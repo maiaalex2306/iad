@@ -56,3 +56,8 @@ grant execute on function public.criar_minha_empresa(text, text) to authenticate
 -- Limpeza: empresas que ficaram sem nenhum perfil por causa do erro acima.
 delete from public.tenants t
  where not exists (select 1 from public.perfis p where p.tenant_id = t.id);
+
+-- O PostgREST (a camada que o app conversa) guarda um cache do que existe no
+-- banco. Criar a função não basta se ele ainda não sabe que ela existe — daí
+-- o "Could not find the function ... in the schema cache". Isto avisa.
+notify pgrst, 'reload schema';
