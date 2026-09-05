@@ -202,6 +202,28 @@
     return marca;
   }
 
+  /* Registro sem empresa não aparece para ninguém: o filtro por empresa o
+     esconde, e para quem cadastrou parece que o salvar não funcionou. Aconteceu
+     de verdade com as contas, que nasciam sem carimbo. Corrigida a origem, isto
+     recupera o que já tinha sido gravado assim.
+
+     Só roda para usuário comum, que tem exatamente uma empresa: para o
+     administrador, com várias à vista, não há resposta certa sobre de quem é o
+     registro órfão — e adivinhar seria pior do que deixar aparecer. */
+  function adotarOrfaos() {
+    const ctx = contexto();
+    if (!ctx.usuario || ctx.admin || !ctx.tenantId) return 0;
+    let adotados = 0;
+    ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos']
+      .forEach(function (colecao) {
+        (estado[colecao] || []).forEach(function (r) {
+          if (!r.tenantId) { r.tenantId = ctx.tenantId; adotados++; }
+        });
+      });
+    if (adotados) salvar();
+    return adotados;
+  }
+
   function conta(id) { return estado.contas.find(function (c) { return c.id === id; }); }
   function contato(id) { return estado.contatos.find(function (c) { return c.id === id; }); }
   function oportunidade(id) { return estado.oportunidades.find(function (o) { return o.id === id; }); }
@@ -217,7 +239,7 @@
     const nova = Object.assign({
       id: uid('acc'), nome: '', razaoSocial: '', cnpj: '', segmento: '', porte: '',
       cidade: '', uf: '', site: '', telefone: '', relacaoAtual: 'Prospect', criadoEm: hoje()
-    }, dados);
+    }, carimbo(false), dados);
     estado.contas.push(nova);
     salvar();
     return nova;
@@ -508,6 +530,7 @@
     criarConta, criarContato, criarOportunidade, atualizarOportunidade,
     pontuar, registrarEvento, removerEvento, definirCompromisso, definirInsight,
     criarTarefa, concluirTarefa, excluirTarefa,
+    adotarOrfaos,
     catalogo, catalogoAtivos, nomesDoCatalogo, criarNoCatalogo, atualizarNoCatalogo,
     removerDoCatalogo, produto,
     fecharOportunidade, reabrirOportunidade, excluirOportunidade,

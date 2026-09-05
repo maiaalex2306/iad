@@ -23,6 +23,10 @@
     const conteudo = document.getElementById('conteudo');
     const logado = A.atual();
 
+    /* Registro sem empresa fica invisível. Aqui, com a sessão já conhecida,
+       o que tiver nascido assim é adotado antes de a tela ser desenhada. */
+    if (logado) Store.adotarOrfaos();
+
     document.body.classList.toggle('sem-sessao', !logado);
     if (!logado) {
       conteudo.innerHTML = V.acesso();
