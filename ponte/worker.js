@@ -45,9 +45,15 @@ export default {
     if (requisicao.method === 'POST' && url.searchParams.get('k')) {
       if (url.searchParams.get('k') !== ambiente.CHAVE_ESCRITA) return json({ erro: 'chave de escrita inválida' }, 401);
 
-      const corpo = await requisicao.json().catch(() => ({}));
+      /* Lemos como texto primeiro: se vier algo que não é JSON, guardamos o
+         conteúdo cru em vez de perder a entrega. */
+      const texto = await requisicao.text();
+      let corpo;
+      try { corpo = JSON.parse(texto); } catch (e) { corpo = { conteudo_bruto: texto }; }
+
       /* O Linked Helper manda ora um objeto, ora um array, conforme a ação. */
       const lista = Array.isArray(corpo) ? corpo : (corpo.data || corpo.items || [corpo]);
+      if (!lista.length) return json({ ok: true, recebidos: 0 });
 
       await Promise.all(lista.map((item) => {
         const id = crypto.randomUUID();
