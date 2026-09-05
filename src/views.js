@@ -1239,6 +1239,7 @@
       '<button class="btn ghost mini" onclick="App.baixarModelo(\'contatos\')">contatos.csv</button>' +
       '<button class="btn ghost mini" onclick="App.baixarModelo(\'oportunidades\')">oportunidades.csv</button></div></div>' +
 
+      blocoNuvem() +
       blocoLinkedHelper() +
 
       '<div class="card"><h2>Backup</h2>' +
@@ -1253,6 +1254,46 @@
       '<p class="small muted">Carrega uma carteira fictícia com os grupos de pipeline para treinar a leitura do modelo.</p>' +
       '<div class="row"><button class="btn ghost" onclick="App.carregarDemo()">Carregar demonstração</button>' +
       '<button class="btn ghost" onclick="App.limpar()">Apagar tudo</button></div></div>';
+  }
+
+  /* A nuvem é opcional: sem ela o app segue local, como sempre foi. */
+  function blocoNuvem() {
+    const N = global.IADNuvem;
+    const e = N.estado();
+
+    if (!e.configurada) {
+      return '<div class="card"><div class="row"><h2 style="margin:0">Nuvem (Supabase)</h2><span class="espaco"></span>' +
+        '<button class="btn ghost mini" onclick="App.configurarNuvem()">Configurar</button></div>' +
+        '<p class="small muted" style="margin:8px 0 0">Ligue o app a um banco na nuvem para a equipe compartilhar a mesma carteira e para o login passar a ser verificado no servidor. ' +
+        'O passo a passo e o arquivo do banco estão na pasta <code>nuvem/</code> do projeto.</p></div>';
+    }
+
+    if (!e.conectado) {
+      return '<div class="card"><div class="row"><h2 style="margin:0">Nuvem (Supabase)</h2><span class="espaco"></span>' +
+        '<span class="pill warn">desconectado</span>' +
+        '<button class="btn ghost mini" onclick="App.configurarNuvem()">Alterar</button></div>' +
+        '<p class="small muted" style="margin:8px 0 12px">Configurada, mas ninguém entrou nesta máquina.</p>' +
+        '<div class="row"><button class="btn alt mini" onclick="App.entrarNuvem()">Entrar na nuvem</button>' +
+        '<button class="btn ghost mini" onclick="App.cadastrarNuvem()">Criar acesso na nuvem</button></div></div>';
+    }
+
+    const perfil = e.perfil || {};
+    const semEmpresa = !perfil.tenant_id;
+    return '<div class="card"><div class="row"><h2 style="margin:0">Nuvem (Supabase)</h2><span class="espaco"></span>' +
+      '<span class="pill ok">conectado</span></div>' +
+      '<p class="small muted" style="margin:8px 0 4px">' + esc(e.email) +
+      (perfil.nome ? ' · ' + esc(perfil.nome) : '') +
+      (perfil.papel === 'admin' ? ' · <strong>administrador</strong>' : '') + '</p>' +
+      (e.ultima ? '<p class="tiny muted" style="margin:0 0 12px">Última sincronização: ' + esc(e.ultima.replace('T', ' ').slice(0, 16)) + '</p>' : '') +
+      (semEmpresa
+        ? '<div class="aviso" style="margin-bottom:12px">Seu usuário ainda não tem empresa na nuvem. Defina antes de sincronizar — é ela que separa a sua carteira das outras.</div>' +
+          '<button class="btn alt mini" onclick="App.definirEmpresaNuvem()">Definir minha empresa</button>'
+        : '<div class="row"><button class="btn alt mini" onclick="App.sincronizarNuvem()">Sincronizar agora</button>' +
+          '<button class="btn ghost mini" onclick="App.puxarNuvem()">Só baixar</button>' +
+          '<button class="btn ghost mini" onclick="App.sairNuvem()">Sair da nuvem</button></div>' +
+          '<p class="tiny muted" style="margin:10px 0 0">Sincronizar envia a sua carteira e traz o que os outros mudaram. ' +
+          'O app continua funcionando offline com a última cópia baixada.</p>') +
+      '<div id="recado-nuvem"></div></div>';
   }
 
   /* O app não recebe webhook — quem recebe é a ponte. Aqui só buscamos o que chegou. */

@@ -104,6 +104,12 @@
     }).catch(function () {});
   }
 
+  function recadoNuvem(texto, erro) {
+    const alvo = document.getElementById('recado-nuvem');
+    if (!alvo) return;
+    alvo.innerHTML = '<div class="' + (erro ? 'aviso' : 'faixa-delta') + '" style="margin-top:12px">' + U.esc(texto) + '</div>';
+  }
+
   function pintarLeads() {
     const alvo = document.getElementById('caixa-linkedhelper');
     if (alvo) alvo.innerHTML = V.listaLeads(leads);
@@ -713,6 +719,102 @@
       global.IADSeed.carregar();
       location.hash = '#/hoje';
       render();
+    },
+
+    /* ---------- Nuvem ---------- */
+    configurarNuvem: function () {
+      const N = global.IADNuvem;
+      U.formulario('Conectar ao Supabase', [
+        { id: 'url', rotulo: 'URL do projeto', placeholder: 'https://xxxxxxxx.supabase.co' },
+        { id: 'chave', rotulo: 'Chave pública (anon / publishable)' }
+      ], N.config(), function (d) {
+        if (!d.url || !d.chave) { alert('Preencha os dois campos.'); return; }
+        N.salvarConfig(d);
+        render();
+      });
+    },
+
+    entrarNuvem: function () {
+      const N = global.IADNuvem;
+      U.formulario('Entrar na nuvem', [
+        { id: 'email', rotulo: 'E-mail' },
+        { id: 'senha', rotulo: 'Senha', tipo: 'password' }
+      ], {}, function (d) {
+        recadoNuvem('Entrando…');
+        N.entrar(d.email, d.senha)
+          .then(function () { return N.meuPerfil(); })
+          .then(function (perfil) {
+            N.guardarPerfilNaSessao(perfil);
+            render();
+            recadoNuvem(perfil && perfil.tenant_id
+              ? 'Conectado. Use "Sincronizar agora" para enviar e receber.'
+              : 'Conectado. Defina sua empresa antes de sincronizar.');
+          })
+          .catch(function (e) { render(); recadoNuvem('Não entrou: ' + e.message, true); });
+      });
+    },
+
+    cadastrarNuvem: function () {
+      const N = global.IADNuvem;
+      U.formulario('Criar acesso na nuvem', [
+        { id: 'nome', rotulo: 'Seu nome' },
+        { id: 'email', rotulo: 'E-mail' },
+        { id: 'whatsapp', rotulo: 'WhatsApp' },
+        { id: 'senha', rotulo: 'Senha (mínimo 6 caracteres)', tipo: 'password' }
+      ], {}, function (d) {
+        if (!d.email || (d.senha || '').length < 6) { alert('Informe e-mail e uma senha de ao menos 6 caracteres.'); return; }
+        recadoNuvem('Criando…');
+        N.cadastrar(d.email, d.senha, { nome: d.nome, whatsapp: d.whatsapp })
+          .then(function (r) {
+            render();
+            recadoNuvem(r && r.access_token
+              ? 'Acesso criado e conectado. Defina sua empresa.'
+              : 'Acesso criado. Confirme o e-mail que o Supabase acabou de enviar e depois clique em "Entrar na nuvem".');
+          })
+          .catch(function (e) { render(); recadoNuvem('Não foi possível criar: ' + e.message, true); });
+      });
+    },
+
+    definirEmpresaNuvem: function () {
+      const N = global.IADNuvem;
+      U.formulario('Minha empresa na nuvem', [
+        { id: 'nome', rotulo: 'Nome da empresa' },
+        { id: 'cnpj', rotulo: 'CNPJ' }
+      ], {}, function (d) {
+        if (!d.nome) return;
+        recadoNuvem('Criando empresa…');
+        N.criarEmpresa(d.nome, d.cnpj)
+          .then(function (empresa) { return N.salvarPerfil({ tenant_id: empresa.id }); })
+          .then(function () { return N.meuPerfil(); })
+          .then(function (perfil) {
+            N.guardarPerfilNaSessao(perfil);
+            render();
+            recadoNuvem('Empresa definida. Agora pode sincronizar.');
+          })
+          .catch(function (e) { render(); recadoNuvem('Falhou: ' + e.message, true); });
+      });
+    },
+
+    sincronizarNuvem: function () {
+      recadoNuvem('Sincronizando…');
+      global.IADNuvem.sincronizar()
+        .then(function (r) {
+          render();
+          recadoNuvem('Enviados ' + r.enviados + ' registro(s), recebidos ' + r.recebidos + '.');
+        })
+        .catch(function (e) { render(); recadoNuvem('Não sincronizou: ' + e.message, true); });
+    },
+
+    puxarNuvem: function () {
+      if (!U.confirmar('Baixar a carteira da nuvem? O que estiver só neste aparelho e ainda não foi enviado será substituído.')) return;
+      recadoNuvem('Baixando…');
+      global.IADNuvem.puxar()
+        .then(function (n) { render(); recadoNuvem(n + ' registro(s) baixados.'); })
+        .catch(function (e) { render(); recadoNuvem('Não baixou: ' + e.message, true); });
+    },
+
+    sairNuvem: function () {
+      global.IADNuvem.sair().then(function () { render(); });
     },
 
     /* ---------- Linked Helper ---------- */
