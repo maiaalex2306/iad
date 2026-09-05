@@ -222,6 +222,70 @@ th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line
 th { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 .tabela-rolagem { overflow-x: auto; }
 
+/* ---------- Avanço da decisão ---------- */
+.destaque-avanco { border-top: 3px solid var(--orange); }
+
+.medidor { display: flex; align-items: center; gap: 16px; margin: 14px 0 16px; }
+.medidor .numero { font-size: 2.1rem; font-weight: 800; letter-spacing: -.03em; line-height: 1; }
+.medidor .numero .de { font-size: .95rem; font-weight: 600; color: var(--muted); }
+.medidor .trilho { flex: 1; min-width: 0; }
+.medidor .legenda { margin-top: 6px; }
+
+/* O mapa: as 8 decisões de relance, cor e símbolo dizendo o estado. */
+.mapa-decisao { display: grid; grid-template-columns: repeat(auto-fit, minmax(108px, 1fr)); gap: 8px; }
+.celula {
+  display: flex; flex-direction: column; gap: 2px; align-items: flex-start;
+  padding: 9px 10px; border-radius: 11px; cursor: pointer; text-align: left;
+  border: 1px solid var(--line); background: var(--bg); color: var(--text);
+}
+.celula:hover { border-color: var(--navy-2); }
+.celula .marca { font-size: .85rem; line-height: 1; height: 14px; font-weight: 700; }
+.celula .rot { font-size: .82rem; font-weight: 700; line-height: 1.2; }
+.celula .estado { font-size: .68rem; color: var(--muted); }
+.celula.q0 { border-style: dashed; opacity: .8; }
+.celula.q1 { border-color: var(--warn); background: rgba(184,134,11,.09); }
+.celula.q1 .marca { color: var(--warn); }
+.celula.q2 { border-color: var(--ok); background: rgba(26,127,75,.11); }
+.celula.q2 .marca { color: var(--ok); }
+.celula.q2.sem-prova { border-color: var(--risk); background: rgba(212,118,26,.1); border-style: dashed; }
+.celula.q2.sem-prova .marca { color: var(--risk); }
+
+/* A mesma leitura, do tamanho de uma linha, para comparar negócios na lista. */
+.tira { display: inline-flex; gap: 3px; }
+.tira i { width: 15px; height: 6px; border-radius: 2px; background: var(--line); }
+.tira i.t1 { background: var(--warn); }
+.tira i.t2 { background: var(--ok); }
+.tira i.t2.sem-prova { background: var(--risk); }
+
+/* ---------- O que falta ---------- */
+ol.lacunas { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.lacuna { display: flex; gap: 11px; padding: 11px 0; border-top: 1px solid var(--line); }
+.lacuna:first-child { border-top: 0; padding-top: 0; }
+.lacuna .ordem {
+  flex: 0 0 24px; height: 24px; border-radius: 50%; background: var(--navy); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-size: .76rem; font-weight: 700;
+}
+.lacuna .conteudo { flex: 1; min-width: 0; }
+.lacuna p { margin: 4px 0; }
+
+/* ---------- Blocos recolhíveis ---------- */
+details.bloco {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow); margin-top: 14px; overflow: hidden;
+}
+details.bloco > summary {
+  display: flex; align-items: baseline; gap: 10px; padding: 14px 16px;
+  cursor: pointer; list-style: none; font-weight: 700;
+}
+details.bloco > summary::-webkit-details-marker { display: none; }
+details.bloco > summary::after { content: '▾'; margin-left: auto; color: var(--muted); font-size: .8rem; }
+details.bloco[open] > summary::after { content: '▴'; }
+details.bloco > summary:hover { background: var(--bg); }
+details.bloco > summary .resumo { font-size: .78rem; font-weight: 400; color: var(--muted); }
+details.bloco > .corpo { padding: 0 16px 16px; }
+details.bloco .card { border: 0; box-shadow: none; padding: 0; background: transparent; }
+details.bloco .card + .card { margin-top: 16px; }
+
 /* Hoje: uma linha por negócio, faixa lateral pela urgência. */
 .lista-foco { display: flex; flex-direction: column; gap: 10px; }
 .foco {

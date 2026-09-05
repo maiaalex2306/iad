@@ -308,7 +308,7 @@
     },
 
     /* ---------- Tarefas ---------- */
-    novaTarefa: function (opId) {
+    novaTarefa: function (opId, decisaoAlvo) {
       const op = Store.oportunidade(opId);
       if (!op) return;
       const r = E.resumo(op);
@@ -317,7 +317,7 @@
         { id: 'tipo', rotulo: 'Tipo', tipo: 'select', opcoes: P.TIPOS_TAREFA },
         {
           id: 'decisaoAlvo', rotulo: 'Decisão que pretende provocar', tipo: 'select',
-          padrao: r.nbd.dimensao ? r.nbd.dimensao.id : 'problema',
+          padrao: decisaoAlvo || (r.nbd.dimensao ? r.nbd.dimensao.id : 'problema'),
           opcoes: P.DIMENSOES.map(function (d) { return { valor: d.id, rotulo: d.nome }; })
         },
         { id: 'vencimento', rotulo: 'Para quando', tipo: 'date', padrao: Store.hoje() }

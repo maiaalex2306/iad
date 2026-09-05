@@ -31,7 +31,8 @@
         '<div class="row"><strong>' + esc(r.op.titulo) + '</strong><span class="espaco"></span>' +
         (i.urgencia ? '<span class="pill ' + classes[i.urgencia] + '">' + urgencias[i.urgencia] + '</span>' : '') +
         '<span class="pill navy">' + U.compacto(r.op.valor) + '</span></div>' +
-        '<div class="small muted">' + esc((r.conta && r.conta.nome) || '') + ' · ' + esc(r.op.etapa) + ' · IAD ' + r.iad + '/16</div>' +
+        '<div class="small muted">' + esc((r.conta && r.conta.nome) || '') + ' · ' + esc(r.op.etapa) + '</div>' +
+        '<div class="row" style="margin-top:7px;gap:8px">' + tiraDecisao(r.op) + '<span class="tiny muted">' + r.iad + '/16</span></div>' +
         '<div class="small" style="margin-top:8px"><strong>' + esc(i.motivo) + '</strong></div>' +
         '<div class="small muted">' + esc(i.acao) + '</div>' +
         (tarefas ? '<div class="tarefas">' + tarefas + '</div>' : '') +
@@ -202,6 +203,15 @@
     return '<div class="lista">' + itens + '</div>';
   }
 
+  /* Tira compacta: o mesmo mapa das 8 decisões, do tamanho de uma linha. */
+  function tiraDecisao(op) {
+    return '<span class="tira" aria-hidden="true">' + P.DIMENSOES.map(function (d) {
+      const n = op.dims[d.id] || 0;
+      const provado = n === 2 && E.podeComprovar(op, d.id);
+      return '<i class="' + (n === 2 ? (provado ? 't2' : 't2 sem-prova') : 't' + n) + '" title="' + esc(d.nome) + '"></i>';
+    }).join('') + '</span>';
+  }
+
   function cardOportunidade(r) {
     const comp = r.compromisso;
     return '<button class="item g-' + r.classe.id + '" onclick="App.abrir(\'' + r.op.id + '\')">' +
@@ -215,8 +225,11 @@
         (comp && comp.vencido ? '<span class="pill dead">compromisso vencido</span>' : '') +
         ((r.op.adiamentos || 0) >= 2 ? '<span class="pill warn">' + r.op.adiamentos + ' adiamentos</span>' : '') +
       '</div>' +
-      '<div style="margin-top:9px">' + U.barra(r.saude) + '</div>' +
-      '<div class="tiny muted" style="margin-top:5px">Próxima decisão: ' + esc(r.nbd.dimensao ? r.nbd.dimensao.nome : 'formalização') + '</div>' +
+      '<div class="row" style="margin-top:9px;gap:8px">' + tiraDecisao(r.op) +
+      '<span class="tiny muted">' + r.iad + '/16</span></div>' +
+      '<div class="tiny muted" style="margin-top:6px">Falta: ' +
+      esc(r.lacunas.length ? r.lacunas.slice(0, 2).map(function (l) { return l.titulo; }).join(', ') +
+        (r.lacunas.length > 2 ? ' e mais ' + (r.lacunas.length - 2) : '') : 'nada — resta formalizar') + '</div>' +
       '</button>';
   }
 
@@ -295,68 +308,156 @@
       '<p class="muted small">' + esc((conta && conta.nome) || 'Sem conta') + ' · ' + U.moeda(op.valor) + ' · ' + esc(op.tipo || 'Novo negócio') +
       ' · Etapa CRM: ' + esc(op.etapa) + ' há ' + r.tempoNaEtapa + ' dias' +
       (op.fechamentoPrevisto ? ' · previsão ' + U.data(op.fechamentoPrevisto) : '') + '</p>' +
-      blocoIndicadores(r) +
-      blocoCompromisso(op, r) +
-      blocoNBD(op, r) +
+
+      blocoAvanco(op, r) +
+      blocoLacunas(op, r) +
+      blocoProximoPasso(op, r) +
       blocoAlertas(r) +
-      '<div class="card"><h2>Evolução da decisão</h2>' + curvaIAD(op) + '</div>' +
-      blocoDimensoes(op) +
-      blocoGate(op, r) +
-      blocoGrupo(op, r) +
-      blocoTarefas(op) +
-      blocoArquivos(op) +
-      blocoHistorico(op);
+      detalhe('As 8 decisões', 'pontue aqui', blocoDimensoes(op)) +
+      detalhe('Proposal Gate', r.gates.prontidao + '% de prontidão', blocoGate(op, r)) +
+      detalhe('Buying group', r.coverage.mapeados + ' pessoa(s) · ' + r.coverage.percentual + '% dos papéis críticos', blocoGrupo(op, r)) +
+      detalhe('Tarefas', contarTarefas(op), blocoTarefas(op)) +
+      detalhe('Arquivos', 'anexos por decisão', blocoArquivos(op)) +
+      detalhe('Evolução da decisão', 'a curva do IAD', curvaIAD(op)) +
+      detalhe('Histórico', 'tudo o que aconteceu', blocoHistorico(op));
   }
 
-  function blocoIndicadores(r) {
+  function contarTarefas(op) {
+    const abertas = Store.tarefasDaOportunidade(op.id).filter(function (t) { return t.status === 'aberta'; });
+    return abertas.length ? abertas.length + ' aberta(s)' : 'nenhuma aberta';
+  }
+
+  /* Seções de detalhe ficam recolhidas: o topo responde, o resto aprofunda. */
+  function detalhe(titulo, resumo, conteudo) {
+    return '<details class="bloco"><summary><span class="tit">' + esc(titulo) + '</span>' +
+      '<span class="resumo">' + esc(resumo) + '</span></summary>' +
+      '<div class="corpo">' + conteudo + '</div></details>';
+  }
+
+  /* ---------------- Avanço: o mapa das 8 decisões ---------------- */
+  const ESTADOS = ['Não sabemos', 'Parcial', 'Comprovado'];
+
+  function mapaDecisao(op, clicavel) {
+    return '<div class="mapa-decisao">' + P.DIMENSOES.map(function (d) {
+      const n = op.dims[d.id] || 0;
+      const provado = n === 2 && E.podeComprovar(op, d.id);
+      const classe = n === 2 ? (provado ? 'q2' : 'q2 sem-prova') : 'q' + n;
+      const marca = n === 2 ? (provado ? '✓' : '!') : (n === 1 ? '◐' : '');
+      const abre = clicavel ? ' onclick="App.novaEvidencia(\'' + op.id + '\',null,\'' + d.id + '\')"' : '';
+      return '<button class="celula ' + classe + '"' + abre +
+        ' title="' + esc(d.nome + ': ' + ESTADOS[n] + (n === 2 && !provado ? ' (sem evidência confirmada)' : '')) + '">' +
+        '<span class="marca">' + marca + '</span>' +
+        '<span class="rot">' + esc(d.nome) + '</span>' +
+        '<span class="estado">' + esc(n === 2 && !provado ? 'sem prova' : ESTADOS[n]) + '</span>' +
+        '</button>';
+    }).join('') + '</div>';
+  }
+
+  function blocoAvanco(op, r) {
+    const notas = P.DIMENSOES.map(function (d) { return op.dims[d.id] || 0; });
+    const provadas = notas.filter(function (n) { return n === 2; }).length;
+    const parciais = notas.filter(function (n) { return n === 1; }).length;
+    const zeros = notas.filter(function (n) { return n === 0; }).length;
+    const faltam = 16 - r.iad;
     const d = r.delta;
+
     const resumoDelta = d.mudancas.length || d.evidencias
-      ? (d.iadDelta > 0 ? '+' + d.iadDelta + ' no IAD · ' : '') + d.evidencias + ' evidência(s) nos últimos 7 dias' +
+      ? (d.iadDelta > 0 ? '+' + d.iadDelta + ' esta semana · ' : '') + d.evidencias + ' evidência(s) em 7 dias' +
         (d.mudancas.length ? ' · ' + d.mudancas.map(function (m) { return m.nome + ' ' + m.de + '→' + m.para; }).join(', ') : '')
       : 'Nada mudou na decisão nos últimos 7 dias.';
 
-    return '<div class="grid k4">' +
-      '<div class="kpi"><div class="rot">IAD</div><div class="val">' + r.iad + '<span class="small muted">/16</span></div><div class="obs">' + esc(r.classe.rotulo) + '</div></div>' +
-      '<div class="kpi"><div class="rot">Evidence Age</div><div class="val">' + r.evidenceAge + '<span class="small muted">d</span></div><div class="obs">' + esc(r.faixa.rotulo) + '</div></div>' +
-      '<div class="kpi"><div class="rot">Decision Velocity</div><div class="val">' + r.velocity + '</div><div class="obs">decisões em 30 dias</div></div>' +
-      '<div class="kpi"><div class="rot">Buying Group</div><div class="val">' + r.coverage.percentual + '%</div><div class="obs">' + r.coverage.mapeados + ' pessoas mapeadas</div></div>' +
+    return '<div class="card destaque-avanco">' +
+      '<div class="row"><h2 style="margin:0">Avanço da decisão</h2><span class="espaco"></span>' +
+      '<span class="pill ' + r.faixa.classe + '">' + r.evidenceAge + 'd sem evidência</span>' +
+      '<span class="pill">' + esc(r.classe.rotulo) + '</span></div>' +
+
+      '<div class="medidor">' +
+        '<div class="numero">' + r.iad + '<span class="de">/16</span></div>' +
+        '<div class="trilho">' + U.barra((r.iad / 16) * 100) +
+          '<div class="legenda tiny muted">' + provadas + ' comprovadas · ' + parciais + ' parciais · ' + zeros + ' em branco · faltam ' + faltam + ' pontos</div>' +
+        '</div>' +
       '</div>' +
-      '<div class="faixa-delta ' + (d.mudancas.length || d.evidencias ? '' : 'parado') + '">' + esc(resumoDelta) + '</div>';
+
+      mapaDecisao(op, !op.desfecho) +
+      '<p class="tiny muted" style="margin:8px 0 0">Toque em uma decisão para registrar a evidência que a comprova.</p>' +
+      '<div class="faixa-delta ' + (d.mudancas.length || d.evidencias ? '' : 'parado') + '">' + esc(resumoDelta) + '</div>' +
+      '</div>';
   }
 
-  function blocoCompromisso(op, r) {
+  /* ---------------- O que falta ---------------- */
+  function blocoLacunas(op, r) {
+    if (op.desfecho) return '';
+    const lacunas = r.lacunas;
+    if (!lacunas.length) {
+      return '<div class="card"><h2>O que falta</h2>' +
+        '<p class="small">Nada. As oito decisões estão comprovadas, o grupo comprador está coberto e há um próximo passo combinado. O que resta é formalizar.</p></div>';
+    }
+
+    const itens = lacunas.map(function (l, i) {
+      const rotulo = l.tipo === 'dimensao'
+        ? (l.nota === 0 ? 'não sabemos' : 'falta comprovar')
+        : (l.tipo === 'comprovacao' ? 'sem prova' : (l.tipo === 'papel' ? 'papel ausente' : 'sem data'));
+      const classe = l.tipo === 'dimensao' && l.nota === 1 ? 'warn' : (l.tipo === 'papel' ? 'risk' : 'dead');
+
+      const acoes = l.dimensao
+        ? '<button class="btn alt mini" onclick="App.novaEvidencia(\'' + op.id + '\',null,\'' + l.dimensao.id + '\')">Registrar evidência</button>' +
+          '<button class="btn ghost mini" onclick="App.novaTarefa(\'' + op.id + '\',\'' + l.dimensao.id + '\')">Criar tarefa</button>'
+        : (l.tipo === 'compromisso'
+            ? '<button class="btn alt mini" onclick="App.definirCompromisso(\'' + op.id + '\')">Combinar data</button>'
+            : '<button class="btn ghost mini" onclick="App.ligarStakeholder(\'' + op.id + '\')">Vincular pessoa</button>');
+
+      return '<li class="lacuna">' +
+        '<span class="ordem">' + (i + 1) + '</span>' +
+        '<div class="conteudo">' +
+          '<div class="row"><strong>' + esc(l.titulo) + '</strong><span class="pill ' + classe + '">' + rotulo + '</span></div>' +
+          '<p class="small muted">' + esc(l.falta) + '</p>' +
+          '<p class="tiny"><span class="muted">O que resolve:</span> ' + esc(l.comoProvar) + '</p>' +
+          '<div class="row">' + acoes + '</div>' +
+        '</div></li>';
+    }).join('');
+
+    return '<div class="card"><div class="row"><h2 style="margin:0">O que falta</h2><span class="espaco"></span>' +
+      '<span class="pill">' + lacunas.length + ' item(ns)</span></div>' +
+      '<p class="tiny muted" style="margin:6px 0 12px">Em ordem de prioridade: resolver o primeiro costuma destravar os seguintes.</p>' +
+      '<ol class="lacunas">' + itens + '</ol></div>';
+  }
+
+  /* ---------------- Próximo passo: compromisso + recomendação ---------------- */
+  function blocoProximoPasso(op, r) {
     const c = r.compromisso;
-    const corpo = c
+    const compromisso = c
       ? '<div class="row"><span class="pill ' + (c.vencido ? 'dead' : 'ok') + '">' +
           (c.vencido ? 'vencido há ' + c.diasAtraso + 'd' : 'em ' + c.diasAte + 'd') + '</span>' +
           '<strong>' + esc(c.texto) + '</strong></div>' +
-        '<p class="small muted" style="margin:8px 0 0">Combinado para ' + U.data(c.data) + ' · a vez é ' +
-          (c.dono === 'cliente' ? 'do cliente' : 'nossa') + '.</p>'
-      : '<p class="small muted" style="margin:0">Nenhum próximo passo combinado com data. Sem isso, não há como saber se este negócio está atrasado.</p>';
+        '<p class="tiny muted" style="margin:6px 0 0">' + U.data(c.data) + ' · a vez é ' + (c.dono === 'cliente' ? 'do cliente' : 'nossa') + '.</p>'
+      : '<p class="small muted" style="margin:0">Nenhum próximo passo combinado com data.</p>';
 
-    return '<div class="card"><div class="row"><h2 style="margin:0">Próximo compromisso</h2><span class="espaco"></span>' +
-      '<button class="btn ghost mini" onclick="App.definirCompromisso(\'' + op.id + '\')">' + (c ? 'Atualizar' : 'Definir') + '</button></div>' +
-      '<div style="margin-top:10px">' + corpo + '</div></div>';
-  }
-
-  function blocoNBD(op, r) {
-    const canais = r.nbd.canais ? P.CANAIS.map(function (c) {
-      return '<tr><td><strong>' + esc(c.nome) + '</strong></td><td>' + esc(r.nbd.canais[c.id]) + '</td></tr>';
+    const canais = r.nbd.canais ? P.CANAIS.map(function (canal) {
+      return '<tr><td><strong>' + esc(canal.nome) + '</strong></td><td>' + esc(r.nbd.canais[canal.id]) + '</td></tr>';
     }).join('') : '';
 
-    return '<div class="card"><h2>Próxima melhor decisão</h2>' +
+    return '<div class="card"><div class="row"><h2 style="margin:0">Próximo passo</h2><span class="espaco"></span>' +
+      '<button class="btn ghost mini" onclick="App.definirCompromisso(\'' + op.id + '\')">' + (c ? 'Atualizar' : 'Combinar data') + '</button></div>' +
+      '<div style="margin:10px 0 14px">' + compromisso + '</div>' +
       (r.nbd.critico ? '<div class="aviso" style="margin-bottom:10px">Risco crítico nesta oportunidade.</div>' : '') +
-      '<p><strong>' + esc(r.nbd.decisao) + '</strong></p>' +
-      '<p class="small muted">Ação recomendada: ' + esc(r.nbd.acao) + '</p>' +
-      (r.nbd.conteudo ? '<p class="tiny muted">Material de apoio: ' + esc(r.nbd.conteudo) + '</p>' : '') +
-      (canais ? '<div class="tabela-rolagem" style="margin-top:8px"><table><tbody>' + canais + '</tbody></table></div>' : '') +
-      '<div class="row" style="margin-top:12px"><button class="btn alt" onclick="App.novaEvidencia(\'' + op.id + '\')">Registrar evidência do cliente</button>' +
+      '<p class="small"><span class="muted">Decisão a provocar:</span> <strong>' + esc(r.nbd.decisao) + '</strong></p>' +
+      '<p class="small muted">' + esc(r.nbd.acao) + '</p>' +
+      (canais ? detalhe('Como fazer em cada canal', r.nbd.conteudo || '', '<div class="tabela-rolagem"><table><tbody>' + canais + '</tbody></table></div>') : '') +
+      '<div class="row" style="margin-top:12px"><button class="btn alt" onclick="App.novaEvidencia(\'' + op.id + '\')">Registrar evidência</button>' +
       '<button class="btn ghost" onclick="App.fecharReuniao(\'' + op.id + '\')">Fechamento de reunião</button>' +
-      '<button class="btn ghost" onclick="App.novaAtividade(\'' + op.id + '\')">Registrar atividade</button></div></div>';
+      '<button class="btn ghost" onclick="App.novaAtividade(\'' + op.id + '\')">Atividade</button></div></div>';
   }
 
+  let filtroHistorico = 'tudo';
+
+  /* "O que falta" já lista compromisso, papéis e provas pendentes.
+     Aqui ficam só os riscos que aquela lista não cobre. */
+  const ALERTAS_JA_COBERTOS = ['compromisso', 'comprovacao', 'papel'];
+
   function blocoAlertas(r) {
-    const html = r.alertas.map(function (a) {
+    const html = r.alertas.filter(function (a) {
+      return ALERTAS_JA_COBERTOS.indexOf(a.tipo) === -1;
+    }).map(function (a) {
       return '<div class="aviso" style="margin-bottom:6px">' + (a.nivel === 'alto' ? '🔴 ' : '🟡 ') + esc(a.texto) + '</div>';
     }).join('');
     return html ? '<div class="card"><h2>Alertas</h2>' + html + '</div>' : '';
@@ -463,7 +564,6 @@
       '<button class="btn ghost mini" onclick="App.excluirArquivo(\'' + a.id + '\',\'' + a.oportunidadeId + '\')">Excluir</button></div></div>';
   }
 
-  let filtroHistorico = 'tudo';
 
   function blocoHistorico(op) {
     const tipos = [['tudo', 'Tudo'], ['decision', 'Evidências'], ['pontuacao', 'Pontuação'], ['activity', 'Atividades'], ['sistema', 'Sistema']];
@@ -506,6 +606,8 @@
       '<div class="row" style="margin:6px 0 12px">' + filtros + '</div>' +
       '<div class="timeline">' + eventos + '</div></div>';
   }
+
+  /* ---------------- Revisão semanal ---------------- */
 
   /* ---------------- Revisão semanal ---------------- */
   function revisao() {

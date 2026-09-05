@@ -168,29 +168,29 @@
     const g = gates(op);
     const f = faixaEvidencia(idade);
 
-    if (idade > 14) lista.push({ nivel: idade > 30 ? 'alto' : 'medio', texto: idade + ' dias sem evidência do comprador (' + f.rotulo + ').' });
-    if (cob.mapeados <= 1) lista.push({ nivel: 'alto', texto: 'Venda single-threaded: depende de uma única pessoa.' });
-    if (depoisDaProposta(op) && !cob.temEconomicBuyer) lista.push({ nivel: 'alto', texto: 'Em proposta ou adiante sem acesso ao decisor econômico.' });
-    if (depoisDaProposta(op) && !g.liberado) lista.push({ nivel: 'alto', texto: 'Proposta emitida com prontidão de apenas ' + g.prontidao + '%.' });
-    if (!cob.temChampion) lista.push({ nivel: 'medio', texto: 'Nenhum champion identificado no grupo comprador.' });
-    if (decisionVelocity(op) === 0) lista.push({ nivel: 'medio', texto: 'Decision Velocity zerada nos últimos 30 dias.' });
+    if (idade > 14) lista.push({ tipo: 'evidencia', nivel: idade > 30 ? 'alto' : 'medio', texto: idade + ' dias sem evidência do comprador (' + f.rotulo + ').' });
+    if (cob.mapeados <= 1) lista.push({ tipo: 'single', nivel: 'alto', texto: 'Venda single-threaded: depende de uma única pessoa.' });
+    if (depoisDaProposta(op) && !cob.temEconomicBuyer) lista.push({ tipo: 'papel', nivel: 'alto', texto: 'Em proposta ou adiante sem acesso ao decisor econômico.' });
+    if (depoisDaProposta(op) && !g.liberado) lista.push({ tipo: 'gate', nivel: 'alto', texto: 'Proposta emitida com prontidão de apenas ' + g.prontidao + '%.' });
+    if (!cob.temChampion) lista.push({ tipo: 'papel', nivel: 'medio', texto: 'Nenhum champion identificado no grupo comprador.' });
+    if (decisionVelocity(op) === 0) lista.push({ tipo: 'velocity', nivel: 'medio', texto: 'Decision Velocity zerada nos últimos 30 dias.' });
 
     const comp = compromisso(op);
     if (comp && comp.vencido) {
-      lista.push({ nivel: 'alto', texto: 'Compromisso vencido há ' + comp.diasAtraso + ' dia(s): ' + comp.texto + '.' });
+      lista.push({ tipo: 'compromisso', nivel: 'alto', texto: 'Compromisso vencido há ' + comp.diasAtraso + ' dia(s): ' + comp.texto + '.' });
     } else if (!comp) {
-      lista.push({ nivel: 'medio', texto: 'Nenhum próximo passo combinado com data.' });
+      lista.push({ tipo: 'compromisso', nivel: 'medio', texto: 'Nenhum próximo passo combinado com data.' });
     }
     if ((op.adiamentos || 0) >= 2) {
-      lista.push({ nivel: 'alto', texto: 'Data de fechamento adiada ' + op.adiamentos + ' vezes.' });
+      lista.push({ tipo: 'adiamento', nivel: 'alto', texto: 'Data de fechamento adiada ' + op.adiamentos + ' vezes.' });
     }
     const aut = autoria(op);
     if (aut.total >= 3 && aut.concentracao === 1 && aut.principal) {
-      lista.push({ nivel: 'medio', texto: 'Todas as evidências vieram de ' + aut.principal.nome + '.' });
+      lista.push({ tipo: 'autoria', nivel: 'medio', texto: 'Todas as evidências vieram de ' + aut.principal.nome + '.' });
     }
     P.DIMENSOES.forEach(function (d) {
       if ((op.dims[d.id] || 0) === 2 && !podeComprovar(op, d.id)) {
-        lista.push({ nivel: 'medio', texto: d.nome + ' está como comprovado sem evidência confirmada.' });
+        lista.push({ tipo: 'comprovacao', nivel: 'medio', texto: d.nome + ' está como comprovado sem evidência confirmada.' });
       }
     });
     return lista;
@@ -211,6 +211,7 @@
       nbd: nextBestDecision(op),
       alertas: alertas(op),
       compromisso: compromisso(op),
+      lacunas: lacunas(op),
       tempoNaEtapa: tempoNaEtapa(op),
       delta: deltaSemana(op),
       autoria: autoria(op)
@@ -389,6 +390,76 @@
     return melhor;
   }
 
+  /* O que falta, em ordem, com o caminho para resolver cada item.
+     Responde à pergunta que o vendedor faz olhando a tela: e agora? */
+  function lacunas(op) {
+    const lista = [];
+    const cob = coverage(op);
+
+    ORDEM_DECISAO.forEach(function (id) {
+      const d = P.DIMENSOES.find(function (x) { return x.id === id; });
+      const nota = op.dims[id] || 0;
+      const provas = evidenciasDaDimensao(op, id);
+
+      /* Nota 2 sem evidência confirmada também é lacuna: falta a prova, não a nota. */
+      if (nota === 2) {
+        if (podeComprovar(op, id)) return;
+        lista.push({
+          tipo: 'comprovacao',
+          dimensao: d,
+          nota: nota,
+          titulo: d.nome,
+          falta: 'Está como comprovado, mas nenhuma evidência confirmada sustenta isso.',
+          comoProvar: d.evidencias[0],
+          evidencias: d.evidencias,
+          registradas: provas.length,
+          canal: d.canais.email,
+          pontos: 0
+        });
+        return;
+      }
+      const falta = nota === 0
+        ? d.pergunta
+        : 'Falta comprovar: hoje é ' + d.niveis[1].toLowerCase().replace(/\.$/, '') + '.';
+
+      lista.push({
+        tipo: 'dimensao',
+        dimensao: d,
+        nota: nota,
+        titulo: d.nome,
+        falta: falta,
+        comoProvar: d.evidencias[0],
+        evidencias: d.evidencias,
+        registradas: provas.length,
+        canal: nota === 0 ? d.canais.whatsapp : d.canais.email,
+        pontos: 2 - nota
+      });
+    });
+
+    if (cob.faltando.length) {
+      lista.push({
+        tipo: 'papel',
+        papeis: cob.faltando,
+        titulo: cob.faltando.length === 1 ? cob.faltando[0] : 'Papéis ausentes no grupo comprador',
+        falta: 'Ninguém ocupa ' + (cob.faltando.length === 1 ? 'este papel' : 'estes papéis') + ': ' + cob.faltando.join(', ') + '.',
+        comoProvar: 'Peça ao champion a apresentação a essas áreas e registre a evidência quando elas participarem.',
+        pontos: 0
+      });
+    }
+
+    if (!compromisso(op)) {
+      lista.push({
+        tipo: 'compromisso',
+        titulo: 'Próximo passo combinado',
+        falta: 'Não há data combinada — sem isso não dá para saber se o negócio atrasou.',
+        comoProvar: 'Feche uma data com o cliente e registre de quem é a vez.',
+        pontos: 0
+      });
+    }
+
+    return lista;
+  }
+
   /* Foco do dia: o app procura o vendedor, em vez de esperar ser procurado.
      Uma linha por negócio, a mais urgente primeiro. */
   function focoDoDia(oportunidades, tarefas) {
@@ -485,7 +556,7 @@
     iad, evidenceAge, faixaEvidencia, decisionVelocity, coverage, gates,
     saude, classificar, nextBestDecision, alertas, resumo, carteira,
     focoDoDia, aprendizado, sugerirDimensao, podeComprovar, evidenciasDaDimensao,
-    autoria, compromisso, tempoNaEtapa, medianaEtapaGanhos, deltaSemana, curva, historico,
+    autoria, compromisso, tempoNaEtapa, medianaEtapaGanhos, deltaSemana, curva, historico, lacunas,
     stakeholdersDaOp, diasEntre, indiceEtapa, depoisDaProposta
   };
 })(window);
