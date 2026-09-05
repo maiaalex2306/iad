@@ -451,6 +451,15 @@
         { id: 'titulo', rotulo: 'O que o cliente fez', tipo: 'textarea', voz: true, placeholder: 'Ex.: CFO pediu o payback antes de aprovar' },
         { id: 'dimensao', rotulo: 'Dimensão afetada', tipo: 'select', padrao: dimensaoSugerida || 'problema', opcoes: P.DIMENSOES.map(function (d) { return { valor: d.id, rotulo: d.nome }; }) },
         { id: 'forca', rotulo: 'Força da evidência', tipo: 'select', padrao: 'confirmado', opcoes: P.FORCAS.map(function (f) { return { valor: f.id, rotulo: f.rotulo + ' — ' + f.desc }; }) },
+        /* Registrar a evidência e pontuar eram dois gestos, e o segundo não era
+           pedido em lugar nenhum: a pessoa lançava a evidência e o mapa continuava
+           zerado, como se nada tivesse acontecido. Agora é a mesma janela. */
+        { id: 'nota', rotulo: 'Como fica esta decisão', tipo: 'select', padrao: '2', opcoes: [
+          { valor: 'manter', rotulo: 'Manter como está' },
+          { valor: '0', rotulo: '0 — Não sabemos' },
+          { valor: '1', rotulo: '1 — Parcial' },
+          { valor: '2', rotulo: '2 — Comprovado pelo cliente' }
+        ] },
         { id: 'sugestao', rotulo: 'Ou escolha uma evidência típica', tipo: 'select', opcoes: [{ valor: '', rotulo: '— descrever acima —' }].concat(sugestoes) }
       );
       if (pessoas.length) {
@@ -483,18 +492,64 @@
             ? { texto: d.compromissoTexto || 'Próximo passo combinado', data: d.compromissoData, dono: d.compromissoDono }
             : null
         });
+
+        /* A evidência entra primeiro: é ela que autoriza o 2. */
+        if (d.nota !== 'manter') {
+          const nota = Number(d.nota);
+          const atual = Store.oportunidade(alvo);
+          if (nota === 2 && !E.podeComprovar(atual, dimensao)) {
+            alert('Evidência registrada. A nota ficou em 1: só relato não comprova — para 2 é preciso uma evidência confirmada ou documentada.');
+            Store.pontuar(alvo, dimensao, Math.max(1, atual.dims[dimensao] || 0));
+          } else {
+            Store.pontuar(alvo, dimensao, nota);
+          }
+        }
         render();
       }, function (dlg) {
         /* A dimensão se ajusta ao que está sendo escrito ou ditado; o vendedor pode trocar. */
         const texto = dlg.querySelector('[name="titulo"]');
         const select = dlg.querySelector('[name="dimensao"]');
+        const forca = dlg.querySelector('[name="forca"]');
+        const nota = dlg.querySelector('[name="nota"]');
+        const escolhaOp = dlg.querySelector('[name="oportunidadeId"]');
         let tocado = false;
-        select.addEventListener('change', function () { tocado = true; });
+        let notaTocada = false;
+
+        const opDoFormulario = function () {
+          return op || (escolhaOp ? Store.oportunidade(escolhaOp.value) : null);
+        };
+
+        /* O 2 vale "comprovado", e relato não comprova. Em vez de aceitar e
+           recusar depois, a opção fica indisponível enquanto não puder valer. */
+        const ajustarNota = function () {
+          const alvo = opDoFormulario();
+          const atual = (alvo && alvo.dims[select.value]) || 0;
+          const podeDois = forca.value !== 'relato';
+          const opcaoDois = nota.querySelector('option[value="2"]');
+
+          opcaoDois.disabled = !podeDois;
+          opcaoDois.textContent = podeDois
+            ? '2 — Comprovado pelo cliente'
+            : '2 — Comprovado (exige evidência confirmada)';
+
+          if (notaTocada) {
+            if (!podeDois && nota.value === '2') nota.value = '1';
+            return;
+          }
+          const sugerida = podeDois ? 2 : 1;
+          nota.value = String(Math.max(atual, sugerida));
+        };
+
+        nota.addEventListener('change', function () { notaTocada = true; });
+        select.addEventListener('change', function () { tocado = true; ajustarNota(); });
+        forca.addEventListener('change', ajustarNota);
+        if (escolhaOp) escolhaOp.addEventListener('change', ajustarNota);
         texto.addEventListener('input', function () {
           if (tocado) return;
           const palpite = E.sugerirDimensao(texto.value);
-          if (palpite) select.value = palpite;
+          if (palpite) { select.value = palpite; ajustarNota(); }
         });
+        ajustarNota();
       });
     },
 
