@@ -226,6 +226,9 @@ th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line
 th { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 .tabela-rolagem { overflow-x: auto; }
 
+input.busca { margin-bottom: 12px; }
+td .tiny { display: block; }
+
 /* ---------- Kanban ---------- */
 .kanban { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 8px; align-items: flex-start; }
 .kanban .coluna {
@@ -233,6 +236,11 @@ th { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color:
   border: 1px solid var(--line); border-radius: 12px; padding: 9px;
 }
 .kanban .coluna header { display: flex; flex-direction: column; gap: 1px; margin-bottom: 8px; padding: 0 2px; }
+.kanban .mais {
+  width: 22px; height: 22px; border-radius: 7px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--muted); cursor: pointer; font-size: .95rem; line-height: 1;
+}
+.kanban .mais:hover { background: var(--orange); border-color: var(--orange); color: #fff; }
 .kanban .coluna header strong { font-size: .84rem; }
 .kanban .cartoes { display: flex; flex-direction: column; gap: 8px; min-height: 72px; }
 .kanban .mini {

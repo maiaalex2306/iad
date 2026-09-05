@@ -10,7 +10,8 @@
     { hash: '#/painel', ico: '📊', nome: 'Painel', render: V.painel },
     { hash: '#/pipeline', ico: '🗂️', nome: 'Pipeline', render: V.pipeline },
     { hash: '#/revisao', ico: '🔄', nome: 'Revisão', render: V.revisao },
-    { hash: '#/contas', ico: '🏢', nome: 'Contas', render: V.contas },
+    { hash: '#/cadastros', ico: '📇', nome: 'Cadastros', render: V.cadastros },
+    { hash: '#/contas', ico: '🏢', nome: 'Contas', render: V.contas, foraDasAbas: true },
     { hash: '#/playbook', ico: '🎯', nome: 'Playbook', render: V.playbook, foraDasAbas: true }
   ];
 
@@ -84,6 +85,127 @@
     filtrarHistorico: function (tipo) { V.definirFiltroHistorico(tipo); render(); },
     filtrarHoje: function (chave) { V.definirFiltroHoje(chave); render(); },
     modoPipeline: function (modo) { V.definirModoPipeline(modo); render(); },
+    abaCadastro: function (aba) { V.definirAbaCadastro(aba); render(); },
+
+    /* Buscar re-renderiza a tela; devolvemos o foco e o cursor ao campo. */
+    buscarCadastro: function (texto) {
+      V.definirBuscaCadastro(texto);
+      render();
+      const campo = document.getElementById('busca-cadastro');
+      if (campo) { campo.focus(); campo.setSelectionRange(campo.value.length, campo.value.length); }
+    },
+
+    novoItemCatalogo: function (nome) {
+      const titulo = nome === 'segmentos' ? 'Novo segmento' : 'Novo tipo de tarefa';
+      U.formulario(titulo, [{ id: 'nome', rotulo: 'Nome' }], {}, function (d) {
+        if (!d.nome) return;
+        Store.criarNoCatalogo(nome, { nome: d.nome });
+        render();
+      });
+    },
+
+    editarItemCatalogo: function (nome, id) {
+      const item = Store.catalogo(nome).find(function (i) { return i.id === id; });
+      if (!item) return;
+      U.formulario('Editar', [
+        { id: 'nome', rotulo: 'Nome' },
+        { id: 'ativo', rotulo: 'Situação', tipo: 'select', opcoes: [{ valor: 'sim', rotulo: 'Ativo' }, { valor: 'nao', rotulo: 'Inativo' }] }
+      ], { nome: item.nome, ativo: item.ativo === false ? 'nao' : 'sim' }, function (d) {
+        Store.atualizarNoCatalogo(nome, id, { nome: d.nome, ativo: d.ativo === 'sim' });
+        render();
+      });
+    },
+
+    excluirItemCatalogo: function (nome, id) {
+      if (!U.confirmar('Excluir este item do cadastro? Os registros que já o usam continuam como estão.')) return;
+      Store.removerDoCatalogo(nome, id);
+      render();
+    },
+
+    novoProduto: function () {
+      U.formulario('Novo produto', camposProduto(), {}, function (d) {
+        if (!d.nome) return;
+        Store.criarNoCatalogo('produtos', Object.assign({}, d, { precoReferencia: Number(d.precoReferencia) || 0 }));
+        render();
+      });
+    },
+
+    editarProduto: function (id) {
+      const p = Store.produto(id);
+      if (!p) return;
+      U.formulario('Editar produto', camposProduto().concat([
+        { id: 'ativo', rotulo: 'Situação', tipo: 'select', opcoes: [{ valor: 'sim', rotulo: 'Ativo' }, { valor: 'nao', rotulo: 'Inativo' }] }
+      ]), Object.assign({}, p, { ativo: p.ativo === false ? 'nao' : 'sim' }), function (d) {
+        Store.atualizarNoCatalogo('produtos', id, Object.assign({}, d, {
+          precoReferencia: Number(d.precoReferencia) || 0, ativo: d.ativo === 'sim'
+        }));
+        render();
+      });
+    },
+
+    /* Cadastro rápido: empresa, contato e oportunidade em um formulário só.
+       É o que evita abrir três telas para registrar uma conversa de cinco minutos. */
+    cadastroRapido: function (etapa) {
+      const est = Store.obter();
+      const contas = est.contas.slice().sort(function (a, b) { return a.nome.localeCompare(b.nome); });
+      const produtos = Store.catalogoAtivos('produtos');
+
+      const campos = [
+        { id: 'contaId', rotulo: 'Empresa', tipo: 'select',
+          opcoes: [{ valor: '', rotulo: '— cadastrar nova abaixo —' }]
+            .concat(contas.map(function (c) { return { valor: c.id, rotulo: c.nome }; })) },
+        { id: 'empresaNova', rotulo: 'Nome da nova empresa', placeholder: 'preencha só se for empresa nova' },
+        { id: 'segmento', rotulo: 'Segmento da nova empresa', tipo: 'select',
+          opcoes: [{ valor: '', rotulo: '— sem segmento —' }]
+            .concat(Store.nomesDoCatalogo('segmentos').map(function (n) { return { valor: n, rotulo: n }; })) },
+        { id: 'titulo', rotulo: 'Oportunidade' },
+        { id: 'valor', rotulo: 'Valor (R$)', tipo: 'number' },
+        { id: 'fechamentoPrevisto', rotulo: 'Fechamento previsto', tipo: 'date' },
+        { id: 'contatoNome', rotulo: 'Contato (opcional)' },
+        { id: 'contatoCargo', rotulo: 'Cargo do contato' },
+        { id: 'contatoPapel', rotulo: 'Papel na compra', tipo: 'select', opcoes: P.PAPEIS },
+        { id: 'contatoPerfil', rotulo: 'Perfil (Challenger)', tipo: 'select',
+          opcoes: P.PERFIS.map(function (x) { return { valor: x.id, rotulo: x.rotulo }; }) }
+      ];
+      if (produtos.length) {
+        campos.push({ id: 'produtoId', rotulo: 'Produto', tipo: 'select',
+          opcoes: [{ valor: '', rotulo: '— nenhum —' }]
+            .concat(produtos.map(function (p) { return { valor: p.id, rotulo: p.nome }; })) });
+      }
+
+      U.formulario('Cadastro rápido — ' + etapa, campos, {}, function (d) {
+        if (!d.titulo) { alert('Dê um título à oportunidade.'); return; }
+
+        let contaId = d.contaId;
+        if (!contaId) {
+          if (!d.empresaNova) { alert('Escolha uma empresa ou informe o nome da nova.'); return; }
+          if (d.segmento) Store.criarNoCatalogo('segmentos', { nome: d.segmento });
+          contaId = Store.criarConta({ nome: d.empresaNova, segmento: d.segmento || '' }).id;
+        }
+
+        const op = Store.criarOportunidade({
+          contaId: contaId, titulo: d.titulo, valor: Number(d.valor) || 0,
+          etapa: etapa, fechamentoPrevisto: d.fechamentoPrevisto || ''
+        });
+
+        if (d.contatoNome) {
+          const contato = Store.criarContato({
+            contaId: contaId, nome: d.contatoNome, cargo: d.contatoCargo,
+            papel: d.contatoPapel, perfil: d.contatoPerfil
+          });
+          op.stakeholders.push(contato.id);
+        }
+
+        if (d.produtoId) {
+          const prod = Store.produto(d.produtoId);
+          op.itens.push({ produtoId: d.produtoId, quantidade: 1, precoUnitario: prod ? prod.precoReferencia : 0 });
+          if (!op.valor && prod) op.valor = prod.precoReferencia || 0;
+        }
+
+        Store.salvar();
+        render();
+      });
+    },
 
     /* Kanban: arrastar move a etapa — e o histórico registra que foi só a etapa. */
     arrastar: function (evento, opId) {
@@ -141,9 +263,17 @@
     },
 
     novoContato: function (contaId) {
-      U.formulario('Novo contato', camposContato(contaId), {}, function (d) {
+      const contas = Store.obter().contas;
+      if (!contas.length) { alert('Cadastre uma empresa primeiro.'); return App.novaConta(); }
+      const campos = contaId ? camposContato(contaId) : [{
+        id: 'contaId', rotulo: 'Empresa', tipo: 'select',
+        opcoes: contas.map(function (c) { return { valor: c.id, rotulo: c.nome }; })
+      }].concat(camposContato(null));
+      U.formulario('Novo contato', campos, {}, function (d) {
         if (!d.nome) return;
-        Store.criarContato(Object.assign({ contaId: contaId }, d, { reportaA: d.reportaA || null }));
+        Store.criarContato(Object.assign({}, d, {
+          contaId: contaId || d.contaId, reportaA: d.reportaA || null
+        }));
         render();
       });
     },
@@ -351,7 +481,7 @@
       const r = E.resumo(op);
       U.formulario('Nova tarefa', [
         { id: 'titulo', rotulo: 'O que fazer' },
-        { id: 'tipo', rotulo: 'Tipo', tipo: 'select', opcoes: P.TIPOS_TAREFA },
+        { id: 'tipo', rotulo: 'Tipo', tipo: 'select', opcoes: Store.nomesDoCatalogo('tiposTarefa') },
         {
           id: 'decisaoAlvo', rotulo: 'Decisão que pretende provocar', tipo: 'select',
           padrao: decisaoAlvo || (r.nbd.dimensao ? r.nbd.dimensao.id : 'problema'),
@@ -563,10 +693,27 @@
   };
 
   /* ---------- campos reutilizados ---------- */
-  function camposConta() {
+  function camposProduto() {
     return [
-      { id: 'nome', rotulo: 'Empresa' },
-      { id: 'segmento', rotulo: 'Segmento' },
+      { id: 'nome', rotulo: 'Produto' },
+      { id: 'sku', rotulo: 'Código / SKU' },
+      { id: 'categoria', rotulo: 'Categoria' },
+      { id: 'unidade', rotulo: 'Unidade', placeholder: 'un, kg, t, hora, mês' },
+      { id: 'precoReferencia', rotulo: 'Preço de referência (R$)', tipo: 'number' },
+      { id: 'descricao', rotulo: 'Descrição', tipo: 'textarea' }
+    ];
+  }
+
+  function camposConta() {
+    const segmentos = Store.nomesDoCatalogo('segmentos');
+    return [
+      { id: 'nome', rotulo: 'Empresa (nome fantasia)' },
+      { id: 'razaoSocial', rotulo: 'Razão social' },
+      { id: 'cnpj', rotulo: 'CNPJ' },
+      { id: 'segmento', rotulo: 'Segmento', tipo: 'select',
+        opcoes: [{ valor: '', rotulo: '— sem segmento —' }]
+          .concat(segmentos.map(function (n) { return { valor: n, rotulo: n }; })) },
+      { id: 'telefone', rotulo: 'Telefone' },
       { id: 'porte', rotulo: 'Porte (faturamento ou funcionários)' },
       { id: 'cidade', rotulo: 'Cidade' },
       { id: 'uf', rotulo: 'UF' },

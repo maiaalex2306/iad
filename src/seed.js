@@ -36,7 +36,7 @@
       const o = Object.assign({
         id: uid('opp'), dono: 'Alexandre', criadoEm: dias(75), etapaDesde: dias(20),
         fechamentoPrevisto: '', tipo: 'Novo negócio', concorrentes: '', produto: '',
-        adiamentos: 0, proximoCompromisso: null,
+        adiamentos: 0, itens: [], proximoCompromisso: null,
         stakeholders: pessoas.map(function (p) { return p.id; }),
         eventos: eventos.map(function (e) {
           return Object.assign({ id: uid('evt'), tipo: 'decision', forca: 'confirmado' }, e);
@@ -61,6 +61,18 @@
       });
     }
 
+    /* Catálogo de produtos: sem ele, a aba Produtos abre vazia na demonstração. */
+    const produtos = [
+      { nome: 'Programa de eficiência industrial', sku: 'PEI-100', categoria: 'Serviço', unidade: 'projeto', precoReferencia: 480000, descricao: 'Diagnóstico, implantação e acompanhamento por 12 meses.' },
+      { nome: 'Contrato anual de suprimento', sku: 'CAS-200', categoria: 'Contrato', unidade: 'ano', precoReferencia: 310000, descricao: 'Fornecimento contínuo com SLA de reposição.' },
+      { nome: 'Piloto técnico', sku: 'PIL-010', categoria: 'Serviço', unidade: 'unidade', precoReferencia: 45000, descricao: 'Prova de conceito em uma unidade, 60 dias.' },
+      { nome: 'Assistência técnica mensal', sku: 'ATM-050', categoria: 'Serviço', unidade: 'mês', precoReferencia: 18000, descricao: '' }
+    ].map(function (p) {
+      const item = Object.assign({ id: uid('prd'), ativo: true, criadoEm: dias(100) }, p);
+      est.produtos.push(item);
+      return item;
+    });
+
     /* 1. Falso avançado: etapa adiantada, decisão imatura, sem decisor econômico. */
     const acme = conta('ACME Agroindustrial', { segmento: 'Agro / Indústria', porte: '500 a 1000 funcionários', cidade: 'Uberlândia', uf: 'MG' });
     const acme1 = pessoa(acme, 'Carlos Menezes', 'Gerente de Operações', 'Champion / Mobilizer', 'favoravel', { influencia: 2, perfil: 'amigo' });
@@ -73,6 +85,7 @@
         { data: dias(13), dimensao: 'prioridade', canal: 'Reunião', forca: 'confirmado', contatoId: acme1.id, titulo: 'Cliente informou que o projeto precisa iniciar em outubro' },
         { data: dias(28), dimensao: 'problema', canal: 'E-mail', forca: 'documentado', contatoId: acme1.id, titulo: 'Cliente enviou dados de perda dos últimos 6 meses' }
       ]);
+    opAcme.itens = [{ produtoId: produtos[0].id, quantidade: 1, precoUnitario: 840000 }];
     opAcme.insight = { texto: 'A perda não está na colheita: está no intervalo entre lotes, e ela cresce com o volume.', estado: 'apresentado', atualizadoEm: dias(20) };
     opAcme.proximoCompromisso = { texto: 'Cliente levaria a proposta ao CFO', data: dias(9), dono: 'cliente', registradoEm: dias(20) };
     tarefa(opAcme, 'Pedir a Carlos a agenda com o CFO', 'stakeholders', dias(3), 'Cobrar retorno');
@@ -121,6 +134,7 @@
         { data: dias(5), dimensao: 'consenso', canal: 'Reunião', forca: 'confirmado', contatoId: v2.id, titulo: 'Cliente realizou reunião interna e alinhou diretoria e financeiro' },
         { data: dias(11), dimensao: 'risco', canal: 'Reunião', forca: 'confirmado', contatoId: v1.id, titulo: 'Cliente aprovou piloto em duas unidades' }
       ]);
+    opVale.itens = [{ produtoId: produtos[1].id, quantidade: 1, precoUnitario: 1450000 }];
     opVale.insight = { texto: 'O custo do programa safra não é o preço do insumo: é a janela de aplicação perdida por atraso logístico.', estado: 'aceito', atualizadoEm: dias(30) };
     opVale.proximoCompromisso = { texto: 'Jurídico devolve o contrato revisado', data: dias(-4), dono: 'cliente', registradoEm: dias(2) };
     tarefa(opVale, 'Preparar referência técnica para reduzir o risco percebido', 'risco', dias(-2), 'Enviar material');

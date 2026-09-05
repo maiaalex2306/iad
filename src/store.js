@@ -14,7 +14,10 @@
   function hoje() { return new Date().toISOString().slice(0, 10); }
 
   function estadoVazio() {
-    return { versao: VERSAO, contas: [], contatos: [], oportunidades: [], tarefas: [], config: { moeda: 'BRL' } };
+    return {
+      versao: VERSAO, contas: [], contatos: [], oportunidades: [], tarefas: [],
+      segmentos: [], tiposTarefa: [], produtos: [], config: { moeda: 'BRL' }
+    };
   }
 
   let estado = estadoVazio();
@@ -24,9 +27,26 @@
   function migrar(dados) {
     if (!dados || !Array.isArray(dados.oportunidades)) return null;
     dados.tarefas = dados.tarefas || [];
+    dados.produtos = dados.produtos || [];
     dados.contas.forEach(function (c) {
       if (c.relacaoAtual == null) c.relacaoAtual = 'Prospect';
+      if (c.razaoSocial == null) c.razaoSocial = '';
+      if (c.cnpj == null) c.cnpj = '';
+      if (c.telefone == null) c.telefone = '';
     });
+
+    /* Catálogos: o que era texto solto vira lista gerenciável, sem perder o que já existe. */
+    if (!dados.segmentos || !dados.segmentos.length) {
+      const nomes = {};
+      dados.contas.forEach(function (c) { if (c.segmento) nomes[c.segmento] = true; });
+      dados.segmentos = Object.keys(nomes).sort().map(function (nome) {
+        return { id: uid('seg'), nome: nome, ativo: true };
+      });
+    }
+    if (!dados.tiposTarefa || !dados.tiposTarefa.length) {
+      dados.tiposTarefa = (global.IADPlaybook ? global.IADPlaybook.TIPOS_TAREFA : ['Ligar'])
+        .map(function (nome) { return { id: uid('tpt'), nome: nome, ativo: true }; });
+    }
     dados.contatos.forEach(function (c) {
       if (c.influencia == null) c.influencia = 2;
       if (c.reportaA === undefined) c.reportaA = null;
@@ -34,6 +54,7 @@
       if (c.perfil == null) c.perfil = 'nao_classificado';
     });
     dados.oportunidades.forEach(function (o) {
+      if (!Array.isArray(o.itens)) o.itens = [];
       if (o.etapaDesde == null) o.etapaDesde = o.criadoEm || hoje();
       if (o.adiamentos == null) o.adiamentos = 0;
       if (o.proximoCompromisso === undefined) o.proximoCompromisso = null;
@@ -96,8 +117,8 @@
 
   function criarConta(dados) {
     const nova = Object.assign({
-      id: uid('acc'), nome: '', segmento: '', porte: '', cidade: '', uf: '',
-      site: '', relacaoAtual: 'Prospect', criadoEm: hoje()
+      id: uid('acc'), nome: '', razaoSocial: '', cnpj: '', segmento: '', porte: '',
+      cidade: '', uf: '', site: '', telefone: '', relacaoAtual: 'Prospect', criadoEm: hoje()
     }, dados);
     estado.contas.push(nova);
     salvar();
@@ -130,6 +151,7 @@
       criadoEm: hoje(),
       fechamentoPrevisto: '',
       adiamentos: 0,
+      itens: [],
       proximoCompromisso: null,
       insight: { texto: '', estado: 'nenhum', atualizadoEm: null },
       dims: { problema: 0, prioridade: 0, impacto: 0, criterios: 0, stakeholders: 0, consenso: 0, risco: 0, processo: 0 },
@@ -245,6 +267,51 @@
     return op;
   }
 
+  /* ---------- Catálogos: segmentos, tipos de tarefa e produtos ---------- */
+  const CATALOGOS = { segmentos: 'seg', tiposTarefa: 'tpt', produtos: 'prd' };
+
+  function catalogo(nome) { return estado[nome] || []; }
+
+  function catalogoAtivos(nome) {
+    return catalogo(nome).filter(function (i) { return i.ativo !== false; });
+  }
+
+  function nomesDoCatalogo(nome) {
+    return catalogoAtivos(nome).map(function (i) { return i.nome; });
+  }
+
+  function criarNoCatalogo(nome, dados) {
+    const item = Object.assign({ id: uid(CATALOGOS[nome] || 'cat'), nome: '', ativo: true, criadoEm: hoje() }, dados);
+    if (!item.nome) return null;
+    const existente = catalogo(nome).find(function (i) {
+      return i.nome.trim().toLowerCase() === item.nome.trim().toLowerCase();
+    });
+    if (existente) return existente;
+    estado[nome].push(item);
+    salvar();
+    return item;
+  }
+
+  function atualizarNoCatalogo(nome, id, mudancas) {
+    const item = catalogo(nome).find(function (i) { return i.id === id; });
+    if (!item) return null;
+    const anterior = item.nome;
+    Object.assign(item, mudancas);
+    /* Renomear um segmento renomeia nas contas: o vínculo é pelo nome. */
+    if (nome === 'segmentos' && mudancas.nome && mudancas.nome !== anterior) {
+      estado.contas.forEach(function (c) { if (c.segmento === anterior) c.segmento = mudancas.nome; });
+    }
+    salvar();
+    return item;
+  }
+
+  function removerDoCatalogo(nome, id) {
+    estado[nome] = catalogo(nome).filter(function (i) { return i.id !== id; });
+    salvar();
+  }
+
+  function produto(id) { return catalogo('produtos').find(function (p) { return p.id === id; }); }
+
   /* ---------- Tarefas ---------- */
   function criarTarefa(dados) {
     const nova = Object.assign({
@@ -333,6 +400,8 @@
     criarConta, criarContato, criarOportunidade, atualizarOportunidade,
     pontuar, registrarEvento, removerEvento, definirCompromisso, definirInsight,
     criarTarefa, concluirTarefa, excluirTarefa,
+    catalogo, catalogoAtivos, nomesDoCatalogo, criarNoCatalogo, atualizarNoCatalogo,
+    removerDoCatalogo, produto,
     fecharOportunidade, reabrirOportunidade, excluirOportunidade,
     exportar, importar, limpar
   };

@@ -334,7 +334,8 @@
       const cartoes = doGrupo.map(function (r) { return cartaoKanban(r, etapas); }).join('') ||
         '<div class="vazio tiny">—</div>';
       return '<section class="coluna" ondragover="event.preventDefault()" ondrop="App.soltar(event,\'' + etapa + '\')">' +
-        '<header><strong>' + esc(etapa) + '</strong>' +
+        '<header><div class="row" style="gap:6px"><strong>' + esc(etapa) + '</strong><span class="espaco"></span>' +
+        '<button class="mais" title="Cadastro rápido nesta etapa" onclick="App.cadastroRapido(\'' + etapa + '\')">+</button></div>' +
         '<span class="tiny muted">' + doGrupo.length + ' · ' + U.compacto(valor) + '</span></header>' +
         '<div class="cartoes">' + cartoes + '</div></section>';
     }).join('');
@@ -889,6 +890,153 @@
     return '<div class="row"><h1>Contas</h1><span class="espaco"></span><button class="btn alt mini" onclick="App.novaConta()">+ Conta</button></div>' + lista;
   }
 
+  /* ---------------- Cadastros ---------------- */
+  const ABAS_CADASTRO = [
+    ['empresas', 'Empresas'], ['contatos', 'Contatos'], ['oportunidades', 'Oportunidades'],
+    ['segmentos', 'Segmentos'], ['tiposTarefa', 'Tipos de tarefa'], ['produtos', 'Produtos']
+  ];
+  let abaCadastro = 'empresas';
+  let buscaCadastro = '';
+
+  function cadastros() {
+    const est = Store.obter();
+    const abas = ABAS_CADASTRO.map(function (a) {
+      return '<button class="pill' + (abaCadastro === a[0] ? ' orange' : '') + '" onclick="App.abaCadastro(\'' + a[0] + '\')">' + esc(a[1]) + '</button>';
+    }).join(' ');
+
+    const criar = {
+      empresas: 'App.novaConta()', contatos: 'App.novoContato()', oportunidades: 'App.novaOportunidade()',
+      segmentos: "App.novoItemCatalogo('segmentos')", tiposTarefa: "App.novoItemCatalogo('tiposTarefa')",
+      produtos: "App.novoProduto()"
+    }[abaCadastro];
+
+    const corpo = {
+      empresas: listaEmpresas, contatos: listaContatos, oportunidades: listaOportunidades,
+      segmentos: function (e) { return listaCatalogo(e, 'segmentos'); },
+      tiposTarefa: function (e) { return listaCatalogo(e, 'tiposTarefa'); },
+      produtos: listaProdutos
+    }[abaCadastro](est);
+
+    return '<div class="row"><h1>Cadastros</h1><span class="espaco"></span>' +
+      '<button class="btn alt mini" onclick="' + criar + '">+ Novo</button></div>' +
+      '<div class="row" style="margin:8px 0 10px">' + abas + '</div>' +
+      '<input id="busca-cadastro" class="busca" type="search" placeholder="Buscar…" value="' + esc(buscaCadastro) +
+      '" oninput="App.buscarCadastro(this.value)">' +
+      corpo;
+  }
+
+  function combina(texto) {
+    if (!buscaCadastro) return true;
+    return String(texto || '').toLowerCase().indexOf(buscaCadastro.toLowerCase()) !== -1;
+  }
+
+  function tabela(colunas, linhas, vazio) {
+    if (!linhas) return '<div class="vazio">' + esc(vazio) + '</div>';
+    return '<div class="card" style="padding:0"><div class="tabela-rolagem"><table><thead><tr>' +
+      colunas.map(function (c) { return '<th>' + esc(c) + '</th>'; }).join('') +
+      '</tr></thead><tbody>' + linhas + '</tbody></table></div></div>';
+  }
+
+  function listaEmpresas(est) {
+    const linhas = est.contas.filter(function (c) {
+      return combina(c.nome) || combina(c.razaoSocial) || combina(c.cnpj) || combina(c.segmento) || combina(c.cidade);
+    }).map(function (c) {
+      const ops = est.oportunidades.filter(function (o) { return o.contaId === c.id && !o.desfecho; });
+      const valor = ops.reduce(function (s, o) { return s + (o.valor || 0); }, 0);
+      return '<tr><td><strong>' + esc(c.nome) + '</strong>' +
+        (c.razaoSocial ? '<span class="tiny muted">' + esc(c.razaoSocial) + '</span>' : '') +
+        (c.cnpj ? '<span class="tiny muted">' + esc(c.cnpj) + '</span>' : '') + '</td>' +
+        '<td>' + esc(c.segmento || '—') + '</td>' +
+        '<td>' + esc([c.cidade, c.uf].filter(Boolean).join('/') || '—') + '</td>' +
+        '<td>' + esc(c.relacaoAtual || '—') + '</td>' +
+        '<td class="right">' + Store.contatosDaConta(c.id).length + '</td>' +
+        '<td class="right">' + ops.length + (valor ? '<span class="tiny muted">' + U.compacto(valor) + '</span>' : '') + '</td>' +
+        '<td class="right" style="white-space:nowrap">' +
+          '<button class="btn ghost mini" onclick="App.editarConta(\'' + c.id + '\')">Editar</button> ' +
+          '<button class="btn ghost mini" onclick="App.novoContato(\'' + c.id + '\')">+ Contato</button> ' +
+          '<button class="btn ghost mini" onclick="App.novaOportunidade(\'' + c.id + '\')">+ Op.</button>' +
+        '</td></tr>';
+    }).join('');
+    return tabela(['Empresa', 'Segmento', 'Cidade', 'Relação', 'Contatos', 'Oportunidades', ''], linhas, 'Nenhuma empresa encontrada.');
+  }
+
+  function listaContatos(est) {
+    const linhas = est.contatos.filter(function (c) {
+      const conta = Store.conta(c.contaId);
+      return combina(c.nome) || combina(c.cargo) || combina(c.email) || combina(conta && conta.nome);
+    }).map(function (c) {
+      const conta = Store.conta(c.contaId);
+      const perfil = P.PERFIS.find(function (x) { return x.id === (c.perfil || 'nao_classificado'); });
+      const classePerfil = { mobilizador: 'ok', falador: 'warn', bloqueador: 'dead' }[perfil.grupo] || '';
+      return '<tr><td><strong>' + esc(c.nome) + '</strong>' +
+        '<span class="tiny muted">' + esc(c.cargo || '—') + '</span></td>' +
+        '<td>' + esc((conta && conta.nome) || '—') + '</td>' +
+        '<td>' + esc(c.papel) + '</td>' +
+        '<td>' + (perfil.grupo === 'indefinido' ? '<span class="tiny muted">sem perfil</span>'
+          : '<span class="pill ' + classePerfil + '">' + esc(perfil.rotulo) + '</span>') + '</td>' +
+        '<td><span class="dot ' + c.sentimento + '"></span><span class="tiny">' + esc(c.email || c.telefone || '—') + '</span></td>' +
+        '<td class="right"><button class="btn ghost mini" onclick="App.editarContato(\'' + c.id + '\')">Editar</button></td></tr>';
+    }).join('');
+    return tabela(['Contato', 'Empresa', 'Papel', 'Perfil', 'Contato', ''], linhas, 'Nenhum contato encontrado.');
+  }
+
+  function listaOportunidades(est) {
+    const linhas = est.oportunidades.filter(function (o) {
+      const conta = Store.conta(o.contaId);
+      return combina(o.titulo) || combina(conta && conta.nome) || combina(o.etapa);
+    }).sort(function (a, b) { return (b.valor || 0) - (a.valor || 0); }).map(function (o) {
+      const conta = Store.conta(o.contaId);
+      const r = E.resumo(o);
+      return '<tr><td><strong>' + esc(o.titulo) + '</strong>' +
+        '<span class="tiny muted">' + esc(o.tipo || '') + '</span></td>' +
+        '<td>' + esc((conta && conta.nome) || '—') + '</td>' +
+        '<td>' + (o.desfecho ? '<span class="pill">encerrada</span>' : esc(o.etapa)) + '</td>' +
+        '<td class="right">' + U.compacto(o.valor) + '</td>' +
+        '<td class="right">' + r.iad + '/16</td>' +
+        '<td class="right" style="white-space:nowrap">' +
+          '<button class="btn ghost mini" onclick="App.abrir(\'' + o.id + '\')">Abrir</button> ' +
+          '<button class="btn ghost mini" onclick="App.editarOportunidade(\'' + o.id + '\')">Editar</button></td></tr>';
+    }).join('');
+    return tabela(['Oportunidade', 'Empresa', 'Etapa', 'Valor', 'IAD', ''], linhas, 'Nenhuma oportunidade encontrada.');
+  }
+
+  function listaCatalogo(est, nome) {
+    const usos = function (item) {
+      if (nome === 'segmentos') return est.contas.filter(function (c) { return c.segmento === item.nome; }).length;
+      return est.tarefas.filter(function (t) { return t.tipo === item.nome; }).length;
+    };
+    const linhas = Store.catalogo(nome).filter(function (i) { return combina(i.nome); }).map(function (i) {
+      return '<tr><td><strong>' + esc(i.nome) + '</strong></td>' +
+        '<td>' + (i.ativo === false ? '<span class="pill">inativo</span>' : '<span class="pill ok">ativo</span>') + '</td>' +
+        '<td class="right">' + usos(i) + '</td>' +
+        '<td class="right" style="white-space:nowrap">' +
+          '<button class="btn ghost mini" onclick="App.editarItemCatalogo(\'' + nome + '\',\'' + i.id + '\')">Editar</button> ' +
+          '<button class="btn ghost mini" onclick="App.excluirItemCatalogo(\'' + nome + '\',\'' + i.id + '\')">Excluir</button></td></tr>';
+    }).join('');
+    return tabela([nome === 'segmentos' ? 'Segmento' : 'Tipo de tarefa', 'Situação', 'Em uso', ''], linhas, 'Nada cadastrado ainda.');
+  }
+
+  function listaProdutos(est) {
+    const linhas = Store.catalogo('produtos').filter(function (p) {
+      return combina(p.nome) || combina(p.sku) || combina(p.categoria);
+    }).map(function (p) {
+      const usos = est.oportunidades.filter(function (o) {
+        return (o.itens || []).some(function (i) { return i.produtoId === p.id; });
+      }).length;
+      return '<tr><td><strong>' + esc(p.nome) + '</strong>' +
+        (p.descricao ? '<span class="tiny muted">' + esc(p.descricao) + '</span>' : '') + '</td>' +
+        '<td>' + esc(p.sku || '—') + '</td>' +
+        '<td>' + esc(p.categoria || '—') + '</td>' +
+        '<td>' + esc(p.unidade || '—') + '</td>' +
+        '<td class="right">' + (p.precoReferencia ? U.moeda(p.precoReferencia) : '—') + '</td>' +
+        '<td class="right">' + usos + '</td>' +
+        '<td class="right" style="white-space:nowrap">' +
+          '<button class="btn ghost mini" onclick="App.editarProduto(\'' + p.id + '\')">Editar</button> ' +
+          '<button class="btn ghost mini" onclick="App.excluirItemCatalogo(\'produtos\',\'' + p.id + '\')">Excluir</button></td></tr>';
+    }).join('');
+    return tabela(['Produto', 'SKU', 'Categoria', 'Unidade', 'Preço de referência', 'Em uso', ''], linhas, 'Nenhum produto cadastrado.');
+  }
+
   /* ---------------- Playbook ---------------- */
   function playbook() {
     const dims = P.DIMENSOES.map(function (d) {
@@ -963,11 +1111,13 @@
   }
 
   global.IADViews = {
-    hoje, painel, pipeline, cockpit, revisao, contas, playbook, dados, itemArquivo,
+    hoje, painel, pipeline, cockpit, revisao, contas, cadastros, playbook, dados, itemArquivo,
     definirFiltro: function (f) { filtroGrupo = f; },
     definirFiltroHistorico: function (f) { filtroHistorico = f; },
     definirFiltroHoje: function (f) { filtroHoje = f; },
     definirModoPipeline: function (m) { modoPipeline = m; },
+    definirAbaCadastro: function (a) { abaCadastro = a; buscaCadastro = ''; },
+    definirBuscaCadastro: function (b) { buscaCadastro = b; },
     definirPeriodo: function (f) { filtroPeriodo = f; },
     definirSegmento: function (f) { filtroSegmento = f; }
   };
