@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>IAD CRM — Gestão comercial orientada à decisão</title>
+<meta name="description" content="CRM que administra decisões de compra, evidências do cliente e buying groups — não apenas etapas e atividades.">
+<meta name="theme-color" content="#0d2b4e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="IAD CRM">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div>
+      <div class="marca">IAD <span>CRM</span></div>
+      <div class="sub">O funil organiza. A decisão fecha.</div>
+    </div>
+    <div class="espaco"></div>
+    <button onclick="App.ir('#/dados')" title="Dados e instalação">⚙︎ Dados</button>
+  </header>
+  <nav class="tabs"></nav>
+  <div class="col"><main id="conteudo"></main></div>
+</div>
+
+<script src="src/playbook.js"></script>
+<script src="src/store.js"></script>
+<script src="src/engine.js"></script>
+<script src="src/ui.js"></script>
+<script src="src/seed.js"></script>
+<script src="src/views.js"></script>
+<script src="src/app.js"></script>
+</body>
+</html>
