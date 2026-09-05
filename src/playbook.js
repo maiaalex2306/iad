@@ -232,6 +232,15 @@
     { id: 'whatsapp', nome: 'WhatsApp', papel: 'Remove barreiras e fecha microcompromissos.' }
   ];
 
+  /* O desfecho que mais importa não é a perda para o concorrente: é o cliente
+     que não decidiu nada. Sem separar os dois, o modelo nunca aprende. */
+  const DESFECHOS = [
+    { id: 'ganho', rotulo: 'Ganho', classe: 'ok', pergunta: 'O cliente comprou.' },
+    { id: 'perdido_concorrente', rotulo: 'Perdido para concorrente', classe: 'dead', pergunta: 'O cliente decidiu, e escolheu outro.' },
+    { id: 'perdido_inacao', rotulo: 'Perdido por inação', classe: 'dead', pergunta: 'O cliente não decidiu nada e o projeto morreu.' },
+    { id: 'adiado', rotulo: 'Adiado', classe: 'warn', pergunta: 'Ficou para outro ciclo, com data conhecida ou não.' }
+  ];
+
   const FAIXAS_EVIDENCIA = [
     { max: 7, rotulo: 'Ativo', classe: 'ok' },
     { max: 14, rotulo: 'Atenção', classe: 'warn' },
@@ -240,7 +249,7 @@
   ];
 
   global.IADPlaybook = {
-    DIMENSOES, ETAPAS, GATES_PROPOSTA, PAPEIS, PAPEIS_CRITICOS,
+    DIMENSOES, ETAPAS, GATES_PROPOSTA, PAPEIS, PAPEIS_CRITICOS, DESFECHOS,
     CANAIS, FAIXAS_EVIDENCIA, ATIVIDADES_QUE_NAO_CONTAM
   };
 })(window);

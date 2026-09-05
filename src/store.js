@@ -88,6 +88,7 @@
       eventos: [],
       snapshots: [],
       gateLiberadoPor: null,
+      desfecho: null,
       notas: ''
     }, dados);
     nova.snapshots = [{ data: hoje(), iad: 0, dims: Object.assign({}, nova.dims) }];
@@ -131,6 +132,36 @@
     return op;
   }
 
+  /* Fechar o ciclo: o desfecho congela a foto da decisão no dia do fechamento.
+     É essa foto que, somada a muitos negócios, valida ou derruba o modelo. */
+  function fecharOportunidade(id, dados) {
+    const op = oportunidade(id);
+    if (!op) return null;
+    op.desfecho = {
+      tipo: dados.tipo,
+      data: dados.data || hoje(),
+      motivo: dados.motivo || '',
+      concorrente: dados.concorrente || '',
+      valorFinal: dados.valorFinal != null ? dados.valorFinal : op.valor,
+      iadFinal: dados.iadFinal,
+      dimsFinal: Object.assign({}, op.dims),
+      coverageFinal: dados.coverageFinal,
+      evidenceAgeFinal: dados.evidenceAgeFinal,
+      diasEmAberto: dados.diasEmAberto
+    };
+    if (dados.tipo === 'ganho') op.etapa = 'Venda';
+    salvar();
+    return op;
+  }
+
+  function reabrirOportunidade(id) {
+    const op = oportunidade(id);
+    if (!op) return null;
+    op.desfecho = null;
+    salvar();
+    return op;
+  }
+
   function excluirOportunidade(id) {
     estado.oportunidades = estado.oportunidades.filter(function (o) { return o.id !== id; });
     salvar();
@@ -155,6 +186,7 @@
     conta, contato, oportunidade, contatosDaConta,
     criarConta, criarContato, criarOportunidade, atualizarOportunidade,
     pontuar, registrarEvento, removerEvento, excluirOportunidade,
+    fecharOportunidade, reabrirOportunidade,
     exportar, importar, limpar, estadoVazio
   };
 })(window);

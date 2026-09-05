@@ -5,6 +5,47 @@
   const P = global.IADPlaybook, Store = global.IADStore, E = global.IADEngine, U = global.IADUI;
   const esc = U.esc;
 
+  /* ---------------- Hoje: a tela do vendedor ---------------- */
+  function hoje() {
+    const est = Store.obter();
+    if (!est.oportunidades.length) return boasVindas();
+
+    const foco = E.focoDoDia(est.oportunidades);
+    if (!foco.itens.length) {
+      return cabecalhoHoje(foco) + '<div class="card"><div class="vazio">Nenhum negócio aberto. Toda a carteira está encerrada.</div></div>';
+    }
+
+    const urgencias = ['', 'Atenção', 'Prioridade', 'Urgente'];
+    const classes = ['', '', 'warn', 'dead'];
+
+    const itens = foco.itens.slice(0, 12).map(function (i) {
+      const r = i.resumo;
+      return '<div class="foco u' + i.urgencia + '">' +
+        '<div class="row"><strong>' + esc(r.op.titulo) + '</strong><span class="espaco"></span>' +
+        (i.urgencia ? '<span class="pill ' + classes[i.urgencia] + '">' + urgencias[i.urgencia] + '</span>' : '') +
+        '<span class="pill navy">' + U.compacto(r.op.valor) + '</span></div>' +
+        '<div class="small muted">' + esc((r.conta && r.conta.nome) || '') + ' · ' + esc(r.op.etapa) + ' · IAD ' + r.iad + '/16</div>' +
+        '<div class="small" style="margin-top:8px"><strong>' + esc(i.motivo) + '</strong></div>' +
+        '<div class="small muted">' + esc(i.acao) + '</div>' +
+        '<div class="row" style="margin-top:10px">' +
+        '<button class="btn alt mini" onclick="App.novaEvidencia(\'' + r.op.id + '\')">Registrar evidência</button>' +
+        '<button class="btn ghost mini" onclick="App.abrir(\'' + r.op.id + '\')">Abrir</button></div></div>';
+    }).join('');
+
+    return cabecalhoHoje(foco) + '<div class="lista-foco">' + itens + '</div>';
+  }
+
+  function cabecalhoHoje(foco) {
+    const n = foco.urgentes.length;
+    return '<div class="row"><h1>Hoje</h1><span class="espaco"></span>' +
+      '<button class="btn alt mini" onclick="App.capturaRapida()">+ Evidência</button></div>' +
+      '<p class="muted small">' +
+      (n
+        ? n + ' negócio(s) precisam de você agora · ' + U.compacto(foco.valorUrgente) + ' envolvidos'
+        : 'Nada urgente. A lista abaixo está em ordem de prioridade.') +
+      '</p>';
+  }
+
   /* ---------------- Painel executivo ---------------- */
   function painel() {
     const est = Store.obter();
@@ -59,7 +100,42 @@
         '<p class="tiny muted" style="margin-top:10px">Leia como: “este valor só anda quando esta decisão acontecer dentro do cliente”.</p></div>' +
       '</div>' +
       '<div class="sec-titulo"><h2>Riscos críticos</h2><span class="tiny muted">maior valor primeiro</span></div>' +
-      '<div class="lista">' + criticos + '</div>';
+      '<div class="lista">' + criticos + '</div>' +
+      aprendizado();
+  }
+
+  /* O que a carteira fechada já ensinou. Com pouca amostra, diz que é pouca amostra. */
+  function aprendizado() {
+    const a = E.aprendizado(Store.obter().oportunidades);
+    if (!a.total) {
+      return '<div class="sec-titulo"><h2>Aprendizado da carteira</h2></div>' +
+        '<div class="card"><div class="vazio small">Nenhum negócio encerrado ainda. Ao fechar uma oportunidade — ganha ou perdida — o app congela a foto das oito decisões daquele dia. É a comparação entre essas fotos que valida o modelo.</div></div>';
+    }
+
+    const pct = function (v) { return v == null ? '—' : Math.round(v * 100) + '%'; };
+    const num = function (v, c) { return v == null ? '—' : U.numero(v, c || 1); };
+
+    const linhas = a.porDimensao.map(function (d) {
+      return '<tr><td>' + esc(d.nome) + '</td><td class="right">' + num(d.ganho) + '</td>' +
+        '<td class="right">' + num(d.perdido) + '</td>' +
+        '<td class="right">' + (d.diferenca == null ? '—' : (d.diferenca > 0 ? '+' : '') + num(d.diferenca)) + '</td></tr>';
+    }).join('');
+
+    const top = a.porDimensao.filter(function (d) { return d.diferenca != null && d.diferenca > 0; })[0];
+
+    return '<div class="sec-titulo"><h2>Aprendizado da carteira</h2><span class="tiny muted">' + a.total + ' negócio(s) encerrado(s)</span></div>' +
+      '<div class="grid k4">' +
+        '<div class="kpi"><div class="rot">Taxa de ganho</div><div class="val">' + pct(a.taxaGanho) + '</div><div class="obs">' + a.ganhos + ' ganhos</div></div>' +
+        '<div class="kpi"><div class="rot">Perdas por inação</div><div class="val">' + pct(a.taxaInacao) + '</div><div class="obs">' + a.perdidosInacao + ' clientes não decidiram</div></div>' +
+        '<div class="kpi"><div class="rot">IAD no fechamento</div><div class="val">' + num(a.iadGanhos) + '<span class="small muted"> × ' + num(a.iadPerdidos) + '</span></div><div class="obs">ganhos × perdidos</div></div>' +
+        '<div class="kpi"><div class="rot">Coverage no fechamento</div><div class="val">' + (a.coverageGanhos == null ? '—' : Math.round(a.coverageGanhos) + '%') + '<span class="small muted"> × ' + (a.coveragePerdidos == null ? '—' : Math.round(a.coveragePerdidos) + '%') + '</span></div><div class="obs">ganhos × perdidos</div></div>' +
+      '</div>' +
+      '<div class="card" style="margin-top:12px"><h3>Quais decisões separaram ganho de perda</h3>' +
+      (a.confiavel
+        ? (top ? '<p class="small">Maior diferença até aqui: <strong>' + esc(top.nome) + '</strong>.</p>' : '')
+        : '<div class="aviso" style="margin-bottom:10px">Amostra pequena (' + a.ganhos + ' ganhos, ' + (a.perdidosConcorrente + a.perdidosInacao) + ' perdas). Leia como indício, não como conclusão — a partir de cerca de cinco de cada lado os números começam a significar algo.</div>') +
+      '<div class="tabela-rolagem"><table><thead><tr><th>Decisão</th><th class="right">Ganhos</th><th class="right">Perdidos</th><th class="right">Diferença</th></tr></thead><tbody>' + linhas + '</tbody></table></div>' +
+      '<p class="tiny muted" style="margin-top:8px">Nota média (0 a 2) de cada dimensão no dia em que o negócio foi encerrado.</p></div>';
   }
 
   function boasVindas() {
@@ -75,11 +151,12 @@
 
   function pipeline() {
     const est = Store.obter();
-    const resumos = est.oportunidades.map(E.resumo)
+    if (filtroGrupo === 'fechados') return pipelineFechados(est);
+    const resumos = est.oportunidades.filter(function (o) { return !o.desfecho; }).map(E.resumo)
       .filter(function (r) { return filtroGrupo === 'todos' || r.classe.id === filtroGrupo; })
       .sort(function (a, b) { return b.saude - a.saude; });
 
-    const filtros = [['todos', 'Todos'], ['real', 'Negócio real'], ['oculto', 'Oculto promissor'], ['construcao', 'Em construção'], ['falso', 'Falso avançado'], ['zumbi', 'Zumbi']]
+    const filtros = [['todos', 'Todos'], ['real', 'Negócio real'], ['oculto', 'Oculto promissor'], ['construcao', 'Em construção'], ['falso', 'Falso avançado'], ['zumbi', 'Zumbi'], ['fechados', 'Encerrados']]
       .map(function (f) {
         return '<button class="pill' + (filtroGrupo === f[0] ? ' orange' : '') + '" onclick="App.filtrar(\'' + f[0] + '\')">' + esc(f[1]) + '</button>';
       }).join(' ');
@@ -91,6 +168,35 @@
       '<button class="btn alt mini" onclick="App.novaOportunidade()">+ Oportunidade</button></div>' +
       '<div class="row" style="margin:8px 0 14px">' + filtros + '</div>' +
       '<div class="lista">' + itens + '</div>';
+  }
+
+  function cabecalhoPipeline(filtros) {
+    return '<div class="row"><h1>Pipeline</h1><span class="espaco"></span>' +
+      '<button class="btn alt mini" onclick="App.novaOportunidade()">+ Oportunidade</button></div>' +
+      '<div class="row" style="margin:8px 0 14px">' + filtros + '</div>';
+  }
+
+  function pipelineFechados(est) {
+    const filtros = [['todos', 'Todos'], ['real', 'Negócio real'], ['oculto', 'Oculto promissor'], ['construcao', 'Em construção'], ['falso', 'Falso avançado'], ['zumbi', 'Zumbi'], ['fechados', 'Encerrados']]
+      .map(function (f) {
+        return '<button class="pill' + (filtroGrupo === f[0] ? ' orange' : '') + '" onclick="App.filtrar(\'' + f[0] + '\')">' + esc(f[1]) + '</button>';
+      }).join(' ');
+
+    const fechadas = est.oportunidades.filter(function (o) { return o.desfecho; })
+      .sort(function (a, b) { return b.desfecho.data.localeCompare(a.desfecho.data); });
+
+    const itens = fechadas.map(function (op) {
+      const d = P.DESFECHOS.find(function (x) { return x.id === op.desfecho.tipo; }) || { rotulo: op.desfecho.tipo, classe: '' };
+      const conta = Store.conta(op.contaId);
+      return '<button class="item" onclick="App.abrir(\'' + op.id + '\')">' +
+        '<div class="row"><span class="tit">' + esc(op.titulo) + '</span><span class="espaco"></span>' +
+        '<span class="pill ' + d.classe + '">' + esc(d.rotulo) + '</span></div>' +
+        '<div class="small muted">' + esc((conta && conta.nome) || '') + ' · ' + U.compacto(op.desfecho.valorFinal) + ' · encerrado em ' + U.data(op.desfecho.data) + '</div>' +
+        '<div class="tiny muted" style="margin-top:6px">IAD no fechamento: ' + op.desfecho.iadFinal + '/16 · grupo comprador ' + (op.desfecho.coverageFinal || 0) + '%' +
+        (op.desfecho.motivo ? ' · ' + esc(op.desfecho.motivo) : '') + '</div></button>';
+    }).join('') || '<div class="vazio">Nenhum negócio encerrado ainda.</div>';
+
+    return cabecalhoPipeline(filtros) + '<div class="lista">' + itens + '</div>';
   }
 
   function cardOportunidade(r) {
@@ -153,8 +259,19 @@
       return '<tr><td><strong>' + esc(c.nome) + '</strong></td><td>' + esc(r.nbd.canais[c.id]) + '</td></tr>';
     }).join('') : '';
 
+    const desf = op.desfecho ? P.DESFECHOS.find(function (x) { return x.id === op.desfecho.tipo; }) : null;
+    const banner = desf
+      ? '<div class="card" style="margin-top:10px"><div class="row"><span class="pill ' + desf.classe + '">' + esc(desf.rotulo) + '</span>' +
+        '<span class="small muted">encerrado em ' + U.data(op.desfecho.data) + ' · IAD ' + op.desfecho.iadFinal + '/16 · ' + (op.desfecho.diasEmAberto || 0) + ' dias em aberto</span>' +
+        '<span class="espaco"></span><button class="btn ghost mini" onclick="App.reabrir(\'' + op.id + '\')">Reabrir</button></div>' +
+        (op.desfecho.motivo ? '<p class="small" style="margin:10px 0 0">' + esc(op.desfecho.motivo) + '</p>' : '') +
+        (op.desfecho.concorrente ? '<p class="tiny muted" style="margin:6px 0 0">Concorrente: ' + esc(op.desfecho.concorrente) + '</p>' : '') + '</div>'
+      : '';
+
     return '<div class="row"><button class="btn ghost mini" onclick="App.ir(\'#/pipeline\')">← Pipeline</button>' +
-      '<span class="espaco"></span><button class="btn ghost mini" onclick="App.editarOportunidade(\'' + op.id + '\')">Editar</button></div>' +
+      '<span class="espaco"></span><button class="btn ghost mini" onclick="App.editarOportunidade(\'' + op.id + '\')">Editar</button>' +
+      (op.desfecho ? '' : '<button class="btn ghost mini" onclick="App.encerrar(\'' + op.id + '\')">Encerrar</button>') + '</div>' +
+      banner +
       '<h1 style="margin-top:10px">' + esc(op.titulo) + '</h1>' +
       '<p class="muted small">' + esc((r.conta && r.conta.nome) || 'Sem conta') + ' · ' + U.moeda(op.valor) + ' · Etapa CRM: ' + esc(op.etapa) + '</p>' +
 
@@ -292,5 +409,8 @@
       '<button class="btn ghost" onclick="App.limpar()">Apagar tudo</button></div></div>';
   }
 
-  global.IADViews = { painel, pipeline, cockpit, revisao, contas, playbook, dados, definirFiltro: function (f) { filtroGrupo = f; } };
+  global.IADViews = {
+    hoje, painel, pipeline, cockpit, revisao, contas, playbook, dados,
+    definirFiltro: function (f) { filtroGrupo = f; }
+  };
 })(window);

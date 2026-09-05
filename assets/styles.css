@@ -195,5 +195,18 @@ th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line
 th { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 .tabela-rolagem { overflow-x: auto; }
 
+/* Hoje: uma linha por negócio, faixa lateral pela urgência. */
+.lista-foco { display: flex; flex-direction: column; gap: 10px; }
+.foco {
+  background: var(--surface); border: 1px solid var(--line);
+  border-left: 4px solid var(--line); border-radius: var(--radius);
+  padding: 13px 14px; box-shadow: var(--shadow);
+}
+.foco.u1 { border-left-color: var(--muted); }
+.foco.u2 { border-left-color: var(--warn); }
+.foco.u3 { border-left-color: var(--dead); }
+
+button.btn.voz { margin-top: 6px; }
+
 .aviso { border-left: 3px solid var(--orange); background: var(--orange-soft); padding: 10px 12px; border-radius: 8px; font-size: .86rem; }
 .vazio { text-align: center; color: var(--muted); padding: 30px 10px; }

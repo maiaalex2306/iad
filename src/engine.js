@@ -196,7 +196,7 @@
 
   /* Carteira: onde está o dinheiro e qual decisão o está segurando. */
   function carteira(oportunidades) {
-    const abertas = oportunidades.filter(function (o) { return o.etapa !== 'Venda'; });
+    const abertas = oportunidades.filter(function (o) { return !o.desfecho; });
     const resumos = abertas.map(resumo);
     const total = resumos.reduce(function (s, r) { return s + (r.op.valor || 0); }, 0);
     const porGrupo = {};
@@ -240,9 +240,111 @@
     };
   }
 
+  /* Sugestão de dimensão a partir do texto da evidência: pura palavra-chave,
+     visível e sempre editável pelo vendedor. Não é IA, e não finge ser. */
+  const PISTAS = {
+    problema: ['problema', 'perda', 'retrabalho', 'parada', 'gargalo', 'desperdicio', 'reclamacao', 'dificuldade', 'falha'],
+    prioridade: ['prazo', 'urgente', 'trimestre', 'meta', 'safra', 'cronograma', 'adiar', 'este ano', 'orcamento anual'],
+    impacto: ['payback', 'roi', 'retorno', 'economia', 'business case', 'calculo', 'numeros', 'r$', 'reducao de custo', 'estimativa'],
+    criterios: ['criterio', 'requisito', 'checklist', 'rfp', 'comparativo', 'avaliacao', 'especificacao', 'edital'],
+    stakeholders: ['cfo', 'ceo', 'diretor', 'gerente', 'apresentou', 'incluiu', 'entrou', 'participou', 'convidou', 'novo decisor'],
+    consenso: ['reuniao interna', 'alinhou', 'alinhamento', 'apoio', 'encaminhou', 'comite', 'internamente', 'defendeu'],
+    risco: ['piloto', 'prova de conceito', 'poc', 'referencia', 'visita', 'sla', 'garantia', 'teste', 'seguranca'],
+    processo: ['contrato', 'juridico', 'assinatura', 'homologacao', 'cadastro', 'compras', 'alcada', 'aprovacao', 'faturamento']
+  };
+  const ORDEM_DESEMPATE = ['processo', 'consenso', 'stakeholders', 'risco', 'criterios', 'impacto', 'prioridade', 'problema'];
+
+  function sugerirDimensao(texto) {
+    if (!texto) return null;
+    const limpo = texto.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    let melhor = null, melhorPontos = 0;
+    ORDEM_DESEMPATE.forEach(function (id) {
+      const pontos = PISTAS[id].filter(function (pista) { return limpo.indexOf(pista) !== -1; }).length;
+      if (pontos > melhorPontos) { melhorPontos = pontos; melhor = id; }
+    });
+    return melhor;
+  }
+
+  /* Foco do dia: o app procura o vendedor, em vez de esperar ser procurado.
+     Uma linha por negócio, a mais urgente primeiro. */
+  function focoDoDia(oportunidades) {
+    const itens = [];
+    oportunidades.filter(function (o) { return !o.desfecho; }).forEach(function (op) {
+      const r = resumo(op);
+      const push = function (urgencia, motivo, acao) {
+        itens.push({ resumo: r, urgencia: urgencia, motivo: motivo, acao: acao });
+      };
+      if (r.evidenceAge > 30) {
+        push(3, r.evidenceAge + ' dias sem evidência do cliente', 'Requalifique ou encerre: registre o desfecho real.');
+      } else if (depoisDaProposta(op) && !r.coverage.temEconomicBuyer) {
+        push(3, 'Em ' + op.etapa.toLowerCase() + ' sem acesso ao decisor econômico', r.nbd.acao);
+      } else if (depoisDaProposta(op) && !r.gates.liberado) {
+        push(3, 'Proposta emitida com prontidão de ' + r.gates.prontidao + '%', 'Feche as lacunas: ' + r.gates.pendentes.map(function (p) { return p.nome; }).join(', ') + '.');
+      } else if (r.evidenceAge > 14) {
+        push(2, r.evidenceAge + ' dias sem evidência do cliente', r.nbd.acao);
+      } else if (r.velocity === 0) {
+        push(2, 'Nenhuma microdecisão nos últimos 30 dias', r.nbd.acao);
+      } else if (r.coverage.mapeados <= 1) {
+        push(1, 'Depende de uma única pessoa', r.nbd.acao);
+      } else {
+        push(0, 'Próxima decisão: ' + (r.nbd.dimensao ? r.nbd.dimensao.nome : 'formalização'), r.nbd.acao);
+      }
+    });
+    itens.sort(function (a, b) {
+      return b.urgencia - a.urgencia || (b.resumo.op.valor || 0) - (a.resumo.op.valor || 0);
+    });
+    return {
+      itens: itens,
+      urgentes: itens.filter(function (i) { return i.urgencia >= 2; }),
+      valorUrgente: itens.filter(function (i) { return i.urgencia >= 2; })
+        .reduce(function (s, i) { return s + (i.resumo.op.valor || 0); }, 0)
+    };
+  }
+
+  /* Aprendizado: compara a foto da decisão no fechamento entre ganhos e perdas.
+     É a única forma de o IAD deixar de ser hipótese. */
+  function aprendizado(oportunidades) {
+    const fechadas = oportunidades.filter(function (o) { return o.desfecho; });
+    const por = function (tipo) { return fechadas.filter(function (o) { return o.desfecho.tipo === tipo; }); };
+    const ganhos = por('ganho');
+    const perdidos = fechadas.filter(function (o) {
+      return o.desfecho.tipo === 'perdido_concorrente' || o.desfecho.tipo === 'perdido_inacao';
+    });
+    const media = function (lista, fn) {
+      return lista.length ? lista.reduce(function (s, o) { return s + fn(o); }, 0) / lista.length : null;
+    };
+    const iadDe = function (o) { return o.desfecho.iadFinal != null ? o.desfecho.iadFinal : 0; };
+
+    const porDimensao = P.DIMENSOES.map(function (d) {
+      const g = media(ganhos, function (o) { return (o.desfecho.dimsFinal || {})[d.id] || 0; });
+      const p = media(perdidos, function (o) { return (o.desfecho.dimsFinal || {})[d.id] || 0; });
+      return { id: d.id, nome: d.nome, ganho: g, perdido: p, diferenca: (g == null || p == null) ? null : g - p };
+    }).sort(function (a, b) { return (b.diferenca || 0) - (a.diferenca || 0); });
+
+    return {
+      total: fechadas.length,
+      ganhos: ganhos.length,
+      perdidosConcorrente: por('perdido_concorrente').length,
+      perdidosInacao: por('perdido_inacao').length,
+      adiados: por('adiado').length,
+      valorGanho: ganhos.reduce(function (s, o) { return s + (o.desfecho.valorFinal || 0); }, 0),
+      taxaGanho: fechadas.length ? ganhos.length / fechadas.length : null,
+      taxaInacao: fechadas.length ? por('perdido_inacao').length / fechadas.length : null,
+      iadGanhos: media(ganhos, iadDe),
+      iadPerdidos: media(perdidos, iadDe),
+      coverageGanhos: media(ganhos, function (o) { return o.desfecho.coverageFinal || 0; }),
+      coveragePerdidos: media(perdidos, function (o) { return o.desfecho.coverageFinal || 0; }),
+      cicloGanhos: media(ganhos, function (o) { return o.desfecho.diasEmAberto || 0; }),
+      porDimensao: porDimensao,
+      confiavel: ganhos.length >= 5 && perdidos.length >= 5,
+      fechadas: fechadas
+    };
+  }
+
   global.IADEngine = {
     iad, evidenceAge, faixaEvidencia, decisionVelocity, coverage, gates,
     saude, classificar, nextBestDecision, alertas, resumo, carteira,
+    focoDoDia, aprendizado, sugerirDimensao,
     stakeholdersDaOp, diasEntre, indiceEtapa, depoisDaProposta
   };
 })(window);

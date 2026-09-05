@@ -31,7 +31,7 @@
   }
 
   /* Diálogo genérico: recebe HTML de formulário e devolve os campos preenchidos. */
-  function formulario(titulo, campos, valores, aoConfirmar) {
+  function formulario(titulo, campos, valores, aoConfirmar, aoMontar) {
     const dlg = document.createElement('dialog');
     const html = campos.map(function (c) {
       const v = (valores && valores[c.id] != null) ? valores[c.id] : (c.padrao != null ? c.padrao : '');
@@ -44,7 +44,8 @@
           }).join('') + '</select></label>';
       }
       if (c.tipo === 'textarea') {
-        return '<label class="campo"><span>' + esc(c.rotulo) + '</span><textarea name="' + c.id + '">' + esc(v) + '</textarea></label>';
+        return '<label class="campo"><span>' + esc(c.rotulo) + '</span><textarea name="' + c.id + '">' + esc(v) + '</textarea>' +
+          (c.voz ? botaoVoz(c.id) : '') + '</label>';
       }
       return '<label class="campo"><span>' + esc(c.rotulo) + '</span><input type="' + (c.tipo || 'text') + '" name="' + c.id + '" value="' + esc(v) + '"' + (c.placeholder ? ' placeholder="' + esc(c.placeholder) + '"' : '') + '></label>';
     }).join('');
@@ -55,6 +56,8 @@
       '<button class="btn" value="ok" type="submit">Salvar</button></div></form>';
 
     document.body.appendChild(dlg);
+    ligarVoz(dlg);
+    if (aoMontar) aoMontar(dlg);
     dlg.addEventListener('close', function () {
       if (dlg.returnValue === 'ok') {
         const dados = {};
@@ -69,6 +72,45 @@
     dlg.showModal();
   }
 
+  /* Ditado: o vendedor sai da reunião e fala a evidência.
+     Só aparece onde o navegador tem reconhecimento de voz (Chrome, Edge, Safari). */
+  function vozDisponivel() {
+    return !!(global.SpeechRecognition || global.webkitSpeechRecognition);
+  }
+
+  function botaoVoz(campoId) {
+    if (!vozDisponivel()) return '';
+    return '<button type="button" class="btn ghost mini voz" data-voz="' + campoId + '">🎤 Ditar</button>';
+  }
+
+  function ligarVoz(dlg) {
+    dlg.querySelectorAll('[data-voz]').forEach(function (botao) {
+      botao.addEventListener('click', function () {
+        const campo = dlg.querySelector('[name="' + botao.dataset.voz + '"]');
+        const Reconhecimento = global.SpeechRecognition || global.webkitSpeechRecognition;
+        const rec = new Reconhecimento();
+        rec.lang = 'pt-BR';
+        rec.interimResults = false;
+        rec.continuous = false;
+        const rotuloOriginal = botao.textContent;
+        botao.textContent = '● Ouvindo…';
+        botao.disabled = true;
+        const encerrar = function () { botao.textContent = rotuloOriginal; botao.disabled = false; };
+        rec.onresult = function (e) {
+          const texto = e.results[0][0].transcript;
+          campo.value = campo.value ? campo.value + ' ' + texto : texto;
+          campo.dispatchEvent(new Event('input'));
+        };
+        rec.onerror = function (e) {
+          encerrar();
+          if (e.error === 'not-allowed') alert('O navegador bloqueou o microfone. Libere o acesso para usar o ditado.');
+        };
+        rec.onend = encerrar;
+        rec.start();
+      });
+    });
+  }
+
   function confirmar(mensagem) { return global.confirm(mensagem); }
 
   function barra(percentual, alt) {
@@ -76,5 +118,8 @@
     return '<div class="barra' + (alt ? ' alt' : '') + '"><i style="width:' + p + '%"></i></div>';
   }
 
-  global.IADUI = { esc: esc, moeda: moeda, compacto: compacto, data: data, numero: numero, formulario: formulario, confirmar: confirmar, barra: barra };
+  global.IADUI = {
+    esc: esc, moeda: moeda, compacto: compacto, data: data, numero: numero,
+    formulario: formulario, confirmar: confirmar, barra: barra, vozDisponivel: vozDisponivel
+  };
 })(window);
