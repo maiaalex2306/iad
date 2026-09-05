@@ -39,6 +39,10 @@
 
   function conectado() { return !!(configurada() && sessao() && sessao().access_token); }
 
+  /* Com a nuvem configurada, é ela quem manda no login: contas de verdade,
+     e-mail de verdade. Sem ela, o app segue no modo local. */
+  function mandaNoAcesso() { return configurada(); }
+
   /* ---------- chamadas ---------- */
   function cabecalhos(comAutenticacao) {
     const c = config();
@@ -48,7 +52,16 @@
     return h;
   }
 
+  /* O token do Supabase vive cerca de uma hora. Sem isto, o app funcionaria
+     bem e começaria a falhar sozinho no meio do expediente, com uma mensagem
+     que não diz nada ao vendedor. Numa recusa por token vencido, renovamos e
+     repetimos a chamada uma vez — só uma, para um refresh inválido não virar
+     laço infinito. */
   function chamar(caminho, opcoes) {
+    return tentar(caminho, opcoes, true);
+  }
+
+  function tentar(caminho, opcoes, podeRenovar) {
     const c = config();
     if (!c.url) return Promise.reject(new Error('Configure o endereço do Supabase em ⚙︎ Dados.'));
     const o = opcoes || {};
@@ -67,6 +80,11 @@
         if (!resposta.ok) {
           const msg = (corpo && (corpo.error_description || corpo.msg || corpo.message || corpo.hint)) ||
             ('O servidor respondeu ' + resposta.status + '.');
+          const vencido = resposta.status === 401 && o.autenticado !== false &&
+            sessao() && sessao().refresh_token && /jwt|token/i.test(msg);
+          if (vencido && podeRenovar) {
+            return renovar().then(function () { return tentar(caminho, opcoes, false); });
+          }
           const erro = new Error(msg);
           erro.status = resposta.status;
           throw erro;
@@ -118,10 +136,12 @@
     return chamar('/auth/v1/user', {}).then(function (u) { return u; });
   }
 
+  /* O perfil vem com a empresa embutida (tenants é chave estrangeira de perfis),
+     porque quem pergunta "quem sou eu" quase sempre quer também "de onde". */
   function meuPerfil() {
     const s = sessao();
     if (!s || !s.user) return Promise.resolve(null);
-    return chamar('/rest/v1/perfis?id=eq.' + s.user.id + '&select=*').then(function (linhas) {
+    return chamar('/rest/v1/perfis?id=eq.' + s.user.id + '&select=*,tenants(id,nome,cnpj)').then(function (linhas) {
       return (linhas && linhas[0]) || null;
     });
   }
@@ -275,7 +295,7 @@
   }
 
   global.IADNuvem = {
-    config, salvarConfig, configurada, conectado, estado, sessao,
+    config, salvarConfig, configurada, conectado, mandaNoAcesso, estado, sessao,
     cadastrar, entrar, sair, renovar, eu, meuPerfil, salvarPerfil, criarMinhaEmpresa,
     guardarPerfilNaSessao, empurrar, puxar, sincronizar, ultimaSincronizacao,
     paraBanco, paraApp

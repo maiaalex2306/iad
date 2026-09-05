@@ -198,6 +198,59 @@
     Store.salvar();
   }
 
+  /* ---------- sessão vinda do servidor ----------
+     Quando o Supabase manda no login, quem autentica é ele — mas o resto do
+     app pergunta sempre a atual(), e não deveria precisar saber de onde a
+     sessão veio. Então o usuário do servidor é espelhado na tabela local, com
+     o mesmo id, e tudo a jusante continua igual.
+
+     O espelho não guarda senha: quem confere a senha é o servidor. */
+  function espelharDaNuvem(usuarioNuvem, perfil) {
+    const estado = Store.obter();
+    estado.usuarios = estado.usuarios || [];
+    estado.tenants = estado.tenants || [];
+
+    const meta = usuarioNuvem.user_metadata || {};
+    let u = usuario(usuarioNuvem.id);
+    if (!u) {
+      u = { id: usuarioNuvem.id, criadoEm: Store.hoje() };
+      estado.usuarios.push(u);
+    }
+
+    u.naNuvem = true;
+    u.email = usuarioNuvem.email || u.email || '';
+    u.login = u.email;
+    u.nome = (perfil && perfil.nome) || meta.nome || u.nome || u.email;
+    u.whatsapp = (perfil && perfil.whatsapp) || meta.whatsapp || u.whatsapp || '';
+    u.papel = (perfil && perfil.papel === 'admin') ? 'admin' : 'usuario';
+    u.tenantId = (perfil && perfil.tenant_id) || null;
+    u.ativo = true;
+    u.emailConfirmado = true;
+    u.ultimoAcesso = new Date().toISOString();
+
+    /* A empresa também é espelhada: as telas mostram o nome dela, não o id. */
+    const empresa = perfil && perfil.tenants;
+    if (u.tenantId) {
+      let t = tenant(u.tenantId);
+      if (!t) {
+        t = { id: u.tenantId, nome: '', cnpj: '', criadoEm: Store.hoje() };
+        estado.tenants.push(t);
+      }
+      if (empresa) { t.nome = empresa.nome || t.nome; t.cnpj = empresa.cnpj || t.cnpj; }
+      if (!t.nome) t.nome = 'Minha empresa';
+    }
+
+    Store.salvar();
+    return u;
+  }
+
+  /* Um login local só vale para quem não veio do servidor — hoje, o Adm.
+     É a porta de serviço: sem internet, ou antes de a nuvem existir. */
+  function ehLocal(texto) {
+    const u = porLogin(texto);
+    return !!u && !u.naNuvem;
+  }
+
   /* O administrador padrão nasce com o sistema; sem ele ninguém entra. */
   function garantirAdministrador() {
     const estado = Store.obter();
@@ -219,6 +272,7 @@
     usuarios, tenants, tenant, usuario, porLogin, criarUsuario, criarTenant,
     gerarCodigo, confirmarCodigo, completarPerfil, salvarUsuario, excluirUsuario,
     definirSenha, conferirSenha, garantirAdministrador, abrirSessao,
+    espelharDaNuvem, ehLocal,
     VALIDADE_CODIGO_MIN
   };
 })(window);

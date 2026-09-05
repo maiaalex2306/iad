@@ -18,9 +18,11 @@
 
   function acesso() {
     const A = global.IADAuth;
-    const corpo = {
-      login: telaLogin, cadastro: telaCadastro, codigo: telaCodigo, perfil: telaPerfil
-    }[telaAcesso] || telaLogin;
+    const naNuvem = global.IADNuvem.mandaNoAcesso();
+    const corpo = (naNuvem
+      ? { login: telaLogin, cadastro: telaCadastroNuvem, confirme: telaConfirmeNuvem, empresa: telaEmpresaNuvem }
+      : { login: telaLogin, cadastro: telaCadastro, codigo: telaCodigo, perfil: telaPerfil }
+    )[telaAcesso] || telaLogin;
 
     return '<div class="acesso">' +
       painelAcesso() +
@@ -59,8 +61,10 @@
   }
 
   function telaLogin() {
-    return '<h2 style="margin-bottom:14px">Entrar</h2>' +
-      campo('ac-login', 'Login ou e-mail', 'text', '', ' autocomplete="username"') +
+    const naNuvem = global.IADNuvem.mandaNoAcesso();
+    return '<h2 style="margin-bottom:' + (naNuvem ? '6' : '14') + 'px">Entrar</h2>' +
+      (naNuvem ? '<p class="tiny muted" style="margin-bottom:14px">Sua conta é verificada no servidor.</p>' : '') +
+      campo('ac-login', naNuvem ? 'E-mail' : 'Login ou e-mail', 'text', '', ' autocomplete="username"') +
       campo('ac-senha', 'Senha', 'password', '', ' autocomplete="current-password" onkeydown="if(event.key===\'Enter\')App.entrar()"') +
       '<button class="btn alt" style="width:100%;margin-top:6px" onclick="App.entrar()">Entrar</button>' +
       '<p class="small muted" style="margin:16px 0 0">Primeiro acesso? ' +
@@ -78,6 +82,43 @@
       '<button class="btn alt" style="width:100%;margin-top:6px" onclick="App.criarAcesso()">Continuar</button>' +
       '<p class="small muted" style="margin:16px 0 0">' +
       '<a href="#" onclick="event.preventDefault();App.telaAcesso(\'login\')">Voltar para o login</a></p>';
+  }
+
+  /* ---------- primeiro acesso com servidor ----------
+     Aqui não há código na tela: quem confirma o e-mail é o Supabase, pelo link
+     que ele manda. O código de seis dígitos existia só porque, sem servidor,
+     não havia como mandar e-mail nenhum. */
+  function telaCadastroNuvem() {
+    return '<h2 style="margin-bottom:6px">Criar acesso</h2>' +
+      '<p class="tiny muted" style="margin-bottom:14px">Você vai receber um e-mail para confirmar.</p>' +
+      campo('ac-nome', 'Seu nome', 'text') +
+      campo('ac-email', 'E-mail', 'email', '', ' autocomplete="email"') +
+      campo('ac-whatsapp', 'WhatsApp', 'text', '', ' placeholder="(00) 00000-0000"') +
+      campo('ac-senha1', 'Senha', 'password', '', ' autocomplete="new-password"') +
+      campo('ac-senha2', 'Repita a senha', 'password') +
+      '<button class="btn alt" style="width:100%;margin-top:6px" onclick="App.criarAcesso()">Criar acesso</button>' +
+      '<p class="small muted" style="margin:16px 0 0">' +
+      '<a href="#" onclick="event.preventDefault();App.telaAcesso(\'login\')">Voltar para o login</a></p>';
+  }
+
+  function telaConfirmeNuvem() {
+    return '<h2 style="margin-bottom:6px">Confirme seu e-mail</h2>' +
+      '<p class="small muted">Enviamos um e-mail para <strong>' +
+      esc((pendente && pendente.email) || '') + '</strong>. Abra e clique no link.</p>' +
+      '<div class="aviso" style="margin:12px 0">Ao clicar, o navegador pode mostrar uma página de erro. ' +
+      'A confirmação já aconteceu assim mesmo — o link tenta voltar para um endereço que não existe aqui.</div>' +
+      '<button class="btn alt" style="width:100%" onclick="App.telaAcesso(\'login\')">Já confirmei, quero entrar</button>';
+  }
+
+  function telaEmpresaNuvem() {
+    return '<h2 style="margin-bottom:6px">Sua empresa</h2>' +
+      '<p class="tiny muted" style="margin-bottom:14px">É ela que separa a sua carteira das outras. ' +
+      'Se você entra num time que já usa o sistema, não crie: peça a quem administra para ligar você à empresa dele.</p>' +
+      campo('ac-empresa-nova', 'Nome da empresa', 'text') +
+      campo('ac-cnpj', 'CNPJ', 'text') +
+      '<button class="btn alt" style="width:100%;margin-top:6px" onclick="App.criarEmpresaAcesso()">Criar e entrar</button>' +
+      '<p class="small muted" style="margin:14px 0 0">' +
+      '<a href="#" onclick="event.preventDefault();App.sair(true)">Sair</a></p>';
   }
 
   function telaCodigo() {
@@ -1199,7 +1240,17 @@
         '</td></tr>';
     }).join('');
 
-    return tabela(['Usuário', 'Empresa', 'E-mail', 'WhatsApp', 'Papel', 'Situação', ''], linhas, 'Nenhum usuário encontrado.');
+    /* Com a nuvem no comando, criar usuário aqui não cria conta nenhuma: quem
+       guarda contas é o Supabase. Dizer isso na tela evita a armadilha de
+       cadastrar alguém que depois não consegue entrar. */
+    const aviso = global.IADNuvem.mandaNoAcesso()
+      ? '<div class="aviso" style="margin-bottom:12px">As contas ficam no servidor. ' +
+        'Para incluir alguém: peça que a pessoa abra o app, use <strong>Criar meu acesso</strong> e confirme o e-mail. ' +
+        'Depois ligue ela à sua empresa — o comando está em <code>nuvem/PASSO-A-PASSO.md</code>, seção 5. ' +
+        'Cadastrar por aqui só afeta este aparelho.</div>'
+      : '';
+
+    return aviso + tabela(['Usuário', 'Empresa', 'E-mail', 'WhatsApp', 'Papel', 'Situação', ''], linhas, 'Nenhum usuário encontrado.');
   }
 
   /* ---------------- Playbook ---------------- */

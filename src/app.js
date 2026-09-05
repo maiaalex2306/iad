@@ -125,6 +125,44 @@
     if (alvo) alvo.innerHTML = V.listaLeads(leads);
   }
 
+  /* ---------- entrada pelo servidor ----------
+     Duas idas: uma para a senha, outra para o perfil. Quem ainda não tem
+     empresa para na tela de empresa em vez de entrar numa carteira sem dono. */
+  function entrarPelaNuvem(email, senha) {
+    V.definirTelaAcesso('login', null, 'Entrando…');
+    render();
+    global.IADNuvem.entrar(email, senha)
+      .then(concluirEntradaNaNuvem)
+      .catch(function (e) {
+        const msg = /Invalid login/i.test(e.message) ? 'E-mail ou senha não conferem.'
+          : /not confirmed/i.test(e.message) ? 'Confirme seu e-mail pelo link que enviamos.'
+          : e.message;
+        V.definirTelaAcesso('login', null, msg);
+        render();
+      });
+  }
+
+  function concluirEntradaNaNuvem() {
+    const N = global.IADNuvem;
+    return N.meuPerfil().then(function (perfil) {
+      N.guardarPerfilNaSessao(perfil);
+      const u = N.sessao().user;
+
+      if (!perfil || !perfil.tenant_id) {
+        V.definirTelaAcesso('empresa', { email: u.email }, '');
+        return render();
+      }
+
+      A.abrirSessao(A.espelharDaNuvem(u, perfil));
+      V.definirTelaAcesso('login', null, '');
+      location.hash = '#/hoje';
+      render();
+      /* Trazer o que já existe no servidor é o que faz a troca de aparelho
+         funcionar; falhar aqui não impede de usar o app com a cópia local. */
+      return N.puxar().then(render, function () {});
+    });
+  }
+
   const OPCOES_SIM_NAO = [{ valor: 'nao', rotulo: 'Não' }, { valor: 'sim', rotulo: 'Sim' }];
 
   const App = {
@@ -929,6 +967,11 @@
       const senha = (document.getElementById('ac-senha') || {}).value || '';
       if (!login || !senha) { V.definirTelaAcesso('login', null, 'Informe login e senha.'); return render(); }
 
+      /* Com a nuvem configurada é o servidor que confere a senha. A exceção é
+         o login local que nunca esteve na nuvem — o Adm —, que continua sendo
+         a porta de serviço para entrar sem internet. */
+      if (global.IADNuvem.mandaNoAcesso() && !A.ehLocal(login)) return entrarPelaNuvem(login, senha);
+
       A.entrar(login, senha).then(function () {
         V.definirTelaAcesso('login', null, '');
         location.hash = '#/hoje';
@@ -957,7 +1000,20 @@
       if (senha1.length < 6) return recado('cadastro', 'A senha precisa de ao menos 6 caracteres.');
       if (senha1 !== senha2) return recado('cadastro', 'As senhas não conferem.');
 
-      A.criarUsuario({ nome: nome, email: email, whatsapp: v('ac-whatsapp').trim() }, senha1)
+      const dados = { nome: nome, email: email, whatsapp: v('ac-whatsapp').trim() };
+
+      if (global.IADNuvem.mandaNoAcesso()) {
+        recado('cadastro', 'Criando acesso…');
+        global.IADNuvem.cadastrar(email, senha1, dados)
+          .then(function () {
+            V.definirTelaAcesso('confirme', { email: email }, '');
+            render();
+          })
+          .catch(function (e) { recado('cadastro', e.message); });
+        return;
+      }
+
+      A.criarUsuario(dados, senha1)
         .then(function (u) {
           A.gerarCodigo(u);
           V.definirTelaAcesso('codigo', u, '');
@@ -1002,11 +1058,23 @@
       render();
     },
 
-    sair: function () {
-      if (!U.confirmar('Sair do sistema?')) return;
+    sair: function (semPerguntar) {
+      if (!semPerguntar && !U.confirmar('Sair do sistema?')) return;
       A.encerrarSessao();
-      V.definirTelaAcesso('login', null, '');
-      render();
+      const N = global.IADNuvem;
+      const depois = function () { V.definirTelaAcesso('login', null, ''); render(); };
+      if (N.conectado()) N.sair().then(depois, depois); else depois();
+    },
+
+    /* A empresa nasce no banco, não aqui: ver criar_minha_empresa no schema. */
+    criarEmpresaAcesso: function () {
+      const v = function (id) { return (document.getElementById(id) || {}).value || ''; };
+      const nome = v('ac-empresa-nova').trim();
+      if (!nome) return recado('empresa', 'Escreva o nome da empresa.');
+      recado('empresa', 'Criando empresa…');
+      global.IADNuvem.criarMinhaEmpresa(nome, v('ac-cnpj').trim())
+        .then(function () { return concluirEntradaNaNuvem(); })
+        .catch(function (e) { recado('empresa', e.message); });
     },
 
     filtrarTenant: function (valor) { A.definirFiltros({ tenant: valor, usuario: 'todos' }); render(); },
