@@ -58,7 +58,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .topbar button:hover { background: rgba(255,255,255,.22); }
 
-main { flex: 1; padding: 16px; padding-bottom: calc(84px + var(--safe-b)); max-width: 1180px; width: 100%; margin: 0 auto; }
+main { flex: 1; min-width: 0; padding: 16px; padding-bottom: calc(84px + var(--safe-b)); max-width: 1680px; width: 100%; margin: 0 auto; }
 
 nav.tabs {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 40;
@@ -85,7 +85,7 @@ nav.tabs a.ativo { color: var(--orange); font-weight: 700; }
   nav.tabs a.ativo { background: var(--orange-soft); }
   .topbar { position: fixed; left: 0; right: 0; }
   main { padding: 86px 28px 40px; }
-  .app > .col { flex: 1; }
+  .app > .col { flex: 1; min-width: 0; }
 }
 
 /* ---------- componentes ---------- */
@@ -95,6 +95,10 @@ nav.tabs a.ativo { color: var(--orange); font-weight: 700; }
 .grid.k2 { grid-template-columns: repeat(2, 1fr); }
 .grid.k3 { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
 .grid.k4 { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+@media (min-width: 1400px) {
+  .grid.k2 { grid-template-columns: repeat(2, 1fr); }
+  .mapa-decisao { grid-template-columns: repeat(8, 1fr); }
+}
 .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .espaco { flex: 1; }
 .muted { color: var(--muted); }
@@ -223,14 +227,14 @@ th { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color:
 .tabela-rolagem { overflow-x: auto; }
 
 /* ---------- Kanban ---------- */
-.kanban { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 8px; }
+.kanban { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 8px; align-items: flex-start; }
 .kanban .coluna {
-  flex: 0 0 236px; min-width: 236px; background: var(--bg);
+  flex: 1 1 0; min-width: 176px; background: var(--bg);
   border: 1px solid var(--line); border-radius: 12px; padding: 9px;
 }
 .kanban .coluna header { display: flex; flex-direction: column; gap: 1px; margin-bottom: 8px; padding: 0 2px; }
 .kanban .coluna header strong { font-size: .84rem; }
-.kanban .cartoes { display: flex; flex-direction: column; gap: 8px; min-height: 40px; }
+.kanban .cartoes { display: flex; flex-direction: column; gap: 8px; min-height: 72px; }
 .kanban .mini {
   background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--line);
   border-radius: 10px; padding: 10px; cursor: pointer; box-shadow: var(--shadow);
