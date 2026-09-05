@@ -16,6 +16,7 @@
   ];
 
   let promptInstalacao = null;
+  let leads = null;
 
   function render() {
     const hash = location.hash || '#/hoje';
@@ -28,6 +29,7 @@
     } else if (hash === '#/dados') {
       conteudo.innerHTML = V.dados();
       pintarUso();
+      pintarLeads();
     } else {
       const rota = ROTAS.find(function (r) { return r.hash === hash; }) || ROTAS[0];
       conteudo.innerHTML = rota.render();
@@ -74,6 +76,11 @@
       const mb = (u.bytes / 1048576).toFixed(1);
       destino.textContent = 'Anexos: ' + u.quantidade + ' arquivo(s), ' + mb + ' MB (guardados fora do JSON).';
     }).catch(function () {});
+  }
+
+  function pintarLeads() {
+    const alvo = document.getElementById('caixa-linkedhelper');
+    if (alvo) alvo.innerHTML = V.listaLeads(leads);
   }
 
   const OPCOES_SIM_NAO = [{ valor: 'nao', rotulo: 'Não' }, { valor: 'sim', rotulo: 'Sim' }];
@@ -680,6 +687,101 @@
       global.IADSeed.carregar();
       location.hash = '#/hoje';
       render();
+    },
+
+    /* ---------- Linked Helper ---------- */
+    configurarPonte: function () {
+      const I = global.IADIntegracoes;
+      U.formulario('Ponte do Linked Helper', [
+        { id: 'url', rotulo: 'Endereço da ponte', placeholder: 'https://ponte-iad.seu-subdominio.workers.dev/' },
+        { id: 'token', rotulo: 'Chave de leitura' }
+      ], I.config(), function (d) {
+        I.salvarConfig(d);
+        leads = null;
+        render();
+      });
+    },
+
+    buscarLeads: function () {
+      const alvo = document.getElementById('caixa-linkedhelper');
+      if (alvo) alvo.innerHTML = '<div class="tiny muted" style="margin-top:10px">Buscando…</div>';
+      global.IADIntegracoes.buscar().then(function (lista) {
+        leads = lista;
+        pintarLeads();
+      }).catch(function (e) {
+        leads = null;
+        if (alvo) alvo.innerHTML = '<div class="aviso" style="margin-top:10px">' + U.esc(e.message) + '</div>';
+      });
+    },
+
+    descartarLead: function (id) {
+      leads = (leads || []).filter(function (l) { return l.id !== id; });
+      global.IADIntegracoes.marcarProcessados([id]);
+      pintarLeads();
+    },
+
+    /* A resposta no LinkedIn é evidência do cliente: entra como tal, com força
+       de relato — ele disse que tem o problema, ainda não provou. */
+    converterLead: function (id) {
+      const lead = (leads || []).find(function (l) { return l.id === id; });
+      if (!lead) return;
+
+      const contas = Store.obter().contas;
+      const parecida = contas.find(function (c) {
+        return lead.empresa && c.nome.toLowerCase().indexOf(lead.empresa.toLowerCase().slice(0, 12)) !== -1;
+      });
+
+      U.formulario('Nova oportunidade a partir do LinkedIn', [
+        { id: 'contaId', rotulo: 'Empresa', tipo: 'select', padrao: parecida ? parecida.id : '',
+          opcoes: [{ valor: '', rotulo: '— cadastrar a empresa abaixo —' }]
+            .concat(contas.map(function (c) { return { valor: c.id, rotulo: c.nome }; })) },
+        { id: 'empresaNova', rotulo: 'Nome da nova empresa', padrao: parecida ? '' : lead.empresa },
+        { id: 'segmento', rotulo: 'Segmento', tipo: 'select',
+          opcoes: [{ valor: '', rotulo: '— sem segmento —' }]
+            .concat(Store.nomesDoCatalogo('segmentos').map(function (n) { return { valor: n, rotulo: n }; })) },
+        { id: 'titulo', rotulo: 'Oportunidade', padrao: lead.empresa ? 'Oportunidade — ' + lead.empresa : 'Oportunidade do LinkedIn' },
+        { id: 'etapa', rotulo: 'Etapa', tipo: 'select', padrao: 'Conexão', opcoes: P.ETAPAS },
+        { id: 'papel', rotulo: 'Papel na compra', tipo: 'select', opcoes: P.PAPEIS },
+        { id: 'perfil', rotulo: 'Perfil (Challenger)', tipo: 'select',
+          opcoes: P.PERFIS.map(function (x) { return { valor: x.id, rotulo: x.rotulo }; }) },
+        { id: 'evidencia', rotulo: 'Evidência (o que o cliente disse)', tipo: 'textarea', padrao: lead.resposta },
+        { id: 'dimensao', rotulo: 'Dimensão afetada', tipo: 'select', padrao: 'problema',
+          opcoes: P.DIMENSOES.map(function (d) { return { valor: d.id, rotulo: d.nome }; }) }
+      ], {}, function (d) {
+        let contaId = d.contaId;
+        if (!contaId) {
+          const nome = d.empresaNova || lead.empresa;
+          if (!nome) { alert('Informe a empresa.'); return; }
+          if (d.segmento) Store.criarNoCatalogo('segmentos', { nome: d.segmento });
+          contaId = Store.criarConta({ nome: nome, segmento: d.segmento || '' }).id;
+        }
+
+        const contato = Store.criarContato({
+          contaId: contaId, nome: lead.nome || 'Contato do LinkedIn', cargo: lead.cargo,
+          papel: d.papel, perfil: d.perfil, linkedin: lead.linkedin,
+          email: lead.email, telefone: lead.telefone,
+          sentimento: lead.resposta ? 'neutro' : 'nao_acessado', canalPreferido: 'LinkedIn'
+        });
+
+        const op = Store.criarOportunidade({
+          contaId: contaId, titulo: d.titulo, etapa: d.etapa,
+          notas: lead.linkedin ? 'Origem: Linked Helper · ' + lead.linkedin : 'Origem: Linked Helper'
+        });
+        op.stakeholders.push(contato.id);
+        Store.salvar();
+
+        if (d.evidencia) {
+          Store.registrarEvento(op.id, {
+            tipo: 'decision', titulo: d.evidencia, dimensao: d.dimensao,
+            forca: 'relato', contatoId: contato.id, canal: 'LinkedIn'
+          });
+        }
+
+        leads = (leads || []).filter(function (l) { return l.id !== id; });
+        global.IADIntegracoes.marcarProcessados([id]);
+        location.hash = '#/op/' + op.id;
+        render();
+      });
     },
 
     instalar: function () {

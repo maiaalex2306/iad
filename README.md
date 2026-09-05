@@ -85,6 +85,9 @@ src/store.js            persistência (localStorage) — trocar aqui para Indexe
 src/engine.js           IAD, Evidence Age, Velocity, Coverage, Gates, NBD, carteira
 src/arquivos.js         anexos em IndexedDB (não cabem no localStorage)
 src/csv.js              importação por planilha, com prévia e detecção de duplicados
+src/graficos.js         gráficos em SVG puro, sem biblioteca
+src/integracoes.js      ponte com o Linked Helper: busca as respostas e converte
+ponte/                  o coletor que recebe o webhook (Cloudflare Worker)
 src/views.js            telas
 src/ui.js               formatação e diálogos
 src/app.js              rotas e ações

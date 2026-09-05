@@ -1096,6 +1096,8 @@
       '<button class="btn ghost mini" onclick="App.baixarModelo(\'contatos\')">contatos.csv</button>' +
       '<button class="btn ghost mini" onclick="App.baixarModelo(\'oportunidades\')">oportunidades.csv</button></div></div>' +
 
+      blocoLinkedHelper() +
+
       '<div class="card"><h2>Backup</h2>' +
       '<p class="small muted">Os dados ficam no dispositivo (offline). Exporte para levar de máquina ou compartilhar com o time. Anexos não entram no JSON.</p>' +
       '<div class="row"><button class="btn" onclick="App.exportar()">Exportar JSON</button>' +
@@ -1110,8 +1112,39 @@
       '<button class="btn ghost" onclick="App.limpar()">Apagar tudo</button></div></div>';
   }
 
+  /* O app não recebe webhook — quem recebe é a ponte. Aqui só buscamos o que chegou. */
+  function blocoLinkedHelper() {
+    const c = global.IADIntegracoes.config();
+    return '<div class="card"><div class="row"><h2 style="margin:0">Linked Helper</h2><span class="espaco"></span>' +
+      '<button class="btn ghost mini" onclick="App.configurarPonte()">' + (c.url ? 'Alterar ponte' : 'Configurar ponte') + '</button>' +
+      (c.url ? '<button class="btn alt mini" onclick="App.buscarLeads()">Buscar respostas</button>' : '') + '</div>' +
+      (c.url
+        ? '<p class="tiny muted" style="margin:8px 0 0">Ponte: ' + esc(c.url) + '</p>'
+        : '<p class="small muted" style="margin:8px 0 0">Quando alguém responde no LinkedIn, o Linked Helper dispara um webhook. Como este app roda no navegador, ele não tem endereço para receber: quem recebe é uma ponte, e o app busca de lá. O código da ponte está na pasta <code>ponte/</code> do projeto.</p>') +
+      '<div id="caixa-linkedhelper"></div></div>';
+  }
+
+  function listaLeads(leads) {
+    if (!leads) return '';
+    if (!leads.length) return '<div class="vazio small">Nenhuma resposta nova na ponte.</div>';
+    return '<div class="lista" style="margin-top:12px">' + leads.map(function (l) {
+      return '<div class="foco u0">' +
+        '<div class="row"><strong>' + esc(l.nome || 'Sem nome') + '</strong>' +
+        (l.cargo ? '<span class="tiny muted">' + esc(l.cargo) + '</span>' : '') +
+        '<span class="espaco"></span>' +
+        (l.campanha ? '<span class="pill">' + esc(l.campanha) + '</span>' : '') + '</div>' +
+        '<div class="small muted">' + esc(l.empresa || 'empresa não informada') + (l.local ? ' · ' + esc(l.local) : '') + '</div>' +
+        (l.resposta ? '<div class="motivo" style="margin-top:8px">“' + esc(l.resposta) + '”</div>' : '') +
+        '<div class="row" style="margin-top:10px">' +
+        '<button class="btn alt mini" onclick="App.converterLead(\'' + esc(l.id) + '\')">Criar oportunidade</button>' +
+        (l.linkedin ? '<a class="btn ghost mini" href="' + esc(l.linkedin) + '" target="_blank" rel="noopener">Abrir perfil</a>' : '') +
+        '<button class="btn ghost mini" onclick="App.descartarLead(\'' + esc(l.id) + '\')">Descartar</button>' +
+        '</div></div>';
+    }).join('') + '</div>';
+  }
+
   global.IADViews = {
-    hoje, painel, pipeline, cockpit, revisao, contas, cadastros, playbook, dados, itemArquivo,
+    hoje, painel, pipeline, cockpit, revisao, contas, cadastros, playbook, dados, itemArquivo, listaLeads,
     definirFiltro: function (f) { filtroGrupo = f; },
     definirFiltroHistorico: function (f) { filtroHistorico = f; },
     definirFiltroHoje: function (f) { filtroHoje = f; },
