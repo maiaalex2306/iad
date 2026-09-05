@@ -22,7 +22,7 @@ Funciona **offline**: os dados ficam no dispositivo e o app abre sem rede.
 Quando o produto estiver validado, o mesmo código é empacotado com
 **Tauri** (Windows/macOS) e **Capacitor** (App Store / Play Store) — sem reescrever a interface.
 
-## O que já está implementado (MVP)
+## O que já está implementado
 
 Os quatro componentes que sustentam a metodologia:
 
@@ -38,12 +38,23 @@ Os quatro componentes que sustentam a metodologia:
 4. **Next Best Decision.** Regra que aponta qual decisão precisa ocorrer *dentro do
    cliente* agora — e como provocá-la em LinkedIn, LinkedHelper, e-mail e WhatsApp.
 
-Em volta disso: contas, contatos, oportunidades e pipeline; **Proposal Gate** com
-prontidão em % e liberação manual registrada; **Decision Velocity** (microdecisões
-comprovadas em 30 dias); **painel executivo** que separa pipeline saudável, em risco
-e zumbi e mostra qual decisão está travando cada faixa de receita; **revisão semanal**
-com a única pergunta que importa (“o que mudou na decisão do cliente?”); playbook das
-8 decisões por canal; export/import JSON.
+**Força da evidência** (relato / confirmado / documentado) governa a pontuação:
+uma dimensão só chega a 2 com evidência confirmada ou documentada. Cada evidência
+aponta **quem a produziu** e pode carregar **o que ficou combinado e para quando** —
+o compromisso que vira o relógio de atraso.
+
+Em volta disso: contas, contatos (com influência e hierarquia), oportunidades,
+**tarefas** com decisão-alvo e **arquivos** categorizados pela decisão que destravam;
+**Proposal Gate** com prontidão em % e liberação manual registrada; **Decision
+Velocity**; **desfecho** (ganho, perdido para concorrente, perdido por inação, adiado)
+que congela a foto da decisão e alimenta a seção de **aprendizado da carteira**;
+**painel executivo** que separa pipeline saudável, em risco e zumbi e mostra qual
+decisão está travando cada faixa de receita; tela **Hoje** com o que precisa de
+atenção agora; **revisão semanal**; **curva do IAD** e delta da semana; histórico
+unificado; playbook; **importação por CSV** e export/import JSON.
+
+Quatro relógios de atraso, todos calculados: Evidence Age, compromisso vencido,
+tempo na etapa e contador de adiamentos da data de fechamento.
 
 Classificação automática da carteira: *Negócio real*, *Oculto promissor*,
 *Em construção*, *Falso avançado* e *Zumbi*.
@@ -72,6 +83,8 @@ assets/styles.css       mobile-first; o mesmo CSS serve celular e desktop
 src/playbook.js         ontologia da decisão: 8 dimensões, evidências, gates, canais
 src/store.js            persistência (localStorage) — trocar aqui para IndexedDB ou API
 src/engine.js           IAD, Evidence Age, Velocity, Coverage, Gates, NBD, carteira
+src/arquivos.js         anexos em IndexedDB (não cabem no localStorage)
+src/csv.js              importação por planilha, com prévia e detecção de duplicados
 src/views.js            telas
 src/ui.js               formatação e diálogos
 src/app.js              rotas e ações

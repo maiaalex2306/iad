@@ -10,7 +10,7 @@
     const est = Store.obter();
     if (!est.oportunidades.length) return boasVindas();
 
-    const foco = E.focoDoDia(est.oportunidades);
+    const foco = E.focoDoDia(est.oportunidades, est.tarefas);
     if (!foco.itens.length) {
       return cabecalhoHoje(foco) + '<div class="card"><div class="vazio">Nenhum negócio aberto. Toda a carteira está encerrada.</div></div>';
     }
@@ -20,6 +20,13 @@
 
     const itens = foco.itens.slice(0, 12).map(function (i) {
       const r = i.resumo;
+      const tarefas = (i.tarefas || []).slice(0, 3).map(function (t) {
+        const atrasada = t.vencimento < Store.hoje();
+        return '<div class="tarefa-linha"><button class="quadro" onclick="App.concluirTarefa(\'' + t.id + '\')" title="Concluir"></button>' +
+          '<span class="small">' + esc(t.titulo) + '</span>' +
+          '<span class="tiny ' + (atrasada ? 'atrasado' : 'muted') + '">' + U.data(t.vencimento) + '</span></div>';
+      }).join('');
+
       return '<div class="foco u' + i.urgencia + '">' +
         '<div class="row"><strong>' + esc(r.op.titulo) + '</strong><span class="espaco"></span>' +
         (i.urgencia ? '<span class="pill ' + classes[i.urgencia] + '">' + urgencias[i.urgencia] + '</span>' : '') +
@@ -27,6 +34,7 @@
         '<div class="small muted">' + esc((r.conta && r.conta.nome) || '') + ' · ' + esc(r.op.etapa) + ' · IAD ' + r.iad + '/16</div>' +
         '<div class="small" style="margin-top:8px"><strong>' + esc(i.motivo) + '</strong></div>' +
         '<div class="small muted">' + esc(i.acao) + '</div>' +
+        (tarefas ? '<div class="tarefas">' + tarefas + '</div>' : '') +
         '<div class="row" style="margin-top:10px">' +
         '<button class="btn alt mini" onclick="App.novaEvidencia(\'' + r.op.id + '\')">Registrar evidência</button>' +
         '<button class="btn ghost mini" onclick="App.abrir(\'' + r.op.id + '\')">Abrir</button></div></div>';
@@ -141,33 +149,33 @@
   function boasVindas() {
     return '<div class="card"><h1>Bem-vindo ao IAD CRM</h1>' +
       '<p>Este CRM não mede o que o vendedor fez. Mede o que mudou na decisão do comprador.</p>' +
-      '<p class="small muted">Comece com dados de demonstração para entender o modelo, ou cadastre sua primeira conta.</p>' +
+      '<p class="small muted">Comece com dados de demonstração para entender o modelo, cadastre sua primeira conta ou importe sua carteira de uma planilha.</p>' +
       '<div class="row"><button class="btn alt" onclick="App.carregarDemo()">Carregar demonstração</button>' +
-      '<button class="btn ghost" onclick="App.novaConta()">Criar primeira conta</button></div></div>';
+      '<button class="btn ghost" onclick="App.novaConta()">Criar primeira conta</button>' +
+      '<button class="btn ghost" onclick="App.ir(\'#/dados\')">Importar planilha</button></div></div>';
   }
 
   /* ---------------- Pipeline ---------------- */
   let filtroGrupo = 'todos';
+  const FILTROS = [['todos', 'Todos'], ['real', 'Negócio real'], ['oculto', 'Oculto promissor'],
+    ['construcao', 'Em construção'], ['falso', 'Falso avançado'], ['zumbi', 'Zumbi'], ['fechados', 'Encerrados']];
 
   function pipeline() {
     const est = Store.obter();
-    if (filtroGrupo === 'fechados') return pipelineFechados(est);
+    const filtros = FILTROS.map(function (f) {
+      return '<button class="pill' + (filtroGrupo === f[0] ? ' orange' : '') + '" onclick="App.filtrar(\'' + f[0] + '\')">' + esc(f[1]) + '</button>';
+    }).join(' ');
+
+    if (filtroGrupo === 'fechados') return cabecalhoPipeline(filtros) + listaFechados(est);
+
     const resumos = est.oportunidades.filter(function (o) { return !o.desfecho; }).map(E.resumo)
       .filter(function (r) { return filtroGrupo === 'todos' || r.classe.id === filtroGrupo; })
       .sort(function (a, b) { return b.saude - a.saude; });
 
-    const filtros = [['todos', 'Todos'], ['real', 'Negócio real'], ['oculto', 'Oculto promissor'], ['construcao', 'Em construção'], ['falso', 'Falso avançado'], ['zumbi', 'Zumbi'], ['fechados', 'Encerrados']]
-      .map(function (f) {
-        return '<button class="pill' + (filtroGrupo === f[0] ? ' orange' : '') + '" onclick="App.filtrar(\'' + f[0] + '\')">' + esc(f[1]) + '</button>';
-      }).join(' ');
-
     const itens = resumos.map(cardOportunidade).join('') ||
       '<div class="vazio">Nenhuma oportunidade neste filtro.</div>';
 
-    return '<div class="row"><h1>Pipeline</h1><span class="espaco"></span>' +
-      '<button class="btn alt mini" onclick="App.novaOportunidade()">+ Oportunidade</button></div>' +
-      '<div class="row" style="margin:8px 0 14px">' + filtros + '</div>' +
-      '<div class="lista">' + itens + '</div>';
+    return cabecalhoPipeline(filtros) + '<div class="lista">' + itens + '</div>';
   }
 
   function cabecalhoPipeline(filtros) {
@@ -176,12 +184,7 @@
       '<div class="row" style="margin:8px 0 14px">' + filtros + '</div>';
   }
 
-  function pipelineFechados(est) {
-    const filtros = [['todos', 'Todos'], ['real', 'Negócio real'], ['oculto', 'Oculto promissor'], ['construcao', 'Em construção'], ['falso', 'Falso avançado'], ['zumbi', 'Zumbi'], ['fechados', 'Encerrados']]
-      .map(function (f) {
-        return '<button class="pill' + (filtroGrupo === f[0] ? ' orange' : '') + '" onclick="App.filtrar(\'' + f[0] + '\')">' + esc(f[1]) + '</button>';
-      }).join(' ');
-
+  function listaFechados(est) {
     const fechadas = est.oportunidades.filter(function (o) { return o.desfecho; })
       .sort(function (a, b) { return b.desfecho.data.localeCompare(a.desfecho.data); });
 
@@ -196,23 +199,76 @@
         (op.desfecho.motivo ? ' · ' + esc(op.desfecho.motivo) : '') + '</div></button>';
     }).join('') || '<div class="vazio">Nenhum negócio encerrado ainda.</div>';
 
-    return cabecalhoPipeline(filtros) + '<div class="lista">' + itens + '</div>';
+    return '<div class="lista">' + itens + '</div>';
   }
 
   function cardOportunidade(r) {
+    const comp = r.compromisso;
     return '<button class="item g-' + r.classe.id + '" onclick="App.abrir(\'' + r.op.id + '\')">' +
       '<div class="row"><span class="tit">' + esc(r.op.titulo) + '</span><span class="espaco"></span>' +
       '<span class="pill navy">' + U.compacto(r.op.valor) + '</span></div>' +
-      '<div class="small muted" style="margin:2px 0 8px">' + esc((r.conta && r.conta.nome) || 'Sem conta') + ' · ' + esc(r.op.etapa) + '</div>' +
+      '<div class="small muted" style="margin:2px 0 8px">' + esc((r.conta && r.conta.nome) || 'Sem conta') + ' · ' + esc(r.op.etapa) + ' · ' + r.tempoNaEtapa + 'd nesta etapa</div>' +
       '<div class="row tiny">' +
         '<span class="pill">IAD ' + r.iad + '/16</span>' +
         '<span class="pill ' + r.faixa.classe + '">' + r.evidenceAge + 'd sem evidência</span>' +
         '<span class="pill">Grupo ' + r.coverage.percentual + '%</span>' +
-        '<span class="pill">' + esc(r.classe.rotulo) + '</span>' +
+        (comp && comp.vencido ? '<span class="pill dead">compromisso vencido</span>' : '') +
+        ((r.op.adiamentos || 0) >= 2 ? '<span class="pill warn">' + r.op.adiamentos + ' adiamentos</span>' : '') +
       '</div>' +
       '<div style="margin-top:9px">' + U.barra(r.saude) + '</div>' +
       '<div class="tiny muted" style="margin-top:5px">Próxima decisão: ' + esc(r.nbd.dimensao ? r.nbd.dimensao.nome : 'formalização') + '</div>' +
       '</button>';
+  }
+
+  /* ---------------- Curva do IAD ----------------
+     Série única, degraus: o IAD só muda quando uma decisão muda. */
+  function curvaIAD(op) {
+    const pontos = E.curva(op);
+    if (pontos.length < 2) {
+      return '<div class="vazio small">A curva aparece a partir da segunda mudança de pontuação.</div>';
+    }
+
+    const L = 40, T = 14, larg = 620, alt = 170, D = 26;
+    const x0 = L, x1 = larg - 16, y0 = T, y1 = alt - D;
+    const datas = pontos.map(function (p) { return new Date(p.data + 'T00:00:00').getTime(); });
+    const min = Math.min.apply(null, datas), max = Math.max.apply(null, datas);
+    const px = function (t) { return max === min ? x1 : x0 + ((t - min) / (max - min)) * (x1 - x0); };
+    const py = function (v) { return y1 - (Math.max(0, Math.min(16, v)) / 16) * (y1 - y0); };
+
+    let d = '';
+    pontos.forEach(function (p, i) {
+      const X = px(datas[i]), Y = py(p.iad);
+      if (i === 0) d += 'M' + X.toFixed(1) + ' ' + Y.toFixed(1);
+      else d += ' H' + X.toFixed(1) + ' V' + Y.toFixed(1);
+    });
+
+    const grade = [0, 8, 16].map(function (v) {
+      return '<line x1="' + x0 + '" y1="' + py(v) + '" x2="' + x1 + '" y2="' + py(v) + '" stroke="var(--line)" stroke-width="1" fill="none"/>' +
+        '<text x="' + (x0 - 8) + '" y="' + (py(v) + 4) + '" text-anchor="end" font-size="10" fill="var(--muted)">' + v + '</text>';
+    }).join('');
+
+    const marcas = pontos.map(function (p, i) {
+      if (!p.dimensao && i !== pontos.length - 1) return '';
+      const X = px(datas[i]), Y = py(p.iad);
+      const titulo = U.data(p.data) + ' · IAD ' + p.iad +
+        (p.dimensao ? ' · ' + p.dimensao + ' ' + p.de + '→' + p.para : '');
+      return '<circle cx="' + X.toFixed(1) + '" cy="' + Y.toFixed(1) + '" r="4.5" fill="var(--surface)" stroke="var(--navy-2)" stroke-width="2">' +
+        '<title>' + esc(titulo) + '</title></circle>';
+    }).join('');
+
+    const ultimo = pontos[pontos.length - 1];
+    const ux = px(datas[datas.length - 1]), uy = py(ultimo.iad);
+
+    return '<div class="grafico"><svg viewBox="0 0 ' + larg + ' ' + alt + '" width="100%" height="' + alt + '" role="img" ' +
+      'aria-label="Evolução do IAD ao longo do tempo, de ' + U.data(pontos[0].data) + ' a ' + U.data(ultimo.data) + '">' +
+      grade +
+      '<path d="' + d + '" fill="none" stroke="var(--navy-2)" stroke-width="2" stroke-linejoin="round"/>' +
+      marcas +
+      '<text x="' + Math.min(ux + 8, larg - 60) + '" y="' + Math.max(uy - 8, 14) + '" font-size="11" font-weight="700" fill="var(--navy-2)">IAD ' + ultimo.iad + '</text>' +
+      '<text x="' + x0 + '" y="' + (alt - 8) + '" font-size="10" fill="var(--muted)">' + U.data(pontos[0].data) + '</text>' +
+      '<text x="' + x1 + '" y="' + (alt - 8) + '" font-size="10" fill="var(--muted)" text-anchor="end">' + U.data(ultimo.data) + '</text>' +
+      '</svg></div>' +
+      '<p class="tiny muted">Cada degrau é uma decisão que mudou. Passe o ponteiro sobre um ponto para ver qual.</p>';
   }
 
   /* ---------------- Cockpit da oportunidade ---------------- */
@@ -220,44 +276,7 @@
     const op = Store.oportunidade(id);
     if (!op) return '<div class="vazio">Oportunidade não encontrada.</div>';
     const r = E.resumo(op);
-
-    const dims = P.DIMENSOES.map(function (d) {
-      const v = op.dims[d.id] || 0;
-      const notas = [0, 1, 2].map(function (n) {
-        return '<button class="' + (v === n ? 'on' + n : '') + '" onclick="App.pontuar(\'' + op.id + '\',\'' + d.id + '\',' + n + ')" title="' + esc(d.niveis[n]) + '">' + n + '</button>';
-      }).join('');
-      return '<div class="dim"><div class="cab"><span class="nome">' + esc(d.nome) + '</span><div class="notas">' + notas + '</div></div>' +
-        '<div class="small muted" style="margin-top:4px">' + esc(d.pergunta) + '</div>' +
-        '<div class="tiny muted" style="margin-top:3px">Nível atual: ' + esc(d.niveis[v]) + '</div></div>';
-    }).join('');
-
-    const gatesHtml = r.gates.itens.map(function (i) {
-      return '<span class="pill ' + (i.ok ? 'ok' : 'dead') + '">' + esc(i.nome) + ' ' + i.atual + '/' + i.min + '</span>';
-    }).join(' ');
-
-    const pessoas = E.stakeholdersDaOp(op).map(function (p) {
-      return '<div class="pessoa"><div class="nome"><span class="dot ' + p.sentimento + '"></span>' + esc(p.nome) + '</div>' +
-        '<div class="tiny muted">' + esc(p.cargo || '—') + '</div>' +
-        '<div class="tiny" style="margin-top:5px">' + esc(p.papel) + '</div>' +
-        '<div class="row tiny" style="margin-top:7px"><button class="btn ghost mini" onclick="App.editarContato(\'' + p.id + '\')">Editar</button>' +
-        '<button class="btn ghost mini" onclick="App.removerStakeholder(\'' + op.id + '\',\'' + p.id + '\')">Remover</button></div></div>';
-    }).join('') || '<div class="vazio small">Nenhum stakeholder ligado. Venda single-threaded é o maior risco silencioso.</div>';
-
-    const eventos = (op.eventos || []).slice(0, 25).map(function (e) {
-      const dim = P.DIMENSOES.find(function (d) { return d.id === e.dimensao; });
-      return '<div class="evento ' + (e.tipo === 'activity' ? 'activity' : '') + '">' +
-        '<div class="quando">' + U.data(e.data) + ' · ' + (e.tipo === 'activity' ? 'Atividade do vendedor (não conta como avanço)' : 'Evidência do cliente' + (dim ? ' · ' + esc(dim.nome) : '')) + (e.canal ? ' · ' + esc(e.canal) : '') + '</div>' +
-        '<div class="small">' + esc(e.titulo) + '</div>' +
-        '<button class="btn ghost mini" style="margin-top:5px" onclick="App.removerEvento(\'' + op.id + '\',\'' + e.id + '\')">Excluir</button></div>';
-    }).join('') || '<div class="vazio small">Nenhum evento registrado.</div>';
-
-    const alertasHtml = r.alertas.map(function (a) {
-      return '<div class="aviso" style="margin-bottom:6px">' + (a.nivel === 'alto' ? '🔴 ' : '🟡 ') + esc(a.texto) + '</div>';
-    }).join('');
-
-    const canais = r.nbd.canais ? P.CANAIS.map(function (c) {
-      return '<tr><td><strong>' + esc(c.nome) + '</strong></td><td>' + esc(r.nbd.canais[c.id]) + '</td></tr>';
-    }).join('') : '';
+    const conta = r.conta;
 
     const desf = op.desfecho ? P.DESFECHOS.find(function (x) { return x.id === op.desfecho.tipo; }) : null;
     const banner = desf
@@ -273,70 +292,250 @@
       (op.desfecho ? '' : '<button class="btn ghost mini" onclick="App.encerrar(\'' + op.id + '\')">Encerrar</button>') + '</div>' +
       banner +
       '<h1 style="margin-top:10px">' + esc(op.titulo) + '</h1>' +
-      '<p class="muted small">' + esc((r.conta && r.conta.nome) || 'Sem conta') + ' · ' + U.moeda(op.valor) + ' · Etapa CRM: ' + esc(op.etapa) + '</p>' +
+      '<p class="muted small">' + esc((conta && conta.nome) || 'Sem conta') + ' · ' + U.moeda(op.valor) + ' · ' + esc(op.tipo || 'Novo negócio') +
+      ' · Etapa CRM: ' + esc(op.etapa) + ' há ' + r.tempoNaEtapa + ' dias' +
+      (op.fechamentoPrevisto ? ' · previsão ' + U.data(op.fechamentoPrevisto) : '') + '</p>' +
+      blocoIndicadores(r) +
+      blocoCompromisso(op, r) +
+      blocoNBD(op, r) +
+      blocoAlertas(r) +
+      '<div class="card"><h2>Evolução da decisão</h2>' + curvaIAD(op) + '</div>' +
+      blocoDimensoes(op) +
+      blocoGate(op, r) +
+      blocoGrupo(op, r) +
+      blocoTarefas(op) +
+      blocoArquivos(op) +
+      blocoHistorico(op);
+  }
 
-      '<div class="grid k4">' +
-        '<div class="kpi"><div class="rot">IAD</div><div class="val">' + r.iad + '<span class="small muted">/16</span></div><div class="obs">' + esc(r.classe.rotulo) + '</div></div>' +
-        '<div class="kpi"><div class="rot">Evidence Age</div><div class="val">' + r.evidenceAge + '<span class="small muted">d</span></div><div class="obs">' + esc(r.faixa.rotulo) + '</div></div>' +
-        '<div class="kpi"><div class="rot">Decision Velocity</div><div class="val">' + r.velocity + '</div><div class="obs">decisões em 30 dias</div></div>' +
-        '<div class="kpi"><div class="rot">Buying Group</div><div class="val">' + r.coverage.percentual + '%</div><div class="obs">' + r.coverage.mapeados + ' pessoas mapeadas</div></div>' +
+  function blocoIndicadores(r) {
+    const d = r.delta;
+    const resumoDelta = d.mudancas.length || d.evidencias
+      ? (d.iadDelta > 0 ? '+' + d.iadDelta + ' no IAD · ' : '') + d.evidencias + ' evidência(s) nos últimos 7 dias' +
+        (d.mudancas.length ? ' · ' + d.mudancas.map(function (m) { return m.nome + ' ' + m.de + '→' + m.para; }).join(', ') : '')
+      : 'Nada mudou na decisão nos últimos 7 dias.';
+
+    return '<div class="grid k4">' +
+      '<div class="kpi"><div class="rot">IAD</div><div class="val">' + r.iad + '<span class="small muted">/16</span></div><div class="obs">' + esc(r.classe.rotulo) + '</div></div>' +
+      '<div class="kpi"><div class="rot">Evidence Age</div><div class="val">' + r.evidenceAge + '<span class="small muted">d</span></div><div class="obs">' + esc(r.faixa.rotulo) + '</div></div>' +
+      '<div class="kpi"><div class="rot">Decision Velocity</div><div class="val">' + r.velocity + '</div><div class="obs">decisões em 30 dias</div></div>' +
+      '<div class="kpi"><div class="rot">Buying Group</div><div class="val">' + r.coverage.percentual + '%</div><div class="obs">' + r.coverage.mapeados + ' pessoas mapeadas</div></div>' +
       '</div>' +
+      '<div class="faixa-delta ' + (d.mudancas.length || d.evidencias ? '' : 'parado') + '">' + esc(resumoDelta) + '</div>';
+  }
 
-      '<div class="card" style="margin-top:14px"><h2>Próxima melhor decisão</h2>' +
-        (r.nbd.critico ? '<div class="aviso" style="margin-bottom:10px">Risco crítico nesta oportunidade.</div>' : '') +
-        '<p><strong>' + esc(r.nbd.decisao) + '</strong></p>' +
-        '<p class="small muted">Ação recomendada: ' + esc(r.nbd.acao) + '</p>' +
-        (r.nbd.conteudo ? '<p class="tiny muted">Material de apoio: ' + esc(r.nbd.conteudo) + '</p>' : '') +
-        (canais ? '<div class="tabela-rolagem" style="margin-top:8px"><table><tbody>' + canais + '</tbody></table></div>' : '') +
-        '<div class="row" style="margin-top:12px"><button class="btn alt" onclick="App.novaEvidencia(\'' + op.id + '\')">Registrar evidência do cliente</button>' +
-        '<button class="btn ghost" onclick="App.novaAtividade(\'' + op.id + '\')">Registrar atividade</button></div></div>' +
+  function blocoCompromisso(op, r) {
+    const c = r.compromisso;
+    const corpo = c
+      ? '<div class="row"><span class="pill ' + (c.vencido ? 'dead' : 'ok') + '">' +
+          (c.vencido ? 'vencido há ' + c.diasAtraso + 'd' : 'em ' + c.diasAte + 'd') + '</span>' +
+          '<strong>' + esc(c.texto) + '</strong></div>' +
+        '<p class="small muted" style="margin:8px 0 0">Combinado para ' + U.data(c.data) + ' · a vez é ' +
+          (c.dono === 'cliente' ? 'do cliente' : 'nossa') + '.</p>'
+      : '<p class="small muted" style="margin:0">Nenhum próximo passo combinado com data. Sem isso, não há como saber se este negócio está atrasado.</p>';
 
-      (alertasHtml ? '<div class="card"><h2>Alertas</h2>' + alertasHtml + '</div>' : '') +
+    return '<div class="card"><div class="row"><h2 style="margin:0">Próximo compromisso</h2><span class="espaco"></span>' +
+      '<button class="btn ghost mini" onclick="App.definirCompromisso(\'' + op.id + '\')">' + (c ? 'Atualizar' : 'Definir') + '</button></div>' +
+      '<div style="margin-top:10px">' + corpo + '</div></div>';
+  }
 
-      '<div class="card"><h2>As 8 decisões</h2><p class="tiny muted">0 = desconhecido · 1 = parcial · 2 = comprovado pelo cliente</p>' + dims + '</div>' +
+  function blocoNBD(op, r) {
+    const canais = r.nbd.canais ? P.CANAIS.map(function (c) {
+      return '<tr><td><strong>' + esc(c.nome) + '</strong></td><td>' + esc(r.nbd.canais[c.id]) + '</td></tr>';
+    }).join('') : '';
 
-      '<div class="card"><h2>Proposal Gate</h2>' +
-        '<div class="row"><span class="pill ' + (r.gates.liberado ? 'ok' : 'risk') + '">Prontidão ' + r.gates.prontidao + '%</span>' +
-        (op.gateLiberadoPor ? '<span class="pill warn">Liberado manualmente por ' + esc(op.gateLiberadoPor) + '</span>' : '') + '</div>' +
-        '<div style="margin:10px 0">' + U.barra(r.gates.prontidao, !r.gates.liberado) + '</div>' +
-        '<div class="row">' + gatesHtml + '</div>' +
-        (r.gates.liberado
-          ? '<p class="small" style="margin-top:10px">Qualificação mínima atendida: a proposta agora formaliza decisões já tomadas.</p>'
-          : '<p class="small" style="margin-top:10px">Faltam: ' + esc(r.gates.pendentes.map(function (p) { return p.nome; }).join(', ')) + '.</p>' +
-            '<button class="btn ghost mini" onclick="App.liberarGate(\'' + op.id + '\')">Liberar proposta mesmo assim (fica registrado)</button>') +
-      '</div>' +
+    return '<div class="card"><h2>Próxima melhor decisão</h2>' +
+      (r.nbd.critico ? '<div class="aviso" style="margin-bottom:10px">Risco crítico nesta oportunidade.</div>' : '') +
+      '<p><strong>' + esc(r.nbd.decisao) + '</strong></p>' +
+      '<p class="small muted">Ação recomendada: ' + esc(r.nbd.acao) + '</p>' +
+      (r.nbd.conteudo ? '<p class="tiny muted">Material de apoio: ' + esc(r.nbd.conteudo) + '</p>' : '') +
+      (canais ? '<div class="tabela-rolagem" style="margin-top:8px"><table><tbody>' + canais + '</tbody></table></div>' : '') +
+      '<div class="row" style="margin-top:12px"><button class="btn alt" onclick="App.novaEvidencia(\'' + op.id + '\')">Registrar evidência do cliente</button>' +
+      '<button class="btn ghost" onclick="App.fecharReuniao(\'' + op.id + '\')">Fechamento de reunião</button>' +
+      '<button class="btn ghost" onclick="App.novaAtividade(\'' + op.id + '\')">Registrar atividade</button></div></div>';
+  }
 
-      '<div class="card"><div class="row"><h2 style="margin:0">Buying group</h2><span class="espaco"></span>' +
-        '<button class="btn ghost mini" onclick="App.ligarStakeholder(\'' + op.id + '\')">+ Vincular pessoa</button></div>' +
-        '<p class="tiny muted" style="margin:6px 0 10px">Papéis críticos faltando: ' + (r.coverage.faltando.length ? esc(r.coverage.faltando.join(', ')) : 'nenhum') + '</p>' +
-        '<div class="mapa">' + pessoas + '</div></div>' +
+  function blocoAlertas(r) {
+    const html = r.alertas.map(function (a) {
+      return '<div class="aviso" style="margin-bottom:6px">' + (a.nivel === 'alto' ? '🔴 ' : '🟡 ') + esc(a.texto) + '</div>';
+    }).join('');
+    return html ? '<div class="card"><h2>Alertas</h2>' + html + '</div>' : '';
+  }
 
-      '<div class="card"><h2>Linha do tempo da decisão</h2>' +
-        '<p class="tiny muted">Verde = o cliente se moveu. Cinza = nós nos movemos.</p>' +
-        '<div class="timeline">' + eventos + '</div></div>';
+  function blocoDimensoes(op) {
+    const dims = P.DIMENSOES.map(function (d) {
+      const v = op.dims[d.id] || 0;
+      const provas = E.evidenciasDaDimensao(op, d.id);
+      const pode = E.podeComprovar(op, d.id);
+      const notas = [0, 1, 2].map(function (n) {
+        const bloqueado = n === 2 && !pode;
+        return '<button class="' + (v === n ? 'on' + n : '') + (bloqueado ? ' bloqueado' : '') + '" ' +
+          'onclick="App.pontuar(\'' + op.id + '\',\'' + d.id + '\',' + n + ')" ' +
+          'title="' + esc(bloqueado ? 'Exige uma evidência confirmada ou documentada' : d.niveis[n]) + '">' + n + '</button>';
+      }).join('');
+      return '<div class="dim"><div class="cab"><span class="nome">' + esc(d.nome) + '</span><div class="notas">' + notas + '</div></div>' +
+        '<div class="small muted" style="margin-top:4px">' + esc(d.pergunta) + '</div>' +
+        '<div class="tiny muted" style="margin-top:3px">' + esc(d.niveis[v]) +
+        ' · ' + provas.length + ' evidência(s)' + (pode ? ', ao menos uma confirmada' : ', nenhuma confirmada') + '</div></div>';
+    }).join('');
+
+    return '<div class="card"><h2>As 8 decisões</h2>' +
+      '<p class="tiny muted">0 = desconhecido · 1 = parcial · 2 = comprovado pelo cliente. A nota 2 exige evidência confirmada ou documentada.</p>' + dims + '</div>';
+  }
+
+  function blocoGate(op, r) {
+    const gatesHtml = r.gates.itens.map(function (i) {
+      return '<span class="pill ' + (i.ok ? 'ok' : 'dead') + '">' + esc(i.nome) + ' ' + i.atual + '/' + i.min + '</span>';
+    }).join(' ');
+
+    return '<div class="card"><h2>Proposal Gate</h2>' +
+      '<div class="row"><span class="pill ' + (r.gates.liberado ? 'ok' : 'risk') + '">Prontidão ' + r.gates.prontidao + '%</span>' +
+      (op.gateLiberadoPor ? '<span class="pill warn">Liberado manualmente por ' + esc(op.gateLiberadoPor) + '</span>' : '') + '</div>' +
+      '<div style="margin:10px 0">' + U.barra(r.gates.prontidao, !r.gates.liberado) + '</div>' +
+      '<div class="row">' + gatesHtml + '</div>' +
+      (r.gates.liberado
+        ? '<p class="small" style="margin-top:10px">Qualificação mínima atendida: a proposta agora formaliza decisões já tomadas.</p>'
+        : '<p class="small" style="margin-top:10px">Faltam: ' + esc(r.gates.pendentes.map(function (p) { return p.nome; }).join(', ')) + '.</p>' +
+          '<button class="btn ghost mini" onclick="App.liberarGate(\'' + op.id + '\')">Liberar proposta mesmo assim (fica registrado)</button>') +
+      '</div>';
+  }
+
+  function blocoGrupo(op, r) {
+    const pessoas = E.stakeholdersDaOp(op).map(function (p) {
+      const chefe = p.reportaA ? Store.contato(p.reportaA) : null;
+      return '<div class="pessoa"><div class="nome"><span class="dot ' + p.sentimento + '"></span>' + esc(p.nome) + '</div>' +
+        '<div class="tiny muted">' + esc(p.cargo || '—') + '</div>' +
+        '<div class="tiny" style="margin-top:5px">' + esc(p.papel) + ' · influência ' + (p.influencia || 2) + '/3</div>' +
+        (chefe ? '<div class="tiny muted">reporta a ' + esc(chefe.nome) + '</div>' : '') +
+        '<div class="row tiny" style="margin-top:7px"><button class="btn ghost mini" onclick="App.editarContato(\'' + p.id + '\')">Editar</button>' +
+        '<button class="btn ghost mini" onclick="App.removerStakeholder(\'' + op.id + '\',\'' + p.id + '\')">Remover</button></div></div>';
+    }).join('') || '<div class="vazio small">Nenhum stakeholder ligado. Venda single-threaded é o maior risco silencioso.</div>';
+
+    const aut = r.autoria;
+    const notaAutoria = aut.total
+      ? '<p class="tiny muted" style="margin:0 0 10px">' + aut.total + ' evidência(s) de ' + aut.pessoas + ' pessoa(s)' +
+        (aut.principal ? ' · ' + Math.round(aut.concentracao * 100) + '% vieram de ' + esc(aut.principal.nome) : '') + '.</p>'
+      : '';
+
+    return '<div class="card"><div class="row"><h2 style="margin:0">Buying group</h2><span class="espaco"></span>' +
+      '<button class="btn ghost mini" onclick="App.ligarStakeholder(\'' + op.id + '\')">+ Vincular pessoa</button></div>' +
+      '<p class="tiny muted" style="margin:6px 0 4px">Papéis críticos faltando: ' + (r.coverage.faltando.length ? esc(r.coverage.faltando.join(', ')) : 'nenhum') + '</p>' +
+      notaAutoria +
+      '<div class="mapa">' + pessoas + '</div></div>';
+  }
+
+  function blocoTarefas(op) {
+    const tarefas = Store.tarefasDaOportunidade(op.id)
+      .sort(function (a, b) { return a.vencimento.localeCompare(b.vencimento); });
+    const abertas = tarefas.filter(function (t) { return t.status === 'aberta'; });
+
+    const linhas = abertas.map(function (t) {
+      const d = P.DIMENSOES.find(function (x) { return x.id === t.decisaoAlvo; });
+      const atrasada = t.vencimento < Store.hoje();
+      return '<div class="tarefa-linha"><button class="quadro" onclick="App.concluirTarefa(\'' + t.id + '\')" title="Concluir"></button>' +
+        '<span class="small">' + esc(t.titulo) + (d ? ' <span class="tiny muted">→ ' + esc(d.nome) + '</span>' : '') + '</span>' +
+        '<span class="espaco"></span>' +
+        '<span class="tiny ' + (atrasada ? 'atrasado' : 'muted') + '">' + U.data(t.vencimento) + '</span>' +
+        '<button class="btn ghost mini" onclick="App.excluirTarefa(\'' + t.id + '\')">✕</button></div>';
+    }).join('') || '<div class="vazio small">Nenhuma tarefa aberta.</div>';
+
+    return '<div class="card"><div class="row"><h2 style="margin:0">Tarefas</h2><span class="espaco"></span>' +
+      '<button class="btn ghost mini" onclick="App.novaTarefa(\'' + op.id + '\')">+ Tarefa</button></div>' +
+      '<p class="tiny muted" style="margin:6px 0 10px">Toda tarefa aponta para a decisão que pretende provocar. Tarefa sem decisão-alvo é agenda, não venda.</p>' +
+      '<div class="tarefas">' + linhas + '</div></div>';
+  }
+
+  function blocoArquivos(op) {
+    return '<div class="card"><div class="row"><h2 style="margin:0">Arquivos</h2><span class="espaco"></span>' +
+      '<button class="btn ghost mini" onclick="App.anexar(\'' + op.id + '\')">+ Anexar</button></div>' +
+      '<p class="tiny muted" style="margin:6px 0 10px">Organizados pela decisão que destravam. Documento enviado pelo cliente vira evidência.</p>' +
+      '<div id="lista-arquivos" class="lista-arquivos"><div class="tiny muted">Carregando anexos…</div></div></div>';
+  }
+
+  function itemArquivo(a) {
+    const kb = a.tamanho > 1048576
+      ? (a.tamanho / 1048576).toFixed(1) + ' MB'
+      : Math.max(1, Math.round(a.tamanho / 1024)) + ' KB';
+    return '<div class="arquivo"><div class="row"><strong class="small">' + esc(a.nome) + '</strong>' +
+      '<span class="espaco"></span><span class="pill">' + esc(a.categoria) + '</span></div>' +
+      '<div class="tiny muted">' + kb + ' · ' + U.data(a.data) + ' · ' + (a.enviadoPor === 'cliente' ? 'enviado pelo cliente' : 'enviado por nós') + '</div>' +
+      '<div class="row" style="margin-top:6px"><button class="btn ghost mini" onclick="App.abrirArquivo(\'' + a.id + '\')">Abrir</button>' +
+      '<button class="btn ghost mini" onclick="App.excluirArquivo(\'' + a.id + '\',\'' + a.oportunidadeId + '\')">Excluir</button></div></div>';
+  }
+
+  let filtroHistorico = 'tudo';
+
+  function blocoHistorico(op) {
+    const tipos = [['tudo', 'Tudo'], ['decision', 'Evidências'], ['pontuacao', 'Pontuação'], ['activity', 'Atividades'], ['sistema', 'Sistema']];
+    const filtros = tipos.map(function (t) {
+      return '<button class="pill' + (filtroHistorico === t[0] ? ' orange' : '') + '" onclick="App.filtrarHistorico(\'' + t[0] + '\')">' + esc(t[1]) + '</button>';
+    }).join(' ');
+
+    const eventos = E.historico(op)
+      .filter(function (e) { return filtroHistorico === 'tudo' || e.tipo === filtroHistorico; })
+      .slice(0, 40)
+      .map(function (e) {
+        const dim = P.DIMENSOES.find(function (d) { return d.id === e.dimensao; });
+        const forca = e.forca ? P.FORCAS.find(function (f) { return f.id === e.forca; }) : null;
+        const quem = e.contatoId ? Store.contato(e.contatoId) : null;
+
+        let rotulo, classe;
+        if (e.tipo === 'decision') { rotulo = 'Evidência do cliente'; classe = 'ev'; }
+        else if (e.tipo === 'pontuacao') { rotulo = 'Pontuação'; classe = 'pt'; }
+        else if (e.tipo === 'sistema') { rotulo = 'Sistema'; classe = 'sis'; }
+        else { rotulo = 'Atividade do vendedor (não conta como avanço)'; classe = 'at'; }
+
+        const titulo = e.tipo === 'pontuacao' && dim ? dim.nome + ' ' + esc(e.titulo) : esc(e.titulo);
+
+        return '<div class="evento ' + classe + '">' +
+          '<div class="quando">' + U.data(e.data) + ' · ' + rotulo +
+          (dim && e.tipo !== 'pontuacao' ? ' · ' + esc(dim.nome) : '') +
+          (e.canal ? ' · ' + esc(e.canal) : '') + '</div>' +
+          '<div class="small">' + titulo + '</div>' +
+          (forca || quem
+            ? '<div class="tiny muted">' + (forca ? esc(forca.rotulo) : '') + (quem ? (forca ? ' · ' : '') + 'por ' + esc(quem.nome) : '') + '</div>'
+            : '') +
+          (e.justificativa ? '<div class="tiny muted">' + esc(e.justificativa) + '</div>' : '') +
+          (e.compromisso && e.compromisso.data ? '<div class="tiny muted">Combinado: ' + esc(e.compromisso.texto) + ' até ' + U.data(e.compromisso.data) + '</div>' : '') +
+          (e.tipo === 'sistema' || e.tipo === 'pontuacao' ? '' :
+            '<button class="btn ghost mini" style="margin-top:5px" onclick="App.removerEvento(\'' + op.id + '\',\'' + e.id + '\')">Excluir</button>') +
+          '</div>';
+      }).join('') || '<div class="vazio small">Nenhum evento neste filtro.</div>';
+
+    return '<div class="card"><h2>Histórico</h2>' +
+      '<div class="row" style="margin:6px 0 12px">' + filtros + '</div>' +
+      '<div class="timeline">' + eventos + '</div></div>';
   }
 
   /* ---------------- Revisão semanal ---------------- */
   function revisao() {
     const est = Store.obter();
     const resumos = est.oportunidades
-      .filter(function (o) { return o.etapa !== 'Venda'; })
+      .filter(function (o) { return !o.desfecho; })
       .map(E.resumo)
       .sort(function (a, b) { return b.evidenceAge - a.evidenceAge; });
 
     if (!resumos.length) return '<h1>Revisão semanal</h1><div class="vazio">Sem oportunidades abertas.</div>';
 
     const cards = resumos.map(function (r) {
-      const mudou = (r.op.eventos || []).filter(function (e) { return e.tipo === 'decision' && E.diasEntre(e.data) <= 7; });
+      const d = r.delta;
+      const comp = r.compromisso;
       return '<div class="card"><div class="row"><h3 style="margin:0">' + esc(r.op.titulo) + '</h3><span class="espaco"></span>' +
         '<span class="pill ' + r.faixa.classe + '">' + r.evidenceAge + 'd</span></div>' +
         '<div class="small muted">' + esc((r.conta && r.conta.nome) || '') + ' · ' + esc(r.op.etapa) + ' · ' + U.compacto(r.op.valor) + ' · IAD ' + r.iad + '/16</div>' +
         '<p class="small" style="margin-top:10px"><strong>O que mudou na decisão do cliente nos últimos 7 dias?</strong></p>' +
-        (mudou.length
-          ? '<ul class="small" style="margin:0 0 8px 18px">' + mudou.map(function (e) { return '<li>' + esc(e.titulo) + '</li>'; }).join('') + '</ul>'
+        (d.evidencias || d.mudancas.length
+          ? '<ul class="small" style="margin:0 0 8px 18px">' +
+            (d.mudancas.map(function (m) { return '<li>' + esc(m.nome) + ': ' + m.de + ' → ' + m.para + '</li>'; }).join('')) +
+            '<li>' + d.evidencias + ' evidência(s) registrada(s)</li></ul>'
           : '<div class="aviso" style="margin-bottom:8px">Nada mudou. Sem evidência nova do lado do cliente, não houve avanço real.</div>') +
+        (comp
+          ? '<p class="tiny ' + (comp.vencido ? 'atrasado' : 'muted') + '">Compromisso: ' + esc(comp.texto) + ' — ' + U.data(comp.data) +
+            (comp.vencido ? ' (vencido há ' + comp.diasAtraso + 'd)' : '') + '</p>'
+          : '<p class="tiny atrasado">Sem próximo passo combinado com data.</p>') +
         '<p class="small muted">Próxima decisão a provocar: ' + esc(r.nbd.decisao) + '</p>' +
         '<div class="row"><button class="btn alt mini" onclick="App.novaEvidencia(\'' + r.op.id + '\')">Registrar evidência</button>' +
+        '<button class="btn ghost mini" onclick="App.definirCompromisso(\'' + r.op.id + '\')">Definir compromisso</button>' +
         '<button class="btn ghost mini" onclick="App.abrir(\'' + r.op.id + '\')">Abrir cockpit</button></div></div>';
     }).join('');
 
@@ -353,15 +552,25 @@
     const lista = est.contas.map(function (c) {
       const pessoas = Store.contatosDaConta(c.id);
       const ops = est.oportunidades.filter(function (o) { return o.contaId === c.id; });
+      const abertas = ops.filter(function (o) { return !o.desfecho; });
+      const valor = abertas.reduce(function (s, o) { return s + (o.valor || 0); }, 0);
+      const ultima = abertas.map(function (o) { return E.evidenceAge(o); }).sort(function (a, b) { return a - b; })[0];
+
       const chips = pessoas.map(function (p) {
         return '<button class="pill" onclick="App.editarContato(\'' + p.id + '\')"><span class="dot ' + p.sentimento + '"></span>' + esc(p.nome) + ' · ' + esc(p.papel) + '</button>';
       }).join(' ') || '<span class="tiny muted">Nenhum contato.</span>';
+
+      const local = [c.cidade, c.uf].filter(Boolean).join('/');
+      const ficha = [c.segmento, c.porte, local, c.relacaoAtual].filter(Boolean).join(' · ');
+
       return '<div class="card"><div class="row"><h3 style="margin:0">' + esc(c.nome) + '</h3><span class="espaco"></span>' +
-        '<span class="pill">' + ops.length + ' oportunidade(s)</span></div>' +
-        '<div class="tiny muted">' + esc(c.segmento || '—') + '</div>' +
+        '<span class="pill">' + abertas.length + ' aberta(s)</span>' +
+        (valor ? '<span class="pill navy">' + U.compacto(valor) + '</span>' : '') + '</div>' +
+        '<div class="tiny muted">' + esc(ficha || '—') + (ultima != null ? ' · última evidência há ' + ultima + 'd' : '') + '</div>' +
         '<div class="row" style="margin-top:10px">' + chips + '</div>' +
         '<div class="row" style="margin-top:10px"><button class="btn ghost mini" onclick="App.novoContato(\'' + c.id + '\')">+ Contato</button>' +
-        '<button class="btn ghost mini" onclick="App.novaOportunidade(\'' + c.id + '\')">+ Oportunidade</button></div></div>';
+        '<button class="btn ghost mini" onclick="App.novaOportunidade(\'' + c.id + '\')">+ Oportunidade</button>' +
+        '<button class="btn ghost mini" onclick="App.editarConta(\'' + c.id + '\')">Editar</button></div></div>';
     }).join('');
     return '<div class="row"><h1>Contas</h1><span class="espaco"></span><button class="btn alt mini" onclick="App.novaConta()">+ Conta</button></div>' + lista;
   }
@@ -380,11 +589,17 @@
     }).join('');
 
     const naoContam = P.ATIVIDADES_QUE_NAO_CONTAM.map(function (a) { return '<span class="pill dead">' + esc(a) + '</span>'; }).join(' ');
+    const forcas = P.FORCAS.map(function (f) {
+      return '<tr><td><strong>' + esc(f.rotulo) + '</strong></td><td>' + esc(f.desc) + '</td></tr>';
+    }).join('');
 
     return '<h1>Playbook da decisão</h1>' +
       '<div class="card"><h2>A regra</h2>' +
       '<p>O estágio mostra onde a oportunidade está. As decisões mostram se ela realmente avançou.</p>' +
       '<p class="small muted">Não conta como avanço:</p><div class="row">' + naoContam + '</div></div>' +
+      '<div class="card"><h2>Força da evidência</h2>' +
+      '<p class="small">Uma decisão só chega a 2 com evidência confirmada ou documentada.</p>' +
+      '<div class="tabela-rolagem"><table><tbody>' + forcas + '</tbody></table></div></div>' +
       '<div class="sec-titulo"><h2>As 8 decisões e a cadência multicanal</h2></div>' + dims;
   }
 
@@ -397,20 +612,35 @@
       '<ul class="small"><li><strong>Android/Chrome/Edge:</strong> menu ⋮ → “Instalar aplicativo”.</li>' +
       '<li><strong>iPhone/Safari:</strong> Compartilhar → “Adicionar à Tela de Início”.</li>' +
       '<li><strong>Desktop:</strong> ícone de instalar na barra de endereço.</li></ul>' +
-      '<button class="btn alt" id="btn-instalar" onclick="App.instalar()">Instalar aplicativo</button></div>' +
+      '<button class="btn alt" onclick="App.instalar()">Instalar aplicativo</button></div>' +
+
+      '<div class="card"><h2>Importar planilha</h2>' +
+      '<p class="small muted">Traga a carteira que já existe. Importe nesta ordem: empresas, depois contatos, depois oportunidades — contatos e oportunidades precisam da empresa já cadastrada.</p>' +
+      '<div class="row"><button class="btn" onclick="App.importarCsv(\'empresas\')">Empresas</button>' +
+      '<button class="btn" onclick="App.importarCsv(\'contatos\')">Contatos</button>' +
+      '<button class="btn" onclick="App.importarCsv(\'oportunidades\')">Oportunidades</button></div>' +
+      '<div class="row" style="margin-top:10px"><span class="tiny muted">Modelos:</span>' +
+      '<button class="btn ghost mini" onclick="App.baixarModelo(\'empresas\')">empresas.csv</button>' +
+      '<button class="btn ghost mini" onclick="App.baixarModelo(\'contatos\')">contatos.csv</button>' +
+      '<button class="btn ghost mini" onclick="App.baixarModelo(\'oportunidades\')">oportunidades.csv</button></div></div>' +
+
       '<div class="card"><h2>Backup</h2>' +
-      '<p class="small muted">Os dados ficam no dispositivo (offline). Exporte para levar de máquina ou compartilhar com o time.</p>' +
+      '<p class="small muted">Os dados ficam no dispositivo (offline). Exporte para levar de máquina ou compartilhar com o time. Anexos não entram no JSON.</p>' +
       '<div class="row"><button class="btn" onclick="App.exportar()">Exportar JSON</button>' +
       '<button class="btn ghost" onclick="App.importar()">Importar JSON</button></div>' +
-      '<p class="tiny muted" style="margin-top:10px">' + est.contas.length + ' contas · ' + est.contatos.length + ' contatos · ' + est.oportunidades.length + ' oportunidades.</p></div>' +
+      '<p class="tiny muted" style="margin-top:10px">' + est.contas.length + ' contas · ' + est.contatos.length + ' contatos · ' +
+      est.oportunidades.length + ' oportunidades · ' + est.tarefas.length + ' tarefas.</p>' +
+      '<p class="tiny muted" id="uso-anexos">Anexos: calculando…</p></div>' +
+
       '<div class="card"><h2>Demonstração</h2>' +
-      '<p class="small muted">Carrega uma carteira fictícia com os quatro grupos de pipeline para treinar a leitura do modelo.</p>' +
+      '<p class="small muted">Carrega uma carteira fictícia com os grupos de pipeline para treinar a leitura do modelo.</p>' +
       '<div class="row"><button class="btn ghost" onclick="App.carregarDemo()">Carregar demonstração</button>' +
       '<button class="btn ghost" onclick="App.limpar()">Apagar tudo</button></div></div>';
   }
 
   global.IADViews = {
-    hoje, painel, pipeline, cockpit, revisao, contas, playbook, dados,
-    definirFiltro: function (f) { filtroGrupo = f; }
+    hoje, painel, pipeline, cockpit, revisao, contas, playbook, dados, itemArquivo,
+    definirFiltro: function (f) { filtroGrupo = f; },
+    definirFiltroHistorico: function (f) { filtroHistorico = f; }
   };
 })(window);

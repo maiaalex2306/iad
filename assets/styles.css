@@ -179,8 +179,35 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--navy-2); ou
 .timeline { border-left: 2px solid var(--line); padding-left: 14px; margin-left: 6px; }
 .evento { position: relative; padding: 8px 0; }
 .evento::before { content: ''; position: absolute; left: -21px; top: 14px; width: 10px; height: 10px; border-radius: 50%; background: var(--ok); }
-.evento.activity::before { background: var(--muted); opacity: .45; }
+.evento.at::before { background: var(--muted); opacity: .45; }
+.evento.pt::before { background: var(--navy-2); }
+.evento.sis::before { background: var(--warn); }
 .evento .quando { font-size: .72rem; color: var(--muted); }
+
+/* Delta da semana: a resposta antes da pergunta ser feita. */
+.faixa-delta {
+  margin-top: 12px; padding: 9px 13px; border-radius: 10px; font-size: .86rem;
+  background: rgba(26,127,75,.09); border: 1px solid rgba(26,127,75,.25); color: var(--ok);
+}
+.faixa-delta.parado { background: var(--bg); border-color: var(--line); color: var(--muted); }
+
+.grafico { margin: 6px 0 4px; }
+.grafico svg { display: block; max-width: 100%; }
+
+.tarefas { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.tarefa-linha { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--line); }
+.tarefa-linha:last-child { border-bottom: 0; }
+.tarefa-linha .quadro {
+  width: 17px; height: 17px; flex: 0 0 auto; border: 2px solid var(--rule-strong, var(--muted));
+  border-radius: 5px; background: transparent; cursor: pointer;
+}
+.tarefa-linha .quadro:hover { background: var(--ok); border-color: var(--ok); }
+.atrasado { color: var(--dead); font-weight: 700; }
+
+.lista-arquivos { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.arquivo { border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: var(--surface); }
+
+.notas button.bloqueado { opacity: .45; border-style: dashed; }
 
 dialog {
   border: 0; border-radius: 16px; padding: 0; width: min(560px, 94vw);

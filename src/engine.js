@@ -174,6 +174,25 @@
     if (depoisDaProposta(op) && !g.liberado) lista.push({ nivel: 'alto', texto: 'Proposta emitida com prontidão de apenas ' + g.prontidao + '%.' });
     if (!cob.temChampion) lista.push({ nivel: 'medio', texto: 'Nenhum champion identificado no grupo comprador.' });
     if (decisionVelocity(op) === 0) lista.push({ nivel: 'medio', texto: 'Decision Velocity zerada nos últimos 30 dias.' });
+
+    const comp = compromisso(op);
+    if (comp && comp.vencido) {
+      lista.push({ nivel: 'alto', texto: 'Compromisso vencido há ' + comp.diasAtraso + ' dia(s): ' + comp.texto + '.' });
+    } else if (!comp) {
+      lista.push({ nivel: 'medio', texto: 'Nenhum próximo passo combinado com data.' });
+    }
+    if ((op.adiamentos || 0) >= 2) {
+      lista.push({ nivel: 'alto', texto: 'Data de fechamento adiada ' + op.adiamentos + ' vezes.' });
+    }
+    const aut = autoria(op);
+    if (aut.total >= 3 && aut.concentracao === 1 && aut.principal) {
+      lista.push({ nivel: 'medio', texto: 'Todas as evidências vieram de ' + aut.principal.nome + '.' });
+    }
+    P.DIMENSOES.forEach(function (d) {
+      if ((op.dims[d.id] || 0) === 2 && !podeComprovar(op, d.id)) {
+        lista.push({ nivel: 'medio', texto: d.nome + ' está como comprovado sem evidência confirmada.' });
+      }
+    });
     return lista;
   }
 
@@ -190,7 +209,11 @@
       saude: saude(op),
       classe: classificar(op),
       nbd: nextBestDecision(op),
-      alertas: alertas(op)
+      alertas: alertas(op),
+      compromisso: compromisso(op),
+      tempoNaEtapa: tempoNaEtapa(op),
+      delta: deltaSemana(op),
+      autoria: autoria(op)
     };
   }
 
@@ -240,6 +263,107 @@
     };
   }
 
+  function pesoForca(forca) {
+    const f = P.FORCAS.find(function (x) { return x.id === forca; });
+    return f ? f.peso : 1;
+  }
+
+  function evidenciasDaDimensao(op, dimensao) {
+    return eventosDeDecisao(op).filter(function (e) { return e.dimensao === dimensao; });
+  }
+
+  /* Nota 2 significa "comprovado". Sem uma evidência ao menos confirmada,
+     não é comprovação: é opinião do vendedor sobre o cliente. */
+  function podeComprovar(op, dimensao) {
+    return evidenciasDaDimensao(op, dimensao).some(function (e) {
+      return pesoForca(e.forca) >= P.FORCA_MINIMA_PARA_COMPROVAR;
+    });
+  }
+
+  /* Quem produziu as evidências. Se vier tudo da mesma pessoa, a conta
+     inteira está apoiada nela — e agora isso é fato, não suposição. */
+  function autoria(op) {
+    const contagem = {};
+    eventosDeDecisao(op).forEach(function (e) {
+      if (!e.contatoId) return;
+      contagem[e.contatoId] = (contagem[e.contatoId] || 0) + 1;
+    });
+    const ids = Object.keys(contagem);
+    const total = ids.reduce(function (s, id) { return s + contagem[id]; }, 0);
+    const principal = ids.sort(function (a, b) { return contagem[b] - contagem[a]; })[0];
+    return {
+      pessoas: ids.length,
+      total: total,
+      principal: principal ? Store.contato(principal) : null,
+      concentracao: total ? (contagem[principal] || 0) / total : 0
+    };
+  }
+
+  /* O compromisso combinado é o relógio mais honesto do funil:
+     não mede o nosso esforço, mede a palavra do cliente. */
+  function compromisso(op) {
+    const c = op.proximoCompromisso;
+    if (!c || !c.data) return null;
+    const atraso = diasEntre(c.data);
+    const vencido = new Date(c.data + 'T00:00:00') < new Date(Store.hoje() + 'T00:00:00');
+    return {
+      texto: c.texto || 'Próximo passo combinado',
+      data: c.data,
+      dono: c.dono || 'cliente',
+      vencido: vencido,
+      diasAtraso: vencido ? atraso : 0,
+      diasAte: vencido ? 0 : diasEntre(Store.hoje(), c.data)
+    };
+  }
+
+  function tempoNaEtapa(op) {
+    return diasEntre(op.etapaDesde || op.criadoEm);
+  }
+
+  /* Mediana da própria carteira, não benchmark de mercado. */
+  function medianaEtapaGanhos(oportunidades, etapa) {
+    const tempos = oportunidades
+      .filter(function (o) { return o.desfecho && o.desfecho.tipo === 'ganho'; })
+      .map(function (o) { return o.desfecho.diasEmAberto || 0; })
+      .filter(function (d) { return d > 0; })
+      .sort(function (a, b) { return a - b; });
+    if (!tempos.length) return null;
+    const meio = Math.floor(tempos.length / 2);
+    const total = tempos.length % 2 ? tempos[meio] : (tempos[meio - 1] + tempos[meio]) / 2;
+    /* Aproximação: o tempo total dividido pelas etapas do processo. */
+    return Math.round(total / P.ETAPAS.length);
+  }
+
+  /* Delta da semana: o que mudou na decisão nos últimos 7 dias. */
+  function deltaSemana(op) {
+    const recentes = (op.snapshots || []).filter(function (s) { return diasEntre(s.data) <= 7; });
+    const evidencias = eventosDeDecisao(op).filter(function (e) { return diasEntre(e.data) <= 7; });
+    const mudancas = recentes.filter(function (s) { return s.dimensaoAlterada; }).map(function (s) {
+      const d = P.DIMENSOES.find(function (x) { return x.id === s.dimensaoAlterada; });
+      return { nome: d ? d.nome : s.dimensaoAlterada, de: s.de, para: s.para };
+    });
+    const ganho = mudancas.reduce(function (soma, m) { return soma + ((m.para || 0) - (m.de || 0)); }, 0);
+    return { iadDelta: ganho, evidencias: evidencias.length, mudancas: mudancas };
+  }
+
+  /* Série para a curva do IAD: um ponto por snapshot, do mais antigo ao mais novo. */
+  function curva(op) {
+    const pontos = (op.snapshots || []).map(function (s) {
+      const d = s.dimensaoAlterada ? P.DIMENSOES.find(function (x) { return x.id === s.dimensaoAlterada; }) : null;
+      return { data: s.data, iad: s.iad, dimensao: d ? d.nome : null, de: s.de, para: s.para };
+    });
+    if (op.desfecho) pontos.push({ data: op.desfecho.data, iad: op.desfecho.iadFinal, dimensao: null, fecho: true });
+    return pontos;
+  }
+
+  /* Histórico unificado: evidência, atividade, pontuação e mudanças de sistema
+     na mesma linha do tempo, em ordem. */
+  function historico(op) {
+    return (op.eventos || []).slice().sort(function (a, b) {
+      return b.data.localeCompare(a.data);
+    });
+  }
+
   /* Sugestão de dimensão a partir do texto da evidência: pura palavra-chave,
      visível e sempre editável pelo vendedor. Não é IA, e não finge ser. */
   const PISTAS = {
@@ -267,14 +391,30 @@
 
   /* Foco do dia: o app procura o vendedor, em vez de esperar ser procurado.
      Uma linha por negócio, a mais urgente primeiro. */
-  function focoDoDia(oportunidades) {
+  function focoDoDia(oportunidades, tarefas) {
     const itens = [];
+    const porOp = {};
+    (tarefas || []).filter(function (t) { return t.status === 'aberta'; }).forEach(function (t) {
+      if (!t.oportunidadeId) return;
+      (porOp[t.oportunidadeId] = porOp[t.oportunidadeId] || []).push(t);
+    });
+
     oportunidades.filter(function (o) { return !o.desfecho; }).forEach(function (op) {
       const r = resumo(op);
       const push = function (urgencia, motivo, acao) {
-        itens.push({ resumo: r, urgencia: urgencia, motivo: motivo, acao: acao });
+        itens.push({ resumo: r, urgencia: urgencia, motivo: motivo, acao: acao, tarefas: porOp[op.id] || [] });
       };
-      if (r.evidenceAge > 30) {
+      const comp = r.compromisso;
+      const vencidas = (porOp[op.id] || []).filter(function (t) { return t.vencimento < Store.hoje(); });
+
+      if (comp && comp.vencido) {
+        push(3, 'Compromisso vencido há ' + comp.diasAtraso + ' dia(s): ' + comp.texto,
+          comp.dono === 'cliente'
+            ? 'Cobre o retorno combinado e reagende com data nova.'
+            : 'A bola está com você: entregue o que foi combinado hoje.');
+      } else if (vencidas.length) {
+        push(3, vencidas.length + ' tarefa(s) vencida(s)', vencidas[0].titulo);
+      } else if (r.evidenceAge > 30) {
         push(3, r.evidenceAge + ' dias sem evidência do cliente', 'Requalifique ou encerre: registre o desfecho real.');
       } else if (depoisDaProposta(op) && !r.coverage.temEconomicBuyer) {
         push(3, 'Em ' + op.etapa.toLowerCase() + ' sem acesso ao decisor econômico', r.nbd.acao);
@@ -344,7 +484,8 @@
   global.IADEngine = {
     iad, evidenceAge, faixaEvidencia, decisionVelocity, coverage, gates,
     saude, classificar, nextBestDecision, alertas, resumo, carteira,
-    focoDoDia, aprendizado, sugerirDimensao,
+    focoDoDia, aprendizado, sugerirDimensao, podeComprovar, evidenciasDaDimensao,
+    autoria, compromisso, tempoNaEtapa, medianaEtapaGanhos, deltaSemana, curva, historico,
     stakeholdersDaOp, diasEntre, indiceEtapa, depoisDaProposta
   };
 })(window);

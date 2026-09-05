@@ -232,6 +232,34 @@
     { id: 'whatsapp', nome: 'WhatsApp', papel: 'Remove barreiras e fecha microcompromissos.' }
   ];
 
+  /* Força da evidência: "ele disse que vai levar ao CFO" não é a mesma coisa
+     que "o CFO participou". Sem essa distinção o IAD de um otimista vale o
+     mesmo que o de um cético, e o índice perde sentido comparativo. */
+  const FORCAS = [
+    { id: 'relato', rotulo: 'Relato', peso: 1, desc: 'O cliente disse que vai acontecer.' },
+    { id: 'confirmado', rotulo: 'Confirmado', peso: 2, desc: 'O cliente fez, e nós presenciamos.' },
+    { id: 'documentado', rotulo: 'Documentado', peso: 3, desc: 'Está por escrito: e-mail, ata, documento ou sistema.' }
+  ];
+  const FORCA_MINIMA_PARA_COMPROVAR = 2;
+
+  const TIPOS_TAREFA = ['Ligar', 'Enviar material', 'Reunião', 'Preparar', 'Visitar', 'Cobrar retorno'];
+
+  const CATEGORIAS_ARQUIVO = [
+    'Business case', 'Critérios de avaliação', 'Proposta', 'Contrato',
+    'Referência / case', 'Dados do cliente', 'Ata de reunião', 'Outro'
+  ];
+
+  const RELACOES_CONTA = ['Prospect', 'Cliente ativo', 'Ex-cliente'];
+  const TIPOS_OPORTUNIDADE = ['Novo negócio', 'Expansão', 'Renovação'];
+
+  /* Perguntas fechadas do fim de reunião: cada "sim" vira evidência sem digitação. */
+  const FECHAMENTO_REUNIAO = [
+    { id: 'stakeholders', pergunta: 'Entrou alguém novo na conversa?', evidencia: 'Novo participante entrou na decisão', forca: 'confirmado' },
+    { id: 'impacto', pergunta: 'Ficou algum número acordado?', evidencia: 'Cliente acordou os números do impacto', forca: 'confirmado' },
+    { id: 'processo', pergunta: 'Ficou marcado um próximo passo com data?', evidencia: 'Cliente assumiu um próximo passo com data', forca: 'confirmado' },
+    { id: 'risco', pergunta: 'Apareceu algum bloqueio ou receio novo?', evidencia: 'Cliente expôs um bloqueio ou receio', forca: 'relato' }
+  ];
+
   /* O desfecho que mais importa não é a perda para o concorrente: é o cliente
      que não decidiu nada. Sem separar os dois, o modelo nunca aprende. */
   const DESFECHOS = [
@@ -250,6 +278,8 @@
 
   global.IADPlaybook = {
     DIMENSOES, ETAPAS, GATES_PROPOSTA, PAPEIS, PAPEIS_CRITICOS, DESFECHOS,
+    FORCAS, FORCA_MINIMA_PARA_COMPROVAR, TIPOS_TAREFA, CATEGORIAS_ARQUIVO,
+    RELACOES_CONTA, TIPOS_OPORTUNIDADE, FECHAMENTO_REUNIAO,
     CANAIS, FAIXAS_EVIDENCIA, ATIVIDADES_QUE_NAO_CONTAM
   };
 })(window);
