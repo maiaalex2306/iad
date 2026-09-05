@@ -15,9 +15,19 @@
   const CHAVE_SESSAO = 'iad-crm:nuvem-sessao:v1';
 
   /* ---------- configuração ---------- */
+  /* O que foi configurado neste navegador vence; o resto vem de src/config.js,
+     para que quem abre o app pela primeira vez já ache o servidor. */
+  function padrao() {
+    const c = (global.IADConfig && global.IADConfig.supabase) || {};
+    return { url: String(c.url || '').replace(/\/+$/, ''), chave: String(c.chave || '') };
+  }
+
   function config() {
-    try { return JSON.parse(localStorage.getItem(CHAVE_CONFIG)) || { url: '', chave: '' }; }
-    catch (e) { return { url: '', chave: '' }; }
+    const base = padrao();
+    let salvo = null;
+    try { salvo = JSON.parse(localStorage.getItem(CHAVE_CONFIG)); } catch (e) { salvo = null; }
+    if (!salvo) return base;
+    return { url: salvo.url || base.url, chave: salvo.chave || base.chave };
   }
 
   function salvarConfig(nova) {
