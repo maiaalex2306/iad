@@ -192,29 +192,47 @@
     const estado = Store.obter();
     const donoId = (sessao().user || {}).id;
 
+    /* Uma tabela que falha não pode esconder as outras. Com Promise.all, o
+       primeiro erro aborta tudo e o problema seguinte só aparece depois de
+       consertar este — descobrir de um em um custa uma rodada por defeito.
+       Aqui todas as tabelas são tentadas e os erros voltam juntos. */
     const envios = TABELAS.map(function (t) {
       const linhas = (estado[t.local] || []).map(function (r) { return paraBanco(r, perfil.tenant_id, donoId); });
-      if (!linhas.length) return Promise.resolve(0);
+      if (!linhas.length) return Promise.resolve({ tabela: t.remota, enviados: 0 });
       return chamar('/rest/v1/' + t.remota, {
         metodo: 'POST',
         cabecalhos: { Prefer: 'resolution=merge-duplicates,return=minimal' },
         corpo: linhas
-      }).then(function () { return linhas.length; });
+      }).then(
+        function () { return { tabela: t.remota, enviados: linhas.length }; },
+        function (e) { return { tabela: t.remota, enviados: 0, erro: e.message }; }
+      );
     });
 
-    return Promise.all(envios).then(function (contagens) {
-      return contagens.reduce(function (s, n) { return s + n; }, 0);
+    return Promise.all(envios).then(function (resultados) {
+      const falhas = resultados.filter(function (r) { return r.erro; });
+      if (falhas.length) {
+        throw new Error(falhas.map(function (f) { return f.tabela + ': ' + f.erro; }).join(' — '));
+      }
+      return resultados.reduce(function (s, r) { return s + r.enviados; }, 0);
     });
   }
 
   function puxar() {
     const buscas = TABELAS.map(function (t) {
-      return chamar('/rest/v1/' + t.remota + '?select=*').then(function (linhas) {
-        return { local: t.local, linhas: (linhas || []).map(paraApp) };
-      });
+      return chamar('/rest/v1/' + t.remota + '?select=*').then(
+        function (linhas) { return { local: t.local, linhas: (linhas || []).map(paraApp) }; },
+        function (e) { return { local: t.local, tabela: t.remota, erro: e.message }; }
+      );
     });
 
     return Promise.all(buscas).then(function (resultados) {
+      const falhas = resultados.filter(function (r) { return r.erro; });
+      if (falhas.length) {
+        throw new Error(falhas.map(function (f) { return f.tabela + ': ' + f.erro; }).join(' — '));
+      }
+      /* Só troca a cópia local depois que todas as tabelas vieram: substituir
+         parte delas deixaria a carteira pela metade, com contas sem contatos. */
       const estado = Store.obter();
       resultados.forEach(function (r) { estado[r.local] = r.linhas; });
       Store.salvar();

@@ -80,6 +80,7 @@ create table if not exists public.oportunidades (
   id                   text primary key,
   tenant_id            uuid not null references public.tenants(id) on delete cascade,
   dono_id              uuid references auth.users(id) on delete set null,
+  dono                 text default '',
   conta_id             text,
   titulo               text not null,
   valor                numeric default 0,
@@ -135,19 +136,21 @@ create table if not exists public.produtos (
 );
 
 create table if not exists public.segmentos (
-  id         text primary key,
-  tenant_id  uuid not null references public.tenants(id) on delete cascade,
-  nome       text not null,
-  ativo      boolean default true,
-  criado_em  date default current_date
+  id            text primary key,
+  tenant_id     uuid not null references public.tenants(id) on delete cascade,
+  nome          text not null,
+  ativo         boolean default true,
+  criado_em     date default current_date,
+  atualizado_em timestamptz default now()
 );
 
 create table if not exists public.tipos_tarefa (
-  id         text primary key,
-  tenant_id  uuid not null references public.tenants(id) on delete cascade,
-  nome       text not null,
-  ativo      boolean default true,
-  criado_em  date default current_date
+  id            text primary key,
+  tenant_id     uuid not null references public.tenants(id) on delete cascade,
+  nome          text not null,
+  ativo         boolean default true,
+  criado_em     date default current_date,
+  atualizado_em timestamptz default now()
 );
 
 create index if not exists idx_contas_tenant        on public.contas(tenant_id);
