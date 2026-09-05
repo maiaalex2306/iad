@@ -89,10 +89,11 @@
     return '';
   }
 
+  /* Uma planilha traz "46.700,00", "46700.00" ou "R$ 46.700". O mesmo leitor
+     que atende o formulário atende aqui — dois entendimentos de vírgula no
+     mesmo app seria pedir para divergirem. */
   function numero(valor) {
-    if (!valor) return 0;
-    const limpo = String(valor).replace(/[^0-9,.-]/g, '').replace(/\.(?=\d{3}\b)/g, '').replace(',', '.');
-    return Number(limpo) || 0;
+    return global.IADUI.numeroDigitado(valor);
   }
 
   function dataISO(valor) {

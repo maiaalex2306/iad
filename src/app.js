@@ -216,7 +216,7 @@
     novoProduto: function () {
       U.formulario('Novo produto', camposProduto(), {}, function (d) {
         if (!d.nome) return;
-        Store.criarNoCatalogo('produtos', Object.assign({}, d, { precoReferencia: Number(d.precoReferencia) || 0 }));
+        Store.criarNoCatalogo('produtos', Object.assign({}, d, { precoReferencia: U.numeroDigitado(d.precoReferencia) }));
         render();
       });
     },
@@ -228,7 +228,7 @@
         { id: 'ativo', rotulo: 'Situação', tipo: 'select', opcoes: [{ valor: 'sim', rotulo: 'Ativo' }, { valor: 'nao', rotulo: 'Inativo' }] }
       ]), Object.assign({}, p, { ativo: p.ativo === false ? 'nao' : 'sim' }), function (d) {
         Store.atualizarNoCatalogo('produtos', id, Object.assign({}, d, {
-          precoReferencia: Number(d.precoReferencia) || 0, ativo: d.ativo === 'sim'
+          precoReferencia: U.numeroDigitado(d.precoReferencia), ativo: d.ativo === 'sim'
         }));
         render();
       });
@@ -250,7 +250,7 @@
           opcoes: [{ valor: '', rotulo: '— sem segmento —' }]
             .concat(Store.nomesDoCatalogo('segmentos').map(function (n) { return { valor: n, rotulo: n }; })) },
         { id: 'titulo', rotulo: 'Oportunidade' },
-        { id: 'valor', rotulo: 'Valor (R$)', tipo: 'number' },
+        { id: 'valor', rotulo: 'Valor (R$)', tipo: 'moeda' },
         { id: 'fechamentoPrevisto', rotulo: 'Fechamento previsto', tipo: 'date' },
         { id: 'contatoNome', rotulo: 'Contato (opcional)' },
         { id: 'contatoCargo', rotulo: 'Cargo do contato' },
@@ -275,7 +275,7 @@
         }
 
         const op = Store.criarOportunidade({
-          contaId: contaId, titulo: d.titulo, valor: Number(d.valor) || 0,
+          contaId: contaId, titulo: d.titulo, valor: U.numeroDigitado(d.valor),
           etapa: etapa, fechamentoPrevisto: d.fechamentoPrevisto || ''
         });
 
@@ -1165,7 +1165,7 @@
       { id: 'sku', rotulo: 'Código / SKU' },
       { id: 'categoria', rotulo: 'Categoria' },
       { id: 'unidade', rotulo: 'Unidade', placeholder: 'un, kg, t, hora, mês' },
-      { id: 'precoReferencia', rotulo: 'Preço de referência (R$)', tipo: 'number' },
+      { id: 'precoReferencia', rotulo: 'Preço de referência (R$)', tipo: 'moeda' },
       { id: 'descricao', rotulo: 'Descrição', tipo: 'textarea' }
     ];
   }
@@ -1217,7 +1217,7 @@
     return [
       { id: 'titulo', rotulo: 'Título' },
       { id: 'contaId', rotulo: 'Conta', tipo: 'select', padrao: contaPadrao || (contas[0] && contas[0].id), opcoes: contas.map(function (c) { return { valor: c.id, rotulo: c.nome }; }) },
-      { id: 'valor', rotulo: 'Valor (R$)', tipo: 'number' },
+      { id: 'valor', rotulo: 'Valor (R$)', tipo: 'moeda' },
       { id: 'etapa', rotulo: 'Etapa CRM', tipo: 'select', opcoes: P.ETAPAS },
       { id: 'tipo', rotulo: 'Tipo', tipo: 'select', opcoes: P.TIPOS_OPORTUNIDADE },
       { id: 'fechamentoPrevisto', rotulo: 'Fechamento previsto', tipo: 'date' },
