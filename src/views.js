@@ -701,13 +701,42 @@
       const classe = n === 2 ? (provado ? 'q2' : 'q2 sem-prova') : 'q' + n;
       const marca = n === 2 ? (provado ? '✓' : '!') : (n === 1 ? '◐' : '');
       const abre = clicavel ? ' onclick="App.novaEvidencia(\'' + op.id + '\',null,\'' + d.id + '\')"' : '';
-      return '<button class="celula ' + classe + '"' + abre +
-        ' title="' + esc(d.nome + ': ' + ESTADOS[n] + (n === 2 && !provado ? ' (sem evidência confirmada)' : '')) + '">' +
+      return '<button class="celula ' + classe + '"' + abre + '>' +
         '<span class="marca">' + marca + '</span>' +
         '<span class="rot">' + esc(d.nome) + '</span>' +
         '<span class="estado">' + esc(n === 2 && !provado ? 'sem prova' : ESTADOS[n]) + '</span>' +
+        ajudaDaDimensao(d, n, provado) +
         '</button>';
     }).join('') + '</div>';
+  }
+
+  /* Ajuda pelo contexto: o nome da decisão sozinho não diz o que ela quer saber,
+     e ninguém abre o Playbook no meio de uma pontuação. O balão traz a pergunta,
+     o que cada nota significa — com a atual em destaque — e o que comprova.
+
+     Vai dentro do <button>, então só pode conter conteúdo de frase: spans com
+     display block, nunca div ou ul. */
+  function ajudaDaDimensao(d, n, provado) {
+    const niveis = d.niveis.map(function (texto, i) {
+      return '<span class="nivel' + (i === n ? ' agora' : '') + '">' +
+        '<span class="n">' + i + '</span>' + esc(texto) + '</span>';
+    }).join('');
+
+    const comprova = d.evidencias.slice(0, 3).map(function (e) {
+      return '<span class="ev">' + esc(e) + '</span>';
+    }).join('');
+
+    return '<span class="ajuda" role="tooltip">' +
+      '<span class="ajuda-titulo">' + esc(d.nome) + '</span>' +
+      '<span class="ajuda-pergunta">' + esc(d.pergunta) + '</span>' +
+      '<span class="ajuda-rot">O que cada nota significa</span>' +
+      '<span class="niveis">' + niveis + '</span>' +
+      '<span class="ajuda-rot">O que comprova</span>' +
+      '<span class="evs">' + comprova + '</span>' +
+      (n === 2 && !provado
+        ? '<span class="ajuda-alerta">Está em 2 sem evidência confirmada ou documentada.</span>'
+        : '') +
+      '</span>';
   }
 
   function blocoAvanco(op, r) {
