@@ -58,7 +58,18 @@
     const papeisPresentes = new Set(pessoas.map(function (p) { return p.papel; }));
     const criticosCobertos = P.PAPEIS_CRITICOS.filter(function (papel) { return papeisPresentes.has(papel); });
     const engajados = pessoas.filter(function (p) { return p.sentimento === 'favoravel' || p.sentimento === 'neutro'; });
+    const resistentes = pessoas.filter(function (p) { return p.sentimento === 'resistente'; });
+    const favoraveis = pessoas.filter(function (p) { return p.sentimento === 'favoravel'; });
+    /* Resistência de quem assina não é a mesma coisa que resistência de quem
+       opera: uma trava o negócio, a outra atrasa. */
+    const resistentesCriticos = resistentes.filter(function (p) {
+      return P.PAPEIS_CRITICOS.indexOf(p.papel) !== -1;
+    });
     return {
+      resistentes: resistentes.length,
+      favoraveis: favoraveis.length,
+      resistentesCriticos: resistentesCriticos,
+      naoAcessados: pessoas.filter(function (p) { return p.sentimento === 'nao_acessado'; }).length,
       mapeados: pessoas.length,
       papeis: papeisPresentes.size,
       criticosCobertos: criticosCobertos.length,
@@ -191,6 +202,17 @@
     }
     if (cob.bloqueadores) {
       lista.push({ tipo: 'mobilizador', nivel: 'medio', texto: cob.bloqueadores + ' bloqueador(es) identificado(s) no grupo comprador.' });
+    }
+    /* A posição de cada pessoa era preenchida e não gerava nada. Quem decide
+       estar contra é o sinal mais caro de ignorar. */
+    if (cob.resistentesCriticos && cob.resistentesCriticos.length) {
+      const nomes = cob.resistentesCriticos.map(function (p) { return p.nome + ' (' + p.papel + ')'; }).join(', ');
+      lista.push({ tipo: 'posicao', nivel: 'alto', texto: 'Resistência em papel crítico: ' + nomes + '.' });
+    } else if (cob.mapeados >= 2 && !cob.favoraveis) {
+      lista.push({ tipo: 'posicao', nivel: 'medio', texto: 'Ninguém favorável no grupo comprador: nenhum aliado declarado.' });
+    }
+    if (cob.mapeados >= 3 && cob.naoAcessados >= Math.ceil(cob.mapeados / 2)) {
+      lista.push({ tipo: 'posicao', nivel: 'medio', texto: cob.naoAcessados + ' de ' + cob.mapeados + ' pessoas ainda não acessadas.' });
     }
     const ins = op.insight || {};
     if ((op.dims.problema || 0) === 2 && ins.estado !== 'aceito') {

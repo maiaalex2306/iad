@@ -664,6 +664,9 @@
       '<p class="muted small">' + esc((conta && conta.nome) || 'Sem conta') + ' · ' + U.moeda(op.valor) + ' · ' + esc(op.tipo || 'Novo negócio') +
       ' · Etapa CRM: ' + esc(op.etapa) + ' há ' + r.tempoNaEtapa + ' dias' +
       (op.fechamentoPrevisto ? ' · previsão ' + U.data(op.fechamentoPrevisto) : '') + '</p>' +
+      (op.concorrentes
+        ? '<p class="tiny muted" style="margin:-6px 0 0">Contra: ' + esc(op.concorrentes) + '</p>'
+        : '') +
 
       blocoAvanco(op, r) +
       blocoLacunas(op, r) +
@@ -906,13 +909,17 @@
   }
 
   function blocoGrupo(op, r) {
-    const pessoas = E.stakeholdersDaOp(op).map(function (p) {
+    /* Quem decide primeiro: influência era preenchida e não ordenava nada. */
+    const pessoas = E.stakeholdersDaOp(op).slice().sort(function (a, b) {
+      return (b.influencia || 2) - (a.influencia || 2);
+    }).map(function (p) {
       const chefe = p.reportaA ? Store.contato(p.reportaA) : null;
       return '<div class="pessoa"><div class="nome"><span class="dot ' + p.sentimento + '"></span>' + esc(p.nome) + '</div>' +
         '<div class="tiny muted">' + esc(p.cargo || '—') + '</div>' +
         '<div class="tiny" style="margin-top:5px">' + esc(p.papel) + ' · influência ' + (p.influencia || 2) + '/3</div>' +
         perfilEtiqueta(p) +
         (chefe ? '<div class="tiny muted">reporta a ' + esc(chefe.nome) + '</div>' : '') +
+        (p.canalPreferido ? '<div class="tiny muted">fala melhor por ' + esc(p.canalPreferido) + '</div>' : '') +
         '<div class="row tiny" style="margin-top:7px"><button class="btn ghost mini" onclick="App.editarContato(\'' + p.id + '\')">Editar</button>' +
         '<button class="btn ghost mini" onclick="App.removerStakeholder(\'' + op.id + '\',\'' + p.id + '\')">Remover</button></div></div>';
     }).join('') || '<div class="vazio small">Nenhum stakeholder ligado. Venda single-threaded é o maior risco silencioso.</div>';
