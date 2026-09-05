@@ -6,77 +6,223 @@
   const esc = U.esc;
 
   /* ---------------- Hoje: a tela do vendedor ---------------- */
+  const URGENCIAS = [
+    { chave: 3, rotulo: 'Urgente', classe: 'dead', cor: 'var(--dead)' },
+    { chave: 2, rotulo: 'Prioridade', classe: 'warn', cor: 'var(--risk)' },
+    { chave: 'resto', rotulo: 'Em dia', classe: 'ok', cor: 'var(--ok)' }
+  ];
+  let filtroHoje = 'todos';
+
   function hoje() {
     const est = Store.obter();
     if (!est.oportunidades.length) return boasVindas();
 
+    const G = global.IADGraficos;
     const foco = E.focoDoDia(est.oportunidades, est.tarefas);
     if (!foco.itens.length) {
-      return cabecalhoHoje(foco) + '<div class="card"><div class="vazio">Nenhum negócio aberto. Toda a carteira está encerrada.</div></div>';
+      return '<h1>Hoje</h1><div class="card"><div class="vazio">Nenhum negócio aberto. Toda a carteira está encerrada.</div></div>';
     }
 
-    const urgencias = ['', 'Atenção', 'Prioridade', 'Urgente'];
-    const classes = ['', '', 'warn', 'dead'];
+    const balde = function (i) { return i.urgencia >= 3 ? 3 : (i.urgencia === 2 ? 2 : 'resto'); };
+    const grupos = URGENCIAS.map(function (u) {
+      const itens = foco.itens.filter(function (i) { return balde(i) === u.chave; });
+      return Object.assign({}, u, {
+        qtd: itens.length,
+        valor: itens.reduce(function (s, i) { return s + (i.resumo.op.valor || 0); }, 0)
+      });
+    });
 
-    const itens = foco.itens.slice(0, 12).map(function (i) {
-      const r = i.resumo;
-      const tarefas = (i.tarefas || []).slice(0, 3).map(function (t) {
-        const atrasada = t.vencimento < Store.hoje();
-        return '<div class="tarefa-linha"><button class="quadro" onclick="App.concluirTarefa(\'' + t.id + '\')" title="Concluir"></button>' +
-          '<span class="small">' + esc(t.titulo) + '</span>' +
-          '<span class="tiny ' + (atrasada ? 'atrasado' : 'muted') + '">' + U.data(t.vencimento) + '</span></div>';
-      }).join('');
-
-      return '<div class="foco u' + i.urgencia + '">' +
-        '<div class="row"><strong>' + esc(r.op.titulo) + '</strong><span class="espaco"></span>' +
-        (i.urgencia ? '<span class="pill ' + classes[i.urgencia] + '">' + urgencias[i.urgencia] + '</span>' : '') +
-        '<span class="pill navy">' + U.compacto(r.op.valor) + '</span></div>' +
-        '<div class="small muted">' + esc((r.conta && r.conta.nome) || '') + ' · ' + esc(r.op.etapa) + '</div>' +
-        '<div class="row" style="margin-top:7px;gap:8px">' + tiraDecisao(r.op) + '<span class="tiny muted">' + r.iad + '/16</span></div>' +
-        '<div class="small" style="margin-top:8px"><strong>' + esc(i.motivo) + '</strong></div>' +
-        '<div class="small muted">' + esc(i.acao) + '</div>' +
-        (tarefas ? '<div class="tarefas">' + tarefas + '</div>' : '') +
-        '<div class="row" style="margin-top:10px">' +
-        '<button class="btn alt mini" onclick="App.novaEvidencia(\'' + r.op.id + '\')">Registrar evidência</button>' +
-        '<button class="btn ghost mini" onclick="App.abrir(\'' + r.op.id + '\')">Abrir</button></div></div>';
+    const cartoesResumo = grupos.map(function (g) {
+      const ativo = String(filtroHoje) === String(g.chave);
+      return '<button class="tile ' + g.classe + (ativo ? ' ativo' : '') + '" onclick="App.filtrarHoje(\'' + g.chave + '\')">' +
+        '<span class="qtd">' + g.qtd + '</span>' +
+        '<span class="rot">' + esc(g.rotulo) + '</span>' +
+        '<span class="val">' + U.compacto(g.valor) + '</span></button>';
     }).join('');
 
-    return cabecalhoHoje(foco) + '<div class="lista-foco">' + itens + '</div>';
-  }
+    const visiveis = foco.itens.filter(function (i) {
+      return filtroHoje === 'todos' || String(balde(i)) === String(filtroHoje);
+    });
 
-  function cabecalhoHoje(foco) {
-    const n = foco.urgentes.length;
+    const itens = visiveis.slice(0, 15).map(cartaoFoco).join('') ||
+      '<div class="vazio">Nada neste filtro.</div>';
+
     return '<div class="row"><h1>Hoje</h1><span class="espaco"></span>' +
       '<button class="btn alt mini" onclick="App.capturaRapida()">+ Evidência</button></div>' +
-      '<p class="muted small">' +
-      (n
-        ? n + ' negócio(s) precisam de você agora · ' + U.compacto(foco.valorUrgente) + ' envolvidos'
-        : 'Nada urgente. A lista abaixo está em ordem de prioridade.') +
-      '</p>';
+      '<p class="muted small">' + (grupos[0].qtd
+        ? grupos[0].qtd + ' negócio(s) precisam de você agora · ' + U.compacto(grupos[0].valor) + ' envolvidos'
+        : 'Nada urgente hoje.') + '</p>' +
+      '<div class="tiles">' + cartoesResumo +
+        '<button class="tile todos' + (filtroHoje === 'todos' ? ' ativo' : '') + '" onclick="App.filtrarHoje(\'todos\')">' +
+        '<span class="qtd">' + foco.itens.length + '</span><span class="rot">Todos</span>' +
+        '<span class="val">' + U.compacto(foco.itens.reduce(function (s, i) { return s + (i.resumo.op.valor || 0); }, 0)) + '</span></button>' +
+      '</div>' +
+      '<div class="card" style="padding:14px 16px">' +
+        G.composicao(grupos.filter(function (g) { return g.valor > 0; }).map(function (g) {
+          return { rotulo: g.rotulo, valor: g.valor, cor: g.cor };
+        })) + '</div>' +
+      '<div class="lista-foco">' + itens + '</div>';
+  }
+
+  function cartaoFoco(i) {
+    const r = i.resumo;
+    const rotulos = ['', 'Atenção', 'Prioridade', 'Urgente'];
+    const classes = ['', '', 'warn', 'dead'];
+    const tarefas = (i.tarefas || []).slice(0, 3).map(function (t) {
+      const atrasada = t.vencimento < Store.hoje();
+      return '<div class="tarefa-linha"><button class="quadro" onclick="event.stopPropagation();App.concluirTarefa(\'' + t.id + '\')" title="Concluir"></button>' +
+        '<span class="small">' + esc(t.titulo) + '</span>' +
+        '<span class="espaco"></span><span class="tiny ' + (atrasada ? 'atrasado' : 'muted') + '">' + U.data(t.vencimento) + '</span></div>';
+    }).join('');
+
+    const falta = r.lacunas.length
+      ? r.lacunas.slice(0, 3).map(function (l) { return esc(l.titulo); }).join(' · ') +
+        (r.lacunas.length > 3 ? ' · +' + (r.lacunas.length - 3) : '')
+      : 'nada — resta formalizar';
+
+    return '<div class="foco u' + i.urgencia + '">' +
+      '<div class="row"><strong>' + esc(r.op.titulo) + '</strong><span class="espaco"></span>' +
+      (i.urgencia ? '<span class="pill ' + classes[i.urgencia] + '">' + rotulos[i.urgencia] + '</span>' : '') +
+      '<span class="pill navy">' + U.compacto(r.op.valor) + '</span></div>' +
+      '<div class="small muted">' + esc((r.conta && r.conta.nome) || '') + ' · ' + esc(r.op.etapa) + '</div>' +
+
+      '<div class="linha-avanco">' + tiraDecisao(r.op) +
+        '<span class="iad">' + r.iad + '<span class="de">/16</span></span>' +
+        '<span class="espaco"></span>' +
+        '<span class="pill ' + r.faixa.classe + '">' + r.evidenceAge + 'd</span>' +
+        '<span class="pill">grupo ' + r.coverage.percentual + '%</span>' +
+      '</div>' +
+
+      '<div class="motivo"><strong>' + esc(i.motivo) + '</strong><br><span class="muted">' + esc(i.acao) + '</span></div>' +
+      '<div class="tiny muted" style="margin-top:6px">Falta: ' + falta + '</div>' +
+      (tarefas ? '<div class="tarefas">' + tarefas + '</div>' : '') +
+      '<div class="row" style="margin-top:10px">' +
+      '<button class="btn alt mini" onclick="App.novaEvidencia(\'' + r.op.id + '\')">Registrar evidência</button>' +
+      '<button class="btn ghost mini" onclick="App.abrir(\'' + r.op.id + '\')">Abrir</button></div></div>';
   }
 
   /* ---------------- Painel executivo ---------------- */
+  let filtroPeriodo = 'todos';
+  let filtroSegmento = 'todos';
+
   function painel() {
     const est = Store.obter();
     if (!est.oportunidades.length) return boasVindas();
-    const c = E.carteira(est.oportunidades);
 
-    const kpi = function (rot, val, obs) {
-      return '<div class="kpi"><div class="rot">' + esc(rot) + '</div><div class="val">' + val + '</div><div class="obs">' + esc(obs || '') + '</div></div>';
+    const G = global.IADGraficos;
+    const abertas = est.oportunidades.filter(function (o) { return !o.desfecho; });
+    const meses = E.mesesDisponiveis(est.oportunidades);
+    const segmentos = E.segmentosDisponiveis(est.oportunidades);
+
+    /* Se o filtro apontar para um mês que sumiu, volta para tudo. */
+    if (filtroPeriodo !== 'todos' && meses.indexOf(filtroPeriodo) === -1) filtroPeriodo = 'todos';
+    if (filtroSegmento !== 'todos' && segmentos.indexOf(filtroSegmento) === -1) filtroSegmento = 'todos';
+
+    const selecionadas = E.filtrar(abertas, { periodo: filtroPeriodo, segmento: filtroSegmento });
+    const c = E.carteira(selecionadas);
+    const resumos = c.resumos;
+
+    const filtros =
+      '<div class="filtros">' +
+        '<div class="grupo-filtro"><span class="rot">Período</span>' +
+          pill('todos', filtroPeriodo, 'App.filtrarPeriodo', 'Todos') +
+          meses.map(function (m) { return pill(m, filtroPeriodo, 'App.filtrarPeriodo', E.rotuloMes(m)); }).join('') +
+        '</div>' +
+        '<div class="grupo-filtro"><span class="rot">Segmento</span>' +
+          pill('todos', filtroSegmento, 'App.filtrarSegmento', 'Todos') +
+          segmentos.map(function (seg) { return pill(seg, filtroSegmento, 'App.filtrarSegmento', seg); }).join('') +
+        '</div>' +
+      '</div>';
+
+    if (!resumos.length) {
+      return '<h1>Painel de decisão</h1>' + filtros +
+        '<div class="card"><div class="vazio">Nenhuma oportunidade aberta neste recorte.</div></div>';
+    }
+
+    const composicao = G.composicao([
+      { rotulo: 'Saudável', valor: c.saudavel, cor: G.CORES_SAUDE.saudavel },
+      { rotulo: 'Em risco', valor: c.emRisco, cor: G.CORES_SAUDE.risco },
+      { rotulo: 'Zumbi', valor: c.zumbi, cor: G.CORES_SAUDE.zumbi }
+    ]);
+
+    const porMes = E.porMes(resumos);
+    const porEtapa = E.porEtapa(resumos).map(function (e) {
+      return { rotulo: e.etapa, valor: e.valor, saudavel: e.saudavel, risco: e.valor - e.saudavel, zumbi: 0,
+               nota: e.qtd + ' neg. · IAD médio ' + U.numero(e.iadMedio, 1) };
+    });
+    const porSegmento = E.porSegmento(resumos).map(function (seg) {
+      return { rotulo: seg.segmento, valor: seg.valor, saudavel: seg.saudavel, risco: seg.risco, zumbi: seg.zumbi,
+               nota: seg.qtd + ' neg. · IAD médio ' + U.numero(seg.iadMedio, 1) };
+    });
+    const travas = c.travas.slice(0, 8).map(function (t) {
+      return { rotulo: t.nome, valor: t.valor, nota: t.qtd + ' negócio(s)' };
+    });
+    const evidencia = E.distribuicaoEvidencia(resumos);
+
+    const kpi = function (rot, val, obs, classe) {
+      return '<div class="kpi ' + (classe || '') + '"><div class="rot">' + esc(rot) + '</div><div class="val">' + val + '</div>' +
+        '<div class="obs">' + esc(obs || '') + '</div></div>';
     };
 
-    const grupos = ['real', 'oculto', 'construcao', 'falso', 'zumbi'].map(function (id) {
-      const g = c.porGrupo[id];
-      if (!g) return '';
-      return '<tr><td>' + esc(g.rotulo) + '</td><td class="right">' + g.qtd + '</td><td class="right">' + U.compacto(g.valor) + '</td>' +
-        '<td class="right">' + Math.round((g.valor / (c.total || 1)) * 100) + '%</td></tr>';
-    }).join('');
+    return '<div class="row"><h1>Painel de decisão</h1><span class="espaco"></span>' +
+      '<span class="tiny muted">' + (filtroPeriodo === 'todos' ? 'todos os meses' : E.rotuloMes(filtroPeriodo)) +
+      ' · ' + (filtroSegmento === 'todos' ? 'todos os segmentos' : esc(filtroSegmento)) + '</span></div>' +
+      filtros +
 
-    const travas = c.travas.slice(0, 5).map(function (t) {
-      return '<tr><td>' + esc(t.nome) + '</td><td class="right">' + t.qtd + '</td><td class="right">' + U.compacto(t.valor) + '</td></tr>';
-    }).join('');
+      '<div class="grid k4">' +
+        kpi('Pipeline aberto', U.compacto(c.total), c.qtd + ' oportunidades') +
+        kpi('Saudável', U.compacto(c.saudavel), 'decisão madura e em movimento', 'bom') +
+        kpi('Em risco', U.compacto(c.emRisco), 'decisão imatura para a etapa', 'atencao') +
+        kpi('Zumbi', U.compacto(c.zumbi), 'sem evidência há +30 dias', 'ruim') +
+      '</div>' +
+      '<div class="card"><h2>Composição do pipeline</h2>' + composicao +
+        '<div class="grid k4" style="margin-top:14px">' +
+          kpi('IAD médio', U.numero(c.iadMedio, 1) + '<span class="small muted">/16</span>', 'maturidade da decisão') +
+          kpi('Evidence Age médio', U.numero(c.evidenceAgeMedio, 1) + '<span class="small muted">d</span>', 'sem movimento do cliente') +
+          kpi('Coverage', Math.round(c.coverageMedio) + '%', 'papéis críticos cobertos') +
+          kpi('Prontidão', Math.round(c.prontidaoMedia) + '%', 'para emitir proposta') +
+        '</div></div>' +
 
-    const criticos = c.resumos
+      '<div class="card"><h2>Como estão os negócios por mês</h2>' +
+        '<p class="tiny muted">Por mês de fechamento previsto. Toque em um mês para filtrar o painel inteiro.</p>' +
+        G.colunasPorMes(porMes, 'App.filtrarPeriodo') + '</div>' +
+
+      '<div class="grid k2">' +
+        '<div class="card"><h2>Por etapa do funil</h2>' +
+          '<p class="tiny muted">O comprimento é o dinheiro; a cor diz quanto dele tem decisão madura.</p>' +
+          G.barrasHorizontais(porEtapa, { descricao: 'Valor por etapa, separado por saúde da decisão' }) + '</div>' +
+        '<div class="card"><h2>Por segmento</h2>' +
+          '<p class="tiny muted">Onde a carteira está concentrada e com que qualidade.</p>' +
+          G.barrasHorizontais(porSegmento, { descricao: 'Valor por segmento, separado por saúde da decisão' }) + '</div>' +
+      '</div>' +
+
+      '<div class="card"><h2>Cada oportunidade e suas 8 decisões</h2>' +
+        '<p class="tiny muted">Uma linha por negócio, do maior valor para o menor. Toque para abrir.</p>' +
+        G.matriz(E.matrizDecisoes(resumos, 14), P.DIMENSOES) + '</div>' +
+
+      '<div class="grid k2">' +
+        '<div class="card"><h2>O que está travando a receita</h2>' +
+          '<p class="tiny muted">Valor que só anda quando esta decisão acontecer dentro do cliente.</p>' +
+          G.barrasHorizontais(travas, { semLegenda: true, descricao: 'Valor parado por decisão pendente' }) + '</div>' +
+        '<div class="card"><h2>Tempo sem evidência do cliente</h2>' +
+          '<p class="tiny muted">Quanto do pipeline está parado, e há quanto tempo.</p>' +
+          G.composicao(evidencia.map(function (f) {
+            return { rotulo: f.rotulo + ' (' + f.qtd + ')', valor: f.valor,
+                     cor: { ok: 'var(--ok)', warn: 'var(--warn)', risk: 'var(--risk)', dead: 'var(--dead)' }[f.classe] };
+          })) + '</div>' +
+      '</div>' +
+
+      riscosCriticos(resumos) +
+      aprendizado();
+  }
+
+  function pill(valor, atual, acao, rotulo) {
+    return '<button class="pill' + (String(valor) === String(atual) ? ' orange' : '') + '" onclick="' + acao + '(\'' +
+      String(valor).replace(/'/g, "\\'") + '\')">' + esc(rotulo) + '</button>';
+  }
+
+  function riscosCriticos(resumos) {
+    const criticos = resumos
       .map(function (r) { return { r: r, altos: r.alertas.filter(function (a) { return a.nivel === 'alto'; }) }; })
       .filter(function (x) { return x.altos.length; })
       .sort(function (a, b) { return (b.r.op.valor || 0) - (a.r.op.valor || 0); })
@@ -85,32 +231,14 @@
         return '<button class="item g-' + x.r.classe.id + '" onclick="App.abrir(\'' + x.r.op.id + '\')">' +
           '<div class="row"><span class="tit">' + esc(x.r.op.titulo) + '</span><span class="espaco"></span>' +
           '<span class="pill navy">' + U.compacto(x.r.op.valor) + '</span></div>' +
-          '<div class="small muted">' + esc((x.r.conta && x.r.conta.nome) || '') + ' · ' + esc(x.r.op.etapa) + ' · IAD ' + x.r.iad + '/16</div>' +
+          '<div class="small muted">' + esc((x.r.conta && x.r.conta.nome) || '') + ' · ' + esc(x.r.op.etapa) + '</div>' +
+          '<div class="row" style="margin-top:7px;gap:8px">' + tiraDecisao(x.r.op) + '<span class="tiny muted">' + x.r.iad + '/16</span></div>' +
           '<div class="small" style="margin-top:6px">⚠ ' + esc(x.altos[0].texto) + '</div></button>';
-      }).join('') || '<div class="vazio">Nenhum risco crítico aberto.</div>';
+      }).join('');
 
-    return '<h1>Painel de decisão</h1>' +
-      '<p class="muted small">Onde está o dinheiro e qual decisão do cliente o está segurando.</p>' +
-      '<div class="grid k4">' +
-        kpi('Pipeline aberto', U.compacto(c.total), c.qtd + ' oportunidades') +
-        kpi('Pipeline saudável', U.compacto(c.saudavel), 'decisão madura e em movimento') +
-        kpi('Pipeline em risco', U.compacto(c.emRisco), 'decisão imatura para a etapa') +
-        kpi('Pipeline zumbi', U.compacto(c.zumbi), 'sem evidência há +30 dias') +
-      '</div>' +
-      '<div class="grid k4" style="margin-top:12px">' +
-        kpi('IAD médio', U.numero(c.iadMedio, 1) + '<span class="small muted">/16</span>', 'maturidade da decisão') +
-        kpi('Evidence Age médio', U.numero(c.evidenceAgeMedio, 1) + '<span class="small muted"> dias</span>', 'tempo sem movimento do cliente') +
-        kpi('Stakeholder Coverage', Math.round(c.coverageMedio) + '%', 'papéis críticos cobertos') +
-        kpi('Proposal Readiness', Math.round(c.prontidaoMedia) + '%', 'prontidão média para propor') +
-      '</div>' +
-      '<div class="grid k2" style="margin-top:14px">' +
-        '<div class="card"><h2>Qualidade do pipeline</h2><div class="tabela-rolagem"><table><thead><tr><th>Grupo</th><th class="right">Qtd</th><th class="right">Valor</th><th class="right">%</th></tr></thead><tbody>' + grupos + '</tbody></table></div></div>' +
-        '<div class="card"><h2>O que está travando a receita</h2><div class="tabela-rolagem"><table><thead><tr><th>Decisão pendente</th><th class="right">Qtd</th><th class="right">Valor</th></tr></thead><tbody>' + (travas || '<tr><td colspan="3" class="muted">Sem travas mapeadas.</td></tr>') + '</tbody></table></div>' +
-        '<p class="tiny muted" style="margin-top:10px">Leia como: “este valor só anda quando esta decisão acontecer dentro do cliente”.</p></div>' +
-      '</div>' +
-      '<div class="sec-titulo"><h2>Riscos críticos</h2><span class="tiny muted">maior valor primeiro</span></div>' +
-      '<div class="lista">' + criticos + '</div>' +
-      aprendizado();
+    if (!criticos) return '';
+    return '<div class="sec-titulo"><h2>Riscos críticos</h2><span class="tiny muted">maior valor primeiro</span></div>' +
+      '<div class="lista">' + criticos + '</div>';
   }
 
   /* O que a carteira fechada já ensinou. Com pouca amostra, diz que é pouca amostra. */
@@ -743,6 +871,9 @@
   global.IADViews = {
     hoje, painel, pipeline, cockpit, revisao, contas, playbook, dados, itemArquivo,
     definirFiltro: function (f) { filtroGrupo = f; },
-    definirFiltroHistorico: function (f) { filtroHistorico = f; }
+    definirFiltroHistorico: function (f) { filtroHistorico = f; },
+    definirFiltroHoje: function (f) { filtroHoje = f; },
+    definirPeriodo: function (f) { filtroPeriodo = f; },
+    definirSegmento: function (f) { filtroSegmento = f; }
   };
 })(window);

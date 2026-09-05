@@ -218,6 +218,133 @@
     };
   }
 
+  /* ---------- Agregações para o painel ---------- */
+
+  function mesDe(op) {
+    const d = op.fechamentoPrevisto || op.criadoEm;
+    return d ? d.slice(0, 7) : '';
+  }
+
+  function rotuloMes(mes) {
+    const nomes = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+    const partes = mes.split('-');
+    return nomes[Number(partes[1]) - 1] + '/' + partes[0].slice(2);
+  }
+
+  function segmentoDe(op) {
+    const c = Store.conta(op.contaId);
+    return (c && c.segmento) || 'Sem segmento';
+  }
+
+  function filtrar(oportunidades, filtros) {
+    const f = filtros || {};
+    return oportunidades.filter(function (o) {
+      if (f.periodo && f.periodo !== 'todos' && mesDe(o) !== f.periodo) return false;
+      if (f.segmento && f.segmento !== 'todos' && segmentoDe(o) !== f.segmento) return false;
+      return true;
+    });
+  }
+
+  function mesesDisponiveis(oportunidades) {
+    const meses = {};
+    oportunidades.filter(function (o) { return !o.desfecho; }).forEach(function (o) {
+      const m = mesDe(o);
+      if (m) meses[m] = true;
+    });
+    return Object.keys(meses).sort();
+  }
+
+  function segmentosDisponiveis(oportunidades) {
+    const segs = {};
+    oportunidades.forEach(function (o) { segs[segmentoDe(o)] = true; });
+    return Object.keys(segs).sort();
+  }
+
+  /* Saúde em três faixas — é o que colore quase todos os gráficos. */
+  function faixaSaude(r) {
+    if (r.classe.id === 'zumbi') return 'zumbi';
+    if (r.classe.id === 'real' || r.classe.id === 'oculto') return 'saudavel';
+    return 'risco';
+  }
+
+  function porMes(resumos) {
+    const mapa = {};
+    resumos.forEach(function (r) {
+      const m = mesDe(r.op);
+      if (!m) return;
+      mapa[m] = mapa[m] || { mes: m, rotulo: rotuloMes(m), qtd: 0, valor: 0, saudavel: 0, risco: 0, zumbi: 0 };
+      mapa[m].qtd += 1;
+      mapa[m].valor += r.op.valor || 0;
+      mapa[m][faixaSaude(r)] += r.op.valor || 0;
+    });
+    return Object.keys(mapa).sort().map(function (k) { return mapa[k]; });
+  }
+
+  function porSegmento(resumos) {
+    const mapa = {};
+    resumos.forEach(function (r) {
+      const seg = segmentoDe(r.op);
+      mapa[seg] = mapa[seg] || { segmento: seg, qtd: 0, valor: 0, somaIad: 0, saudavel: 0, risco: 0, zumbi: 0 };
+      mapa[seg].qtd += 1;
+      mapa[seg].valor += r.op.valor || 0;
+      mapa[seg].somaIad += r.iad;
+      mapa[seg][faixaSaude(r)] += r.op.valor || 0;
+    });
+    return Object.keys(mapa).map(function (k) {
+      const m = mapa[k];
+      m.iadMedio = m.qtd ? m.somaIad / m.qtd : 0;
+      return m;
+    }).sort(function (a, b) { return b.valor - a.valor; });
+  }
+
+  function porEtapa(resumos) {
+    return P.ETAPAS.filter(function (e) { return e !== 'Venda'; }).map(function (etapa) {
+      const doGrupo = resumos.filter(function (r) { return r.op.etapa === etapa; });
+      return {
+        etapa: etapa,
+        qtd: doGrupo.length,
+        valor: doGrupo.reduce(function (s, r) { return s + (r.op.valor || 0); }, 0),
+        saudavel: doGrupo.filter(function (r) { return faixaSaude(r) === 'saudavel'; })
+          .reduce(function (s, r) { return s + (r.op.valor || 0); }, 0),
+        iadMedio: doGrupo.length ? doGrupo.reduce(function (s, r) { return s + r.iad; }, 0) / doGrupo.length : 0
+      };
+    }).filter(function (e) { return e.qtd; });
+  }
+
+  /* Matriz oportunidade × decisão: a carteira inteira em um quadro. */
+  function matrizDecisoes(resumos, limite) {
+    return resumos.slice()
+      .sort(function (a, b) { return (b.op.valor || 0) - (a.op.valor || 0); })
+      .slice(0, limite || 14)
+      .map(function (r) {
+        return {
+          resumo: r,
+          titulo: r.op.titulo,
+          conta: (r.conta && r.conta.nome) || '',
+          valor: r.op.valor || 0,
+          iad: r.iad,
+          celulas: P.DIMENSOES.map(function (d) {
+            const nota = r.op.dims[d.id] || 0;
+            return {
+              dimensao: d.nome,
+              nota: nota,
+              semProva: nota === 2 && !podeComprovar(r.op, d.id)
+            };
+          })
+        };
+      });
+  }
+
+  function distribuicaoEvidencia(resumos) {
+    return P.FAIXAS_EVIDENCIA.map(function (f) {
+      const doGrupo = resumos.filter(function (r) { return r.faixa.rotulo === f.rotulo; });
+      return {
+        rotulo: f.rotulo, classe: f.classe, qtd: doGrupo.length,
+        valor: doGrupo.reduce(function (s, r) { return s + (r.op.valor || 0); }, 0)
+      };
+    });
+  }
+
   /* Carteira: onde está o dinheiro e qual decisão o está segurando. */
   function carteira(oportunidades) {
     const abertas = oportunidades.filter(function (o) { return !o.desfecho; });
@@ -556,6 +683,8 @@
     iad, evidenceAge, faixaEvidencia, decisionVelocity, coverage, gates,
     saude, classificar, nextBestDecision, alertas, resumo, carteira,
     focoDoDia, aprendizado, sugerirDimensao, podeComprovar, evidenciasDaDimensao,
+    filtrar, mesesDisponiveis, segmentosDisponiveis, rotuloMes, segmentoDe, faixaSaude,
+    porMes, porSegmento, porEtapa, matrizDecisoes, distribuicaoEvidencia,
     autoria, compromisso, tempoNaEtapa, medianaEtapaGanhos, deltaSemana, curva, historico, lacunas,
     stakeholdersDaOp, diasEntre, indiceEtapa, depoisDaProposta
   };

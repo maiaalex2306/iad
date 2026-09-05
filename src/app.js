@@ -82,6 +82,9 @@
     abrir: function (id) { location.hash = '#/op/' + id; },
     filtrar: function (grupo) { V.definirFiltro(grupo); render(); },
     filtrarHistorico: function (tipo) { V.definirFiltroHistorico(tipo); render(); },
+    filtrarHoje: function (chave) { V.definirFiltroHoje(chave); render(); },
+    filtrarPeriodo: function (periodo) { V.definirPeriodo(periodo); render(); },
+    filtrarSegmento: function (segmento) { V.definirSegmento(segmento); render(); },
 
     /* ---------- Contas e contatos ---------- */
     novaConta: function () {
