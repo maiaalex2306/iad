@@ -1,5 +1,5 @@
 /* Service worker: cache-first do app shell. Offline no celular e no desktop. */
-const CACHE = 'iad-crm-v12';
+const CACHE = 'iad-crm-v13';
 const ARQUIVOS = [
   './', './index.html', './manifest.webmanifest',
   './assets/styles.css',
@@ -10,8 +10,12 @@ const ARQUIVOS = [
   './icons/icon-192.png', './icons/icon-512.png'
 ];
 
+/* cache: 'reload' força buscar da rede: sem isso o cache HTTP do navegador pode
+   entregar o arquivo velho para dentro do cache novo, e a versão nova nasce
+   com código antigo. */
 self.addEventListener('install', function (e) {
-  e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(ARQUIVOS); }).then(function () { return self.skipWaiting(); }));
+  const pedidos = ARQUIVOS.map(function (u) { return new Request(u, { cache: 'reload' }); });
+  e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(pedidos); }).then(function () { return self.skipWaiting(); }));
 });
 
 self.addEventListener('activate', function (e) {

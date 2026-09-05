@@ -898,7 +898,17 @@
         (aut.principal ? ' · ' + Math.round(aut.concentracao * 100) + '% vieram de ' + esc(aut.principal.nome) : '') + '.</p>'
       : '';
 
+    /* Contato cadastrado na empresa e não ligado a este negócio some da conta
+       da cobertura. Em vez de deixar isso silencioso, o botão diz quantos são. */
+    const soltos = Store.contatosDaConta(op.contaId).filter(function (c) {
+      return (op.stakeholders || []).indexOf(c.id) === -1;
+    });
+
     return '<div class="card"><div class="row"><h2 style="margin:0">Buying group</h2><span class="espaco"></span>' +
+      (soltos.length
+        ? '<button class="btn alt mini" onclick="App.ligarTodosStakeholders(\'' + op.id + '\')">+ Vincular os ' +
+          soltos.length + ' da empresa</button>'
+        : '') +
       '<button class="btn ghost mini" onclick="App.ligarStakeholder(\'' + op.id + '\')">+ Vincular pessoa</button></div>' +
       '<p class="tiny muted" style="margin:6px 0 4px">Papéis críticos faltando: ' + (r.coverage.faltando.length ? esc(r.coverage.faltando.join(', ')) : 'nenhum') + '</p>' +
       notaPerfis + notaAutoria +

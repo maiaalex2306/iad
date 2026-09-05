@@ -750,6 +750,18 @@
       });
     },
 
+    ligarTodosStakeholders: function (opId) {
+      const op = Store.oportunidade(opId);
+      if (!op) return;
+      const soltos = Store.contatosDaConta(op.contaId).filter(function (c) {
+        return op.stakeholders.indexOf(c.id) === -1;
+      });
+      if (!soltos.length) return;
+      soltos.forEach(function (c) { op.stakeholders.push(c.id); });
+      Store.salvar();
+      render();
+    },
+
     removerStakeholder: function (opId, contatoId) {
       const op = Store.oportunidade(opId);
       op.stakeholders = op.stakeholders.filter(function (id) { return id !== contatoId; });
@@ -1305,8 +1317,22 @@
       console.warn('Falha ao preparar o administrador:', e);
       render();
     });
+    /* O app guarda o próprio código para funcionar offline, e é isso que faz uma
+       versão nova demorar a aparecer: o primeiro recarregamento só instala a
+       versão nova; quem usa o código novo é o carregamento seguinte. Duas vezes
+       Ctrl+F5 não é instrução que se dê a um vendedor — então, quando a versão
+       nova assume, a página se recarrega sozinha, uma vez. */
     if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
-      navigator.serviceWorker.register('sw.js').catch(function (e) { console.warn('SW não registrado:', e); });
+      const jaControlado = !!navigator.serviceWorker.controller;
+      let recarregando = false;
+      navigator.serviceWorker.addEventListener('controllerchange', function () {
+        if (!jaControlado || recarregando) return;   /* na primeira visita não há o que trocar */
+        recarregando = true;
+        location.reload();
+      });
+      navigator.serviceWorker.register('sw.js')
+        .then(function (registro) { registro.update(); })
+        .catch(function (e) { console.warn('SW não registrado:', e); });
     }
   });
 })(window);

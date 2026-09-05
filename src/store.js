@@ -283,6 +283,16 @@
       notas: ''
     }, carimbo(true), dados);
     nova.snapshots = [{ data: hoje(), iad: 0, dims: Object.assign({}, nova.dims) }];
+
+    /* O buying group começa com quem já está cadastrado na empresa: são as
+       pessoas daquela conta. Exigir vincular uma a uma fazia o app acusar venda
+       single-threaded e 0% de cobertura num negócio com três interlocutores já
+       cadastrados — alarme falso, que é pior do que alarme nenhum. Quem não faz
+       parte deste negócio se remove no cockpit. */
+    if (!nova.stakeholders.length && nova.contaId) {
+      nova.stakeholders = contatosDaConta(nova.contaId).map(function (c) { return c.id; });
+    }
+
     estado.oportunidades.push(nova);
     salvar();
     return nova;
