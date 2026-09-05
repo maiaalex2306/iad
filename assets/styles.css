@@ -229,22 +229,66 @@ th { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color:
 input.busca { margin-bottom: 12px; }
 td .tiny { display: block; }
 
-/* ---------- Acesso ---------- */
-.sem-sessao nav.tabs, .sem-sessao .topbar button, .sem-sessao .quem, .sem-sessao #barra-admin { display: none; }
-.sem-sessao main { padding-top: 0; padding-bottom: 24px; }
+/* ---------- Acesso ----------
+   A tela de entrada não usa a moldura do app: sem barra superior e sem menu,
+   ela ocupa a janela inteira. Antes o cartão herdava o recuo do topo, que a
+   barra fixa do desktop exigia, e acabava escondido embaixo dela. */
+.sem-sessao .topbar, .sem-sessao nav.tabs, .sem-sessao #barra-admin { display: none; }
+.sem-sessao .app { display: block; }
+.sem-sessao main { padding: 0; max-width: none; }
 
-.acesso { display: flex; justify-content: center; align-items: flex-start; min-height: 70dvh; padding: 24px 0; }
-.cartao-acesso {
-  width: 100%; max-width: 380px; background: var(--surface); border: 1px solid var(--line);
-  border-radius: 16px; padding: 26px 24px 24px; box-shadow: var(--shadow);
+.acesso { display: grid; grid-template-columns: 1fr; min-height: 100dvh; }
+
+/* O lado escuro só aparece onde há largura sobrando: no celular ele viraria
+   uma parede de texto antes do campo de senha. */
+.acesso-painel { display: none; }
+.acesso-forma {
+  display: flex; align-items: center; justify-content: center;
+  padding: 32px 22px calc(32px + var(--safe-b));
+  background: var(--bg);
 }
-.marca-acesso { font-size: 1.35rem; font-weight: 800; letter-spacing: .02em; }
+.cartao-acesso {
+  width: 100%; max-width: 392px; background: var(--surface); border: 1px solid var(--line);
+  border-radius: 18px; padding: 30px 28px 26px; box-shadow: var(--shadow);
+}
+.marca-acesso { font-size: 1.4rem; font-weight: 800; letter-spacing: .02em; }
 .marca-acesso span { color: var(--orange); }
-.cartao-acesso h2 { font-size: 1.12rem; }
-.cartao-acesso .campo { margin-bottom: 12px; }
+.cartao-acesso h2 { font-size: 1.15rem; }
+.cartao-acesso .campo { margin-bottom: 13px; }
+.cartao-acesso .campo span {
+  display: block; font-size: .7rem; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--muted); margin-bottom: 5px;
+}
+.cartao-acesso .campo input, .cartao-acesso .campo select {
+  width: 100%; padding: 11px 12px; border: 1px solid var(--line);
+  border-radius: 10px; background: var(--bg);
+}
+.cartao-acesso .campo input:focus, .cartao-acesso .campo select:focus {
+  outline: 2px solid var(--orange); outline-offset: 1px; background: var(--surface);
+}
+
+@media (min-width: 940px) {
+  .acesso { grid-template-columns: 1.02fr .98fr; }
+  .acesso-painel {
+    display: flex; flex-direction: column; justify-content: center; gap: 26px;
+    padding: 56px 6vw; background: var(--navy); color: #fff;
+  }
+  .acesso-painel .marca-acesso { font-size: 2rem; color: #fff; }
+  .acesso-painel .lema { font-size: 1.05rem; opacity: .82; margin: 6px 0 0; max-width: 34ch; }
+  .acesso-painel ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 18px; max-width: 44ch; }
+  .acesso-painel li { display: grid; grid-template-columns: 30px 1fr; gap: 12px; align-items: start; }
+  .acesso-painel .num {
+    width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center;
+    background: rgba(255,255,255,.12); color: var(--orange); font-weight: 800; font-size: .82rem;
+  }
+  .acesso-painel li strong { display: block; font-size: .92rem; }
+  .acesso-painel li span.diz { font-size: .82rem; opacity: .72; }
+  .acesso-forma .marca-acesso, .acesso-forma .lema-mobile { display: none; }
+}
+
 .mono-destaque {
   font-family: ui-monospace, Menlo, monospace; font-weight: 700; font-size: 1.05rem;
-  letter-spacing: .16em; background: var(--surface); padding: 2px 8px; border-radius: 6px;
+  letter-spacing: .16em; background: var(--bg); padding: 2px 8px; border-radius: 6px;
 }
 
 .quem { display: flex; flex-direction: column; line-height: 1.2; margin-right: 6px; text-align: right; }

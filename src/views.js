@@ -22,12 +22,34 @@
       login: telaLogin, cadastro: telaCadastro, codigo: telaCodigo, perfil: telaPerfil
     }[telaAcesso] || telaLogin;
 
-    return '<div class="acesso"><div class="cartao-acesso">' +
+    return '<div class="acesso">' +
+      painelAcesso() +
+      '<div class="acesso-forma"><div class="cartao-acesso">' +
       '<div class="marca-acesso">IAD <span>CRM</span></div>' +
-      '<p class="tiny muted" style="margin:0 0 18px">Gestão comercial orientada à decisão</p>' +
+      '<p class="tiny muted lema-mobile" style="margin:0 0 18px">Gestão comercial orientada à decisão</p>' +
       (recadoAcesso ? '<div class="aviso" style="margin-bottom:14px">' + esc(recadoAcesso) + '</div>' : '') +
       corpo(A) +
-      '</div></div>';
+      '</div></div></div>';
+  }
+
+  /* O painel escuro existe para que a primeira tela já diga do que se trata:
+     quem abre o app pela primeira vez precisa saber por que ele é diferente
+     de um CRM de funil. Some abaixo de 940px, onde só atrapalharia. */
+  function painelAcesso() {
+    const pilares = [
+      ['1', 'Oito decisões, não oito etapas', 'O IAD mede o que mudou na cabeça do cliente — de 0 a 16.'],
+      ['2', 'Só evidência do cliente conta', 'Proposta enviada e follow-up feito não movem o índice.'],
+      ['3', 'A próxima decisão, explícita', 'O app aponta qual decisão provocar agora, e por qual canal.']
+    ];
+    return '<div class="acesso-painel">' +
+      '<div><div class="marca-acesso">IAD <span>CRM</span></div>' +
+      '<p class="lema">O funil organiza. A decisão fecha.</p></div>' +
+      '<ul>' + pilares.map(function (p) {
+        return '<li><span class="num">' + p[0] + '</span>' +
+          '<span><strong>' + esc(p[1]) + '</strong>' +
+          '<span class="diz">' + esc(p[2]) + '</span></span></li>';
+      }).join('') + '</ul>' +
+      '</div>';
   }
 
   function campo(id, rotulo, tipo, valor, extra) {

@@ -63,9 +63,19 @@
     if (!alvo) return;
     const u = A.atual();
     if (!u) { alvo.innerHTML = ''; return; }
-    const t = A.tenant(u.tenantId);
+    /* Para o administrador, repetir "Administrador" nas duas linhas não diz nada;
+       o que ele precisa ver é qual recorte está enxergando no momento. */
+    let onde;
+    if (u.papel === 'admin') {
+      const f = A.filtros();
+      const alvoTenant = f.tenant === 'todas' ? null : A.tenant(f.tenant);
+      onde = alvoTenant ? alvoTenant.nome : 'Todas as empresas';
+    } else {
+      const t = A.tenant(u.tenantId);
+      onde = (t && t.nome) || '';
+    }
     alvo.innerHTML = '<span class="nome">' + U.esc(u.nome || u.login) + '</span>' +
-      '<span class="onde">' + U.esc(u.papel === 'admin' ? 'Administrador' : ((t && t.nome) || '')) + '</span>';
+      '<span class="onde">' + U.esc(onde) + '</span>';
   }
 
   function montarNav() {
