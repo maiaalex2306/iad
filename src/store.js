@@ -31,6 +31,7 @@
       if (c.influencia == null) c.influencia = 2;
       if (c.reportaA === undefined) c.reportaA = null;
       if (c.telefone === undefined) c.telefone = '';
+      if (c.perfil == null) c.perfil = 'nao_classificado';
     });
     dados.oportunidades.forEach(function (o) {
       if (o.etapaDesde == null) o.etapaDesde = o.criadoEm || hoje();
@@ -38,6 +39,7 @@
       if (o.proximoCompromisso === undefined) o.proximoCompromisso = null;
       if (o.tipo == null) o.tipo = 'Novo negócio';
       if (o.concorrentes == null) o.concorrentes = '';
+      if (o.insight == null) o.insight = { texto: '', estado: 'nenhum', atualizadoEm: null };
       (o.eventos || []).forEach(function (e) {
         if (e.tipo === 'decision' && !e.forca) e.forca = 'relato';
       });
@@ -106,7 +108,7 @@
     const novo = Object.assign({
       id: uid('ctt'), contaId: null, nome: '', cargo: '', papel: 'Usuário',
       email: '', telefone: '', linkedin: '', influencia: 2, reportaA: null,
-      canalPreferido: '', sentimento: 'nao_acessado', criadoEm: hoje()
+      canalPreferido: '', perfil: 'nao_classificado', sentimento: 'nao_acessado', criadoEm: hoje()
     }, dados);
     estado.contatos.push(novo);
     salvar();
@@ -129,6 +131,7 @@
       fechamentoPrevisto: '',
       adiamentos: 0,
       proximoCompromisso: null,
+      insight: { texto: '', estado: 'nenhum', atualizadoEm: null },
       dims: { problema: 0, prioridade: 0, impacto: 0, criterios: 0, stakeholders: 0, consenso: 0, risco: 0, processo: 0 },
       stakeholders: [],
       eventos: [],
@@ -213,6 +216,21 @@
     const op = oportunidade(opId);
     if (!op) return null;
     op.eventos = op.eventos.filter(function (e) { return e.id !== eventoId; });
+    salvar();
+    return op;
+  }
+
+  function definirInsight(opId, insight) {
+    const op = oportunidade(opId);
+    if (!op) return null;
+    const anterior = op.insight || {};
+    op.insight = { texto: insight.texto || '', estado: insight.estado || 'nenhum', atualizadoEm: hoje() };
+    if (anterior.estado !== op.insight.estado) {
+      op.eventos.unshift({
+        id: uid('evt'), tipo: 'sistema', data: hoje(),
+        titulo: 'Insight comercial: ' + op.insight.estado
+      });
+    }
     salvar();
     return op;
   }
@@ -313,7 +331,7 @@
     uid, hoje, carregar, salvar, inscrever, obter, substituir, estadoVazio,
     conta, contato, oportunidade, tarefa, contatosDaConta, tarefasDaOportunidade,
     criarConta, criarContato, criarOportunidade, atualizarOportunidade,
-    pontuar, registrarEvento, removerEvento, definirCompromisso,
+    pontuar, registrarEvento, removerEvento, definirCompromisso, definirInsight,
     criarTarefa, concluirTarefa, excluirTarefa,
     fecharOportunidade, reabrirOportunidade, excluirOportunidade,
     exportar, importar, limpar

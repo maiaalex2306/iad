@@ -43,6 +43,16 @@
   }
 
   /* Coverage: papéis críticos do buying group com relacionamento real. */
+  function mobilizadores(op) {
+    return stakeholdersDaOp(op).filter(function (p) {
+      return P.PERFIS_MOBILIZADORES.indexOf(p.perfil) !== -1;
+    });
+  }
+
+  function bloqueadores(op) {
+    return stakeholdersDaOp(op).filter(function (p) { return p.perfil === 'bloqueador'; });
+  }
+
   function coverage(op) {
     const pessoas = stakeholdersDaOp(op);
     const papeisPresentes = new Set(pessoas.map(function (p) { return p.papel; }));
@@ -57,6 +67,9 @@
       engajados: engajados.length,
       temEconomicBuyer: papeisPresentes.has('Decisor econômico'),
       temChampion: papeisPresentes.has('Champion / Mobilizer'),
+      mobilizadores: mobilizadores(op).length,
+      bloqueadores: bloqueadores(op).length,
+      naoClassificados: pessoas.filter(function (p) { return !p.perfil || p.perfil === 'nao_classificado'; }).length,
       faltando: P.PAPEIS_CRITICOS.filter(function (papel) { return !papeisPresentes.has(papel); })
     };
   }
@@ -173,6 +186,16 @@
     if (depoisDaProposta(op) && !cob.temEconomicBuyer) lista.push({ tipo: 'papel', nivel: 'alto', texto: 'Em proposta ou adiante sem acesso ao decisor econômico.' });
     if (depoisDaProposta(op) && !g.liberado) lista.push({ tipo: 'gate', nivel: 'alto', texto: 'Proposta emitida com prontidão de apenas ' + g.prontidao + '%.' });
     if (!cob.temChampion) lista.push({ tipo: 'papel', nivel: 'medio', texto: 'Nenhum champion identificado no grupo comprador.' });
+    if (cob.mapeados && !cob.mobilizadores) {
+      lista.push({ tipo: 'mobilizador', nivel: 'alto', texto: 'Nenhum mobilizador no grupo: ninguém ali move a decisão por dentro.' });
+    }
+    if (cob.bloqueadores) {
+      lista.push({ tipo: 'mobilizador', nivel: 'medio', texto: cob.bloqueadores + ' bloqueador(es) identificado(s) no grupo comprador.' });
+    }
+    const ins = op.insight || {};
+    if ((op.dims.problema || 0) === 2 && ins.estado !== 'aceito') {
+      lista.push({ tipo: 'insight', nivel: 'medio', texto: 'Problema comprovado, mas o cliente ainda não adotou nosso reenquadramento.' });
+    }
     if (decisionVelocity(op) === 0) lista.push({ tipo: 'velocity', nivel: 'medio', texto: 'Decision Velocity zerada nos últimos 30 dias.' });
 
     const comp = compromisso(op);
@@ -574,6 +597,29 @@
       });
     }
 
+    if (cob.mapeados && !cob.mobilizadores) {
+      lista.push({
+        tipo: 'mobilizador',
+        titulo: 'Nenhum mobilizador identificado',
+        falta: 'O grupo tem ' + cob.mapeados + ' pessoa(s), mas nenhuma classificada como Go-Getter, Professor ou Cético.',
+        comoProvar: 'Classifique os contatos pelo perfil e procure quem já mobilizou uma mudança antes.',
+        pontos: 0
+      });
+    }
+
+    const insight = op.insight || {};
+    if (insight.estado !== 'aceito') {
+      lista.push({
+        tipo: 'insight',
+        titulo: 'Insight comercial',
+        falta: insight.estado === 'nenhum'
+          ? 'Não há um reenquadramento formulado: estamos vendendo solução para um problema que o cliente já definiu sozinho.'
+          : 'O insight foi ' + (insight.estado === 'formulado' ? 'formulado, mas não apresentado' : 'apresentado, mas o cliente ainda não o adotou') + '.',
+        comoProvar: 'Evidência que resolve: o cliente repetir o reenquadramento como se fosse dele.',
+        pontos: 0
+      });
+    }
+
     if (!compromisso(op)) {
       lista.push({
         tipo: 'compromisso',
@@ -685,7 +731,7 @@
     focoDoDia, aprendizado, sugerirDimensao, podeComprovar, evidenciasDaDimensao,
     filtrar, mesesDisponiveis, segmentosDisponiveis, rotuloMes, segmentoDe, faixaSaude,
     porMes, porSegmento, porEtapa, matrizDecisoes, distribuicaoEvidencia,
-    autoria, compromisso, tempoNaEtapa, medianaEtapaGanhos, deltaSemana, curva, historico, lacunas,
+    autoria, compromisso, mobilizadores, bloqueadores, tempoNaEtapa, medianaEtapaGanhos, deltaSemana, curva, historico, lacunas,
     stakeholdersDaOp, diasEntre, indiceEtapa, depoisDaProposta
   };
 })(window);

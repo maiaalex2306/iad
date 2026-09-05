@@ -222,6 +222,33 @@ th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line
 th { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 .tabela-rolagem { overflow-x: auto; }
 
+/* ---------- Kanban ---------- */
+.kanban { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 8px; }
+.kanban .coluna {
+  flex: 0 0 236px; min-width: 236px; background: var(--bg);
+  border: 1px solid var(--line); border-radius: 12px; padding: 9px;
+}
+.kanban .coluna header { display: flex; flex-direction: column; gap: 1px; margin-bottom: 8px; padding: 0 2px; }
+.kanban .coluna header strong { font-size: .84rem; }
+.kanban .cartoes { display: flex; flex-direction: column; gap: 8px; min-height: 40px; }
+.kanban .mini {
+  background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--line);
+  border-radius: 10px; padding: 10px; cursor: pointer; box-shadow: var(--shadow);
+}
+.kanban .mini:hover { border-color: var(--navy-2); }
+.kanban .mini.g-real { border-left-color: var(--ok); }
+.kanban .mini.g-oculto { border-left-color: var(--navy-2); }
+.kanban .mini.g-falso { border-left-color: var(--risk); }
+.kanban .mini.g-zumbi { border-left-color: var(--dead); }
+.kanban .mini.g-construcao { border-left-color: var(--warn); }
+.kanban .mini .titulo { font-weight: 700; font-size: .86rem; line-height: 1.25; }
+.kanban .rodape-mini { display: flex; gap: 4px; margin-top: 8px; }
+.kanban .seta {
+  flex: 1; border: 1px solid var(--line); background: var(--bg); color: var(--muted);
+  border-radius: 7px; padding: 3px 0; cursor: pointer; font-size: .8rem; line-height: 1;
+}
+.kanban .seta:hover { background: var(--navy); color: #fff; border-color: var(--navy); }
+
 /* ---------- Painel gráfico ---------- */
 .filtros { display: flex; flex-direction: column; gap: 8px; margin: 10px 0 16px; }
 .grupo-filtro { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }

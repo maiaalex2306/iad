@@ -83,6 +83,40 @@
     filtrar: function (grupo) { V.definirFiltro(grupo); render(); },
     filtrarHistorico: function (tipo) { V.definirFiltroHistorico(tipo); render(); },
     filtrarHoje: function (chave) { V.definirFiltroHoje(chave); render(); },
+    modoPipeline: function (modo) { V.definirModoPipeline(modo); render(); },
+
+    /* Kanban: arrastar move a etapa — e o histórico registra que foi só a etapa. */
+    arrastar: function (evento, opId) {
+      evento.dataTransfer.setData('text/plain', opId);
+      evento.dataTransfer.effectAllowed = 'move';
+    },
+
+    soltar: function (evento, etapa) {
+      evento.preventDefault();
+      const opId = evento.dataTransfer.getData('text/plain');
+      if (opId) App.moverEtapa(opId, etapa);
+    },
+
+    moverEtapa: function (opId, etapa) {
+      const op = Store.oportunidade(opId);
+      if (!op || op.etapa === etapa) return;
+      Store.atualizarOportunidade(opId, { etapa: etapa });
+      render();
+    },
+
+    definirInsight: function (opId) {
+      const op = Store.oportunidade(opId);
+      if (!op) return;
+      U.formulario('Insight comercial', [
+        { id: 'texto', rotulo: 'O que o cliente não enxerga sozinho', tipo: 'textarea', voz: true,
+          placeholder: 'Ex.: a perda não está na colheita, está no intervalo entre lotes — e ela cresce com o volume.' },
+        { id: 'estado', rotulo: 'Em que ponto está', tipo: 'select',
+          opcoes: P.ESTADOS_INSIGHT.map(function (e) { return { valor: e.id, rotulo: e.rotulo }; }) }
+      ], op.insight || {}, function (d) {
+        Store.definirInsight(opId, d);
+        render();
+      });
+    },
     filtrarPeriodo: function (periodo) { V.definirPeriodo(periodo); render(); },
     filtrarSegmento: function (segmento) { V.definirSegmento(segmento); render(); },
 
@@ -551,6 +585,11 @@
       { id: 'sentimento', rotulo: 'Posição', tipo: 'select', opcoes: [
         { valor: 'nao_acessado', rotulo: 'Não acessado' }, { valor: 'neutro', rotulo: 'Neutro' },
         { valor: 'favoravel', rotulo: 'Favorável' }, { valor: 'resistente', rotulo: 'Resistente' }] },
+      { id: 'perfil', rotulo: 'Perfil (Challenger)', tipo: 'select',
+        opcoes: P.PERFIS.map(function (x) {
+          const grupo = x.grupo === 'indefinido' ? '' : ' — ' + x.grupo;
+          return { valor: x.id, rotulo: x.rotulo + grupo };
+        }) },
       { id: 'influencia', rotulo: 'Influência na decisão', tipo: 'select', padrao: '2', opcoes: [
         { valor: '1', rotulo: '1 — opina' }, { valor: '2', rotulo: '2 — influencia' }, { valor: '3', rotulo: '3 — decide' }] },
       { id: 'reportaA', rotulo: 'Reporta a', tipo: 'select', opcoes: [{ valor: '', rotulo: '— não informado —' }]

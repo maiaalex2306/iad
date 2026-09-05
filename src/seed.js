@@ -63,8 +63,8 @@
 
     /* 1. Falso avançado: etapa adiantada, decisão imatura, sem decisor econômico. */
     const acme = conta('ACME Agroindustrial', { segmento: 'Agro / Indústria', porte: '500 a 1000 funcionários', cidade: 'Uberlândia', uf: 'MG' });
-    const acme1 = pessoa(acme, 'Carlos Menezes', 'Gerente de Operações', 'Champion / Mobilizer', 'favoravel', { influencia: 2 });
-    const acme2 = pessoa(acme, 'Rita Souza', 'Coordenadora de Qualidade', 'Técnico', 'neutro', { influencia: 1, reportaA: acme1.id });
+    const acme1 = pessoa(acme, 'Carlos Menezes', 'Gerente de Operações', 'Champion / Mobilizer', 'favoravel', { influencia: 2, perfil: 'amigo' });
+    const acme2 = pessoa(acme, 'Rita Souza', 'Coordenadora de Qualidade', 'Técnico', 'neutro', { influencia: 1, reportaA: acme1.id, perfil: 'guia' });
     pessoa(acme, 'Paulo Andrade', 'CFO', 'Decisor econômico', 'nao_acessado', { influencia: 3 });
     const opAcme = op({ contaId: acme.id, titulo: 'Projeto X — redução de perdas', valor: 840000, etapa: 'Proposta', etapaDesde: dias(34), adiamentos: 2, fechamentoPrevisto: dias(-20) },
       { problema: 2, prioridade: 2, impacto: 1, criterios: 0, stakeholders: 1, consenso: 0, risco: 1, processo: 2 },
@@ -73,13 +73,14 @@
         { data: dias(13), dimensao: 'prioridade', canal: 'Reunião', forca: 'confirmado', contatoId: acme1.id, titulo: 'Cliente informou que o projeto precisa iniciar em outubro' },
         { data: dias(28), dimensao: 'problema', canal: 'E-mail', forca: 'documentado', contatoId: acme1.id, titulo: 'Cliente enviou dados de perda dos últimos 6 meses' }
       ]);
+    opAcme.insight = { texto: 'A perda não está na colheita: está no intervalo entre lotes, e ela cresce com o volume.', estado: 'apresentado', atualizadoEm: dias(20) };
     opAcme.proximoCompromisso = { texto: 'Cliente levaria a proposta ao CFO', data: dias(9), dono: 'cliente', registradoEm: dias(20) };
     tarefa(opAcme, 'Pedir a Carlos a agenda com o CFO', 'stakeholders', dias(3), 'Cobrar retorno');
 
     /* 2. Oculto promissor: etapa inicial, decisão madura. */
     const nordeste = conta('Grupo Nordeste Alimentos', { segmento: 'Alimentos', porte: 'Acima de 1000 funcionários', cidade: 'Recife', uf: 'PE', relacaoAtual: 'Cliente ativo' });
-    const n1 = pessoa(nordeste, 'Fernanda Lima', 'Diretora Industrial', 'Champion / Mobilizer', 'favoravel', { influencia: 3 });
-    const n2 = pessoa(nordeste, 'Marcos Reis', 'Controller', 'Financeiro', 'neutro', { influencia: 2 });
+    const n1 = pessoa(nordeste, 'Fernanda Lima', 'Diretora Industrial', 'Champion / Mobilizer', 'favoravel', { influencia: 3, perfil: 'go_getter' });
+    const n2 = pessoa(nordeste, 'Marcos Reis', 'Controller', 'Financeiro', 'neutro', { influencia: 2, perfil: 'cetico' });
     const n3 = pessoa(nordeste, 'Júlia Pontes', 'CEO', 'Decisor econômico', 'favoravel', { influencia: 3 });
     const n4 = pessoa(nordeste, 'André Tavares', 'Suprimentos', 'Compras', 'neutro', { influencia: 2, reportaA: n2.id });
     const opNordeste = op({ contaId: nordeste.id, titulo: 'Reestruturação da linha 3', valor: 520000, etapa: 'Diagnóstico', etapaDesde: dias(12), fechamentoPrevisto: dias(-70), tipo: 'Expansão' },
@@ -90,11 +91,12 @@
         { data: dias(6), dimensao: 'stakeholders', canal: 'E-mail', forca: 'documentado', contatoId: n3.id, titulo: 'CEO entrou na conversa e pediu o business case' },
         { data: dias(12), dimensao: 'criterios', canal: 'WhatsApp', forca: 'confirmado', contatoId: n1.id, titulo: 'Cliente compartilhou os 4 critérios de avaliação' }
       ]);
+    opNordeste.insight = { texto: 'O gargalo não é a linha 3: é a troca de formato, que consome duas horas por turno.', estado: 'aceito', atualizadoEm: dias(25) };
     opNordeste.proximoCompromisso = { texto: 'Apresentar business case à diretoria', data: dias(-5), dono: 'nos', registradoEm: dias(6) };
 
     /* 3. Zumbi: parece ativo no CRM, morto na decisão. */
     const litoral = conta('Litoral Papel e Celulose', { segmento: 'Papel e celulose', cidade: 'Joinville', uf: 'SC' });
-    const l1 = pessoa(litoral, 'Sérgio Barros', 'Supervisor de Manutenção', 'Usuário', 'neutro', { influencia: 1 });
+    const l1 = pessoa(litoral, 'Sérgio Barros', 'Supervisor de Manutenção', 'Usuário', 'neutro', { influencia: 1, perfil: 'amigo' });
     op({ contaId: litoral.id, titulo: 'Contrato anual de suprimento', valor: 310000, etapa: 'Validação', etapaDesde: dias(52), adiamentos: 3, fechamentoPrevisto: dias(-15) },
       { problema: 1, prioridade: 1, impacto: 0, criterios: 1, stakeholders: 0, consenso: 0, risco: 1, processo: 0 },
       [l1],
@@ -106,10 +108,10 @@
 
     /* 4. Negócio real: decisão madura, movimento recente, consenso em construção. */
     const vale = conta('Vale Verde Cooperativa', { segmento: 'Cooperativa agrícola', porte: 'Acima de 1000 funcionários', cidade: 'Cascavel', uf: 'PR', relacaoAtual: 'Cliente ativo' });
-    const v1 = pessoa(vale, 'Helena Duarte', 'Gerente Técnica', 'Champion / Mobilizer', 'favoravel', { influencia: 2 });
+    const v1 = pessoa(vale, 'Helena Duarte', 'Gerente Técnica', 'Champion / Mobilizer', 'favoravel', { influencia: 2, perfil: 'professor' });
     const v2 = pessoa(vale, 'Rogério Alves', 'Diretor Financeiro', 'Decisor econômico', 'favoravel', { influencia: 3 });
     const v3 = pessoa(vale, 'Camila Nunes', 'Compras', 'Compras', 'neutro', { influencia: 2, reportaA: v2.id });
-    const v4 = pessoa(vale, 'Eduardo Bastos', 'Jurídico', 'Jurídico / Compliance', 'neutro', { influencia: 1 });
+    const v4 = pessoa(vale, 'Eduardo Bastos', 'Jurídico', 'Jurídico / Compliance', 'neutro', { influencia: 1, perfil: 'bloqueador' });
     const v5 = pessoa(vale, 'Tiago Moura', 'Financeiro', 'Financeiro', 'favoravel', { influencia: 2, reportaA: v2.id });
     const opVale = op({ contaId: vale.id, titulo: 'Programa safra 26/27', valor: 1450000, etapa: 'Validação', etapaDesde: dias(9), fechamentoPrevisto: dias(-40), tipo: 'Renovação' },
       { problema: 2, prioridade: 2, impacto: 2, criterios: 2, stakeholders: 2, consenso: 2, risco: 1, processo: 2 },
@@ -119,6 +121,7 @@
         { data: dias(5), dimensao: 'consenso', canal: 'Reunião', forca: 'confirmado', contatoId: v2.id, titulo: 'Cliente realizou reunião interna e alinhou diretoria e financeiro' },
         { data: dias(11), dimensao: 'risco', canal: 'Reunião', forca: 'confirmado', contatoId: v1.id, titulo: 'Cliente aprovou piloto em duas unidades' }
       ]);
+    opVale.insight = { texto: 'O custo do programa safra não é o preço do insumo: é a janela de aplicação perdida por atraso logístico.', estado: 'aceito', atualizadoEm: dias(30) };
     opVale.proximoCompromisso = { texto: 'Jurídico devolve o contrato revisado', data: dias(-4), dono: 'cliente', registradoEm: dias(2) };
     tarefa(opVale, 'Preparar referência técnica para reduzir o risco percebido', 'risco', dias(-2), 'Enviar material');
 

@@ -289,6 +289,8 @@
   const FILTROS = [['todos', 'Todos'], ['real', 'Negócio real'], ['oculto', 'Oculto promissor'],
     ['construcao', 'Em construção'], ['falso', 'Falso avançado'], ['zumbi', 'Zumbi'], ['fechados', 'Encerrados']];
 
+  let modoPipeline = 'lista';
+
   function pipeline() {
     const est = Store.obter();
     const filtros = FILTROS.map(function (f) {
@@ -301,16 +303,67 @@
       .filter(function (r) { return filtroGrupo === 'todos' || r.classe.id === filtroGrupo; })
       .sort(function (a, b) { return b.saude - a.saude; });
 
-    const itens = resumos.map(cardOportunidade).join('') ||
-      '<div class="vazio">Nenhuma oportunidade neste filtro.</div>';
+    if (!resumos.length) {
+      return cabecalhoPipeline(filtros) + '<div class="vazio">Nenhuma oportunidade neste filtro.</div>';
+    }
 
-    return cabecalhoPipeline(filtros) + '<div class="lista">' + itens + '</div>';
+    return cabecalhoPipeline(filtros) +
+      (modoPipeline === 'kanban'
+        ? kanban(resumos)
+        : '<div class="lista">' + resumos.map(cardOportunidade).join('') + '</div>');
   }
 
   function cabecalhoPipeline(filtros) {
-    return '<div class="row"><h1>Pipeline</h1><span class="espaco"></span>' +
+    const alternar = ['lista', 'kanban'].map(function (m) {
+      return '<button class="pill' + (modoPipeline === m ? ' orange' : '') + '" onclick="App.modoPipeline(\'' + m + '\')">' +
+        (m === 'lista' ? '☰ Lista' : '▦ Kanban') + '</button>';
+    }).join(' ');
+
+    return '<div class="row"><h1>Pipeline</h1><span class="espaco"></span>' + alternar +
       '<button class="btn alt mini" onclick="App.novaOportunidade()">+ Oportunidade</button></div>' +
       '<div class="row" style="margin:8px 0 14px">' + filtros + '</div>';
+  }
+
+  /* Kanban por etapa do funil. A cor da borda continua sendo a decisão,
+     não a etapa — mover o cartão não move a decisão. */
+  function kanban(resumos) {
+    const etapas = P.ETAPAS.filter(function (e) { return e !== 'Venda'; });
+    const colunas = etapas.map(function (etapa) {
+      const doGrupo = resumos.filter(function (r) { return r.op.etapa === etapa; });
+      const valor = doGrupo.reduce(function (s, r) { return s + (r.op.valor || 0); }, 0);
+      const cartoes = doGrupo.map(function (r) { return cartaoKanban(r, etapas); }).join('') ||
+        '<div class="vazio tiny">—</div>';
+      return '<section class="coluna" ondragover="event.preventDefault()" ondrop="App.soltar(event,\'' + etapa + '\')">' +
+        '<header><strong>' + esc(etapa) + '</strong>' +
+        '<span class="tiny muted">' + doGrupo.length + ' · ' + U.compacto(valor) + '</span></header>' +
+        '<div class="cartoes">' + cartoes + '</div></section>';
+    }).join('');
+
+    return '<div class="kanban">' + colunas + '</div>' +
+      '<p class="tiny muted" style="margin-top:8px">Arraste o cartão para mudar a etapa, ou use as setas. A mudança fica registrada no histórico.</p>';
+  }
+
+  function cartaoKanban(r, etapas) {
+    const i = etapas.indexOf(r.op.etapa);
+    const seta = function (destino, simbolo, titulo) {
+      if (destino < 0 || destino >= etapas.length) return '';
+      return '<button class="seta" title="' + esc(titulo + etapas[destino]) + '" ' +
+        'onclick="event.stopPropagation();App.moverEtapa(\'' + r.op.id + '\',\'' + etapas[destino] + '\')">' + simbolo + '</button>';
+    };
+
+    return '<article class="mini g-' + r.classe.id + '" draggable="true" ' +
+      'ondragstart="App.arrastar(event,\'' + r.op.id + '\')" onclick="App.abrir(\'' + r.op.id + '\')">' +
+      '<div class="titulo">' + esc(r.op.titulo) + '</div>' +
+      '<div class="tiny muted">' + esc((r.conta && r.conta.nome) || '') + '</div>' +
+      '<div class="row" style="margin:7px 0 4px;gap:6px">' + tiraDecisao(r.op) + '</div>' +
+      '<div class="row tiny" style="gap:6px">' +
+        '<strong>' + U.compacto(r.op.valor) + '</strong>' +
+        '<span class="muted">IAD ' + r.iad + '</span>' +
+        '<span class="espaco"></span>' +
+        '<span class="pill ' + r.faixa.classe + '">' + r.evidenceAge + 'd</span>' +
+      '</div>' +
+      '<div class="rodape-mini">' + seta(i - 1, '‹', 'Voltar para ') + seta(i + 1, '›', 'Avançar para ') + '</div>' +
+      '</article>';
   }
 
   function listaFechados(est) {
@@ -439,6 +492,7 @@
 
       blocoAvanco(op, r) +
       blocoLacunas(op, r) +
+      blocoInsight(op) +
       blocoProximoPasso(op, r) +
       blocoAlertas(r) +
       detalhe('As 8 decisões', 'pontue aqui', blocoDimensoes(op)) +
@@ -524,7 +578,8 @@
     const itens = lacunas.map(function (l, i) {
       const rotulo = l.tipo === 'dimensao'
         ? (l.nota === 0 ? 'não sabemos' : 'falta comprovar')
-        : (l.tipo === 'comprovacao' ? 'sem prova' : (l.tipo === 'papel' ? 'papel ausente' : 'sem data'));
+        : ({ comprovacao: 'sem prova', papel: 'papel ausente', mobilizador: 'sem mobilizador',
+             insight: 'Teach', compromisso: 'sem data' }[l.tipo] || 'pendente');
       const classe = l.tipo === 'dimensao' && l.nota === 1 ? 'warn' : (l.tipo === 'papel' ? 'risk' : 'dead');
 
       const acoes = l.dimensao
@@ -532,7 +587,9 @@
           '<button class="btn ghost mini" onclick="App.novaTarefa(\'' + op.id + '\',\'' + l.dimensao.id + '\')">Criar tarefa</button>'
         : (l.tipo === 'compromisso'
             ? '<button class="btn alt mini" onclick="App.definirCompromisso(\'' + op.id + '\')">Combinar data</button>'
-            : '<button class="btn ghost mini" onclick="App.ligarStakeholder(\'' + op.id + '\')">Vincular pessoa</button>');
+            : (l.tipo === 'insight'
+                ? '<button class="btn alt mini" onclick="App.definirInsight(\'' + op.id + '\')">Definir insight</button>'
+                : '<button class="btn ghost mini" onclick="App.ligarStakeholder(\'' + op.id + '\')">Vincular pessoa</button>'));
 
       return '<li class="lacuna">' +
         '<span class="ordem">' + (i + 1) + '</span>' +
@@ -548,6 +605,21 @@
       '<span class="pill">' + lacunas.length + ' item(ns)</span></div>' +
       '<p class="tiny muted" style="margin:6px 0 12px">Em ordem de prioridade: resolver o primeiro costuma destravar os seguintes.</p>' +
       '<ol class="lacunas">' + itens + '</ol></div>';
+  }
+
+  /* Teach, do Challenger: o reenquadramento que o cliente não teria sozinho. */
+  function blocoInsight(op) {
+    const ins = op.insight || { estado: 'nenhum', texto: '' };
+    const estado = P.ESTADOS_INSIGHT.find(function (e) { return e.id === ins.estado; }) || P.ESTADOS_INSIGHT[0];
+    const classe = { nenhum: 'dead', formulado: 'warn', apresentado: 'warn', aceito: 'ok' }[ins.estado] || '';
+
+    return '<div class="card"><div class="row"><h2 style="margin:0">Insight comercial</h2><span class="espaco"></span>' +
+      '<span class="pill ' + classe + '">' + esc(estado.rotulo) + '</span>' +
+      '<button class="btn ghost mini" onclick="App.definirInsight(\'' + op.id + '\')">' + (ins.texto ? 'Editar' : 'Definir') + '</button></div>' +
+      (ins.texto
+        ? '<p class="small" style="margin:10px 0 0">' + esc(ins.texto) + '</p>'
+        : '<p class="small muted" style="margin:10px 0 0">Qual verdade sobre o negócio do cliente ele não enxerga sozinho? Sem isso, a conversa começa no problema que ele já sabe que tem — e aí o preço decide.</p>') +
+      '</div>';
   }
 
   /* ---------------- Próximo passo: compromisso + recomendação ---------------- */
@@ -635,12 +707,17 @@
       return '<div class="pessoa"><div class="nome"><span class="dot ' + p.sentimento + '"></span>' + esc(p.nome) + '</div>' +
         '<div class="tiny muted">' + esc(p.cargo || '—') + '</div>' +
         '<div class="tiny" style="margin-top:5px">' + esc(p.papel) + ' · influência ' + (p.influencia || 2) + '/3</div>' +
+        perfilEtiqueta(p) +
         (chefe ? '<div class="tiny muted">reporta a ' + esc(chefe.nome) + '</div>' : '') +
         '<div class="row tiny" style="margin-top:7px"><button class="btn ghost mini" onclick="App.editarContato(\'' + p.id + '\')">Editar</button>' +
         '<button class="btn ghost mini" onclick="App.removerStakeholder(\'' + op.id + '\',\'' + p.id + '\')">Remover</button></div></div>';
     }).join('') || '<div class="vazio small">Nenhum stakeholder ligado. Venda single-threaded é o maior risco silencioso.</div>';
 
     const aut = r.autoria;
+    const cobPerfis = r.coverage;
+    const notaPerfis = '<p class="tiny muted" style="margin:0 0 8px">' +
+      cobPerfis.mobilizadores + ' mobilizador(es) · ' + cobPerfis.bloqueadores + ' bloqueador(es) · ' +
+      cobPerfis.naoClassificados + ' sem perfil.</p>';
     const notaAutoria = aut.total
       ? '<p class="tiny muted" style="margin:0 0 10px">' + aut.total + ' evidência(s) de ' + aut.pessoas + ' pessoa(s)' +
         (aut.principal ? ' · ' + Math.round(aut.concentracao * 100) + '% vieram de ' + esc(aut.principal.nome) : '') + '.</p>'
@@ -649,8 +726,15 @@
     return '<div class="card"><div class="row"><h2 style="margin:0">Buying group</h2><span class="espaco"></span>' +
       '<button class="btn ghost mini" onclick="App.ligarStakeholder(\'' + op.id + '\')">+ Vincular pessoa</button></div>' +
       '<p class="tiny muted" style="margin:6px 0 4px">Papéis críticos faltando: ' + (r.coverage.faltando.length ? esc(r.coverage.faltando.join(', ')) : 'nenhum') + '</p>' +
-      notaAutoria +
+      notaPerfis + notaAutoria +
       '<div class="mapa">' + pessoas + '</div></div>';
+  }
+
+  function perfilEtiqueta(p) {
+    const perfil = P.PERFIS.find(function (x) { return x.id === (p.perfil || 'nao_classificado'); });
+    if (!perfil || perfil.grupo === 'indefinido') return '<div class="tiny muted">perfil não classificado</div>';
+    const classe = { mobilizador: 'ok', falador: 'warn', bloqueador: 'dead' }[perfil.grupo] || '';
+    return '<div style="margin-top:5px"><span class="pill ' + classe + '" title="' + esc(perfil.dica) + '">' + esc(perfil.rotulo) + '</span></div>';
   }
 
   function blocoTarefas(op) {
@@ -830,6 +914,16 @@
       '<div class="card"><h2>Força da evidência</h2>' +
       '<p class="small">Uma decisão só chega a 2 com evidência confirmada ou documentada.</p>' +
       '<div class="tabela-rolagem"><table><tbody>' + forcas + '</tbody></table></div></div>' +
+      '<div class="card"><h2>Quem move a decisão por dentro</h2>' +
+      '<p class="small">Do <em>Challenger Customer</em>: nem todo contato acessível move a compra. Três perfis mobilizam, três apenas conversam, um bloqueia.</p>' +
+      '<div class="tabela-rolagem"><table><thead><tr><th>Perfil</th><th>Grupo</th><th>Como trabalhar</th></tr></thead><tbody>' +
+      P.PERFIS.filter(function (x) { return x.grupo !== 'indefinido'; }).map(function (x) {
+        const classe = { mobilizador: 'ok', falador: 'warn', bloqueador: 'dead' }[x.grupo];
+        return '<tr><td><strong>' + esc(x.rotulo) + '</strong></td>' +
+          '<td><span class="pill ' + classe + '">' + esc(x.grupo) + '</span></td>' +
+          '<td>' + esc(x.dica) + '</td></tr>';
+      }).join('') + '</tbody></table></div>' +
+      '<p class="tiny muted" style="margin-top:8px">A pesquisa por trás desses perfis vem da CEB/Gartner e é defendida sobretudo por quem a produziu. Use como hipótese de trabalho, não como lei.</p></div>' +
       '<div class="sec-titulo"><h2>As 8 decisões e a cadência multicanal</h2></div>' + dims;
   }
 
@@ -873,6 +967,7 @@
     definirFiltro: function (f) { filtroGrupo = f; },
     definirFiltroHistorico: function (f) { filtroHistorico = f; },
     definirFiltroHoje: function (f) { filtroHoje = f; },
+    definirModoPipeline: function (m) { modoPipeline = m; },
     definirPeriodo: function (f) { filtroPeriodo = f; },
     definirSegmento: function (f) { filtroSegmento = f; }
   };

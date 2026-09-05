@@ -15,7 +15,9 @@
       evidencias: [
         'Cliente descreveu o problema com dados próprios',
         'Cliente compartilhou indicadores internos',
-        'Cliente admitiu consequência operacional ou financeira'
+        'Cliente admitiu consequência operacional ou financeira',
+        'Cliente repetiu nosso reenquadramento como se fosse dele',
+        'Cliente mudou de opinião depois de ser desafiado'
       ],
       canais: {
         linkedin: 'Publique o custo invisível do problema, com número e contexto do setor.',
@@ -125,7 +127,9 @@
       evidencias: [
         'Cliente realizou reunião interna sobre o tema',
         'Champion encaminhou nosso material internamente',
-        'Outra área declarou apoio explícito'
+        'Outra área declarou apoio explícito',
+        'Mobilizador levou o tema a quem discordava',
+        'Duas áreas com interesses diferentes chegaram ao mesmo diagnóstico'
       ],
       canais: {
         linkedin: 'Conteúdo que o champion possa citar sem precisar traduzir.',
@@ -147,7 +151,9 @@
       evidencias: [
         'Cliente pediu referência ou visita técnica',
         'Piloto ou prova de conceito foi aprovado',
-        'Cliente aceitou plano de implantação em fases'
+        'Cliente aceitou plano de implantação em fases',
+        'Cliente aceitou nossa recomendação em vez de seguir comparando',
+        'Cliente aceitou garantia ou cláusula que reduz o risco dele'
       ],
       canais: {
         linkedin: 'Prova social específica: mesmo setor, mesmo porte, mesmo problema.',
@@ -232,6 +238,28 @@
     { id: 'whatsapp', nome: 'WhatsApp', papel: 'Remove barreiras e fecha microcompromissos.' }
   ];
 
+  /* Challenger Customer: quem move a compra por dentro não é quem atende melhor
+     o telefone. Mobilizadores geram consenso; faladores geram conversa. */
+  const PERFIS = [
+    { id: 'nao_classificado', rotulo: 'Não classificado', grupo: 'indefinido', dica: 'Classifique depois de duas conversas: dá para ouvir a diferença.' },
+    { id: 'go_getter', rotulo: 'Go-Getter', grupo: 'mobilizador', dica: 'Quer ideia nova e resultado. Traga o insight e um primeiro passo concreto.' },
+    { id: 'professor', rotulo: 'Professor', grupo: 'mobilizador', dica: 'Ensina os colegas. Dê material que ele possa apresentar como dele.' },
+    { id: 'cetico', rotulo: 'Cético', grupo: 'mobilizador', dica: 'Aceita mudar, mas por partes. Ofereça piloto, prova e ganhos pequenos primeiro.' },
+    { id: 'amigo', rotulo: 'Amigo', grupo: 'falador', dica: 'Acessível e simpático — e sem tração interna. Use para chegar a um mobilizador.' },
+    { id: 'guia', rotulo: 'Guia', grupo: 'falador', dica: 'Dá informação que ninguém dá. Ótima fonte, péssimo motor de mudança.' },
+    { id: 'escalador', rotulo: 'Escalador', grupo: 'falador', dica: 'Busca ganho pessoal. Ajuda enquanto o projeto o favorece.' },
+    { id: 'bloqueador', rotulo: 'Bloqueador', grupo: 'bloqueador', dica: 'Prefere o status quo. Não converta: neutralize com quem tem mais poder.' }
+  ];
+  const PERFIS_MOBILIZADORES = ['go_getter', 'professor', 'cetico'];
+
+  /* Teach: o insight que reenquadra o problema antes de falar de solução. */
+  const ESTADOS_INSIGHT = [
+    { id: 'nenhum', rotulo: 'Nenhum insight formulado' },
+    { id: 'formulado', rotulo: 'Formulado por nós' },
+    { id: 'apresentado', rotulo: 'Apresentado ao cliente' },
+    { id: 'aceito', rotulo: 'O cliente adotou o reenquadramento' }
+  ];
+
   /* Força da evidência: "ele disse que vai levar ao CFO" não é a mesma coisa
      que "o CFO participou". Sem essa distinção o IAD de um otimista vale o
      mesmo que o de um cético, e o índice perde sentido comparativo. */
@@ -279,6 +307,7 @@
   global.IADPlaybook = {
     DIMENSOES, ETAPAS, GATES_PROPOSTA, PAPEIS, PAPEIS_CRITICOS, DESFECHOS,
     FORCAS, FORCA_MINIMA_PARA_COMPROVAR, TIPOS_TAREFA, CATEGORIAS_ARQUIVO,
+    PERFIS, PERFIS_MOBILIZADORES, ESTADOS_INSIGHT,
     RELACOES_CONTA, TIPOS_OPORTUNIDADE, FECHAMENTO_REUNIAO,
     CANAIS, FAIXAS_EVIDENCIA, ATIVIDADES_QUE_NAO_CONTAM
   };
