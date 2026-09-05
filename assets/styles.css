@@ -440,11 +440,11 @@ td .tiny { display: block; }
 
    Só onde existe ponteiro: no toque, o dedo que abriria o balão é o mesmo que
    registra a evidência, e o balão ficaria preso na tela. */
-.celula { position: relative; }
-.celula .ajuda { display: none; }
+.tem-ajuda { position: relative; }
+.tem-ajuda .ajuda { display: none; }
 
 @media (hover: hover) and (min-width: 700px) {
-  .celula .ajuda {
+  .tem-ajuda .ajuda {
     display: block;
     position: absolute;
     top: calc(100% + 8px);
@@ -471,59 +471,69 @@ td .tiny { display: block; }
   /* As três últimas colunas abrem para a esquerda, senão saem da tela. */
   .mapa-decisao .celula:nth-child(n+6) .ajuda { left: auto; right: 0; }
 
-  .celula:hover .ajuda,
-  .celula:focus-visible .ajuda {
+  .tem-ajuda:hover .ajuda,
+  .tem-ajuda:focus-visible .ajuda {
     opacity: 1;
     visibility: visible;
     transform: translateY(0);
   }
 
-  .celula .ajuda-titulo {
+  .tem-ajuda .ajuda-titulo {
     display: block; font-size: .84rem; font-weight: 800;
     letter-spacing: -.01em; margin-bottom: 3px;
   }
-  .celula .ajuda-pergunta {
+  .tem-ajuda .ajuda-pergunta {
     display: block; font-size: .78rem; line-height: 1.42;
     color: var(--text); margin-bottom: 11px;
   }
-  .celula .ajuda-rot {
+  .tem-ajuda .ajuda-rot {
     display: block; font-size: .62rem; font-weight: 700;
     letter-spacing: .1em; text-transform: uppercase;
     color: var(--muted); margin-bottom: 5px;
   }
 
-  .celula .niveis { display: block; margin-bottom: 11px; }
-  .celula .niveis .nivel {
+  .tem-ajuda .niveis { display: block; margin-bottom: 11px; }
+  .tem-ajuda .niveis .nivel {
     display: grid; grid-template-columns: 17px 1fr; gap: 7px;
     align-items: start; font-size: .72rem; line-height: 1.35;
     color: var(--muted); padding: 2px 0;
   }
-  .celula .niveis .nivel .n {
+  .tem-ajuda .niveis .nivel .n {
     font-weight: 800; text-align: center; color: var(--muted);
     background: var(--bg); border-radius: 4px; font-size: .68rem;
   }
-  .celula .niveis .nivel.agora { color: var(--text); font-weight: 600; }
-  .celula .niveis .nivel.agora .n { background: var(--navy-2); color: #fff; }
+  .tem-ajuda .niveis .nivel.agora { color: var(--text); font-weight: 600; }
+  .tem-ajuda .niveis .nivel.agora .n { background: var(--navy-2); color: #fff; }
 
-  .celula .evs { display: block; }
-  .celula .evs .ev {
+  .tem-ajuda .evs { display: block; }
+  .tem-ajuda .evs .ev {
     display: block; font-size: .71rem; line-height: 1.35;
     color: var(--muted); padding-left: 11px; position: relative;
     margin-bottom: 2px;
   }
-  .celula .evs .ev::before {
+  .tem-ajuda .evs .ev::before {
     content: '·'; position: absolute; left: 2px; font-weight: 800; color: var(--ok);
   }
 
-  .celula .ajuda-alerta {
+  .tem-ajuda .ajuda-alerta {
     display: block; margin-top: 10px; padding-top: 9px;
     border-top: 1px solid var(--line);
     font-size: .71rem; line-height: 1.35; color: var(--risk); font-weight: 600;
   }
+
+  /* Nos grupos do pipeline o balão explica entra/sai em vez de níveis. */
+  .tem-ajuda .ajuda-linha {
+    display: block; font-size: .73rem; line-height: 1.42;
+    color: var(--muted); margin-bottom: 10px; font-weight: 400;
+  }
+  .tem-ajuda .ajuda-linha:last-child { margin-bottom: 0; }
+  .pill.tem-ajuda .ajuda { font-weight: 400; letter-spacing: 0; text-transform: none; }
+  /* As últimas pílulas abrem para a esquerda, senão saem da tela. */
+  .filtros-pipeline .pill:nth-child(n+5) .ajuda { left: auto; right: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .celula .ajuda { transition: none; }
+  .tem-ajuda .ajuda { transition: none; }
 }
 .celula.q2.sem-prova .marca { color: var(--risk); }
 

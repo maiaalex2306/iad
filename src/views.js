@@ -460,15 +460,66 @@
 
   /* ---------------- Pipeline ---------------- */
   let filtroGrupo = 'todos';
-  const FILTROS = [['todos', 'Todos'], ['real', 'Negócio real'], ['oculto', 'Oculto promissor'],
-    ['construcao', 'Em construção'], ['falso', 'Falso avançado'], ['zumbi', 'Zumbi'], ['fechados', 'Encerrados']];
+  /* A regra que move um negócio entre estes grupos é a lógica central do app, e
+     estava invisível: o vendedor via o rótulo e não sabia o que o tirava dali.
+     Cada balão diz o que é, o que faz entrar e o que faz sair — que é como as
+     oportunidades navegam entre as alternativas.
+
+     A ordem importa: o app testa de cima para baixo e o negócio fica no
+     primeiro grupo que servir. Por isso Zumbi ganha de todos. */
+  const FILTROS = [
+    ['todos', 'Todos', {
+      oQue: 'Toda a carteira aberta. Os cinco grupos abaixo são exclusivos.',
+      entra: 'O app testa as regras nesta ordem e o negócio fica na primeira que servir: Zumbi, Falso avançado, Oculto promissor, Negócio real, Em construção.',
+      sai: 'Nada muda de grupo por decisão sua: muda quando a decisão do cliente, o tempo sem evidência ou a etapa mudam.',
+      faca: 'Comece pelos vermelhos: Falso avançado e Zumbi são os que distorcem a previsão.'
+    }],
+    ['real', 'Negócio real', {
+      oQue: 'Decisão madura, movimento recente e consenso em construção. É o que a previsão pode contar.',
+      entra: 'IAD 11 ou mais · até 14 dias sem evidência do cliente · metade ou mais dos papéis críticos mapeados.',
+      sai: 'Passar de 14 dias sem evidência devolve para Em construção; passar de 30 vira Zumbi.',
+      faca: 'Mantenha o ritmo e proteja a data. Aqui o risco é achar que está ganho.'
+    }],
+    ['oculto', 'Oculto promissor', {
+      oQue: 'A decisão amadureceu mais rápido do que a etapa do funil indica. A previsão está subestimando este negócio.',
+      entra: 'IAD 11 ou mais, com a etapa ainda antes de Proposta.',
+      sai: 'Ao mover para Proposta: vira Negócio real se o gate estiver liberado e houver decisor econômico; senão cai em Falso avançado.',
+      faca: 'Acelere. Leve à proposta antes que o interesse esfrie.'
+    }],
+    ['construcao', 'Em construção', {
+      oQue: 'A decisão ainda está sendo formada. É onde o negócio fica quando nenhuma outra regra serve.',
+      entra: 'Nenhuma das outras condições se aplica — normalmente IAD abaixo de 11.',
+      sai: 'Chegar a IAD 11 com evidência dos últimos 14 dias e metade dos papéis críticos leva a Negócio real.',
+      faca: 'Ataque a lacuna que o cockpit aponta como primeira. Resolver uma costuma destravar as seguintes.'
+    }],
+    ['falso', 'Falso avançado', {
+      oQue: 'Etapa adiantada com decisão imatura. É o maior destruidor de previsão de vendas.',
+      entra: 'Etapa em Proposta ou adiante e ao menos um destes: IAD abaixo de 11, Proposal Gate não liberado, ou nenhum decisor econômico mapeado.',
+      sai: 'Resolvendo as três condições — ou voltando a etapa para onde a decisão realmente está.',
+      faca: 'Pare de empurrar a proposta e volte a comprovar. Insistir aqui gasta o negócio.'
+    }],
+    ['zumbi', 'Zumbi', {
+      oQue: 'Mais de 30 dias sem nenhuma evidência do comprador. Ocupa lugar na previsão e na sua cabeça.',
+      entra: 'Mais de 30 dias sem evidência do cliente — não importa o IAD nem a etapa. Esta regra vence todas as outras.',
+      sai: 'Qualquer evidência nova do cliente zera o relógio e devolve o negócio ao grupo que a decisão dele indicar.',
+      faca: 'Requalifique com uma tentativa clara, ou encerre como perdido por inação.'
+    }],
+    ['fechados', 'Encerrados', {
+      oQue: 'Negócios com desfecho registrado: ganho, perdido para concorrente, perdido por inação ou adiado.',
+      entra: 'Ao clicar em Encerrar no cockpit. O retrato das oito decisões fica congelado naquele momento.',
+      sai: 'Reabrir no cockpit devolve o negócio à carteira ativa.',
+      faca: 'É daqui que sai o Aprendizado do painel: quais decisões estavam fracas nos negócios perdidos.'
+    }]
+  ];
 
   let modoPipeline = 'lista';
 
   function pipeline() {
     const est = Store.dados();
     const filtros = FILTROS.map(function (f) {
-      return '<button class="pill' + (filtroGrupo === f[0] ? ' orange' : '') + '" onclick="App.filtrar(\'' + f[0] + '\')">' + esc(f[1]) + '</button>';
+      return '<button class="pill tem-ajuda' + (filtroGrupo === f[0] ? ' orange' : '') +
+        '" onclick="App.filtrar(\'' + f[0] + '\')">' + esc(f[1]) +
+        ajudaDoGrupo(f[1], f[2]) + '</button>';
     }).join(' ');
 
     if (filtroGrupo === 'fechados') return cabecalhoPipeline(filtros) + listaFechados(est);
@@ -495,7 +546,7 @@
 
     return '<div class="row"><h1>Pipeline</h1><span class="espaco"></span>' + alternar +
       '<button class="btn alt mini" onclick="App.novaOportunidade()">+ Oportunidade</button></div>' +
-      '<div class="row" style="margin:8px 0 14px">' + filtros + '</div>';
+      '<div class="row filtros-pipeline" style="margin:8px 0 14px">' + filtros + '</div>';
   }
 
   /* Kanban por etapa do funil. A cor da borda continua sendo a decisão,
@@ -694,6 +745,20 @@
       '<div class="corpo">' + conteudo + '</div></details>';
   }
 
+  /* Mesmo balão das oito decisões, com o vocabulário dos grupos de pipeline. */
+  function ajudaDoGrupo(nome, a) {
+    const linha = function (rotulo, texto) {
+      return '<span class="ajuda-rot">' + rotulo + '</span><span class="ajuda-linha">' + esc(texto) + '</span>';
+    };
+    return '<span class="ajuda" role="tooltip">' +
+      '<span class="ajuda-titulo">' + esc(nome) + '</span>' +
+      '<span class="ajuda-pergunta">' + esc(a.oQue) + '</span>' +
+      linha('Entra quando', a.entra) +
+      linha('Sai quando', a.sai) +
+      linha('O que fazer', a.faca) +
+      '</span>';
+  }
+
   /* ---------------- Avanço: o mapa das 8 decisões ---------------- */
   const ESTADOS = ['Não sabemos', 'Parcial', 'Comprovado'];
 
@@ -704,7 +769,7 @@
       const classe = n === 2 ? (provado ? 'q2' : 'q2 sem-prova') : 'q' + n;
       const marca = n === 2 ? (provado ? '✓' : '!') : (n === 1 ? '◐' : '');
       const abre = clicavel ? ' onclick="App.novaEvidencia(\'' + op.id + '\',null,\'' + d.id + '\')"' : '';
-      return '<button class="celula ' + classe + '"' + abre + '>' +
+      return '<button class="celula tem-ajuda ' + classe + '"' + abre + '>' +
         '<span class="marca">' + marca + '</span>' +
         '<span class="rot">' + esc(d.nome) + '</span>' +
         '<span class="estado">' + esc(n === 2 && !provado ? 'sem prova' : ESTADOS[n]) + '</span>' +
