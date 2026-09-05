@@ -48,8 +48,12 @@ ser colada em lugar nenhum do app — ela ignora todas as políticas.
 
 ## 5. Colocar o time
 
-Para cada vendedor: ele repete os passos 4.3 a 4.5 no aparelho dele. Depois,
-para que caia na sua empresa em vez de criar outra, rode no **SQL Editor**:
+Para cada vendedor: ele repete os passos 4.3 a 4.5 no aparelho dele e **para
+por ali**. Quem clica em "Definir minha empresa" cria uma empresa separada, e
+a carteira dele não se encontra com a sua — é exatamente o isolamento
+funcionando, só que na direção errada.
+
+Com o vendedor cadastrado, rode no **SQL Editor**:
 
 ```sql
 -- veja os perfis e os ids
@@ -64,6 +68,15 @@ update public.perfis
  where id = 'COLE-O-ID-DO-USUARIO';
 ```
 
+Se alguém criou uma empresa por engano, mova a pessoa e apague a empresa vazia
+— o `delete` só alcança empresa sem nenhum perfil ligado, então não há risco de
+levar junto uma que esteja em uso:
+
+```sql
+delete from public.tenants t
+ where not exists (select 1 from public.perfis p where p.tenant_id = t.id);
+```
+
 Para tornar alguém administrador — vê todas as empresas:
 
 ```sql
@@ -75,6 +88,25 @@ update public.perfis set papel = 'admin' where id = 'COLE-O-ID-DO-USUARIO';
 O app continua funcionando offline com a última cópia baixada; a sincronização
 é sob demanda, pelo botão. Isso é deliberado: o vendedor em área com sinal ruim
 não fica travado.
+
+## Os limites desta sincronização
+
+Vale saber antes de confiar cegamente, porque são consequências da escolha de
+sincronizar em vez de reescrever o app para trabalhar direto no servidor:
+
+- **Exclusão não viaja.** Apagar um registro no aparelho não o apaga no
+  servidor, e a próxima descida traz ele de volta. Para apagar de verdade,
+  apague também na tabela pelo Supabase.
+- **Quem sincroniza por último vence.** Duas pessoas mexendo na mesma
+  oportunidade entre duas sincronizações: a segunda a enviar sobrescreve a
+  primeira, sem aviso e sem mesclar campo a campo.
+- **Sincronizar é um ato, não um estado.** Nada sobe sozinho. Enquanto ninguém
+  clicar, o que está no aparelho é só do aparelho.
+
+Nenhum desses é difícil de resolver depois — precisam de marca de exclusão,
+carimbo de versão por registro e sincronização automática. Mas hoje eles são
+assim, e um time de duas ou três pessoas convive bem com isso desde que
+sincronize ao começar e ao terminar o dia.
 
 ## Limites do plano gratuito
 
