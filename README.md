@@ -87,6 +87,7 @@ src/arquivos.js         anexos em IndexedDB (não cabem no localStorage)
 src/csv.js              importação por planilha, com prévia e detecção de duplicados
 src/graficos.js         gráficos em SVG puro, sem biblioteca
 src/integracoes.js      ponte com o Linked Helper: busca as respostas e converte
+src/auth.js             empresas do sistema, usuários, sessão e papéis
 ponte/                  o coletor que recebe o webhook (Cloudflare Worker)
 src/views.js            telas
 src/ui.js               formatação e diálogos
@@ -102,6 +103,15 @@ serviço no backend quando o produto sair do modo local.
 **Fase 1 — validação (este repositório).** PWA local, um vendedor ou um time pequeno,
 dados no dispositivo com export/import. Objetivo: provar que IAD, Evidence Age e
 Coverage explicam ganho e perda melhor que a etapa do CRM.
+
+### Aviso sobre o login desta fase
+
+O app já tem tela de login, usuários, empresas e isolamento por empresa — mas
+sem servidor isso **organiza** o acesso, não o protege: a senha é conferida
+dentro do próprio navegador, e quem abrir as ferramentas do desenvolvedor
+contorna. O envio do código de confirmação também é local (aparece na tela),
+porque um site sozinho não tem servidor de e-mail. As telas e os papéis já
+estão no formato final; o que muda na Fase 2 é onde a verificação acontece.
 
 **Fase 2 — multiusuário.** Backend (FastAPI ou NestJS) + PostgreSQL, autenticação,
 tenants, sincronização e histórico imutável de snapshots — cada alteração de pontuação

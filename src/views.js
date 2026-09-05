@@ -5,6 +5,117 @@
   const P = global.IADPlaybook, Store = global.IADStore, E = global.IADEngine, U = global.IADUI;
   const esc = U.esc;
 
+  /* ---------------- Acesso: login, primeiro acesso e confirmação ---------------- */
+  let telaAcesso = 'login';
+  let pendente = null;      /* usuário no meio do primeiro acesso */
+  let recadoAcesso = '';
+
+  function definirTelaAcesso(tela, usuario, recado) {
+    telaAcesso = tela;
+    if (usuario !== undefined) pendente = usuario;
+    recadoAcesso = recado || '';
+  }
+
+  function acesso() {
+    const A = global.IADAuth;
+    const corpo = {
+      login: telaLogin, cadastro: telaCadastro, codigo: telaCodigo, perfil: telaPerfil
+    }[telaAcesso] || telaLogin;
+
+    return '<div class="acesso"><div class="cartao-acesso">' +
+      '<div class="marca-acesso">IAD <span>CRM</span></div>' +
+      '<p class="tiny muted" style="margin:0 0 18px">Gestão comercial orientada à decisão</p>' +
+      (recadoAcesso ? '<div class="aviso" style="margin-bottom:14px">' + esc(recadoAcesso) + '</div>' : '') +
+      corpo(A) +
+      '</div></div>';
+  }
+
+  function campo(id, rotulo, tipo, valor, extra) {
+    return '<label class="campo"><span>' + esc(rotulo) + '</span>' +
+      '<input id="' + id + '" type="' + (tipo || 'text') + '" value="' + esc(valor || '') + '"' +
+      (extra || '') + '></label>';
+  }
+
+  function telaLogin() {
+    return '<h2 style="margin-bottom:14px">Entrar</h2>' +
+      campo('ac-login', 'Login ou e-mail', 'text', '', ' autocomplete="username"') +
+      campo('ac-senha', 'Senha', 'password', '', ' autocomplete="current-password" onkeydown="if(event.key===\'Enter\')App.entrar()"') +
+      '<button class="btn alt" style="width:100%;margin-top:6px" onclick="App.entrar()">Entrar</button>' +
+      '<p class="small muted" style="margin:16px 0 0">Primeiro acesso? ' +
+      '<a href="#" onclick="event.preventDefault();App.telaAcesso(\'cadastro\')">Criar meu acesso</a></p>';
+  }
+
+  function telaCadastro() {
+    return '<h2 style="margin-bottom:6px">Criar acesso</h2>' +
+      '<p class="tiny muted" style="margin-bottom:14px">Depois disso confirmamos seu e-mail com um código.</p>' +
+      campo('ac-nome', 'Seu nome', 'text') +
+      campo('ac-email', 'E-mail', 'email', '', ' autocomplete="email"') +
+      campo('ac-whatsapp', 'WhatsApp', 'text', '', ' placeholder="(00) 00000-0000"') +
+      campo('ac-senha1', 'Senha', 'password', '', ' autocomplete="new-password"') +
+      campo('ac-senha2', 'Repita a senha', 'password') +
+      '<button class="btn alt" style="width:100%;margin-top:6px" onclick="App.criarAcesso()">Continuar</button>' +
+      '<p class="small muted" style="margin:16px 0 0">' +
+      '<a href="#" onclick="event.preventDefault();App.telaAcesso(\'login\')">Voltar para o login</a></p>';
+  }
+
+  function telaCodigo() {
+    const codigo = pendente && pendente.codigo;
+    return '<h2 style="margin-bottom:6px">Confirme seu e-mail</h2>' +
+      '<p class="small muted">Enviamos um código de seis dígitos para <strong>' +
+      esc((pendente && pendente.email) || '') + '</strong>.</p>' +
+      (codigo
+        ? '<div class="aviso" style="margin:12px 0"><strong>Modo local:</strong> este app roda sem servidor, ' +
+          'então o e-mail não sai de verdade. Seu código é <span class="mono-destaque">' + esc(codigo) + '</span>.</div>'
+        : '') +
+      campo('ac-codigo', 'Código de seis dígitos', 'text', '', ' inputmode="numeric" maxlength="6" onkeydown="if(event.key===\'Enter\')App.confirmarCodigo()"') +
+      '<button class="btn alt" style="width:100%;margin-top:6px" onclick="App.confirmarCodigo()">Confirmar</button>' +
+      '<p class="small muted" style="margin:14px 0 0">' +
+      '<a href="#" onclick="event.preventDefault();App.reenviarCodigo()">Gerar outro código</a> · ' +
+      '<a href="#" onclick="event.preventDefault();App.telaAcesso(\'login\')">Voltar</a></p>';
+  }
+
+  function telaPerfil(A) {
+    const empresas = A.tenants();
+    return '<h2 style="margin-bottom:6px">Complete seu cadastro</h2>' +
+      '<p class="tiny muted" style="margin-bottom:14px">Você vai enxergar as oportunidades da sua empresa.</p>' +
+      (empresas.length
+        ? '<label class="campo"><span>Empresa</span><select id="ac-empresa">' +
+          '<option value="">— cadastrar nova abaixo —</option>' +
+          empresas.map(function (t) { return '<option value="' + esc(t.id) + '">' + esc(t.nome) + '</option>'; }).join('') +
+          '</select></label>'
+        : '') +
+      campo('ac-empresa-nova', 'Nome da empresa', 'text') +
+      campo('ac-cnpj', 'CNPJ da empresa', 'text') +
+      campo('ac-nome2', 'Seu nome', 'text', (pendente && pendente.nome) || '') +
+      campo('ac-whats2', 'WhatsApp', 'text', (pendente && pendente.whatsapp) || '') +
+      '<button class="btn alt" style="width:100%;margin-top:6px" onclick="App.completarPerfil()">Concluir e entrar</button>';
+  }
+
+  /* Barra do administrador: o único que escolhe empresa e usuário. */
+  function barraAdmin() {
+    const A = global.IADAuth;
+    if (!A.ehAdmin()) return '';
+    const f = A.filtros();
+    const empresas = A.tenants();
+    const pessoas = A.usuarios().filter(function (u) {
+      return u.papel !== 'admin' && (f.tenant === 'todas' || u.tenantId === f.tenant);
+    });
+
+    return '<div class="barra-admin">' +
+      '<span class="etiqueta">Administrador</span>' +
+      '<label>Empresa<select onchange="App.filtrarTenant(this.value)">' +
+        '<option value="todas"' + (f.tenant === 'todas' ? ' selected' : '') + '>Todas as empresas</option>' +
+        empresas.map(function (t) {
+          return '<option value="' + esc(t.id) + '"' + (f.tenant === t.id ? ' selected' : '') + '>' + esc(t.nome) + '</option>';
+        }).join('') + '</select></label>' +
+      '<label>Usuário<select onchange="App.filtrarUsuarioAdmin(this.value)">' +
+        '<option value="todos"' + (f.usuario === 'todos' ? ' selected' : '') + '>Todos os usuários</option>' +
+        pessoas.map(function (u) {
+          return '<option value="' + esc(u.id) + '"' + (f.usuario === u.id ? ' selected' : '') + '>' + esc(u.nome || u.email || u.login) + '</option>';
+        }).join('') + '</select></label>' +
+      '</div>';
+  }
+
   /* ---------------- Hoje: a tela do vendedor ---------------- */
   const URGENCIAS = [
     { chave: 3, rotulo: 'Urgente', classe: 'dead', cor: 'var(--dead)' },
@@ -14,7 +125,7 @@
   let filtroHoje = 'todos';
 
   function hoje() {
-    const est = Store.obter();
+    const est = Store.dados();
     if (!est.oportunidades.length) return boasVindas();
 
     const G = global.IADGraficos;
@@ -106,7 +217,7 @@
   let filtroSegmento = 'todos';
 
   function painel() {
-    const est = Store.obter();
+    const est = Store.dados();
     if (!est.oportunidades.length) return boasVindas();
 
     const G = global.IADGraficos;
@@ -243,7 +354,7 @@
 
   /* O que a carteira fechada já ensinou. Com pouca amostra, diz que é pouca amostra. */
   function aprendizado() {
-    const a = E.aprendizado(Store.obter().oportunidades);
+    const a = E.aprendizado(Store.dados().oportunidades);
     if (!a.total) {
       return '<div class="sec-titulo"><h2>Aprendizado da carteira</h2></div>' +
         '<div class="card"><div class="vazio small">Nenhum negócio encerrado ainda. Ao fechar uma oportunidade — ganha ou perdida — o app congela a foto das oito decisões daquele dia. É a comparação entre essas fotos que valida o modelo.</div></div>';
@@ -292,7 +403,7 @@
   let modoPipeline = 'lista';
 
   function pipeline() {
-    const est = Store.obter();
+    const est = Store.dados();
     const filtros = FILTROS.map(function (f) {
       return '<button class="pill' + (filtroGrupo === f[0] ? ' orange' : '') + '" onclick="App.filtrar(\'' + f[0] + '\')">' + esc(f[1]) + '</button>';
     }).join(' ');
@@ -824,7 +935,7 @@
 
   /* ---------------- Revisão semanal ---------------- */
   function revisao() {
-    const est = Store.obter();
+    const est = Store.dados();
     const resumos = est.oportunidades
       .filter(function (o) { return !o.desfecho; })
       .map(E.resumo)
@@ -860,7 +971,7 @@
 
   /* ---------------- Contas e contatos ---------------- */
   function contas() {
-    const est = Store.obter();
+    const est = Store.dados();
     if (!est.contas.length) {
       return '<div class="row"><h1>Contas</h1><span class="espaco"></span><button class="btn alt mini" onclick="App.novaConta()">+ Conta</button></div><div class="vazio">Nenhuma conta cadastrada.</div>';
     }
@@ -893,13 +1004,14 @@
   /* ---------------- Cadastros ---------------- */
   const ABAS_CADASTRO = [
     ['empresas', 'Empresas'], ['contatos', 'Contatos'], ['oportunidades', 'Oportunidades'],
-    ['segmentos', 'Segmentos'], ['tiposTarefa', 'Tipos de tarefa'], ['produtos', 'Produtos']
+    ['segmentos', 'Segmentos'], ['tiposTarefa', 'Tipos de tarefa'], ['produtos', 'Produtos'],
+    ['usuarios', 'Usuários']
   ];
   let abaCadastro = 'empresas';
   let buscaCadastro = '';
 
   function cadastros() {
-    const est = Store.obter();
+    const est = Store.dados();
     const abas = ABAS_CADASTRO.map(function (a) {
       return '<button class="pill' + (abaCadastro === a[0] ? ' orange' : '') + '" onclick="App.abaCadastro(\'' + a[0] + '\')">' + esc(a[1]) + '</button>';
     }).join(' ');
@@ -907,14 +1019,14 @@
     const criar = {
       empresas: 'App.novaConta()', contatos: 'App.novoContato()', oportunidades: 'App.novaOportunidade()',
       segmentos: "App.novoItemCatalogo('segmentos')", tiposTarefa: "App.novoItemCatalogo('tiposTarefa')",
-      produtos: "App.novoProduto()"
+      produtos: 'App.novoProduto()', usuarios: 'App.novoUsuario()'
     }[abaCadastro];
 
     const corpo = {
       empresas: listaEmpresas, contatos: listaContatos, oportunidades: listaOportunidades,
       segmentos: function (e) { return listaCatalogo(e, 'segmentos'); },
       tiposTarefa: function (e) { return listaCatalogo(e, 'tiposTarefa'); },
-      produtos: listaProdutos
+      produtos: listaProdutos, usuarios: listaUsuarios
     }[abaCadastro](est);
 
     return '<div class="row"><h1>Cadastros</h1><span class="espaco"></span>' +
@@ -1037,6 +1149,37 @@
     return tabela(['Produto', 'SKU', 'Categoria', 'Unidade', 'Preço de referência', 'Em uso', ''], linhas, 'Nenhum produto cadastrado.');
   }
 
+  function listaUsuarios() {
+    const A = global.IADAuth;
+    const eu = A.atual();
+    const todos = A.usuarios().filter(function (u) {
+      if (A.ehAdmin()) return true;
+      return u.tenantId === (eu && eu.tenantId);
+    }).filter(function (u) {
+      const t = A.tenant(u.tenantId);
+      return combina(u.nome) || combina(u.email) || combina(u.login) || combina(t && t.nome);
+    });
+
+    const linhas = todos.map(function (u) {
+      const t = A.tenant(u.tenantId);
+      const souEu = eu && eu.id === u.id;
+      return '<tr><td><strong>' + esc(u.nome || '—') + (souEu ? ' <span class="pill">você</span>' : '') + '</strong>' +
+        '<span class="tiny muted">' + esc(u.login ? 'login: ' + u.login : u.email) + '</span></td>' +
+        '<td>' + esc(u.papel === 'admin' ? 'Todas as empresas' : ((t && t.nome) || '—')) + '</td>' +
+        '<td>' + esc(u.email || '—') + '</td>' +
+        '<td>' + esc(u.whatsapp || '—') + '</td>' +
+        '<td>' + (u.papel === 'admin' ? '<span class="pill navy">Administrador</span>' : '<span class="pill">Usuário</span>') + '</td>' +
+        '<td>' + (u.ativo === false ? '<span class="pill dead">inativo</span>'
+          : (u.emailConfirmado ? '<span class="pill ok">ativo</span>' : '<span class="pill warn">e-mail pendente</span>')) + '</td>' +
+        '<td class="right" style="white-space:nowrap">' +
+          '<button class="btn ghost mini" onclick="App.editarUsuario(\'' + u.id + '\')">Editar</button>' +
+          (u.papel === 'admin' ? '' : ' <button class="btn ghost mini" onclick="App.excluirUsuario(\'' + u.id + '\')">Excluir</button>') +
+        '</td></tr>';
+    }).join('');
+
+    return tabela(['Usuário', 'Empresa', 'E-mail', 'WhatsApp', 'Papel', 'Situação', ''], linhas, 'Nenhum usuário encontrado.');
+  }
+
   /* ---------------- Playbook ---------------- */
   function playbook() {
     const dims = P.DIMENSOES.map(function (d) {
@@ -1077,7 +1220,7 @@
 
   /* ---------------- Dados ---------------- */
   function dados() {
-    const est = Store.obter();
+    const est = Store.dados();
     return '<h1>Dados e instalação</h1>' +
       '<div class="card"><h2>Instalar no desktop e no celular</h2>' +
       '<p class="small">Este é um PWA: o mesmo código roda no navegador, instala no Windows/macOS/Linux e vira ícone no Android e no iPhone.</p>' +
@@ -1145,6 +1288,8 @@
 
   global.IADViews = {
     hoje, painel, pipeline, cockpit, revisao, contas, cadastros, playbook, dados, itemArquivo, listaLeads,
+    acesso, barraAdmin, definirTelaAcesso,
+    pendenteAcesso: function () { return pendente; },
     definirFiltro: function (f) { filtroGrupo = f; },
     definirFiltroHistorico: function (f) { filtroHistorico = f; },
     definirFiltroHoje: function (f) { filtroHoje = f; },

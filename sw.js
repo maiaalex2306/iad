@@ -1,9 +1,9 @@
 /* Service worker: cache-first do app shell. Offline no celular e no desktop. */
-const CACHE = 'iad-crm-v5';
+const CACHE = 'iad-crm-v6';
 const ARQUIVOS = [
   './', './index.html', './manifest.webmanifest',
   './assets/styles.css',
-  './src/playbook.js', './src/store.js', './src/engine.js',
+  './src/playbook.js', './src/store.js', './src/auth.js', './src/engine.js',
   './src/arquivos.js', './src/csv.js', './src/graficos.js', './src/integracoes.js',
   './src/ui.js', './src/seed.js', './src/views.js', './src/app.js',
   './icons/icon-192.png', './icons/icon-512.png'

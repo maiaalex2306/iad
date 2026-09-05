@@ -3,7 +3,8 @@
   'use strict';
 
   const P = global.IADPlaybook, Store = global.IADStore, E = global.IADEngine,
-    U = global.IADUI, V = global.IADViews, Arq = global.IADArquivos, Csv = global.IADCsv;
+    U = global.IADUI, V = global.IADViews, Arq = global.IADArquivos, Csv = global.IADCsv,
+    A = global.IADAuth;
 
   const ROTAS = [
     { hash: '#/hoje', ico: '⚡', nome: 'Hoje', render: V.hoje },
@@ -19,8 +20,19 @@
   let leads = null;
 
   function render() {
-    const hash = location.hash || '#/hoje';
     const conteudo = document.getElementById('conteudo');
+    const logado = A.atual();
+
+    document.body.classList.toggle('sem-sessao', !logado);
+    if (!logado) {
+      conteudo.innerHTML = V.acesso();
+      const primeiro = document.querySelector('.cartao-acesso input');
+      if (primeiro) primeiro.focus();
+      return;
+    }
+    pintarTopo();
+
+    const hash = location.hash || '#/hoje';
 
     if (hash.indexOf('#/op/') === 0) {
       const id = hash.slice(5);
@@ -39,7 +51,21 @@
       const alvo = a.getAttribute('href');
       a.classList.toggle('ativo', alvo === hash || (hash.indexOf('#/op/') === 0 && alvo === '#/pipeline'));
     });
+
+    const barra = document.getElementById('barra-admin');
+    if (barra) barra.innerHTML = V.barraAdmin();
     window.scrollTo(0, 0);
+  }
+
+  /* Quem está logado e de onde: some quando ninguém está. */
+  function pintarTopo() {
+    const alvo = document.getElementById('quem');
+    if (!alvo) return;
+    const u = A.atual();
+    if (!u) { alvo.innerHTML = ''; return; }
+    const t = A.tenant(u.tenantId);
+    alvo.innerHTML = '<span class="nome">' + U.esc(u.nome || u.login) + '</span>' +
+      '<span class="onde">' + U.esc(u.papel === 'admin' ? 'Administrador' : ((t && t.nome) || '')) + '</span>';
   }
 
   function montarNav() {
@@ -153,7 +179,7 @@
     /* Cadastro rápido: empresa, contato e oportunidade em um formulário só.
        É o que evita abrir três telas para registrar uma conversa de cinco minutos. */
     cadastroRapido: function (etapa) {
-      const est = Store.obter();
+      const est = Store.dados();
       const contas = est.contas.slice().sort(function (a, b) { return a.nome.localeCompare(b.nome); });
       const produtos = Store.catalogoAtivos('produtos');
 
@@ -270,7 +296,7 @@
     },
 
     novoContato: function (contaId) {
-      const contas = Store.obter().contas;
+      const contas = Store.dados().contas;
       if (!contas.length) { alert('Cadastre uma empresa primeiro.'); return App.novaConta(); }
       const campos = contaId ? camposContato(contaId) : [{
         id: 'contaId', rotulo: 'Empresa', tipo: 'select',
@@ -297,7 +323,7 @@
 
     /* ---------- Oportunidades ---------- */
     novaOportunidade: function (contaId) {
-      const contas = Store.obter().contas;
+      const contas = Store.dados().contas;
       if (!contas.length) { alert('Cadastre uma conta primeiro.'); return App.novaConta(); }
       U.formulario('Nova oportunidade', camposOportunidade(contas, contaId), {}, function (d) {
         if (!d.titulo) return;
@@ -310,7 +336,7 @@
     editarOportunidade: function (id) {
       const op = Store.oportunidade(id);
       if (!op) return;
-      const contas = Store.obter().contas;
+      const contas = Store.dados().contas;
       U.formulario('Editar oportunidade', camposOportunidade(contas).concat([
         { id: 'notas', rotulo: 'Notas', tipo: 'textarea' }
       ]), op, function (d) {
@@ -336,7 +362,7 @@
 
     /* ---------- Evidências ---------- */
     capturaRapida: function () {
-      const abertas = Store.obter().oportunidades.filter(function (o) { return !o.desfecho; });
+      const abertas = Store.dados().oportunidades.filter(function (o) { return !o.desfecho; });
       if (!abertas.length) { alert('Nenhuma oportunidade aberta para registrar evidência.'); return; }
       App.novaEvidencia(null, abertas);
     },
@@ -683,7 +709,7 @@
     },
 
     carregarDemo: function () {
-      if (Store.obter().oportunidades.length && !U.confirmar('Isso substitui os dados atuais. Continuar?')) return;
+      if (Store.dados().oportunidades.length && !U.confirmar('Isso substitui os dados atuais. Continuar?')) return;
       global.IADSeed.carregar();
       location.hash = '#/hoje';
       render();
@@ -726,7 +752,7 @@
       const lead = (leads || []).find(function (l) { return l.id === id; });
       if (!lead) return;
 
-      const contas = Store.obter().contas;
+      const contas = Store.dados().contas;
       const parecida = contas.find(function (c) {
         return lead.empresa && c.nome.toLowerCase().indexOf(lead.empresa.toLowerCase().slice(0, 12)) !== -1;
       });
@@ -784,6 +810,129 @@
       });
     },
 
+    /* ---------- acesso ---------- */
+    telaAcesso: function (tela) { V.definirTelaAcesso(tela, null, ''); render(); },
+
+    entrar: function () {
+      const login = (document.getElementById('ac-login') || {}).value || '';
+      const senha = (document.getElementById('ac-senha') || {}).value || '';
+      if (!login || !senha) { V.definirTelaAcesso('login', null, 'Informe login e senha.'); return render(); }
+
+      A.entrar(login, senha).then(function () {
+        V.definirTelaAcesso('login', null, '');
+        location.hash = '#/hoje';
+        render();
+      }).catch(function (e) {
+        /* Quem parou no meio do primeiro acesso volta para onde parou. */
+        if (e.pendente === 'codigo') {
+          A.gerarCodigo(e.usuario);
+          V.definirTelaAcesso('codigo', e.usuario, 'Confirme seu e-mail para continuar.');
+        } else if (e.pendente === 'perfil') {
+          V.definirTelaAcesso('perfil', e.usuario, 'Falta completar seu cadastro.');
+        } else {
+          V.definirTelaAcesso('login', null, e.message);
+        }
+        render();
+      });
+    },
+
+    criarAcesso: function () {
+      const v = function (id) { return (document.getElementById(id) || {}).value || ''; };
+      const nome = v('ac-nome').trim(), email = v('ac-email').trim();
+      const senha1 = v('ac-senha1'), senha2 = v('ac-senha2');
+
+      if (!nome || !email) return recado('cadastro', 'Preencha nome e e-mail.');
+      if (email.indexOf('@') === -1) return recado('cadastro', 'E-mail inválido.');
+      if (senha1.length < 6) return recado('cadastro', 'A senha precisa de ao menos 6 caracteres.');
+      if (senha1 !== senha2) return recado('cadastro', 'As senhas não conferem.');
+
+      A.criarUsuario({ nome: nome, email: email, whatsapp: v('ac-whatsapp').trim() }, senha1)
+        .then(function (u) {
+          A.gerarCodigo(u);
+          V.definirTelaAcesso('codigo', u, '');
+          render();
+        })
+        .catch(function (e) { recado('cadastro', e.message); });
+    },
+
+    reenviarCodigo: function () {
+      const u = pendenteAtual();
+      if (!u) return;
+      A.gerarCodigo(u);
+      V.definirTelaAcesso('codigo', u, 'Código novo gerado.');
+      render();
+    },
+
+    confirmarCodigo: function () {
+      const u = pendenteAtual();
+      if (!u) return;
+      const digitado = (document.getElementById('ac-codigo') || {}).value || '';
+      const r = A.confirmarCodigo(u, digitado);
+      if (!r.ok) return recado('codigo', r.motivo, u);
+      V.definirTelaAcesso('perfil', u, '');
+      render();
+    },
+
+    completarPerfil: function () {
+      const u = pendenteAtual();
+      if (!u) return;
+      const v = function (id) { return (document.getElementById(id) || {}).value || ''; };
+      try {
+        A.completarPerfil(u, {
+          tenantId: v('ac-empresa'), empresaNova: v('ac-empresa-nova').trim(),
+          cnpj: v('ac-cnpj').trim(), nome: v('ac-nome2').trim(), whatsapp: v('ac-whats2').trim()
+        });
+      } catch (e) {
+        return recado('perfil', e.message, u);
+      }
+      A.abrirSessao(u);
+      V.definirTelaAcesso('login', null, '');
+      location.hash = '#/hoje';
+      render();
+    },
+
+    sair: function () {
+      if (!U.confirmar('Sair do sistema?')) return;
+      A.encerrarSessao();
+      V.definirTelaAcesso('login', null, '');
+      render();
+    },
+
+    filtrarTenant: function (valor) { A.definirFiltros({ tenant: valor, usuario: 'todos' }); render(); },
+    filtrarUsuarioAdmin: function (valor) { A.definirFiltros({ usuario: valor }); render(); },
+
+    /* ---------- usuários ---------- */
+    novoUsuario: function () {
+      U.formulario('Novo usuário', camposUsuario(), {}, function (d) {
+        if (!d.nome || !d.email) { alert('Nome e e-mail são obrigatórios.'); return; }
+        if (!d.senha || d.senha.length < 6) { alert('Defina uma senha de ao menos 6 caracteres.'); return; }
+        A.criarUsuario({
+          nome: d.nome, email: d.email, login: d.login || d.email, whatsapp: d.whatsapp,
+          tenantId: d.tenantId || Store.tenantDeTrabalho(), papel: d.papel,
+          emailConfirmado: true
+        }, d.senha).then(render).catch(function (e) { alert(e.message); });
+      });
+    },
+
+    editarUsuario: function (id) {
+      const u = A.usuario(id);
+      if (!u) return;
+      U.formulario('Editar usuário', camposUsuario(u).concat([
+        { id: 'ativo', rotulo: 'Situação', tipo: 'select', opcoes: [{ valor: 'sim', rotulo: 'Ativo' }, { valor: 'nao', rotulo: 'Inativo' }] }
+      ]), Object.assign({}, u, { senha: '', ativo: u.ativo === false ? 'nao' : 'sim' }), function (d) {
+        A.salvarUsuario(id, {
+          nome: d.nome, email: d.email, login: d.login, whatsapp: d.whatsapp,
+          tenantId: d.tenantId || u.tenantId, papel: d.papel, ativo: d.ativo === 'sim'
+        }, d.senha || null).then(render).catch(function (e) { alert(e.message); });
+      });
+    },
+
+    excluirUsuario: function (id) {
+      if (!U.confirmar('Excluir este acesso? Os registros criados por ele continuam no sistema.')) return;
+      try { A.excluirUsuario(id); render(); }
+      catch (e) { alert(e.message); }
+    },
+
     instalar: function () {
       if (!promptInstalacao) {
         alert('Use o menu do navegador: “Instalar aplicativo” (Chrome/Edge) ou Compartilhar → “Adicionar à Tela de Início” (Safari/iPhone).');
@@ -793,6 +942,38 @@
       promptInstalacao = null;
     }
   };
+
+  function pendenteAtual() {
+    return V.pendenteAcesso ? V.pendenteAcesso() : null;
+  }
+
+  function recado(tela, texto, usuario) {
+    V.definirTelaAcesso(tela, usuario === undefined ? undefined : usuario, texto);
+    render();
+  }
+
+  function camposUsuario(u) {
+    const admin = A.ehAdmin();
+    const empresas = A.tenants();
+    const campos = [
+      { id: 'nome', rotulo: 'Nome' },
+      { id: 'email', rotulo: 'E-mail' },
+      { id: 'login', rotulo: 'Login (opcional, o padrão é o e-mail)' },
+      { id: 'whatsapp', rotulo: 'WhatsApp' },
+      { id: 'senha', rotulo: u ? 'Nova senha (deixe vazio para manter)' : 'Senha', tipo: 'password' }
+    ];
+    if (admin) {
+      campos.push({
+        id: 'tenantId', rotulo: 'Empresa', tipo: 'select',
+        opcoes: empresas.map(function (t) { return { valor: t.id, rotulo: t.nome }; })
+      });
+      campos.push({
+        id: 'papel', rotulo: 'Papel', tipo: 'select',
+        opcoes: [{ valor: 'usuario', rotulo: 'Usuário' }, { valor: 'admin', rotulo: 'Administrador' }]
+      });
+    }
+    return campos;
+  }
 
   /* ---------- campos reutilizados ---------- */
   function camposProduto() {
@@ -882,7 +1063,10 @@
   document.addEventListener('DOMContentLoaded', function () {
     Store.carregar();
     montarNav();
-    render();
+    A.garantirAdministrador().then(render).catch(function (e) {
+      console.warn('Falha ao preparar o administrador:', e);
+      render();
+    });
     if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
       navigator.serviceWorker.register('sw.js').catch(function (e) { console.warn('SW não registrado:', e); });
     }

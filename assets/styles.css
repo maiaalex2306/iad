@@ -229,6 +229,46 @@ th { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color:
 input.busca { margin-bottom: 12px; }
 td .tiny { display: block; }
 
+/* ---------- Acesso ---------- */
+.sem-sessao nav.tabs, .sem-sessao .topbar button, .sem-sessao .quem, .sem-sessao #barra-admin { display: none; }
+.sem-sessao main { padding-top: 0; padding-bottom: 24px; }
+
+.acesso { display: flex; justify-content: center; align-items: flex-start; min-height: 70dvh; padding: 24px 0; }
+.cartao-acesso {
+  width: 100%; max-width: 380px; background: var(--surface); border: 1px solid var(--line);
+  border-radius: 16px; padding: 26px 24px 24px; box-shadow: var(--shadow);
+}
+.marca-acesso { font-size: 1.35rem; font-weight: 800; letter-spacing: .02em; }
+.marca-acesso span { color: var(--orange); }
+.cartao-acesso h2 { font-size: 1.12rem; }
+.cartao-acesso .campo { margin-bottom: 12px; }
+.mono-destaque {
+  font-family: ui-monospace, Menlo, monospace; font-weight: 700; font-size: 1.05rem;
+  letter-spacing: .16em; background: var(--surface); padding: 2px 8px; border-radius: 6px;
+}
+
+.quem { display: flex; flex-direction: column; line-height: 1.2; margin-right: 6px; text-align: right; }
+.quem .nome { font-size: .82rem; font-weight: 600; }
+.quem .onde { font-size: .68rem; opacity: .7; }
+
+/* Barra do administrador: só ele escolhe empresa e usuário. */
+.barra-admin:empty { display: none; }
+.barra-admin {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 9px 16px; background: var(--navy-2); color: #fff;
+}
+.barra-admin .etiqueta {
+  font-size: .66rem; text-transform: uppercase; letter-spacing: .1em;
+  background: rgba(255,255,255,.18); padding: 3px 9px; border-radius: 999px;
+}
+.barra-admin label { display: flex; align-items: center; gap: 6px; font-size: .76rem; }
+.barra-admin select {
+  width: auto; min-width: 140px; padding: 5px 9px; border-radius: 8px;
+  border: 1px solid rgba(255,255,255,.28); background: rgba(255,255,255,.12); color: #fff;
+}
+.barra-admin select option { color: var(--text); background: var(--surface); }
+@media (min-width: 900px) { .barra-admin { padding-top: 78px; } }
+
 /* ---------- Kanban ---------- */
 .kanban { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 8px; align-items: flex-start; }
 .kanban .coluna {

@@ -15,7 +15,8 @@
 
   function estadoVazio() {
     return {
-      versao: VERSAO, contas: [], contatos: [], oportunidades: [], tarefas: [],
+      versao: VERSAO, tenants: [], usuarios: [],
+      contas: [], contatos: [], oportunidades: [], tarefas: [],
       segmentos: [], tiposTarefa: [], produtos: [], config: { moeda: 'BRL' }
     };
   }
@@ -28,6 +29,20 @@
     if (!dados || !Array.isArray(dados.oportunidades)) return null;
     dados.tarefas = dados.tarefas || [];
     dados.produtos = dados.produtos || [];
+    dados.tenants = dados.tenants || [];
+    dados.usuarios = dados.usuarios || [];
+
+    /* Multiempresa: o que já existia passa a pertencer a uma primeira empresa,
+       criada aqui, para nada ficar órfão e invisível depois do login. */
+    const temRegistros = dados.contas.length || dados.oportunidades.length;
+    if (!dados.tenants.length && temRegistros) {
+      dados.tenants.push({ id: uid('ten'), nome: 'Minha empresa', cnpj: '', ativo: true, criadoEm: hoje() });
+    }
+    const primeiro = dados.tenants[0] ? dados.tenants[0].id : null;
+    ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos']
+      .forEach(function (colecao) {
+        (dados[colecao] || []).forEach(function (r) { if (r.tenantId == null) r.tenantId = primeiro; });
+      });
     dados.contas.forEach(function (c) {
       if (c.relacaoAtual == null) c.relacaoAtual = 'Prospect';
       if (c.razaoSocial == null) c.razaoSocial = '';
@@ -98,10 +113,93 @@
   function inscrever(fn) { ouvintes.push(fn); }
   function obter() { return estado; }
 
+  /* Contas de acesso não são dado de negócio: carregar a demonstração, importar
+     um backup ou apagar a carteira nunca pode derrubar quem tem login. */
   function substituir(novo) {
+    const contasDeAcesso = { tenants: estado.tenants || [], usuarios: estado.usuarios || [] };
     const migrado = migrar(novo) || estadoVazio();
+
+    migrado.tenants = contasDeAcesso.tenants.length ? contasDeAcesso.tenants : (migrado.tenants || []);
+    migrado.usuarios = contasDeAcesso.usuarios.length ? contasDeAcesso.usuarios : (migrado.usuarios || []);
     estado = migrado;
+
+    /* O que entrou sem dono fica com quem está trabalhando agora — senão some da tela. */
+    const ctx = contexto();
+    let alvo = tenantDeTrabalho();
+    const temRegistros = estado.contas.length || estado.oportunidades.length;
+    if (!alvo && temRegistros) {
+      const novoTenant = { id: uid('ten'), nome: 'Minha empresa', cnpj: '', ativo: true, criadoEm: hoje() };
+      estado.tenants.push(novoTenant);
+      alvo = novoTenant.id;
+    }
+    ['contas', 'contatos', 'segmentos', 'tiposTarefa', 'produtos'].forEach(function (colecao) {
+      (estado[colecao] || []).forEach(function (r) { if (!r.tenantId) r.tenantId = alvo; });
+    });
+    ['oportunidades', 'tarefas'].forEach(function (colecao) {
+      (estado[colecao] || []).forEach(function (r) {
+        if (!r.tenantId) r.tenantId = alvo;
+        if (!r.donoId && ctx.usuario) r.donoId = ctx.usuario.id;
+      });
+    });
+
     salvar();
+  }
+
+  /* ---------- escopo: quem está logado enxerga o quê ----------
+     Usuário comum vê a própria empresa. O administrador vê tudo, e é o único
+     que pode estreitar a visão para uma empresa ou um usuário. */
+  function contexto() {
+    const A = global.IADAuth;
+    const u = A && A.atual();
+    if (!u) return { usuario: null, tenantId: null, admin: false, filtros: { tenant: 'todas', usuario: 'todos' } };
+    return {
+      usuario: u,
+      tenantId: u.tenantId,
+      admin: u.papel === 'admin',
+      filtros: A.filtros()
+    };
+  }
+
+  function tenantDeTrabalho() {
+    const ctx = contexto();
+    if (!ctx.usuario) return null;
+    if (!ctx.admin) return ctx.tenantId;
+    if (ctx.filtros.tenant && ctx.filtros.tenant !== 'todas') return ctx.filtros.tenant;
+    return (estado.tenants[0] || {}).id || null;
+  }
+
+  function visivel(registro, comDono) {
+    const ctx = contexto();
+    if (!ctx.usuario) return false;
+    if (!ctx.admin) return registro.tenantId === ctx.tenantId;
+    if (ctx.filtros.tenant !== 'todas' && registro.tenantId !== ctx.filtros.tenant) return false;
+    if (comDono && ctx.filtros.usuario !== 'todos' && registro.donoId !== ctx.filtros.usuario) return false;
+    return true;
+  }
+
+  /* Mesma forma do estado, já filtrado. As telas leem daqui, nunca de obter(). */
+  function dados() {
+    const porTenant = function (lista) { return (lista || []).filter(function (r) { return visivel(r, false); }); };
+    const porDono = function (lista) { return (lista || []).filter(function (r) { return visivel(r, true); }); };
+    return {
+      tenants: estado.tenants,
+      usuarios: estado.usuarios,
+      contas: porTenant(estado.contas),
+      contatos: porTenant(estado.contatos),
+      oportunidades: porDono(estado.oportunidades),
+      tarefas: porDono(estado.tarefas),
+      segmentos: porTenant(estado.segmentos),
+      tiposTarefa: porTenant(estado.tiposTarefa),
+      produtos: porTenant(estado.produtos),
+      config: estado.config
+    };
+  }
+
+  function carimbo(comDono) {
+    const ctx = contexto();
+    const marca = { tenantId: tenantDeTrabalho() };
+    if (comDono) marca.donoId = ctx.usuario ? ctx.usuario.id : null;
+    return marca;
   }
 
   function conta(id) { return estado.contas.find(function (c) { return c.id === id; }); }
@@ -109,10 +207,10 @@
   function oportunidade(id) { return estado.oportunidades.find(function (o) { return o.id === id; }); }
   function tarefa(id) { return estado.tarefas.find(function (t) { return t.id === id; }); }
   function contatosDaConta(contaId) {
-    return estado.contatos.filter(function (c) { return c.contaId === contaId; });
+    return estado.contatos.filter(function (c) { return c.contaId === contaId && visivel(c, false); });
   }
   function tarefasDaOportunidade(opId) {
-    return estado.tarefas.filter(function (t) { return t.oportunidadeId === opId; });
+    return estado.tarefas.filter(function (t) { return t.oportunidadeId === opId && visivel(t, true); });
   }
 
   function criarConta(dados) {
@@ -130,7 +228,7 @@
       id: uid('ctt'), contaId: null, nome: '', cargo: '', papel: 'Usuário',
       email: '', telefone: '', linkedin: '', influencia: 2, reportaA: null,
       canalPreferido: '', perfil: 'nao_classificado', sentimento: 'nao_acessado', criadoEm: hoje()
-    }, dados);
+    }, carimbo(false), dados);
     estado.contatos.push(novo);
     salvar();
     return novo;
@@ -161,7 +259,7 @@
       gateLiberadoPor: null,
       desfecho: null,
       notas: ''
-    }, dados);
+    }, carimbo(true), dados);
     nova.snapshots = [{ data: hoje(), iad: 0, dims: Object.assign({}, nova.dims) }];
     estado.oportunidades.push(nova);
     salvar();
@@ -270,7 +368,9 @@
   /* ---------- Catálogos: segmentos, tipos de tarefa e produtos ---------- */
   const CATALOGOS = { segmentos: 'seg', tiposTarefa: 'tpt', produtos: 'prd' };
 
-  function catalogo(nome) { return estado[nome] || []; }
+  function catalogo(nome) {
+    return (estado[nome] || []).filter(function (i) { return visivel(i, false); });
+  }
 
   function catalogoAtivos(nome) {
     return catalogo(nome).filter(function (i) { return i.ativo !== false; });
@@ -281,7 +381,7 @@
   }
 
   function criarNoCatalogo(nome, dados) {
-    const item = Object.assign({ id: uid(CATALOGOS[nome] || 'cat'), nome: '', ativo: true, criadoEm: hoje() }, dados);
+    const item = Object.assign({ id: uid(CATALOGOS[nome] || 'cat'), nome: '', ativo: true, criadoEm: hoje() }, carimbo(false), dados);
     if (!item.nome) return null;
     const existente = catalogo(nome).find(function (i) {
       return i.nome.trim().toLowerCase() === item.nome.trim().toLowerCase();
@@ -318,7 +418,7 @@
       id: uid('tsk'), titulo: '', tipo: 'Ligar', oportunidadeId: null,
       contatoId: null, decisaoAlvo: '', vencimento: hoje(),
       status: 'aberta', concluidaEm: null, criadoEm: hoje()
-    }, dados);
+    }, carimbo(true), dados);
     estado.tarefas.push(nova);
     salvar();
     return nova;
@@ -392,11 +492,19 @@
     substituir(dados);
   }
 
-  function limpar() { substituir(estadoVazio()); }
+  /* Apaga a carteira, não os acessos. */
+  function limpar() {
+    const vazio = estadoVazio();
+    vazio.tenants = estado.tenants;
+    vazio.usuarios = estado.usuarios;
+    estado = vazio;
+    salvar();
+  }
 
   global.IADStore = {
     uid, hoje, carregar, salvar, inscrever, obter, substituir, estadoVazio,
     conta, contato, oportunidade, tarefa, contatosDaConta, tarefasDaOportunidade,
+    dados, contexto, tenantDeTrabalho, visivel,
     criarConta, criarContato, criarOportunidade, atualizarOportunidade,
     pontuar, registrarEvento, removerEvento, definirCompromisso, definirInsight,
     criarTarefa, concluirTarefa, excluirTarefa,
