@@ -207,6 +207,50 @@ begin
   end loop;
 end $$;
 
+-- Criar a empresa e ligar o próprio perfil a ela, numa operação só.
+--
+-- Por que uma função e não um insert direto do app: ao devolver a linha de um
+-- insert, o Postgres também aplica as políticas de SELECT — e a de tenants diz
+-- "você vê a empresa que é a sua". Quem ainda não tem empresa não consegue ler
+-- a que acabou de criar, e a operação inteira é recusada. Aqui também fica
+-- atômico: ou nasce a empresa com o perfil ligado, ou não nasce nada.
+create or replace function public.criar_minha_empresa(p_nome text, p_cnpj text default '')
+returns public.tenants
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  nova  public.tenants;
+  atual uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'Entre na nuvem antes de criar a empresa.';
+  end if;
+
+  if coalesce(btrim(p_nome), '') = '' then
+    raise exception 'A empresa precisa de um nome.';
+  end if;
+
+  select tenant_id into atual from public.perfis where id = auth.uid();
+  if atual is not null then
+    raise exception 'Seu usuário já está ligado a uma empresa.';
+  end if;
+
+  insert into public.tenants (nome, cnpj)
+    values (btrim(p_nome), coalesce(btrim(p_cnpj), ''))
+    returning * into nova;
+
+  insert into public.perfis (id, tenant_id)
+    values (auth.uid(), nova.id)
+    on conflict (id) do update set tenant_id = excluded.tenant_id;
+
+  return nova;
+end $$;
+
+revoke all on function public.criar_minha_empresa(text, text) from public;
+grant execute on function public.criar_minha_empresa(text, text) to authenticated;
+
 -- Ao confirmar o e-mail, o Supabase cria o usuário; aqui nasce o perfil dele.
 create or replace function public.ao_criar_usuario()
 returns trigger language plpgsql security definer set search_path = public as $$

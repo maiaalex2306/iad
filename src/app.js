@@ -793,8 +793,7 @@
       ], {}, function (d) {
         if (!d.nome) return;
         recadoNuvem('Criando empresa…');
-        N.criarEmpresa(d.nome, d.cnpj)
-          .then(function (empresa) { return N.salvarPerfil({ tenant_id: empresa.id }); })
+        N.criarMinhaEmpresa(d.nome, d.cnpj)
           .then(function () { return N.meuPerfil(); })
           .then(function (perfil) {
             N.guardarPerfilNaSessao(perfil);

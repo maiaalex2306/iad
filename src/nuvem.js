@@ -134,11 +134,14 @@
     });
   }
 
-  function criarEmpresa(nome, cnpj) {
-    return chamar('/rest/v1/tenants', {
-      metodo: 'POST', cabecalhos: { Prefer: 'return=representation' },
-      corpo: { nome: nome, cnpj: cnpj || '' }
-    }).then(function (linhas) { return linhas && linhas[0]; });
+  /* Criar a empresa e ligar o perfil a ela é uma coisa só, e é o banco que faz.
+     Inserir em tenants daqui não funciona: o Postgres aplica as políticas de
+     leitura à linha devolvida, e quem ainda não tem empresa não pode ler a que
+     acabou de criar. Ver nuvem/correcao-01-criar-empresa.sql. */
+  function criarMinhaEmpresa(nome, cnpj) {
+    return chamar('/rest/v1/rpc/criar_minha_empresa', {
+      metodo: 'POST', corpo: { p_nome: nome, p_cnpj: cnpj || '' }
+    });
   }
 
   /* ---------- tradução entre o formato local e o do banco ---------- */
@@ -255,7 +258,7 @@
 
   global.IADNuvem = {
     config, salvarConfig, configurada, conectado, estado, sessao,
-    cadastrar, entrar, sair, renovar, eu, meuPerfil, salvarPerfil, criarEmpresa,
+    cadastrar, entrar, sair, renovar, eu, meuPerfil, salvarPerfil, criarMinhaEmpresa,
     guardarPerfilNaSessao, empurrar, puxar, sincronizar, ultimaSincronizacao,
     paraBanco, paraApp
   };
