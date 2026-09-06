@@ -680,3 +680,56 @@ button.btn.voz { margin-top: 6px; }
 
 .aviso { border-left: 3px solid var(--orange); background: var(--orange-soft); padding: 10px 12px; border-radius: 8px; font-size: .86rem; }
 .vazio { text-align: center; color: var(--muted); padding: 30px 10px; }
+
+/* ---------- assistente de preenchimento ----------
+   A caixa é visualmente diferente do resto do formulário de propósito: o que
+   sai dela é palpite, e palpite tem que parecer palpite até alguém confirmar. */
+.caixa-ia {
+  border: 1px dashed var(--navy-2); border-radius: 12px;
+  padding: 12px 13px; margin-bottom: 14px; background: var(--bg);
+}
+.caixa-ia > .rotulo {
+  display: block; font-size: .74rem; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--navy-2); font-weight: 600; margin-bottom: 6px;
+}
+.caixa-ia textarea { min-height: 84px; background: var(--surface); }
+.caixa-ia .linha { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.caixa-ia .linha button.btn.voz { margin-top: 0; }
+.caixa-ia .estado { font-size: .78rem; color: var(--muted); flex: 1 1 140px; }
+.caixa-ia .rodape-ia { margin: 8px 0 0; font-size: .74rem; color: var(--muted); }
+
+label.campo.sugerido > span::after { content: ' · sugerido'; color: var(--orange); letter-spacing: 0; }
+label.campo.sugerido input,
+label.campo.sugerido select,
+label.campo.sugerido textarea {
+  border-color: var(--orange); background: var(--orange-soft);
+}
+label.campo .origem {
+  display: block; margin-top: 4px; font-size: .75rem; line-height: 1.4;
+  color: var(--muted); font-style: italic;
+}
+
+/* ---------- revisão do que o assistente leu ----------
+   Lista de propostas, não de fatos: cada linha vem com a frase que a originou
+   para dar para conferir sem reabrir o documento. */
+dialog.revisao-ia { width: min(680px, 96vw); }
+.achados { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.achado {
+  border: 1px solid var(--line); border-left: 4px solid var(--navy-2);
+  border-radius: 12px; padding: 12px 13px; background: var(--surface);
+}
+.achado .linha-achado {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; cursor: pointer; margin: 0;
+}
+.achado .linha-achado input[type="checkbox"] { width: auto; margin: 0; flex: none; }
+.achado .linha-achado strong { flex: 1 1 200px; }
+.achado .origem {
+  margin: 7px 0 0; font-size: .8rem; line-height: 1.45; font-style: italic; color: var(--muted);
+  border-left: 2px solid var(--line); padding-left: 9px;
+}
+.achado .compromisso { margin: 6px 0 0; color: var(--risk); }
+.achado .escolhas { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+.achado .campo.mini { flex: 1 1 190px; margin-bottom: 0; }
+.achado .campo.mini select { padding: 7px 9px; font-size: .82rem; }
+.achado:has(input[data-ev]:not(:checked)),
+.achado:has(input[data-ct]:not(:checked)) { opacity: .5; border-left-color: var(--line); }

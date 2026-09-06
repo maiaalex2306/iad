@@ -4,7 +4,7 @@
 
   const P = global.IADPlaybook, Store = global.IADStore, E = global.IADEngine,
     U = global.IADUI, V = global.IADViews, Arq = global.IADArquivos, Csv = global.IADCsv,
-    A = global.IADAuth;
+    A = global.IADAuth, IA = global.IADIA;
 
   const ROTAS = [
     { hash: '#/hoje', ico: '⚡', nome: 'Hoje', render: V.hoje,
@@ -329,6 +329,11 @@
       const produtos = Store.catalogoAtivos('produtos');
 
       const campos = [
+        { id: 'atalhoNegocio', tipo: 'ia', extrair: 'oportunidade',
+          rotulo: 'Conte de onde veio este negócio',
+          placeholder: 'Ex.: Indicação na feira. Agro Verde, agroindústria em Sorocaba. Falei com o Marcelo Prates, o CFO, que está tocando o assunto internamente.',
+          nunca: ['valor', 'fechamentoPrevisto'],
+          contexto: function () { return IA.contextoDaConta(null); } },
         { id: 'contaId', rotulo: 'Empresa', tipo: 'select',
           opcoes: [{ valor: '', rotulo: '— cadastrar nova abaixo —' }]
             .concat(contas.map(function (c) { return { valor: c.id, rotulo: c.nome }; })) },
@@ -408,6 +413,14 @@
       const op = Store.oportunidade(opId);
       if (!op) return;
       U.formulario('Insight comercial', [
+        /* Aqui a IA não extrai: ela escreve um rascunho. A caixa já vem com o
+           que o cliente disse sobre o problema, para o rascunho nascer do caso
+           real e não de um lugar-comum de setor. */
+        { id: 'baseInsight', tipo: 'ia', extrair: 'insight',
+          rotulo: 'Rascunhar o reenquadramento a partir do caso',
+          placeholder: 'Descreva o problema do cliente e o setor dele.',
+          padrao: baseDoInsight(op),
+          contexto: function () { return IA.contextoDaOportunidade(op); } },
         { id: 'texto', rotulo: 'O que o cliente não enxerga sozinho', tipo: 'textarea', voz: true,
           placeholder: 'Ex.: a perda não está na colheita, está no intervalo entre lotes — e ela cresce com o volume.' },
         { id: 'estado', rotulo: 'Em que ponto está', tipo: 'select',
@@ -522,6 +535,11 @@
         d.evidencias.forEach(function (ev) { sugestoes.push({ valor: d.id + '|' + ev, rotulo: d.nome + ' — ' + ev }); });
       });
 
+      /* Compartilhados entre a montagem dos campos e o comportamento da janela. */
+      let tocado = false;
+      let notaTocada = false;
+      let opSelecionada = op;
+
       const campos = [];
       if (listaAbertas) {
         campos.push({
@@ -532,6 +550,37 @@
           })
         });
       }
+
+      /* A caixa que preenche o resto. Um parágrafo colado vira título,
+         dimensão, força, contato, canal, data e compromisso — sete campos.
+         A nota fica de fora na marra: é ela que vira IAD. */
+      campos.push({
+        id: 'ata', tipo: 'ia', extrair: 'evidencia',
+        rotulo: 'Cole a ata ou conte o que aconteceu',
+        placeholder: 'Ex.: Call de ontem com a Agro Verde. Entrou o Marcelo Prates, que é CFO. Disse que a perda por contaminação está em 4% do lote e ficou de mandar os números até dia 30.',
+        nunca: ['nota'],
+        contexto: function () { return IA.contextoDaOportunidade(opSelecionada); },
+        aoAplicar: function (dlg, r) {
+          /* A IA devolve o nome de quem falou; aqui ele vira o contato certo. */
+          const nome = (r.campos && r.campos.contato) || '';
+          const select = dlg.querySelector('[name="contatoId"]');
+          if (nome && select) {
+            const achado = Array.prototype.filter.call(select.options, function (o) {
+              return o.value && o.textContent.toLowerCase().indexOf(nome.toLowerCase().split(' ')[0]) !== -1;
+            })[0];
+            if (achado) { select.value = achado.value; U.marcarSugerido(select, nome); }
+          }
+          /* Força sugerida move a nota automática. Congelamos: a nota volta
+             para "manter" e espera a escolha de quem esteve na reunião. */
+          const nota = dlg.querySelector('[name="nota"]');
+          if (nota) {
+            notaTocada = true;
+            nota.value = 'manter';
+            U.marcarSugerido(nota, 'A nota é sua: o assistente não decide se a decisão amadureceu.');
+          }
+          tocado = true;
+        }
+      });
 
       const pessoas = op ? E.stakeholdersDaOp(op) : [];
       campos.push(
@@ -599,12 +648,11 @@
         const forca = dlg.querySelector('[name="forca"]');
         const nota = dlg.querySelector('[name="nota"]');
         const escolhaOp = dlg.querySelector('[name="oportunidadeId"]');
-        let tocado = false;
-        let notaTocada = false;
 
         const opDoFormulario = function () {
           return op || (escolhaOp ? Store.oportunidade(escolhaOp.value) : null);
         };
+        opSelecionada = opDoFormulario();
 
         /* O 2 vale "comprovado", e relato não comprova. Em vez de aceitar e
            recusar depois, a opção fica indisponível enquanto não puder valer. */
@@ -630,14 +678,174 @@
         nota.addEventListener('change', function () { notaTocada = true; });
         select.addEventListener('change', function () { tocado = true; ajustarNota(); });
         forca.addEventListener('change', ajustarNota);
-        if (escolhaOp) escolhaOp.addEventListener('change', ajustarNota);
+        if (escolhaOp) escolhaOp.addEventListener('change', function () {
+          opSelecionada = opDoFormulario();
+          ajustarNota();
+        });
         texto.addEventListener('input', function () {
           if (tocado) return;
           const palpite = E.sugerirDimensao(texto.value);
           if (palpite) { select.value = palpite; ajustarNota(); }
         });
+
+        /* Enquanto se escreve: o palpite local acerta pelas palavras óbvias;
+           o assistente acerta a diferença entre "vai levar ao CFO" e "o CFO
+           participou", que é justamente o que separa relato de confirmado.
+           Se a chamada falhar, fica valendo o palpite local — sem aviso. */
+        if (IA.disponivel()) {
+          const emFila = IA.fila();
+          IA.aoParar(texto, 1000, function () {
+            if (tocado || texto.value.trim().length < 20) return;
+            emFila.pedir('classificar', texto.value, IA.contextoDaOportunidade(opDoFormulario()))
+              .then(function (r) {
+                if (!r || tocado) return;
+                const c = r.campos || {};
+                if (c.dimensao && select.querySelector('option[value="' + c.dimensao + '"]')) {
+                  select.value = c.dimensao;
+                  U.marcarSugerido(select, r.frases.dimensao);
+                }
+                if (c.forca && !notaTocada) {
+                  forca.value = c.forca;
+                  U.marcarSugerido(forca, r.frases.forca);
+                }
+                ajustarNota();
+              });
+          });
+        }
         ajustarNota();
       });
+    },
+
+    /* ---------- Reunião inteira de uma vez ----------
+       Uma transcrição de call ou uma página de anotações costuma conter cinco
+       ou seis movimentos do cliente espalhados por dimensões diferentes: um
+       receio (risco), uma exigência de comparação (critérios), alguém novo na
+       mesa (stakeholders). Digitar isso um a um é o motivo pelo qual ninguém
+       digita. Aqui o documento entra uma vez e sai como uma lista para conferir. */
+    analisarReuniao: function (opId) {
+      if (!IA.disponivel()) {
+        alert('O assistente precisa da nuvem configurada e de você conectado.');
+        return;
+      }
+      const op = Store.oportunidade(opId);
+      if (!op) return;
+
+      U.formulario('Analisar reunião ou documento', [
+        { id: 'texto', rotulo: 'Cole a transcrição, a ata ou suas anotações', tipo: 'textarea', voz: true,
+          placeholder: 'Cole aqui a transcrição do Meet, o resumo automático da call ou o que você anotou durante a reunião.' },
+        { id: 'arquivo', rotulo: 'Ou escolha um arquivo de texto (.txt, .md, .vtt, .srt)', tipo: 'file' }
+      ], {}, function (d) {
+        if (!d.texto || d.texto.length < 60) {
+          alert('Preciso de mais texto para separar as evidências.');
+          return;
+        }
+        App.processarReuniao(opId, d.texto);
+      }, function (dlg) {
+        /* O arquivo não é anexado: ele é lido para dentro da caixa, onde a
+           pessoa vê exatamente o que vai ser enviado ao assistente. */
+        const entrada = dlg.querySelector('[name="arquivo"]');
+        const caixa = dlg.querySelector('[name="texto"]');
+        if (!entrada) return;
+        entrada.setAttribute('accept', '.txt,.md,.vtt,.srt,.csv,.log,text/*');
+        entrada.addEventListener('change', function () {
+          const arquivo = entrada.files && entrada.files[0];
+          if (!arquivo) return;
+          IA.lerTexto(arquivo).then(function (t) {
+            caixa.value = t;
+            caixa.dispatchEvent(new Event('input'));
+          }).catch(function (e) { alert(e.message); });
+        });
+      });
+    },
+
+    processarReuniao: function (opId, texto) {
+      const op = Store.oportunidade(opId);
+      if (!op) return;
+      const aviso = document.createElement('dialog');
+      aviso.innerHTML = '<div class="corpo"><h2>Lendo a reunião…</h2>' +
+        '<p class="small muted">Separando o que o cliente fez, por decisão. Leva alguns segundos.</p></div>';
+      document.body.appendChild(aviso);
+      aviso.showModal();
+
+      IA.analisarReuniao(texto, IA.contextoDaOportunidade(op)).then(function (r) {
+        aviso.close();
+        aviso.remove();
+        if (!r) { alert('Não consegui falar com o assistente agora. Tente de novo em instantes.'); return; }
+        if (!r.evidencias.length) {
+          alert('Li o texto e não encontrei nada que o CLIENTE tenha feito. Atividade nossa não conta como evidência.');
+          return;
+        }
+        App.revisarReuniao(opId, r);
+      });
+    },
+
+    /* A lista de conferência. Nada entra na base sem alguém marcar — cada
+       evidência mexe no Evidence Age, e cada nota mexe no IAD que o dono da
+       empresa vê. O assistente propõe; quem esteve na reunião assina. */
+    revisarReuniao: function (opId, resultado) {
+      const op = Store.oportunidade(opId);
+      if (!op) return;
+      const dlg = document.createElement('dialog');
+      dlg.className = 'revisao-ia';
+      dlg.innerHTML = V.revisaoDaReuniao(op, resultado);
+      document.body.appendChild(dlg);
+
+      dlg.addEventListener('close', function () {
+        if (dlg.returnValue === 'ok') {
+          let evidencias = 0, notas = 0, pessoas = 0;
+
+          resultado.evidencias.forEach(function (ev, i) {
+            const marca = dlg.querySelector('[data-ev="' + i + '"]');
+            if (!marca || !marca.checked) return;
+            const forca = dlg.querySelector('[data-forca="' + i + '"]').value;
+            const nota = dlg.querySelector('[data-nota="' + i + '"]').value;
+            const contatoId = contatoPeloNome(op.contaId, ev.contato);
+
+            Store.registrarEvento(opId, {
+              tipo: 'decision', titulo: ev.titulo, dimensao: ev.dimensao, forca: forca,
+              contatoId: contatoId, canal: ev.canal || 'Reunião', data: ev.data || Store.hoje(),
+              compromisso: ev.compromissoData
+                ? { texto: ev.compromissoTexto || 'Próximo passo combinado',
+                    data: ev.compromissoData, dono: ev.compromissoDono || 'cliente' }
+                : null
+            });
+            evidencias++;
+
+            /* Mesma regra da evidência avulsa: 2 exige prova confirmada.
+               Aqui isso importa mais, porque são várias notas de uma vez. */
+            if (nota !== 'manter') {
+              const alvo = Store.oportunidade(opId);
+              const n = Number(nota);
+              const permitida = (n === 2 && !E.podeComprovar(alvo, ev.dimensao))
+                ? Math.max(1, alvo.dims[ev.dimensao] || 0)
+                : n;
+              Store.pontuar(opId, ev.dimensao, permitida);
+              notas++;
+            }
+          });
+
+          (resultado.contatos || []).forEach(function (c, i) {
+            const marca = dlg.querySelector('[data-ct="' + i + '"]');
+            if (!marca || !marca.checked) return;
+            if (contatoPeloNome(op.contaId, c.nome)) return;   /* já existe */
+            Store.criarContato({
+              contaId: op.contaId, nome: c.nome, cargo: c.cargo || '',
+              papel: c.papel || 'Usuário', sentimento: 'neutro',
+              perfil: 'nao_classificado', influencia: 2
+            });
+            pessoas++;
+          });
+
+          const partes = [];
+          if (evidencias) partes.push(evidencias + (evidencias === 1 ? ' evidência' : ' evidências'));
+          if (notas) partes.push(notas + (notas === 1 ? ' nota' : ' notas'));
+          if (pessoas) partes.push(pessoas + (pessoas === 1 ? ' pessoa' : ' pessoas'));
+          if (partes.length) alert('Registrado: ' + partes.join(', ') + '.');
+          render();
+        }
+        dlg.remove();
+      });
+      dlg.showModal();
     },
 
     /* Quatro perguntas fechadas: cada "sim" vira evidência, sem digitação livre. */
@@ -765,6 +973,16 @@
               });
             }
             render();
+            /* Anexo de texto guarda muito mais do que "chegou um documento":
+               guarda o que o cliente disse. Em vez de exigir que a pessoa
+               lembre de analisar depois, o convite aparece na hora. */
+            if (IA.disponivel() && IA.ehTexto(arquivo)) {
+              if (U.confirmar('Quer que eu leia “' + arquivo.name + '” e separe as evidências desta reunião?')) {
+                IA.lerTexto(arquivo)
+                  .then(function (t) { App.processarReuniao(opId, t); })
+                  .catch(function (e) { alert(e.message); });
+              }
+            }
           }).catch(function (e) { alert(e.message); });
         });
       };
@@ -1435,6 +1653,35 @@
     return campos;
   }
 
+  /* A IA devolve o nome de quem falou; a base trabalha com id. Casa pelo
+     primeiro nome, que é como as pessoas aparecem numa transcrição. */
+  function contatoPeloNome(contaId, nome) {
+    if (!nome || !contaId) return null;
+    const primeiro = String(nome).trim().toLowerCase().split(/\s+/)[0];
+    if (primeiro.length < 3) return null;
+    const achado = Store.contatosDaConta(contaId).filter(function (c) {
+      return String(c.nome || '').toLowerCase().indexOf(primeiro) !== -1;
+    })[0];
+    return achado ? achado.id : null;
+  }
+
+  /* O material do rascunho de insight: o que o cliente já disse sobre o
+     problema e o impacto. Sem isso o assistente escreveria genérico. */
+  function baseDoInsight(op) {
+    const conta = Store.conta(op.contaId);
+    const partes = [];
+    if (conta) {
+      partes.push('Empresa: ' + conta.nome + (conta.segmento ? ' (' + conta.segmento + ')' : '') +
+        (conta.porte ? ', porte: ' + conta.porte : '') + '.');
+    }
+    ['problema', 'impacto', 'prioridade'].forEach(function (dim) {
+      E.evidenciasDaDimensao(op, dim).slice(-3).forEach(function (ev) {
+        partes.push('O cliente: ' + ev.titulo);
+      });
+    });
+    return partes.join('\n');
+  }
+
   /* ---------- campos reutilizados ---------- */
   function camposProduto() {
     return [
@@ -1450,6 +1697,12 @@
   function camposConta() {
     const segmentos = Store.nomesDoCatalogo('segmentos');
     return [
+      { id: 'atalhoConta', tipo: 'ia', extrair: 'conta',
+        rotulo: 'Cole o que você já sabe da empresa',
+        placeholder: 'Ex.: Agro Verde Ltda, fica em Sorocaba, cerca de 300 funcionários, site agroverde.com.br, telefone (15) 3232-1010.',
+        /* Prospect, cliente ou ex-cliente é fato comercial nosso — não sai de texto. */
+        nunca: ['relacaoAtual'],
+        contexto: function () { return IA.contextoDaConta(null); } },
       { id: 'nome', rotulo: 'Empresa (nome fantasia)' },
       { id: 'razaoSocial', rotulo: 'Razão social' },
       { id: 'cnpj', rotulo: 'CNPJ' },
@@ -1469,6 +1722,10 @@
     const colegas = (contaId ? Store.contatosDaConta(contaId) : [])
       .filter(function (c) { return c.id !== exceto; });
     return [
+      { id: 'atalhoContato', tipo: 'ia', extrair: 'contato',
+        rotulo: 'Cole a assinatura do e-mail, o perfil do LinkedIn ou descreva a pessoa',
+        placeholder: 'Ex.: Marcelo Prates — Diretor Financeiro, Agro Verde. marcelo.prates@agroverde.com.br, (15) 99812-3344. Foi quem pediu o payback.',
+        contexto: function () { return IA.contextoDaConta(contaId); } },
       { id: 'nome', rotulo: 'Nome' },
       { id: 'cargo', rotulo: 'Cargo' },
       { id: 'papel', rotulo: 'Papel na compra', tipo: 'select', opcoes: P.PAPEIS },
@@ -1492,6 +1749,13 @@
 
   function camposOportunidade(contas, contaPadrao) {
     return [
+      { id: 'atalhoOp', tipo: 'ia', extrair: 'oportunidade',
+        rotulo: 'Descreva a oportunidade em uma frase',
+        placeholder: 'Ex.: Renovação do contrato de tratamento na Agro Verde; estão avaliando a Solmax também.',
+        /* Valor, etapa e fechamento previsto são o pipeline e o diagnóstico.
+           Se a IA mexer na etapa, ela apaga o alerta de "falso avançado". */
+        nunca: ['valor', 'etapa', 'fechamentoPrevisto'],
+        contexto: function () { return IA.contextoDaConta(contaPadrao); } },
       { id: 'titulo', rotulo: 'Título' },
       { id: 'contaId', rotulo: 'Conta', tipo: 'select', padrao: contaPadrao || (contas[0] && contas[0].id), opcoes: contas.map(function (c) { return { valor: c.id, rotulo: c.nome }; }) },
       { id: 'valor', rotulo: 'Valor (R$)', tipo: 'moeda' },

@@ -1030,6 +1030,10 @@
       '<p class="small muted">' + esc(r.nbd.acao) + '</p>' +
       (canais ? detalhe('Como fazer em cada canal', r.nbd.conteudo || '', '<div class="tabela-rolagem"><table><tbody>' + canais + '</tbody></table></div>') : '') +
       '<div class="row" style="margin-top:12px"><button class="btn alt" onclick="App.novaEvidencia(\'' + op.id + '\')">Registrar evidência</button>' +
+      (U.assistenteAtivo()
+        ? '<button class="btn ghost" onclick="App.analisarReuniao(\'' + op.id + '\')"' +
+          ' data-ajuda-titulo="Analisar reunião" data-ajuda="Cole a transcrição da call ou suas anotações. O assistente separa cada movimento do cliente na decisão certa — receio vira Risco, exigência vira Critérios — e você confirma linha a linha.">Analisar reunião</button>'
+        : '') +
       '<button class="btn ghost" onclick="App.fecharReuniao(\'' + op.id + '\')">Fechamento de reunião</button>' +
       '<button class="btn ghost" onclick="App.novaAtividade(\'' + op.id + '\')">Atividade</button></div></div>';
   }
@@ -1744,8 +1748,88 @@
     }).join('') + '</div>';
   }
 
+  /* ---------------- Revisão do que o assistente leu na reunião ----------------
+     A tela existe porque o assistente não pode escrever direto na base: cada
+     linha aqui mexe no Evidence Age, e cada nota mexe no IAD que aparece no
+     painel do gestor. Então tudo vem marcado como proposta, com o trecho do
+     documento ao lado, e quem esteve na reunião confirma linha a linha. */
+  function revisaoDaReuniao(op, resultado) {
+    const dimensaoDe = function (id) {
+      return P.DIMENSOES.filter(function (d) { return d.id === id; })[0];
+    };
+
+    const linhas = resultado.evidencias.map(function (ev, i) {
+      const dim = dimensaoDe(ev.dimensao);
+      const atual = op.dims[ev.dimensao] || 0;
+      const podeDois = ev.forca !== 'relato';
+
+      const forcas = P.FORCAS.map(function (f) {
+        return '<option value="' + f.id + '"' + (f.id === ev.forca ? ' selected' : '') + '>' +
+          esc(f.rotulo) + '</option>';
+      }).join('');
+
+      /* As opções de nota mostram o texto do nível daquela decisão, não um
+         número solto: assim dá para escolher sem abrir o playbook. */
+      const notas = ['<option value="manter" selected>Manter em ' + atual + '</option>']
+        .concat([0, 1, 2].map(function (n) {
+          const bloqueada = (n === 2 && !podeDois);
+          return '<option value="' + n + '"' + (bloqueada ? ' disabled' : '') + '>' +
+            n + ' — ' + esc(dim ? dim.niveis[n] : '') + (bloqueada ? ' (exige prova confirmada)' : '') +
+            '</option>';
+        })).join('');
+
+      const compromisso = ev.compromissoData
+        ? '<p class="small compromisso">Combinado: ' + esc(ev.compromissoTexto || 'próximo passo') +
+          ' — ' + U.data(ev.compromissoData) +
+          ' (' + (ev.compromissoDono === 'nos' ? 'nossa vez' : 'vez do cliente') + ')</p>'
+        : '';
+
+      return '<li class="achado">' +
+        '<label class="linha-achado"><input type="checkbox" data-ev="' + i + '" checked>' +
+        '<span class="pill navy">' + esc(dim ? dim.nome : ev.dimensao) + '</span>' +
+        '<strong>' + esc(ev.titulo) + '</strong></label>' +
+        (ev.frase ? '<p class="origem">“' + esc(ev.frase) + '”</p>' : '') +
+        (ev.contato ? '<p class="small muted">Quem falou: ' + esc(ev.contato) + '</p>' : '') +
+        compromisso +
+        '<div class="row escolhas">' +
+          '<label class="campo mini"><span>Força</span><select data-forca="' + i + '">' + forcas + '</select></label>' +
+          '<label class="campo mini"><span>Como fica esta decisão</span><select data-nota="' + i + '">' + notas + '</select></label>' +
+        '</div>' +
+      '</li>';
+    }).join('');
+
+    const novos = (resultado.contatos || []).filter(function (c) {
+      return !Store.contatosDaConta(op.contaId).some(function (x) {
+        return String(x.nome || '').toLowerCase().indexOf(String(c.nome).toLowerCase().split(' ')[0]) !== -1;
+      });
+    });
+
+    const pessoas = novos.length
+      ? '<h3>Pessoas novas que apareceram</h3><ul class="achados">' +
+        novos.map(function (c, i) {
+          return '<li class="achado"><label class="linha-achado">' +
+            '<input type="checkbox" data-ct="' + resultado.contatos.indexOf(c) + '" checked>' +
+            '<strong>' + esc(c.nome) + '</strong>' +
+            (c.cargo ? '<span class="muted"> — ' + esc(c.cargo) + '</span>' : '') +
+            (c.papel ? '<span class="pill">' + esc(c.papel) + '</span>' : '') +
+          '</label>' + (c.frase ? '<p class="origem">“' + esc(c.frase) + '”</p>' : '') + '</li>';
+        }).join('') + '</ul>'
+      : '';
+
+    return '<form method="dialog"><div class="corpo">' +
+      '<h2>O que o assistente encontrou</h2>' +
+      '<p class="small muted">Marque o que realmente aconteceu. Cada item marcado vira uma evidência do cliente, ' +
+      'na decisão indicada. A nota de cada decisão continua sendo sua escolha — por padrão nada muda.</p>' +
+      '<ul class="achados">' + linhas + '</ul>' + pessoas +
+      '</div><div class="rodape">' +
+      '<button class="btn ghost" value="cancelar" type="submit">Descartar</button>' +
+      '<button class="btn" value="ok" type="submit">Registrar o que está marcado</button>' +
+      '</div></form>';
+  }
+
   global.IADViews = {
     hoje, painel, pipeline, cockpit, revisao, contas, cadastros, playbook, dados, itemArquivo, listaLeads,
+    revisaoDaReuniao,
     acesso, barraAdmin, definirTelaAcesso, definirPrimeiraEmpresa, listaUsuariosNuvem,
     pendenteAcesso: function () { return pendente; },
     definirFiltro: function (f) { filtroGrupo = f; },

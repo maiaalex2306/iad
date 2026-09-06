@@ -104,6 +104,12 @@
     });
   }
 
+  /* Edge Functions: o pedaço de servidor que o app tem. Existe para guardar
+     o que não pode viver no navegador — hoje, a chave da IA. */
+  function chamarFuncao(nome, corpo) {
+    return chamar('/functions/v1/' + nome, { metodo: 'POST', corpo: corpo || {} });
+  }
+
   /* ---------- autenticação (GoTrue) ---------- */
   function cadastrar(email, senha, dados) {
     return chamar('/auth/v1/signup', {
@@ -403,7 +409,7 @@
     guardarPerfilNaSessao, empurrar, puxar, sincronizar, ultimaSincronizacao,
     perfisDaNuvem, empresasDaNuvem, souAdminNaNuvem, existeEmpresa,
     definirEmpresaDoPerfil, definirPapelDoPerfil, salvarMeuNome,
-    convitesDaNuvem, convidar, removerConvite, criarEmpresa,
+    convitesDaNuvem, convidar, removerConvite, criarEmpresa, chamarFuncao,
     paraBanco, paraApp
   };
 })(window);

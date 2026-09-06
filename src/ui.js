@@ -116,6 +116,7 @@
           '<input type="text" inputmode="decimal" name="' + c.id + '" value="' + esc(paraCampoMoeda(v)) +
           '" placeholder="0,00" autocomplete="off"></label>';
       }
+      if (c.tipo === 'ia') return caixaIA(c);
       return '<label class="campo"><span>' + esc(c.rotulo) + '</span><input type="' + (c.tipo || 'text') + '" name="' + c.id + '" value="' + esc(v) + '"' + (c.placeholder ? ' placeholder="' + esc(c.placeholder) + '"' : '') + '></label>';
     }).join('');
 
@@ -126,11 +127,14 @@
 
     document.body.appendChild(dlg);
     ligarVoz(dlg);
+    ligarIA(dlg, campos);
+    ligarLimpezaDeSugestao(dlg);
     if (aoMontar) aoMontar(dlg);
     dlg.addEventListener('close', function () {
       if (dlg.returnValue === 'ok') {
         const dados = {};
         campos.forEach(function (c) {
+          if (c.tipo === 'ia') return;          /* caixa de assistente não é dado */
           const el = dlg.querySelector('[name="' + c.id + '"]');
           dados[c.id] = (c.tipo === 'moeda' || c.tipo === 'number')
             ? numeroDigitado(el.value)
@@ -182,6 +186,120 @@
     });
   }
 
+  /* ---------- assistente de preenchimento ----------
+     Um campo do tipo 'ia' vira uma caixa de texto livre acima do formulário:
+     a pessoa cola a ata, e os campos abaixo se preenchem. A caixa só existe
+     quando o assistente está disponível — sem servidor, o formulário é o de
+     sempre, sem botão morto. */
+
+  function assistenteAtivo() {
+    return !!(global.IADIA && global.IADIA.disponivel());
+  }
+
+  function caixaIA(c) {
+    if (!assistenteAtivo()) return '';
+    return '<div class="caixa-ia">' +
+      '<span class="rotulo">✨ ' + esc(c.rotulo || 'Cole a ata ou conte o que aconteceu') + '</span>' +
+      '<textarea name="' + c.id + '" placeholder="' + esc(c.placeholder || '') + '">' + esc(c.padrao || '') + '</textarea>' +
+      '<div class="linha">' +
+        '<button type="button" class="btn mini" data-ia="' + c.id + '">Preencher os campos</button>' +
+        botaoVoz(c.id) +
+        '<span class="estado" data-ia-estado="' + c.id + '"></span>' +
+      '</div>' +
+      '<p class="rodape-ia">O assistente sugere. Quem confirma é você — e a nota da decisão continua sendo sua.</p>' +
+    '</div>';
+  }
+
+  function ligarIA(dlg, campos) {
+    campos.forEach(function (c) {
+      if (c.tipo !== 'ia') return;
+      const botao = dlg.querySelector('[data-ia="' + c.id + '"]');
+      if (!botao) return;
+      const caixa = dlg.querySelector('[name="' + c.id + '"]');
+      const estado = dlg.querySelector('[data-ia-estado="' + c.id + '"]');
+
+      botao.addEventListener('click', function () {
+        const texto = caixa.value.trim();
+        if (texto.length < 12) { estado.textContent = 'Escreva um pouco mais para eu ter o que ler.'; return; }
+        botao.disabled = true;
+        estado.textContent = 'Lendo…';
+        const ctx = c.contexto ? c.contexto() : {};
+        global.IADIA.extrair(c.extrair, texto, ctx).then(function (r) {
+          botao.disabled = false;
+          if (!r) { estado.textContent = 'Não consegui falar com o assistente agora. Preencha à mão.'; return; }
+          const n = aplicarSugestoes(dlg, campos, r, c.nunca);
+          estado.textContent = n
+            ? (n === 1 ? '1 campo preenchido — confira.' : n + ' campos preenchidos — confira.')
+            : 'Não achei nada para preencher neste texto.';
+          if (c.aoAplicar) c.aoAplicar(dlg, r, n);
+        });
+      });
+    });
+  }
+
+  /* Escreve os valores nos campos e deixa cada um visivelmente marcado, com a
+     frase que originou o palpite. A marca some no instante em que a pessoa
+     mexe no campo: aí ele deixou de ser sugestão e virou decisão dela. */
+  function aplicarSugestoes(dlg, campos, resultado, nunca) {
+    const valores = (resultado && resultado.campos) || {};
+    const frases = (resultado && resultado.frases) || {};
+    const proibidos = nunca || [];
+    let n = 0;
+
+    dlg.__aplicandoIA = true;
+    campos.forEach(function (c) {
+      if (c.tipo === 'ia') return;
+      if (proibidos.indexOf(c.id) !== -1) return;
+      const v = valores[c.id];
+      if (v == null || v === '') return;
+      const el = dlg.querySelector('[name="' + c.id + '"]');
+      if (!el) return;
+      if (el.tagName === 'SELECT') {
+        const existe = Array.prototype.some.call(el.options, function (o) {
+          return String(o.value) === String(v);
+        });
+        if (!existe) return;                 /* opção fora da lista real: descarta */
+      }
+      el.value = (c.tipo === 'moeda') ? paraCampoMoeda(v) : v;
+      marcarSugerido(el, frases[c.id]);
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      n++;
+    });
+    dlg.__aplicandoIA = false;
+    return n;
+  }
+
+  function marcarSugerido(el, frase) {
+    const rotulo = el.closest('label.campo');
+    if (!rotulo) return;
+    rotulo.classList.add('sugerido');
+    const antiga = rotulo.querySelector('.origem');
+    if (antiga) antiga.remove();
+    if (frase) {
+      const nota = document.createElement('small');
+      nota.className = 'origem';
+      nota.textContent = '“' + frase + '”';
+      rotulo.appendChild(nota);
+    }
+  }
+
+  function limparSugestao(el) {
+    const rotulo = el.closest && el.closest('label.campo.sugerido');
+    if (!rotulo) return;
+    rotulo.classList.remove('sugerido');
+    const origem = rotulo.querySelector('.origem');
+    if (origem) origem.remove();
+  }
+
+  function ligarLimpezaDeSugestao(dlg) {
+    ['input', 'change'].forEach(function (evento) {
+      dlg.addEventListener(evento, function (e) {
+        if (dlg.__aplicandoIA) return;
+        limparSugestao(e.target);
+      });
+    });
+  }
+
   function confirmar(mensagem) { return global.confirm(mensagem); }
 
   function barra(percentual, alt) {
@@ -192,6 +310,7 @@
   global.IADUI = {
     esc: esc, moeda: moeda, compacto: compacto, data: data, numero: numero,
     numeroDigitado: numeroDigitado, paraCampoMoeda: paraCampoMoeda,
-    formulario: formulario, confirmar: confirmar, barra: barra, vozDisponivel: vozDisponivel
+    formulario: formulario, confirmar: confirmar, barra: barra, vozDisponivel: vozDisponivel,
+    assistenteAtivo: assistenteAtivo, marcarSugerido: marcarSugerido, limparSugestao: limparSugestao
   };
 })(window);
