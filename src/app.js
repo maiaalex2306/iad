@@ -54,6 +54,7 @@
     } else {
       const rota = ROTAS.find(function (r) { return r.hash === hash; }) || ROTAS[0];
       conteudo.innerHTML = rota.render();
+      pintarUsuariosNuvem();
     }
 
     document.querySelectorAll('nav.tabs a').forEach(function (a) {
@@ -133,6 +134,32 @@
   function pintarLeads() {
     const alvo = document.getElementById('caixa-linkedhelper');
     if (alvo) alvo.innerHTML = V.listaLeads(leads);
+  }
+
+  /* Os usuários do servidor só chegam por rede, então a tela desenha primeiro e
+     se completa depois. Guardamos o resultado para não repetir a consulta a
+     cada redesenho — que aqui acontece a cada clique. */
+  let perfisNuvem = null, empresasNuvem = null;
+
+  function pintarUsuariosNuvem(recarregar) {
+    const alvo = document.getElementById('usuarios-nuvem');
+    if (!alvo) return;
+    const N = global.IADNuvem;
+
+    if (perfisNuvem && !recarregar) {
+      alvo.innerHTML = V.listaUsuariosNuvem(perfisNuvem, empresasNuvem, (N.sessao().user || {}).id);
+      return;
+    }
+    Promise.all([N.perfisDaNuvem(), N.empresasDaNuvem()])
+      .then(function (r) {
+        perfisNuvem = r[0] || [];
+        empresasNuvem = r[1] || [];
+        pintarUsuariosNuvem();
+      })
+      .catch(function (e) {
+        const destino = document.getElementById('usuarios-nuvem');
+        if (destino) destino.innerHTML = V.listaUsuariosNuvem({ erro: e.message }, [], null);
+      });
   }
 
   /* ---------- entrada pelo servidor ----------
@@ -1172,6 +1199,24 @@
           recado('empresa', e.message);
         });
     },
+
+    /* ---------- administração da nuvem ---------- */
+    empresaDoPerfil: function (id, tenantId) {
+      global.IADNuvem.ligarPerfil(id, { tenant_id: tenantId || null })
+        .then(function () { perfisNuvem = null; pintarUsuariosNuvem(true); })
+        .catch(function (e) { alert('Não foi possível ligar à empresa: ' + e.message); pintarUsuariosNuvem(true); });
+    },
+
+    papelDoPerfil: function (id, papel) {
+      if (papel === 'admin' && !U.confirmar('Administrador enxerga todas as empresas e pode mover pessoas entre elas. Confirma?')) {
+        return pintarUsuariosNuvem(true);
+      }
+      global.IADNuvem.ligarPerfil(id, { papel: papel })
+        .then(function () { perfisNuvem = null; pintarUsuariosNuvem(true); })
+        .catch(function (e) { alert('Não foi possível mudar o papel: ' + e.message); pintarUsuariosNuvem(true); });
+    },
+
+    recarregarUsuariosNuvem: function () { perfisNuvem = null; pintarUsuariosNuvem(true); },
 
     filtrarTenant: function (valor) { A.definirFiltros({ tenant: valor, usuario: 'todos' }); render(); },
     filtrarUsuarioAdmin: function (valor) { A.definirFiltros({ usuario: valor }); render(); },

@@ -182,6 +182,31 @@
     });
   }
 
+  /* ---------- administração ----------
+     As políticas do banco já deixam o administrador ler todos os perfis e
+     empresas e atualizar perfis alheios. Faltava a tela — e enquanto ela não
+     existia, incluir alguém no time exigia escrever SQL, que é onde o erro
+     nasce. Quem não é administrador recebe lista vazia do próprio Postgres,
+     não de uma checagem daqui. */
+  function perfisDaNuvem() {
+    return chamar('/rest/v1/perfis?select=*&order=criado_em.asc');
+  }
+
+  function empresasDaNuvem() {
+    return chamar('/rest/v1/tenants?select=*&order=nome.asc');
+  }
+
+  function ligarPerfil(id, dados) {
+    return chamar('/rest/v1/perfis?id=eq.' + encodeURIComponent(id), {
+      metodo: 'PATCH', cabecalhos: { Prefer: 'return=representation' }, corpo: dados
+    });
+  }
+
+  function souAdminNaNuvem() {
+    const perfil = sessaoPerfil();
+    return !!(perfil && perfil.papel === 'admin');
+  }
+
   /* ---------- tradução entre o formato local e o do banco ---------- */
   const TABELAS = [
     { local: 'contas', remota: 'contas' },
@@ -316,6 +341,7 @@
     config, salvarConfig, configurada, conectado, mandaNoAcesso, estado, sessao,
     cadastrar, entrar, sair, renovar, eu, meuPerfil, salvarPerfil, criarMinhaEmpresa,
     guardarPerfilNaSessao, empurrar, puxar, sincronizar, ultimaSincronizacao,
+    perfisDaNuvem, empresasDaNuvem, ligarPerfil, souAdminNaNuvem,
     paraBanco, paraApp
   };
 })(window);

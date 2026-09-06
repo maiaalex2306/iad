@@ -434,6 +434,14 @@ td .tiny { display: block; }
 .celula.q2 .marca { color: var(--ok); }
 .celula.q2.sem-prova { border-color: var(--risk); background: rgba(212,118,26,.1); border-style: dashed; }
 
+/* Antes de sincronizar, para qual empresa vai. Mandar dado para a empresa
+   errada é silencioso e chato de desfazer — então a resposta fica à vista. */
+.aviso-empresa {
+  font-size: .82rem; line-height: 1.45; color: var(--text);
+  background: var(--orange-soft); border-left: 3px solid var(--orange);
+  padding: 10px 13px; border-radius: 4px; margin: 0 0 12px;
+}
+
 /* Dicas do insight: o que fazer agora, montado com os dados do negócio.
    O ponto de exclamação marca o que não espera a próxima semana. */
 .dicas {

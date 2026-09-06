@@ -1436,16 +1436,62 @@
     }).join('');
 
     /* Com a nuvem no comando, criar usuário aqui não cria conta nenhuma: quem
-       guarda contas é o Supabase. Dizer isso na tela evita a armadilha de
-       cadastrar alguém que depois não consegue entrar. */
-    const aviso = global.IADNuvem.mandaNoAcesso()
-      ? '<div class="aviso" style="margin-bottom:12px">As contas ficam no servidor. ' +
-        'Para incluir alguém: peça que a pessoa abra o app, use <strong>Criar meu acesso</strong> e confirme o e-mail. ' +
-        'Depois ligue ela à sua empresa — o comando está em <code>nuvem/PASSO-A-PASSO.md</code>, seção 5. ' +
-        'Cadastrar por aqui só afeta este aparelho.</div>'
+       guarda contas é o Supabase. Para o administrador existe a tela de baixo,
+       que lê e edita os perfis do servidor; para os demais, fica o aviso. */
+    const N = global.IADNuvem;
+    const aviso = N.mandaNoAcesso()
+      ? (N.souAdminNaNuvem()
+          ? '<div id="usuarios-nuvem"><p class="tiny muted">Carregando os usuários do servidor…</p></div>' +
+            '<p class="tiny muted" style="margin:14px 0 6px">Abaixo, os usuários deste aparelho — não são contas do servidor.</p>'
+          : '<div class="aviso" style="margin-bottom:12px">As contas ficam no servidor. ' +
+            'Para incluir alguém: peça que a pessoa abra o app, use <strong>Criar meu acesso</strong> e confirme o e-mail. ' +
+            'Quem administra liga a pessoa à empresa. Cadastrar por aqui só afeta este aparelho.</div>')
       : '';
 
     return aviso + tabela(['Usuário', 'Empresa', 'E-mail', 'WhatsApp', 'Papel', 'Situação', ''], linhas, 'Nenhum usuário encontrado.');
+  }
+
+  /* Painel do administrador: os usuários que existem no servidor, com a empresa
+     de cada um editável. É o que substitui escrever SQL para incluir alguém —
+     e é ali que os enganos aconteciam. */
+  function listaUsuariosNuvem(perfis, empresas, eu) {
+    if (!perfis) return '<p class="tiny muted">Carregando os usuários do servidor…</p>';
+    if (perfis.erro) {
+      return '<div class="aviso">Não foi possível ler os usuários do servidor: ' + esc(perfis.erro) + '</div>';
+    }
+    if (!perfis.length) return '<div class="vazio small">Nenhum usuário no servidor.</div>';
+
+    const opcoes = function (atual) {
+      return '<option value="">— sem empresa —</option>' +
+        empresas.map(function (t) {
+          return '<option value="' + esc(t.id) + '"' + (t.id === atual ? ' selected' : '') + '>' + esc(t.nome) + '</option>';
+        }).join('');
+    };
+
+    const linhas = perfis.map(function (p) {
+      const souEu = eu && p.id === eu;
+      return '<tr><td><strong>' + esc(p.nome || '—') + (souEu ? ' <span class="pill">você</span>' : '') + '</strong>' +
+        '<span class="tiny muted">' + esc(p.id.slice(0, 8)) + '…</span></td>' +
+        '<td><select onchange="App.empresaDoPerfil(\'' + p.id + '\', this.value)"' +
+          ' data-ajuda="Liga esta pessoa a uma empresa. É a empresa que decide qual carteira ela enxerga.">' +
+          opcoes(p.tenant_id) + '</select></td>' +
+        '<td><select onchange="App.papelDoPerfil(\'' + p.id + '\', this.value)"' +
+          (souEu ? ' disabled' : '') +
+          ' data-ajuda="Administrador enxerga todas as empresas e pode ligar pessoas a elas.">' +
+          '<option value="usuario"' + (p.papel !== 'admin' ? ' selected' : '') + '>Usuário</option>' +
+          '<option value="admin"' + (p.papel === 'admin' ? ' selected' : '') + '>Administrador</option>' +
+          '</select></td>' +
+        '<td>' + (p.tenant_id ? '<span class="pill ok">ativo</span>' : '<span class="pill warn">sem empresa</span>') + '</td>' +
+        '</tr>';
+    }).join('');
+
+    return '<div class="card" style="margin-bottom:14px"><div class="row"><h3 style="margin:0">Usuários no servidor</h3>' +
+      '<span class="espaco"></span><span class="pill navy">administrador</span>' +
+      '<button class="btn ghost mini" onclick="App.recarregarUsuariosNuvem()"' +
+      ' data-ajuda="Relê a lista do servidor.">Atualizar</button></div>' +
+      '<p class="tiny muted" style="margin:6px 0 10px">Quem está sem empresa entra no app mas não enxerga carteira nenhuma. ' +
+      'Ligue a pessoa à empresa aqui em vez de escrever SQL.</p>' +
+      tabela(['Pessoa', 'Empresa', 'Papel', 'Situação'], linhas, 'Nenhum usuário.') + '</div>';
   }
 
   /* ---------------- Playbook ---------------- */
@@ -1556,7 +1602,10 @@
       (semEmpresa
         ? '<div class="aviso" style="margin-bottom:12px">Seu usuário ainda não tem empresa na nuvem. Defina antes de sincronizar — é ela que separa a sua carteira das outras.</div>' +
           '<button class="btn alt mini" onclick="App.definirEmpresaNuvem()">Definir minha empresa</button>'
-        : '<div class="row"><button class="btn alt mini" onclick="App.sincronizarNuvem()" data-ajuda-titulo="Sincronizar" data-ajuda="Envia a sua carteira e traz o que os outros mudaram. Nada sobe sozinho: sincronize ao começar e ao terminar o dia.">Sincronizar agora</button>' +
+        : '<div class="aviso-empresa">Sincronizando para <strong>' +
+            esc((perfil.tenants && perfil.tenants.nome) || 'sua empresa') + '</strong>. ' +
+            'Tudo que subir daqui passa a pertencer a ela.</div>' +
+          '<div class="row"><button class="btn alt mini" onclick="App.sincronizarNuvem()" data-ajuda-titulo="Sincronizar" data-ajuda="Envia a sua carteira e traz o que os outros mudaram. Nada sobe sozinho: sincronize ao começar e ao terminar o dia.">Sincronizar agora</button>' +
           '<button class="btn ghost mini" onclick="App.puxarNuvem()" data-ajuda-titulo="Só baixar" data-ajuda="Traz do servidor sem enviar nada daqui. Útil ao abrir o app noutro aparelho.">Só baixar</button>' +
           '<button class="btn ghost mini" onclick="App.sairNuvem()">Sair da nuvem</button></div>' +
           '<p class="tiny muted" style="margin:10px 0 0">Sincronizar envia a sua carteira e traz o que os outros mudaram. ' +
@@ -1597,7 +1646,7 @@
 
   global.IADViews = {
     hoje, painel, pipeline, cockpit, revisao, contas, cadastros, playbook, dados, itemArquivo, listaLeads,
-    acesso, barraAdmin, definirTelaAcesso,
+    acesso, barraAdmin, definirTelaAcesso, listaUsuariosNuvem,
     pendenteAcesso: function () { return pendente; },
     definirFiltro: function (f) { filtroGrupo = f; },
     definirFiltroHistorico: function (f) { filtroHistorico = f; },
