@@ -1236,7 +1236,7 @@
 
     /* ---------- administração da nuvem ---------- */
     empresaDoPerfil: function (id, tenantId) {
-      global.IADNuvem.ligarPerfil(id, { tenant_id: tenantId || null })
+      global.IADNuvem.definirEmpresaDoPerfil(id, tenantId)
         .then(function () { perfisNuvem = null; pintarUsuariosNuvem(true); })
         .catch(function (e) { alert('Não foi possível ligar à empresa: ' + e.message); pintarUsuariosNuvem(true); });
     },
@@ -1245,7 +1245,7 @@
       if (papel === 'admin' && !U.confirmar('Administrador enxerga todas as empresas e pode mover pessoas entre elas. Confirma?')) {
         return pintarUsuariosNuvem(true);
       }
-      global.IADNuvem.ligarPerfil(id, { papel: papel })
+      global.IADNuvem.definirPapelDoPerfil(id, papel)
         .then(function () { perfisNuvem = null; pintarUsuariosNuvem(true); })
         .catch(function (e) { alert('Não foi possível mudar o papel: ' + e.message); pintarUsuariosNuvem(true); });
     },

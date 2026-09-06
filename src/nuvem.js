@@ -196,9 +196,29 @@
     return chamar('/rest/v1/tenants?select=*&order=nome.asc');
   }
 
-  function ligarPerfil(id, dados) {
-    return chamar('/rest/v1/perfis?id=eq.' + encodeURIComponent(id), {
-      metodo: 'PATCH', cabecalhos: { Prefer: 'return=representation' }, corpo: dados
+  /* Empresa e papel passam por funções que conferem quem está pedindo, e não
+     por PATCH direto: escrever nessas duas colunas foi revogado no banco. Um
+     PATCH em perfis deixava qualquer um se promover a administrador com a chave
+     pública que vem no app. Ver nuvem/correcao-04-permissoes.sql. */
+  function definirEmpresaDoPerfil(id, tenantId) {
+    return chamar('/rest/v1/rpc/definir_empresa_do_perfil', {
+      metodo: 'POST', corpo: { p_id: id, p_tenant: tenantId || null }
+    });
+  }
+
+  function definirPapelDoPerfil(id, papel) {
+    return chamar('/rest/v1/rpc/definir_papel_do_perfil', {
+      metodo: 'POST', corpo: { p_id: id, p_papel: papel }
+    });
+  }
+
+  /* Nome e WhatsApp continuam sendo do próprio dono. */
+  function salvarMeuNome(dados) {
+    const s = sessao();
+    if (!s || !s.user) return Promise.reject(new Error('Entre na nuvem primeiro.'));
+    return chamar('/rest/v1/perfis?id=eq.' + s.user.id, {
+      metodo: 'PATCH', cabecalhos: { Prefer: 'return=representation' },
+      corpo: { nome: dados.nome, whatsapp: dados.whatsapp }
     });
   }
 
@@ -381,7 +401,8 @@
     config, salvarConfig, configurada, conectado, mandaNoAcesso, estado, sessao,
     cadastrar, entrar, sair, renovar, eu, meuPerfil, salvarPerfil, criarMinhaEmpresa,
     guardarPerfilNaSessao, empurrar, puxar, sincronizar, ultimaSincronizacao,
-    perfisDaNuvem, empresasDaNuvem, ligarPerfil, souAdminNaNuvem, existeEmpresa,
+    perfisDaNuvem, empresasDaNuvem, souAdminNaNuvem, existeEmpresa,
+    definirEmpresaDoPerfil, definirPapelDoPerfil, salvarMeuNome,
     convitesDaNuvem, convidar, removerConvite, criarEmpresa,
     paraBanco, paraApp
   };
