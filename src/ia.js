@@ -14,8 +14,34 @@
   const PRAZO = 12000;
   const PRAZO_REUNIAO = 60000;
 
+  /* Estar conectado ao servidor não quer dizer que a função do assistente foi
+     publicada — são dois passos separados, e o segundo é manual. Sem esta
+     distinção o app mostrava a caixa ✨ para todo mundo e só descobria a
+     ausência quando a pessoa clicava: um botão morto, que é pior do que botão
+     nenhum. Enquanto não houver resposta do servidor, o assistente não existe. */
+  let situacao = 'desconhecido';   /* desconhecido | ok | ausente */
+
   function disponivel() {
-    return !!(Nuvem && Nuvem.conectado());
+    return !!(Nuvem && Nuvem.conectado()) && situacao === 'ok';
+  }
+
+  /* Bate na função uma vez para saber se ela está publicada. Não gasta chamada
+     de IA: texto curto faz o servidor responder vazio antes de falar com o
+     modelo. Resolve com true quando a resposta muda o que a tela deve mostrar. */
+  function verificar() {
+    if (!Nuvem || !Nuvem.conectado()) {
+      const mudou = situacao === 'ok';
+      situacao = 'desconhecido';
+      return Promise.resolve(mudou);
+    }
+    const antes = situacao;
+    return Nuvem.chamarFuncao('assistente', { tipo: 'classificar', texto: '' })
+      .then(function () { situacao = 'ok'; })
+      .catch(function (e) {
+        /* 503 é "publicada, sem chave" — para o vendedor dá no mesmo. */
+        situacao = (e && e.status === 401) ? 'desconhecido' : 'ausente';
+      })
+      .then(function () { return situacao !== antes; });
   }
 
   /* Uma extração. Resolve com {campos, frases} ou null — nunca rejeita. */
@@ -151,6 +177,7 @@
 
   global.IADIA = {
     disponivel: disponivel,
+    verificar: verificar,
     extrair: extrair,
     analisarReuniao: analisarReuniao,
     lerTexto: lerTexto,

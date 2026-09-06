@@ -236,6 +236,10 @@
       A.espelharDaNuvem(u, perfil);
       if (antes.papel !== perfil.papel || antes.tenant_id !== perfil.tenant_id) render();
     }).catch(function () {});
+
+    /* A função do assistente é publicada à mão, num passo separado do login.
+       Perguntamos ao servidor se ela existe antes de oferecer a caixa ✨. */
+    IA.verificar().then(function (mudou) { if (mudou) render(); });
   }
 
   function textoDoConvite(email) {
