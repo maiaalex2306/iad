@@ -41,6 +41,98 @@
     return '';
   }
 
+  /* ---------- de quem é a mensagem ----------
+     O Linked Helper nomeia as mensagens do ponto de vista do prospect:
+     "sent" é o que ELE enviou — e que nós recebemos —, e "received" é o que
+     ele recebeu, ou seja, a nossa própria prospecção.
+
+     Ler o campo errado aqui gravaria a mensagem que o vendedor mandou como se
+     fosse evidência do cliente. É exatamente o que o método proíbe: atividade
+     nossa virando avanço da decisão, e o IAD da carteira inteira subindo
+     sozinho. Por isso a escolha é por autor, nunca por nome de campo. */
+  function mensagensDoCliente(plano, nomeDoLead, meuNome) {
+    const nosso = chave(meuNome || '');
+    const dele = chave(nomeDoLead || '');
+    const candidatas = [];
+
+    const juntar = function (de, texto, quando) {
+      if (!texto || !String(texto).trim()) return;
+      const autor = chave(de || '');
+      if (nosso && autor === nosso) return;           /* somos nós */
+      if (dele && autor && autor !== dele) return;    /* terceiro */
+      candidatas.push({
+        de: de || '',
+        texto: String(texto).replace(/\s+/g, ' ').trim(),
+        quando: String(quando || '')
+      });
+    };
+
+    for (let i = 1; i <= 10; i++) {
+      juntar(plano['repliedmessage' + i + 'from'], plano['repliedmessage' + i + 'text'],
+        plano['repliedmessage' + i + 'sendatiso']);
+      juntar(plano['message' + i + 'from'], plano['message' + i + 'text'],
+        plano['message' + i + 'sendatiso']);
+    }
+    juntar(plano.lastsentmessagefrom, plano.lastsentmessagetext, plano.lastsentmessagesendatiso);
+
+    /* Algumas ações entregam a resposta num campo solto, sem autor. Só valem
+       os nomes que já dizem que é resposta DELE — "reply", "answer". Nomes
+       ambíguos como "message" e "last_message" ficam de fora de propósito:
+       podem ser a nossa própria mensagem, e o preço de errar aqui é alto. */
+    if (!candidatas.length) {
+      const solta = primeiro(plano, ['reply', 'reply_text', 'last_reply', 'reply_message', 'answer']);
+      if (solta) {
+        candidatas.push({
+          de: nomeDoLead || '',
+          texto: String(solta).replace(/\s+/g, ' ').trim(),
+          quando: primeiro(plano, ['reply_date', 'replied_at', 'reply_send_at'])
+        });
+      }
+    }
+
+    candidatas.sort(function (a, b) { return a.quando.localeCompare(b.quando); });
+    return candidatas;
+  }
+
+  /* ---------- emprego atual ----------
+     current_company costuma vir vazio em perfil recém-raspado — foi o que
+     fez a importação nascer sem empresa. O emprego mais recente de verdade
+     está em organization_1. */
+  function empregoAtual(plano) {
+    return {
+      nome: primeiro(plano, ['company_name', 'company', 'current_company',
+        'organization_name', 'organization_1']),
+      cargo: primeiro(plano, ['organization_title_1', 'current_company_position',
+        'position', 'title', 'job_title']),
+      site: primeiro(plano, ['organization_website_1']),
+      cidade: primeiro(plano, ['organization_location_1']),
+      fim: primeiro(plano, ['organization_end_1'])
+    };
+  }
+
+  /* "2026.08" já passou → a pessoa saiu. Criar a conta a partir dela produz
+     uma conta cujo único contato não trabalha mais lá. */
+  function saidaNoPassado(fim) {
+    const m = /^(\d{4})[.\-\/](\d{1,2})/.exec(String(fim || ''));
+    if (!m) return '';
+    const meses = Number(m[1]) * 12 + Number(m[2]);
+    const hoje = new Date();
+    if (meses >= hoje.getFullYear() * 12 + (hoje.getMonth() + 1)) return '';
+    return String(Number(m[2])).padStart(2, '0') + '/' + m[1];
+  }
+
+  /* Campos personalizados cs_msg-*: a sequência que o vendedor escreveu para
+     este prospect. O de "interesse" é o reenquadramento — insight pronto. */
+  const ORDEM_INSIGHT = ['csmsginteresse', 'csmsgdesejo', 'csmsgatencao', 'csmsgacao'];
+
+  function insightDaCampanha(plano) {
+    for (let i = 0; i < ORDEM_INSIGHT.length; i++) {
+      const v = plano[ORDEM_INSIGHT[i]];
+      if (v && String(v).trim()) return String(v).replace(/\s+/g, ' ').trim();
+    }
+    return '';
+  }
+
   /* Aceita o objeto achatado (opção "flat objects", igual ao CSV) e o aninhado. */
   function normalizar(bruto) {
     const d = bruto && bruto.dados ? bruto.dados : (bruto || {});
@@ -51,18 +143,57 @@
       [primeiro(plano, ['first_name', 'firstname', 'given_name']),
        primeiro(plano, ['last_name', 'lastname', 'family_name'])].filter(Boolean).join(' ');
 
+    const emprego = empregoAtual(plano);
+    const meuNome = primeiro(plano, ['my_full_name']);
+    const conversa = mensagensDoCliente(plano, nome, meuNome);
+    const ultima = conversa[conversa.length - 1] || null;
+
+    /* O headline do LinkedIn é vitrine, não cargo: "Gerente de Produção |
+       Coordenador | Operações Industriais | ..." tem 199 caracteres. Só serve
+       de cargo quando não há nada melhor, e mesmo assim cortado. */
+    const headline = primeiro(plano, ['headline', 'original_headline']);
+    const cargo = emprego.cargo || primeiro(plano, ['position', 'title', 'job_title']) ||
+      headline.split(/\s*\|\s*/)[0].slice(0, 80);
+
     return {
       id: bruto && bruto.id ? bruto.id : primeiro(plano, ['id', 'member_id', 'profile_id', 'public_identifier']),
       recebidoEm: (bruto && bruto.recebidoEm) || '',
+
+      /* pessoa */
       nome: nome,
-      cargo: primeiro(plano, ['position', 'title', 'headline', 'current_position', 'job_title']),
-      empresa: primeiro(plano, ['company_name', 'company', 'organization', 'organization_name', 'current_company']),
+      cargo: cargo,
+      headline: headline,
       linkedin: primeiro(plano, ['profile_url', 'linkedin_url', 'url', 'profile_link', 'public_profile_url']),
-      email: primeiro(plano, ['email', 'email_address', 'work_email']),
-      telefone: primeiro(plano, ['phone', 'phone_number', 'mobile']),
-      local: primeiro(plano, ['location', 'city', 'country', 'region']),
-      resposta: primeiro(plano, ['reply', 'reply_text', 'last_reply', 'message', 'answer', 'reply_message', 'last_message']),
+      email: primeiro(plano, ['email', 'email_address', 'work_email', 'third_party_email_1']),
+      emailTipo: primeiro(plano, ['email_type']),
+      telefone: primeiro(plano, ['phone', 'phone_number', 'mobile', 'phone_1', 'phone_2']),
+      local: primeiro(plano, ['location_name', 'location', 'address', 'city', 'country', 'region']),
+      resumo: primeiro(plano, ['summary']),
+      competencias: primeiro(plano, ['skills']),
+
+      /* empresa onde trabalha (ou trabalhava) */
+      empresa: emprego.nome,
+      empresaSite: emprego.site,
+      empresaCidade: emprego.cidade,
+      saiuEm: saidaNoPassado(emprego.fim),
+
+      /* conversa — a única camada que é evidência do cliente */
+      resposta: ultima ? ultima.texto : '',
+      respostaEm: ultima ? String(ultima.quando).slice(0, 10) : '',
+      mensagensDele: conversa.length,
+
+      /* relacionamento */
+      grau: primeiro(plano, ['member_distance']),
+      mutuos: primeiro(plano, ['mutual_count']),
+      conexoes: primeiro(plano, ['connections_count']),
+      conectadoEm: String(primeiro(plano, ['connected_at_iso'])).slice(0, 10),
+
+      /* operação */
       campanha: primeiro(plano, ['campaign', 'campaign_name', 'list', 'list_name']),
+      operador: meuNome,
+      operadorEmail: primeiro(plano, ['my_email']),
+      insight: insightDaCampanha(plano),
+
       bruto: d
     };
   }

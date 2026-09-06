@@ -1269,6 +1269,56 @@
       });
     },
 
+    /* Importação em lote: busca, confere e traz de uma vez. É o mesmo caminho
+       do converterLead, sem a janela por lead — o que muda é a escala. */
+    importarLeads: function () {
+      const espera = document.createElement('dialog');
+      espera.innerHTML = '<div class="corpo"><h2>Buscando na ponte…</h2>' +
+        '<p class="small muted">Procurando quem respondeu no LinkedIn.</p></div>';
+      document.body.appendChild(espera);
+      espera.showModal();
+
+      global.IADIntegracoes.buscar().then(function (lista) {
+        espera.close(); espera.remove();
+        leads = lista;
+        if (!lista.length) { alert('Nenhuma resposta nova na ponte.'); return; }
+        App.revisarImportacao(lista);
+      }).catch(function (e) {
+        espera.close(); espera.remove();
+        alert(e.message);
+      });
+    },
+
+    revisarImportacao: function (lista) {
+      const dlg = document.createElement('dialog');
+      dlg.className = 'revisao-ia';
+      dlg.innerHTML = V.revisaoDaImportacao(lista);
+      document.body.appendChild(dlg);
+
+      dlg.addEventListener('close', function () {
+        if (dlg.returnValue === 'ok') {
+          const escolhidos = lista.filter(function (l, i) {
+            const marca = dlg.querySelector('[data-lead="' + i + '"]');
+            return marca && marca.checked;
+          });
+          const feitos = escolhidos.map(importarUmLead).filter(Boolean);
+          if (feitos.length) {
+            global.IADIntegracoes.marcarProcessados(escolhidos.map(function (l) { return l.id; }));
+            leads = (leads || []).filter(function (l) {
+              return escolhidos.indexOf(l) === -1;
+            });
+            alert(feitos.length === 1
+              ? '1 oportunidade criada a partir do Linked Helper.'
+              : feitos.length + ' oportunidades criadas a partir do Linked Helper.');
+            location.hash = '#/pipeline';
+          }
+          render();
+        }
+        dlg.remove();
+      });
+      dlg.showModal();
+    },
+
     descartarLead: function (id) {
       leads = (leads || []).filter(function (l) { return l.id !== id; });
       global.IADIntegracoes.marcarProcessados([id]);
@@ -1280,6 +1330,14 @@
     converterLead: function (id) {
       const lead = (leads || []).find(function (l) { return l.id === id; });
       if (!lead) return;
+
+      /* Saiu da empresa: a conta seria criada com um único contato que não
+         trabalha mais nela. Perguntamos antes de deixar o dado entrar. */
+      if (lead.saiuEm && !U.confirmar(
+        lead.nome + ' saiu da ' + (lead.empresa || 'empresa') + ' em ' + lead.saiuEm + '.\n\n' +
+        'Criar a oportunidade assim mesmo? Cancele para descartar ou para descobrir onde a pessoa está hoje.')) {
+        return;
+      }
 
       const contas = Store.dados().contas;
       const parecida = contas.find(function (c) {
@@ -1308,7 +1366,10 @@
           const nome = d.empresaNova || lead.empresa;
           if (!nome) { alert('Informe a empresa.'); return; }
           if (d.segmento) Store.criarNoCatalogo('segmentos', { nome: d.segmento });
-          contaId = Store.criarConta({ nome: nome, segmento: d.segmento || '' }).id;
+          contaId = Store.criarConta({
+            nome: nome, segmento: d.segmento || '',
+            site: lead.empresaSite || '', cidade: lead.empresaCidade || ''
+          }).id;
         }
 
         const contato = Store.criarContato({
@@ -1328,9 +1389,21 @@
         if (d.evidencia) {
           Store.registrarEvento(op.id, {
             tipo: 'decision', titulo: d.evidencia, dimensao: d.dimensao,
-            forca: 'relato', contatoId: contato.id, canal: 'LinkedIn'
+            forca: 'relato', contatoId: contato.id, canal: 'LinkedIn',
+            /* A data é a da resposta, não a de hoje. Um lead que ficou dois
+               dias na ponte nasceria com o Evidence Age zerado errado. */
+            data: lead.respostaEm || Store.hoje()
           });
         }
+
+        /* A sequência escrita para este prospect já é o reenquadramento.
+           Entra como rascunho: formulado por nós, ainda não apresentado. */
+        if (lead.insight) {
+          Store.definirInsight(op.id, { texto: lead.insight, estado: 'formulado' });
+        }
+
+        /* O lead é de quem prospectou, não de quem clicou em importar. */
+        atribuirAoOperador(lead, [Store.conta(contaId), contato, op]);
 
         leads = (leads || []).filter(function (l) { return l.id !== id; });
         global.IADIntegracoes.marcarProcessados([id]);
@@ -1678,6 +1751,66 @@
       });
     }
     return campos;
+  }
+
+  /* Um lead vira três registros. Sem janela e sem digitação: o que não veio
+     do LinkedIn fica em branco para o vendedor completar depois — melhor um
+     campo vazio do que um palpite virando fato no painel. */
+  function importarUmLead(lead) {
+    const nome = lead.empresa || ('Contato ' + (lead.nome || 'do LinkedIn'));
+    let conta = Store.dados().contas.find(function (c) {
+      return lead.empresa && c.nome.toLowerCase().indexOf(lead.empresa.toLowerCase().slice(0, 12)) !== -1;
+    });
+    if (!conta) {
+      conta = Store.criarConta({
+        nome: nome, site: lead.empresaSite || '', cidade: lead.empresaCidade || ''
+      });
+    }
+
+    const contato = Store.criarContato({
+      contaId: conta.id, nome: lead.nome || 'Contato do LinkedIn', cargo: lead.cargo || '',
+      linkedin: lead.linkedin || '', email: lead.email || '', telefone: lead.telefone || '',
+      sentimento: lead.resposta ? 'neutro' : 'nao_acessado', canalPreferido: 'LinkedIn'
+    });
+
+    /* Quem já respondeu passou da prospecção: dizer que está em Prospecção
+       seria etapa mais atrasada que a realidade, e o IAD compara as duas. */
+    const op = Store.criarOportunidade({
+      contaId: conta.id,
+      titulo: (lead.empresa ? lead.empresa : (lead.nome || 'LinkedIn')) + ' — origem LH',
+      etapa: lead.resposta ? 'Conexão' : 'Prospecção',
+      origem: 'Linked Helper',
+      notas: 'ORIGEM LH' + (lead.campanha ? ' · campanha: ' + lead.campanha : '') +
+        (lead.operador ? ' · prospecção de ' + lead.operador : '') +
+        (lead.linkedin ? '\n' + lead.linkedin : '') +
+        (lead.headline ? '\n' + lead.headline : '')
+    });
+    op.stakeholders.push(contato.id);
+    Store.salvar();
+
+    if (lead.resposta) {
+      Store.registrarEvento(op.id, {
+        tipo: 'decision', titulo: lead.resposta.slice(0, 160), dimensao: 'problema',
+        forca: 'relato', contatoId: contato.id, canal: 'LinkedIn',
+        data: lead.respostaEm || Store.hoje()
+      });
+    }
+    if (lead.insight) {
+      Store.definirInsight(op.id, { texto: lead.insight, estado: 'formulado' });
+    }
+    atribuirAoOperador(lead, [conta, contato, op]);
+    return op;
+  }
+
+  /* O lead pertence a quem prospectou, não a quem clicou em importar. Só
+     funciona quando o operador do Linked Helper também é usuário do IAD —
+     senão o registro fica com quem importou, que é o comportamento normal. */
+  function atribuirAoOperador(lead, registros) {
+    if (!lead.operadorEmail) return;
+    const dono = A.porLogin(lead.operadorEmail);
+    if (!dono) return;
+    registros.forEach(function (r) { if (r) r.donoId = dono.id; });
+    Store.salvar();
   }
 
   /* A IA devolve o nome de quem falou; a base trabalha com id. Casa pelo

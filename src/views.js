@@ -597,7 +597,16 @@
         (m === 'lista' ? '☰ Lista' : '▦ Kanban') + '</button>';
     }).join(' ');
 
-    return '<div class="row"><h1>Pipeline</h1><span class="espaco"></span>' + alternar +
+    /* A ponte é a fila de espera: o Linked Helper entrega lá e o lead fica
+       guardado 30 dias. O botão vive aqui, e não em ⚙︎ Dados, porque é aqui
+       que o vendedor está quando pensa em pipeline. */
+    const importar = global.IADIntegracoes.configurada()
+      ? '<button class="btn mini" onclick="App.importarLeads()"' +
+        ' data-ajuda-titulo="Importar do Linked Helper" data-ajuda="Traz quem respondeu no LinkedIn.' +
+        ' Você confere a lista e importa de uma vez: empresa, contato, oportunidade e a resposta como evidência.">Importar LH</button>'
+      : '';
+
+    return '<div class="row"><h1>Pipeline</h1><span class="espaco"></span>' + alternar + importar +
       '<button class="btn alt mini" onclick="App.novaOportunidade()" data-ajuda-titulo="Nova oportunidade" data-ajuda="Cria o negócio. A empresa e os contatos podem ser cadastrados na mesma janela.">+ Oportunidade</button></div>' +
       '<div class="row filtros-pipeline" style="margin:8px 0 14px">' + filtros + '</div>';
   }
@@ -1750,15 +1759,33 @@
     if (!leads) return '';
     if (!leads.length) return '<div class="vazio small">Nenhuma resposta nova na ponte.</div>';
     return '<div class="lista" style="margin-top:12px">' + leads.map(function (l) {
-      return '<div class="foco u0">' +
+      /* Quem saiu da empresa não é comprador daquela conta. O aviso vem antes
+         do botão de converter, não depois de a conta já ter sido criada. */
+      const saiu = l.saiuEm
+        ? '<div class="aviso" style="margin-top:8px">Saiu da ' + esc(l.empresa || 'empresa') +
+          ' em ' + esc(l.saiuEm) + '. Confirme onde a pessoa está hoje antes de criar a conta.</div>'
+        : '';
+
+      const rede = [
+        l.grau === 'DISTANCE_1' ? '1\u00ba grau' : '',
+        l.mutuos ? l.mutuos + ' em comum' : '',
+        l.respostaEm ? 'respondeu ' + U.data(l.respostaEm) : ''
+      ].filter(Boolean).join(' \u00b7 ');
+
+      return '<div class="foco ' + (l.saiuEm ? 'u3' : 'u0') + '">' +
         '<div class="row"><strong>' + esc(l.nome || 'Sem nome') + '</strong>' +
         (l.cargo ? '<span class="tiny muted">' + esc(l.cargo) + '</span>' : '') +
         '<span class="espaco"></span>' +
         (l.campanha ? '<span class="pill">' + esc(l.campanha) + '</span>' : '') + '</div>' +
-        '<div class="small muted">' + esc(l.empresa || 'empresa não informada') + (l.local ? ' · ' + esc(l.local) : '') + '</div>' +
-        (l.resposta ? '<div class="motivo" style="margin-top:8px">“' + esc(l.resposta) + '”</div>' : '') +
+        '<div class="small muted">' + esc(l.empresa || 'empresa n\u00e3o informada') +
+        (l.local ? ' \u00b7 ' + esc(l.local) : '') + '</div>' +
+        (rede ? '<div class="tiny muted" style="margin-top:4px">' + esc(rede) +
+          (l.operador ? ' \u00b7 prospec\u00e7\u00e3o de ' + esc(l.operador) : '') + '</div>' : '') +
+        saiu +
+        (l.resposta ? '<div class="motivo" style="margin-top:8px">\u201c' + esc(l.resposta) + '\u201d</div>' : '') +
+        (l.insight ? '<p class="tiny muted" style="margin:6px 0 0">Insight da campanha pronto para usar.</p>' : '') +
         '<div class="row" style="margin-top:10px">' +
-        '<button class="btn alt mini" onclick="App.converterLead(\'' + esc(l.id) + '\')">Criar oportunidade</button>' +
+        '<button class="btn ' + (l.saiuEm ? 'ghost' : 'alt') + ' mini" onclick="App.converterLead(\'' + esc(l.id) + '\')">Criar oportunidade</button>' +
         (l.linkedin ? '<a class="btn ghost mini" href="' + esc(l.linkedin) + '" target="_blank" rel="noopener">Abrir perfil</a>' : '') +
         '<button class="btn ghost mini" onclick="App.descartarLead(\'' + esc(l.id) + '\')">Descartar</button>' +
         '</div></div>';
@@ -1844,9 +1871,64 @@
       '</div></form>';
   }
 
+  /* ---------------- Conferência da importação do Linked Helper ----------------
+     Importar tudo sem olhar encheria o pipeline de oportunidade que não é
+     oportunidade — e um pipeline assim derruba o IAD médio e faz a
+     classificação mentir. Então vem tudo marcado, menos o que tem problema:
+     quem saiu da empresa e quem ainda não respondeu nada. */
+  function motivoDeDuvida(l) {
+    if (l.saiuEm) return 'Saiu da ' + (l.empresa || 'empresa') + ' em ' + l.saiuEm;
+    if (!l.resposta) return 'Ainda não respondeu — não há evidência do cliente';
+    if (!l.empresa) return 'Sem empresa identificada';
+    return '';
+  }
+
+  function revisaoDaImportacao(leads) {
+    const linhas = leads.map(function (l, i) {
+      const duvida = motivoDeDuvida(l);
+      const rede = [
+        l.grau === 'DISTANCE_1' ? '1\u00ba grau' : '',
+        l.mutuos ? l.mutuos + ' em comum' : '',
+        l.respostaEm ? 'respondeu ' + U.data(l.respostaEm) : ''
+      ].filter(Boolean).join(' \u00b7 ');
+
+      return '<li class="achado">' +
+        '<label class="linha-achado"><input type="checkbox" data-lead="' + i + '"' +
+        (duvida ? '' : ' checked') + '>' +
+        '<strong>' + esc(l.nome || 'Sem nome') + '</strong>' +
+        (l.cargo ? '<span class="tiny muted">' + esc(l.cargo) + '</span>' : '') +
+        '<span class="espaco"></span>' +
+        '<span class="pill' + (duvida ? '' : ' navy') + '">' + esc(l.empresa || 'sem empresa') + '</span>' +
+        '</label>' +
+        (rede ? '<p class="small muted" style="margin:6px 0 0">' + esc(rede) +
+          (l.operador ? ' \u00b7 ' + esc(l.operador) : '') + '</p>' : '') +
+        (duvida ? '<p class="compromisso small" style="margin:6px 0 0">' + esc(duvida) + '</p>' : '') +
+        (l.resposta ? '<p class="origem">\u201c' + esc(l.resposta) + '\u201d</p>' : '') +
+        (l.insight ? '<p class="tiny muted" style="margin:6px 0 0">Insight da campanha entra como rascunho.</p>' : '') +
+      '</li>';
+    }).join('');
+
+    const comDuvida = leads.filter(motivoDeDuvida).length;
+
+    return '<form method="dialog"><div class="corpo">' +
+      '<h2>Importar do Linked Helper</h2>' +
+      '<p class="small muted">Cada marcado vira empresa, contato e oportunidade em ' +
+      '<strong>Prospec\u00e7\u00e3o</strong> \u2014 ou <strong>Conex\u00e3o</strong>, se a pessoa j\u00e1 respondeu \u2014 ' +
+      'com origem Linked Helper. A resposta entra como evid\u00eancia de for\u00e7a relato, na data em que ela aconteceu.</p>' +
+      (comDuvida
+        ? '<div class="aviso">' + comDuvida + (comDuvida === 1 ? ' lead veio desmarcado' : ' leads vieram desmarcados') +
+          ': quem saiu da empresa ou ainda n\u00e3o respondeu. Marque se quiser trazer assim mesmo.</div>'
+        : '') +
+      '<ul class="achados">' + linhas + '</ul>' +
+      '</div><div class="rodape">' +
+      '<button class="btn ghost" value="cancelar" type="submit">Cancelar</button>' +
+      '<button class="btn" value="ok" type="submit">Importar os marcados</button>' +
+      '</div></form>';
+  }
+
   global.IADViews = {
     hoje, painel, pipeline, cockpit, revisao, contas, cadastros, playbook, dados, itemArquivo, listaLeads,
-    revisaoDaReuniao,
+    revisaoDaReuniao, revisaoDaImportacao,
     acesso, barraAdmin, definirTelaAcesso, definirPrimeiraEmpresa, listaUsuariosNuvem,
     pendenteAcesso: function () { return pendente; },
     definirFiltro: function (f) { filtroGrupo = f; },
