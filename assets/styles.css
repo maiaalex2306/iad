@@ -434,6 +434,28 @@ td .tiny { display: block; }
 .celula.q2 .marca { color: var(--ok); }
 .celula.q2.sem-prova { border-color: var(--risk); background: rgba(212,118,26,.1); border-style: dashed; }
 
+/* Balão flutuante da ajuda de contexto (src/ajuda.js). Fica no body, então
+   nenhuma caixa da tela o corta, e a posição vem do JS. */
+.balao-ajuda {
+  position: absolute;
+  z-index: 200;
+  max-width: 300px;
+  padding: 9px 12px 10px;
+  background: var(--navy);
+  color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(16, 32, 47, .26);
+  font-size: .78rem;
+  line-height: 1.42;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .1s ease;
+}
+.balao-ajuda.visivel { opacity: 1; }
+.balao-ajuda strong { display: block; font-size: .8rem; margin-bottom: 2px; }
+.balao-ajuda span { display: block; opacity: .88; }
+@media (prefers-reduced-motion: reduce) { .balao-ajuda { transition: none; } }
+
 /* ---------- Ajuda pelo contexto ----------
    O nome da decisão não diz o que ela quer saber, e ninguém abre o Playbook no
    meio de uma pontuação. O balão responde ali mesmo.

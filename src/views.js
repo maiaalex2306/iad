@@ -222,7 +222,7 @@
       '<div class="vazio">Nada neste filtro.</div>';
 
     return '<div class="row"><h1>Hoje</h1><span class="espaco"></span>' +
-      '<button class="btn alt mini" onclick="App.capturaRapida()">+ Evidência</button></div>' +
+      '<button class="btn alt mini" onclick="App.capturaRapida()" data-ajuda-titulo="Registrar evidência" data-ajuda="O cliente se moveu. Só isso zera o tempo sem evidência e permite subir a nota da decisão.">+ Evidência</button></div>' +
       '<p class="muted small">' + (grupos[0].qtd
         ? grupos[0].qtd + ' negócio(s) precisam de você agora · ' + U.compacto(grupos[0].valor) + ' envolvidos'
         : 'Nada urgente hoje.') + '</p>' +
@@ -271,7 +271,7 @@
       '<div class="tiny muted" style="margin-top:6px">Falta: ' + falta + '</div>' +
       (tarefas ? '<div class="tarefas">' + tarefas + '</div>' : '') +
       '<div class="row" style="margin-top:10px">' +
-      '<button class="btn alt mini" onclick="App.novaEvidencia(\'' + r.op.id + '\')">Registrar evidência</button>' +
+      '<button class="btn alt mini" onclick="App.novaEvidencia(\'' + r.op.id + '\')" data-ajuda-titulo="Registrar evidência" data-ajuda="O que o cliente fez nesta semana. Se nada mudou do lado dele, não houve avanço — e é isso que a revisão quer expor.">Registrar evidência</button>' +
       '<button class="btn ghost mini" onclick="App.abrir(\'' + r.op.id + '\')">Abrir</button></div></div>';
   }
 
@@ -299,12 +299,14 @@
     const filtros =
       '<div class="filtros">' +
         '<div class="grupo-filtro"><span class="rot">Período</span>' +
-          pill('todos', filtroPeriodo, 'App.filtrarPeriodo', 'Todos') +
-          meses.map(function (m) { return pill(m, filtroPeriodo, 'App.filtrarPeriodo', E.rotuloMes(m)); }).join('') +
+          pill('todos', filtroPeriodo, 'App.filtrarPeriodo', 'Todos', 'Sem recorte de mês: o painel inteiro considera toda a carteira aberta.') +
+          meses.map(function (m) { return pill(m, filtroPeriodo, 'App.filtrarPeriodo', E.rotuloMes(m),
+            'Recorta o painel inteiro pelos negócios com fechamento previsto para ' + E.rotuloMes(m) + '.'); }).join('') +
         '</div>' +
         '<div class="grupo-filtro"><span class="rot">Segmento</span>' +
-          pill('todos', filtroSegmento, 'App.filtrarSegmento', 'Todos') +
-          segmentos.map(function (seg) { return pill(seg, filtroSegmento, 'App.filtrarSegmento', seg); }).join('') +
+          pill('todos', filtroSegmento, 'App.filtrarSegmento', 'Todos', 'Sem recorte de segmento: todos os mercados juntos.') +
+          segmentos.map(function (seg) { return pill(seg, filtroSegmento, 'App.filtrarSegmento', seg,
+            'Recorta o painel inteiro pelas empresas do segmento ' + seg + '.'); }).join('') +
         '</div>' +
       '</div>';
 
@@ -390,9 +392,10 @@
       aprendizado();
   }
 
-  function pill(valor, atual, acao, rotulo) {
+  function pill(valor, atual, acao, rotulo, ajuda) {
     return '<button class="pill' + (String(valor) === String(atual) ? ' orange' : '') + '" onclick="' + acao + '(\'' +
-      String(valor).replace(/'/g, "\\'") + '\')">' + esc(rotulo) + '</button>';
+      String(valor).replace(/'/g, "\\'") + '\')"' + (ajuda ? ' data-ajuda="' + esc(ajuda) + '"' : '') +
+      '>' + esc(rotulo) + '</button>';
   }
 
   function riscosCriticos(resumos) {
@@ -453,9 +456,9 @@
     return '<div class="card"><h1>Bem-vindo ao IAD CRM</h1>' +
       '<p>Este CRM não mede o que o vendedor fez. Mede o que mudou na decisão do comprador.</p>' +
       '<p class="small muted">Comece com dados de demonstração para entender o modelo, cadastre sua primeira conta ou importe sua carteira de uma planilha.</p>' +
-      '<div class="row"><button class="btn alt" onclick="App.carregarDemo()">Carregar demonstração</button>' +
-      '<button class="btn ghost" onclick="App.novaConta()">Criar primeira conta</button>' +
-      '<button class="btn ghost" onclick="App.ir(\'#/dados\')">Importar planilha</button></div></div>';
+      '<div class="row"><button class="btn alt" onclick="App.carregarDemo()" data-ajuda-titulo="Demonstração" data-ajuda="Carrega uma carteira fictícia com os cinco grupos de pipeline, para treinar a leitura do modelo. Substitui o que está aqui.">Carregar demonstração</button>' +
+      '<button class="btn ghost" onclick="App.novaConta()" data-ajuda-titulo="Primeira empresa" data-ajuda="Cadastre a empresa. Depois vêm os contatos e a oportunidade — ou faça tudo de uma vez pelo botão + Oportunidade.">Criar primeira conta</button>' +
+      '<button class="btn ghost" onclick="App.ir(\'#/dados\')" data-ajuda-titulo="Importar planilha" data-ajuda="Traz empresas, contatos ou oportunidades de um CSV. Os modelos ficam em ⚙︎ Dados.">Importar planilha</button></div></div>';
   }
 
   /* ---------------- Pipeline ---------------- */
@@ -540,12 +543,15 @@
 
   function cabecalhoPipeline(filtros) {
     const alternar = ['lista', 'kanban'].map(function (m) {
-      return '<button class="pill' + (modoPipeline === m ? ' orange' : '') + '" onclick="App.modoPipeline(\'' + m + '\')">' +
+      return '<button class="pill' + (modoPipeline === m ? ' orange' : '') + '" onclick="App.modoPipeline(\'' + m + '\')" data-ajuda="' +
+        (m === 'lista' ? 'Lista ordenada pela saúde da decisão, com IAD, tempo sem evidência e cobertura em cada linha.'
+                       : 'Colunas por etapa do funil. A cor da borda continua sendo a decisão: arrastar o cartão não move a decisão do cliente.') +
+        '">' +
         (m === 'lista' ? '☰ Lista' : '▦ Kanban') + '</button>';
     }).join(' ');
 
     return '<div class="row"><h1>Pipeline</h1><span class="espaco"></span>' + alternar +
-      '<button class="btn alt mini" onclick="App.novaOportunidade()">+ Oportunidade</button></div>' +
+      '<button class="btn alt mini" onclick="App.novaOportunidade()" data-ajuda-titulo="Nova oportunidade" data-ajuda="Cria o negócio. A empresa e os contatos podem ser cadastrados na mesma janela.">+ Oportunidade</button></div>' +
       '<div class="row filtros-pipeline" style="margin:8px 0 14px">' + filtros + '</div>';
   }
 
@@ -708,8 +714,8 @@
       : '';
 
     return '<div class="row"><button class="btn ghost mini" onclick="App.ir(\'#/pipeline\')">← Pipeline</button>' +
-      '<span class="espaco"></span><button class="btn ghost mini" onclick="App.editarOportunidade(\'' + op.id + '\')">Editar</button>' +
-      (op.desfecho ? '' : '<button class="btn ghost mini" onclick="App.encerrar(\'' + op.id + '\')">Encerrar</button>') + '</div>' +
+      '<span class="espaco"></span><button class="btn ghost mini" onclick="App.editarOportunidade(\'' + op.id + '\')" data-ajuda-titulo="Editar" data-ajuda="Muda título, valor, etapa, tipo, previsão e concorrentes. Não mexe nas decisões.">Editar</button>' +
+      (op.desfecho ? '' : '<button class="btn ghost mini" onclick="App.encerrar(\'' + op.id + '\')" data-ajuda-titulo="Encerrar" data-ajuda="Registra o desfecho e congela o retrato das oito decisões. É daqui que sai o Aprendizado do painel.">Encerrar</button>') + '</div>' +
       banner +
       '<h1 style="margin-top:10px">' + esc(op.titulo) + '</h1>' +
       '<p class="muted small">' + esc((conta && conta.nome) || 'Sem conta') + ' · ' + U.moeda(op.valor) + ' · ' + esc(op.tipo || 'Novo negócio') +
@@ -855,19 +861,20 @@
       const classe = l.tipo === 'dimensao' && l.nota === 1 ? 'warn' : (l.tipo === 'papel' ? 'risk' : 'dead');
 
       const acoes = l.dimensao
-        ? '<button class="btn alt mini" onclick="App.novaEvidencia(\'' + op.id + '\',null,\'' + l.dimensao.id + '\')">Registrar evidência</button>' +
-          '<button class="btn ghost mini" onclick="App.novaTarefa(\'' + op.id + '\',\'' + l.dimensao.id + '\')">Criar tarefa</button>'
+        ? '<button class="btn alt mini" onclick="App.novaEvidencia(\'' + op.id + '\',null,\'' + l.dimensao.id + '\')" data-ajuda-titulo="Registrar evidência" data-ajuda="Descreva o que o CLIENTE fez, não o que você fez. A nota da decisão é atualizada na mesma janela.">Registrar evidência</button>' +
+          '<button class="btn ghost mini" onclick="App.novaTarefa(\'' + op.id + '\',\'' + l.dimensao.id + '\')" data-ajuda-titulo="Criar tarefa" data-ajuda="O que VOCÊ vai fazer para provocar esta decisão. Atividade sua não move o índice, mas aparece em Hoje.">Criar tarefa</button>'
         : (l.tipo === 'compromisso'
-            ? '<button class="btn alt mini" onclick="App.definirCompromisso(\'' + op.id + '\')">Combinar data</button>'
+            ? '<button class="btn alt mini" onclick="App.definirCompromisso(\'' + op.id + '\')" data-ajuda-titulo="Combinar data" data-ajuda="Registra o próximo passo e a data. Negócio sem próximo passo combinado é negócio no ar.">Combinar data</button>'
             : (l.tipo === 'insight'
-                ? '<button class="btn alt mini" onclick="App.definirInsight(\'' + op.id + '\')">Definir insight</button>'
-                : '<button class="btn ghost mini" onclick="App.ligarStakeholder(\'' + op.id + '\')">Vincular pessoa</button>'));
+                ? '<button class="btn alt mini" onclick="App.definirInsight(\'' + op.id + '\')" data-ajuda-titulo="Definir insight" data-ajuda="O reenquadramento do Challenger: o que você ensina a este cliente que ele não veria sozinho.">Definir insight</button>'
+                : '<button class="btn ghost mini" onclick="App.ligarStakeholder(\'' + op.id + '\')" data-ajuda-titulo="Vincular pessoa" data-ajuda="Traz um contato da empresa para o grupo comprador deste negócio.">Vincular pessoa</button>'));
 
       return '<li class="lacuna">' +
         '<span class="ordem">' + (i + 1) + '</span>' +
         '<div class="conteudo">' +
           '<div class="row"><strong>' + esc(l.titulo) + '</strong><span class="pill ' + classe + '">' + rotulo + '</span></div>' +
           '<p class="small muted">' + esc(l.falta) + '</p>' +
+          (l.pergunta ? '<p class="tiny"><span class="muted">A responder:</span> ' + esc(l.pergunta) + '</p>' : '') +
           '<p class="tiny"><span class="muted">O que resolve:</span> ' + esc(l.comoProvar) + '</p>' +
           '<div class="row">' + acoes + '</div>' +
         '</div></li>';
@@ -969,7 +976,7 @@
       (r.gates.liberado
         ? '<p class="small" style="margin-top:10px">Qualificação mínima atendida: a proposta agora formaliza decisões já tomadas.</p>'
         : '<p class="small" style="margin-top:10px">Faltam: ' + esc(r.gates.pendentes.map(function (p) { return p.nome; }).join(', ')) + '.</p>' +
-          '<button class="btn ghost mini" onclick="App.liberarGate(\'' + op.id + '\')">Liberar proposta mesmo assim (fica registrado)</button>') +
+          '<button class="btn ghost mini" onclick="App.liberarGate(\'' + op.id + '\')" data-ajuda-titulo="Liberar mesmo assim" data-ajuda="Emite proposta sem a qualificação mínima. Fica registrado quem autorizou — proposta cedo demais é o jeito mais caro de descobrir que o cliente não estava comprando.">Liberar proposta mesmo assim (fica registrado)</button>') +
       '</div>';
   }
 
@@ -1007,10 +1014,10 @@
 
     return '<div class="card"><div class="row"><h2 style="margin:0">Buying group</h2><span class="espaco"></span>' +
       (soltos.length
-        ? '<button class="btn alt mini" onclick="App.ligarTodosStakeholders(\'' + op.id + '\')">+ Vincular os ' +
+        ? '<button class="btn alt mini" onclick="App.ligarTodosStakeholders(\'' + op.id + '\')" data-ajuda-titulo="Vincular todos" data-ajuda="Traz para este negócio os contatos já cadastrados na empresa. Sem eles, a cobertura fica em zero e o app acusa venda de uma perna só.">+ Vincular os ' +
           soltos.length + ' da empresa</button>'
         : '') +
-      '<button class="btn ghost mini" onclick="App.ligarStakeholder(\'' + op.id + '\')">+ Vincular pessoa</button></div>' +
+      '<button class="btn ghost mini" onclick="App.ligarStakeholder(\'' + op.id + '\')" data-ajuda-titulo="Vincular pessoa" data-ajuda="Escolhe um contato da empresa para o grupo comprador deste negócio.">+ Vincular pessoa</button></div>' +
       '<p class="tiny muted" style="margin:6px 0 4px">Papéis críticos faltando: ' + (r.coverage.faltando.length ? esc(r.coverage.faltando.join(', ')) : 'nenhum') + '</p>' +
       notaPerfis + notaAutoria +
       '<div class="mapa">' + pessoas + '</div></div>';
@@ -1134,9 +1141,9 @@
             (comp.vencido ? ' (vencido há ' + comp.diasAtraso + 'd)' : '') + '</p>'
           : '<p class="tiny atrasado">Sem próximo passo combinado com data.</p>') +
         '<p class="small muted">Próxima decisão a provocar: ' + esc(r.nbd.decisao) + '</p>' +
-        '<div class="row"><button class="btn alt mini" onclick="App.novaEvidencia(\'' + r.op.id + '\')">Registrar evidência</button>' +
-        '<button class="btn ghost mini" onclick="App.definirCompromisso(\'' + r.op.id + '\')">Definir compromisso</button>' +
-        '<button class="btn ghost mini" onclick="App.abrir(\'' + r.op.id + '\')">Abrir cockpit</button></div></div>';
+        '<div class="row"><button class="btn alt mini" onclick="App.novaEvidencia(\'' + r.op.id + '\')" data-ajuda-titulo="Registrar evidência" data-ajuda="O que o cliente fez nesta semana. Se nada mudou do lado dele, não houve avanço — e é isso que a revisão quer expor.">Registrar evidência</button>' +
+        '<button class="btn ghost mini" onclick="App.definirCompromisso(\'' + r.op.id + '\')" data-ajuda-titulo="Definir compromisso" data-ajuda="O próximo passo e a data. Sem isso o negócio fica no ar e o app marca em vermelho.">Definir compromisso</button>' +
+        '<button class="btn ghost mini" onclick="App.abrir(\'' + r.op.id + '\')" data-ajuda-titulo="Abrir cockpit" data-ajuda="A tela completa do negócio: as oito decisões, lacunas, grupo comprador, gate e histórico.">Abrir cockpit</button></div></div>';
     }).join('');
 
     return '<h1>Revisão semanal</h1>' +
@@ -1168,14 +1175,31 @@
         (valor ? '<span class="pill navy">' + U.compacto(valor) + '</span>' : '') + '</div>' +
         '<div class="tiny muted">' + esc(ficha || '—') + (ultima != null ? ' · última evidência há ' + ultima + 'd' : '') + '</div>' +
         '<div class="row" style="margin-top:10px">' + chips + '</div>' +
-        '<div class="row" style="margin-top:10px"><button class="btn ghost mini" onclick="App.novoContato(\'' + c.id + '\')">+ Contato</button>' +
+        '<div class="row" style="margin-top:10px"><button class="btn ghost mini" onclick="App.novoContato(\'' + c.id + '\')" data-ajuda-titulo="Novo contato" data-ajuda="Adiciona uma pessoa a esta empresa. O papel na compra e a posição alimentam a cobertura e os alertas.">+ Contato</button>' +
         '<button class="btn ghost mini" onclick="App.novaOportunidade(\'' + c.id + '\')">+ Oportunidade</button>' +
-        '<button class="btn ghost mini" onclick="App.editarConta(\'' + c.id + '\')">Editar</button></div></div>';
+        '<button class="btn ghost mini" onclick="App.editarConta(\'' + c.id + '\')" data-ajuda="Muda os dados da empresa. O segmento aqui é o que agrupa o painel.">Editar</button></div></div>';
     }).join('');
     return '<div class="row"><h1>Contas</h1><span class="espaco"></span><button class="btn alt mini" onclick="App.novaConta()">+ Conta</button></div>' + lista;
   }
 
   /* ---------------- Cadastros ---------------- */
+  const AJUDA_NOVO = {
+    empresas: 'Cadastra uma empresa.', contatos: 'Cadastra uma pessoa e a liga a uma empresa.',
+    oportunidades: 'Cria um negócio.', segmentos: 'Acrescenta um segmento à lista.',
+    tiposTarefa: 'Acrescenta um tipo de tarefa.', produtos: 'Cadastra um produto com preço de referência.',
+    usuarios: 'Cadastra um usuário neste aparelho. Com a nuvem ligada, as contas ficam no servidor.'
+  };
+
+  const AJUDA_CADASTRO = {
+    empresas: 'As contas. O segmento aqui é o que agrupa o painel; a relação atual separa quem já compra de quem nunca comprou.',
+    contatos: 'As pessoas. O papel na compra e a posição são o que alimenta a cobertura e os alertas do grupo comprador.',
+    oportunidades: 'Os negócios. A etapa organiza o funil; quem mede o avanço são as oito decisões dentro de cada um.',
+    segmentos: 'A lista que alimenta o campo Segmento das empresas e a análise por segmento no painel.',
+    tiposTarefa: 'A lista de tipos que aparece ao criar uma tarefa.',
+    produtos: 'O catálogo com preço de referência, para compor o valor das oportunidades.',
+    usuarios: 'Quem tem acesso. Com a nuvem ligada, as contas ficam no servidor — cadastrar aqui só afeta este aparelho.'
+  };
+
   const ABAS_CADASTRO = [
     ['empresas', 'Empresas'], ['contatos', 'Contatos'], ['oportunidades', 'Oportunidades'],
     ['segmentos', 'Segmentos'], ['tiposTarefa', 'Tipos de tarefa'], ['produtos', 'Produtos'],
@@ -1187,7 +1211,7 @@
   function cadastros() {
     const est = Store.dados();
     const abas = ABAS_CADASTRO.map(function (a) {
-      return '<button class="pill' + (abaCadastro === a[0] ? ' orange' : '') + '" onclick="App.abaCadastro(\'' + a[0] + '\')">' + esc(a[1]) + '</button>';
+      return '<button class="pill' + (abaCadastro === a[0] ? ' orange' : '') + '" onclick="App.abaCadastro(\'' + a[0] + '\')" data-ajuda="' + esc(AJUDA_CADASTRO[a[0]] || '') + '">' + esc(a[1]) + '</button>';
     }).join(' ');
 
     const criar = {
@@ -1204,7 +1228,7 @@
     }[abaCadastro](est);
 
     return '<div class="row"><h1>Cadastros</h1><span class="espaco"></span>' +
-      '<button class="btn alt mini" onclick="' + criar + '">+ Novo</button></div>' +
+      '<button class="btn alt mini" onclick="' + criar + '" data-ajuda="' + esc(AJUDA_NOVO[abaCadastro] || 'Cria um item nesta aba.') + '">+ Novo</button></div>' +
       '<div class="row" style="margin:8px 0 10px">' + abas + '</div>' +
       '<input id="busca-cadastro" class="busca" type="search" placeholder="Buscar…" value="' + esc(buscaCadastro) +
       '" oninput="App.buscarCadastro(this.value)">' +
@@ -1238,9 +1262,9 @@
         '<td class="right">' + Store.contatosDaConta(c.id).length + '</td>' +
         '<td class="right">' + ops.length + (valor ? '<span class="tiny muted">' + U.compacto(valor) + '</span>' : '') + '</td>' +
         '<td class="right" style="white-space:nowrap">' +
-          '<button class="btn ghost mini" onclick="App.editarConta(\'' + c.id + '\')">Editar</button> ' +
-          '<button class="btn ghost mini" onclick="App.novoContato(\'' + c.id + '\')">+ Contato</button> ' +
-          '<button class="btn ghost mini" onclick="App.novaOportunidade(\'' + c.id + '\')">+ Op.</button>' +
+          '<button class="btn ghost mini" onclick="App.editarConta(\'' + c.id + '\')" data-ajuda="Muda os dados da empresa. O segmento aqui é o que agrupa o painel.">Editar</button> ' +
+          '<button class="btn ghost mini" onclick="App.novoContato(\'' + c.id + '\')" data-ajuda-titulo="Novo contato" data-ajuda="Adiciona uma pessoa a esta empresa. O papel na compra e a posição alimentam a cobertura e os alertas.">+ Contato</button> ' +
+          '<button class="btn ghost mini" onclick="App.novaOportunidade(\'' + c.id + '\')" data-ajuda-titulo="Nova oportunidade" data-ajuda="Cria um negócio para esta empresa. Os contatos já cadastrados entram no grupo comprador.">+ Op.</button>' +
         '</td></tr>';
     }).join('');
     return tabela(['Empresa', 'Segmento', 'Cidade', 'Relação', 'Contatos', 'Oportunidades', ''], linhas, 'Nenhuma empresa encontrada.');
@@ -1261,7 +1285,7 @@
         '<td>' + (perfil.grupo === 'indefinido' ? '<span class="tiny muted">sem perfil</span>'
           : '<span class="pill ' + classePerfil + '">' + esc(perfil.rotulo) + '</span>') + '</td>' +
         '<td><span class="dot ' + c.sentimento + '"></span><span class="tiny">' + esc(c.email || c.telefone || '—') + '</span></td>' +
-        '<td class="right"><button class="btn ghost mini" onclick="App.editarContato(\'' + c.id + '\')">Editar</button></td></tr>';
+        '<td class="right"><button class="btn ghost mini" onclick="App.editarContato(\'' + c.id + '\')" data-ajuda="Muda os dados da pessoa, inclusive papel na compra, posição e perfil Challenger.">Editar</button></td></tr>';
     }).join('');
     return tabela(['Contato', 'Empresa', 'Papel', 'Perfil', 'Contato', ''], linhas, 'Nenhum contato encontrado.');
   }
@@ -1411,33 +1435,33 @@
       '<ul class="small"><li><strong>Android/Chrome/Edge:</strong> menu ⋮ → “Instalar aplicativo”.</li>' +
       '<li><strong>iPhone/Safari:</strong> Compartilhar → “Adicionar à Tela de Início”.</li>' +
       '<li><strong>Desktop:</strong> ícone de instalar na barra de endereço.</li></ul>' +
-      '<button class="btn alt" onclick="App.instalar()">Instalar aplicativo</button></div>' +
+      '<button class="btn alt" onclick="App.instalar()" data-ajuda-titulo="Instalar" data-ajuda="Cria um ícone próprio no computador ou celular. O app passa a abrir em janela separada e a funcionar sem internet.">Instalar aplicativo</button></div>' +
 
       '<div class="card"><h2>Importar planilha</h2>' +
       '<p class="small muted">Traga a carteira que já existe. Importe nesta ordem: empresas, depois contatos, depois oportunidades — contatos e oportunidades precisam da empresa já cadastrada.</p>' +
-      '<div class="row"><button class="btn" onclick="App.importarCsv(\'empresas\')">Empresas</button>' +
-      '<button class="btn" onclick="App.importarCsv(\'contatos\')">Contatos</button>' +
-      '<button class="btn" onclick="App.importarCsv(\'oportunidades\')">Oportunidades</button></div>' +
+      '<div class="row"><button class="btn" onclick="App.importarCsv(\'empresas\')" data-ajuda="Importa empresas de um CSV. Comece por aqui: contatos e oportunidades precisam da empresa já cadastrada.">Empresas</button>' +
+      '<button class="btn" onclick="App.importarCsv(\'contatos\')" data-ajuda="Importa contatos. Cada linha precisa nomear uma empresa que já exista.">Contatos</button>' +
+      '<button class="btn" onclick="App.importarCsv(\'oportunidades\')" data-ajuda="Importa oportunidades. As oito decisões começam em zero: quem as pontua é a evidência.">Oportunidades</button></div>' +
       '<div class="row" style="margin-top:10px"><span class="tiny muted">Modelos:</span>' +
-      '<button class="btn ghost mini" onclick="App.baixarModelo(\'empresas\')">empresas.csv</button>' +
-      '<button class="btn ghost mini" onclick="App.baixarModelo(\'contatos\')">contatos.csv</button>' +
-      '<button class="btn ghost mini" onclick="App.baixarModelo(\'oportunidades\')">oportunidades.csv</button></div></div>' +
+      '<button class="btn ghost mini" onclick="App.baixarModelo(\'empresas\')" data-ajuda="Baixa um CSV de exemplo com as colunas certas para empresas.">empresas.csv</button>' +
+      '<button class="btn ghost mini" onclick="App.baixarModelo(\'contatos\')" data-ajuda="Baixa um CSV de exemplo com as colunas certas para contatos.">contatos.csv</button>' +
+      '<button class="btn ghost mini" onclick="App.baixarModelo(\'oportunidades\')" data-ajuda="Baixa um CSV de exemplo com as colunas certas para oportunidades.">oportunidades.csv</button></div></div>' +
 
       blocoNuvem() +
       blocoLinkedHelper() +
 
       '<div class="card"><h2>Backup</h2>' +
       '<p class="small muted">Os dados ficam no dispositivo (offline). Exporte para levar de máquina ou compartilhar com o time. Anexos não entram no JSON.</p>' +
-      '<div class="row"><button class="btn" onclick="App.exportar()">Exportar JSON</button>' +
-      '<button class="btn ghost" onclick="App.importar()">Importar JSON</button></div>' +
+      '<div class="row"><button class="btn" onclick="App.exportar()" data-ajuda-titulo="Exportar" data-ajuda="Baixa toda a carteira num arquivo, para backup ou para levar de máquina. Anexos não entram.">Exportar JSON</button>' +
+      '<button class="btn ghost" onclick="App.importar()" data-ajuda-titulo="Importar" data-ajuda="Substitui a carteira deste aparelho pelo conteúdo do arquivo. Suas contas de acesso são preservadas.">Importar JSON</button></div>' +
       '<p class="tiny muted" style="margin-top:10px">' + est.contas.length + ' contas · ' + est.contatos.length + ' contatos · ' +
       est.oportunidades.length + ' oportunidades · ' + est.tarefas.length + ' tarefas.</p>' +
       '<p class="tiny muted" id="uso-anexos">Anexos: calculando…</p></div>' +
 
       '<div class="card"><h2>Demonstração</h2>' +
       '<p class="small muted">Carrega uma carteira fictícia com os grupos de pipeline para treinar a leitura do modelo.</p>' +
-      '<div class="row"><button class="btn ghost" onclick="App.carregarDemo()">Carregar demonstração</button>' +
-      '<button class="btn ghost" onclick="App.limpar()">Apagar tudo</button></div></div>';
+      '<div class="row"><button class="btn ghost" onclick="App.carregarDemo()" data-ajuda-titulo="Demonstração" data-ajuda="Carrega uma carteira fictícia com os cinco grupos de pipeline, para treinar a leitura do modelo. Substitui o que está aqui.">Carregar demonstração</button>' +
+      '<button class="btn ghost" onclick="App.limpar()" data-ajuda-titulo="Apagar tudo" data-ajuda="Apaga a carteira deste aparelho. Não apaga o que já foi sincronizado no servidor, nem os acessos.">Apagar tudo</button></div></div>';
   }
 
   /* A nuvem é opcional: sem ela o app segue local, como sempre foi. */
@@ -1447,7 +1471,7 @@
 
     if (!e.configurada) {
       return '<div class="card"><div class="row"><h2 style="margin:0">Nuvem (Supabase)</h2><span class="espaco"></span>' +
-        '<button class="btn ghost mini" onclick="App.configurarNuvem()">Configurar</button></div>' +
+        '<button class="btn ghost mini" onclick="App.configurarNuvem()" data-ajuda-titulo="Configurar nuvem" data-ajuda="Endereço e chave pública do Supabase. Já vêm preenchidos; só troque para apontar a outro banco.">Configurar</button></div>' +
         '<p class="small muted" style="margin:8px 0 0">Ligue o app a um banco na nuvem para a equipe compartilhar a mesma carteira e para o login passar a ser verificado no servidor. ' +
         'O passo a passo e o arquivo do banco estão na pasta <code>nuvem/</code> do projeto.</p></div>';
     }
@@ -1455,10 +1479,10 @@
     if (!e.conectado) {
       return '<div class="card"><div class="row"><h2 style="margin:0">Nuvem (Supabase)</h2><span class="espaco"></span>' +
         '<span class="pill warn">desconectado</span>' +
-        '<button class="btn ghost mini" onclick="App.configurarNuvem()">Alterar</button></div>' +
+        '<button class="btn ghost mini" onclick="App.configurarNuvem()" data-ajuda-titulo="Alterar nuvem" data-ajuda="Troca o endereço e a chave pública do banco. Só mexa para apontar a outro projeto Supabase.">Alterar</button></div>' +
         '<p class="small muted" style="margin:8px 0 12px">Configurada, mas ninguém entrou nesta máquina.</p>' +
-        '<div class="row"><button class="btn alt mini" onclick="App.entrarNuvem()">Entrar na nuvem</button>' +
-        '<button class="btn ghost mini" onclick="App.cadastrarNuvem()">Criar acesso na nuvem</button></div></div>';
+        '<div class="row"><button class="btn alt mini" onclick="App.entrarNuvem()" data-ajuda-titulo="Entrar na nuvem" data-ajuda="Autentica no servidor com o e-mail e senha da sua conta, para sincronizar a carteira.">Entrar na nuvem</button>' +
+        '<button class="btn ghost mini" onclick="App.cadastrarNuvem()" data-ajuda-titulo="Criar acesso" data-ajuda="Cria a conta no servidor. Chega um e-mail de confirmação — a confirmação vale mesmo que o link mostre página de erro.">Criar acesso na nuvem</button></div></div>';
     }
 
     const perfil = e.perfil || {};
@@ -1472,8 +1496,8 @@
       (semEmpresa
         ? '<div class="aviso" style="margin-bottom:12px">Seu usuário ainda não tem empresa na nuvem. Defina antes de sincronizar — é ela que separa a sua carteira das outras.</div>' +
           '<button class="btn alt mini" onclick="App.definirEmpresaNuvem()">Definir minha empresa</button>'
-        : '<div class="row"><button class="btn alt mini" onclick="App.sincronizarNuvem()">Sincronizar agora</button>' +
-          '<button class="btn ghost mini" onclick="App.puxarNuvem()">Só baixar</button>' +
+        : '<div class="row"><button class="btn alt mini" onclick="App.sincronizarNuvem()" data-ajuda-titulo="Sincronizar" data-ajuda="Envia a sua carteira e traz o que os outros mudaram. Nada sobe sozinho: sincronize ao começar e ao terminar o dia.">Sincronizar agora</button>' +
+          '<button class="btn ghost mini" onclick="App.puxarNuvem()" data-ajuda-titulo="Só baixar" data-ajuda="Traz do servidor sem enviar nada daqui. Útil ao abrir o app noutro aparelho.">Só baixar</button>' +
           '<button class="btn ghost mini" onclick="App.sairNuvem()">Sair da nuvem</button></div>' +
           '<p class="tiny muted" style="margin:10px 0 0">Sincronizar envia a sua carteira e traz o que os outros mudaram. ' +
           'O app continua funcionando offline com a última cópia baixada.</p>') +
@@ -1484,8 +1508,8 @@
   function blocoLinkedHelper() {
     const c = global.IADIntegracoes.config();
     return '<div class="card"><div class="row"><h2 style="margin:0">Linked Helper</h2><span class="espaco"></span>' +
-      '<button class="btn ghost mini" onclick="App.configurarPonte()">' + (c.url ? 'Alterar ponte' : 'Configurar ponte') + '</button>' +
-      (c.url ? '<button class="btn alt mini" onclick="App.buscarLeads()">Buscar respostas</button>' : '') + '</div>' +
+      '<button class="btn ghost mini" onclick="App.configurarPonte()" data-ajuda-titulo="Ponte do Linked Helper" data-ajuda="Endereço e chave de leitura da ponte no Cloudflare. É por onde as respostas do LinkedIn chegam.">' + (c.url ? 'Alterar ponte' : 'Configurar ponte') + '</button>' +
+      (c.url ? '<button class="btn alt mini" onclick="App.buscarLeads()" data-ajuda-titulo="Buscar respostas" data-ajuda="Procura na ponte quem respondeu no LinkedIn. Cada resposta vira empresa, contato e oportunidade com um clique.">Buscar respostas</button>' : '') + '</div>' +
       (c.url
         ? '<p class="tiny muted" style="margin:8px 0 0">Ponte: ' + esc(c.url) + '</p>'
         : '<p class="small muted" style="margin:8px 0 0">Quando alguém responde no LinkedIn, o Linked Helper dispara um webhook. Como este app roda no navegador, ele não tem endereço para receber: quem recebe é uma ponte, e o app busca de lá. O código da ponte está na pasta <code>ponte/</code> do projeto.</p>') +

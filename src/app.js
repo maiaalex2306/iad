@@ -7,11 +7,16 @@
     A = global.IADAuth;
 
   const ROTAS = [
-    { hash: '#/hoje', ico: '⚡', nome: 'Hoje', render: V.hoje },
-    { hash: '#/painel', ico: '📊', nome: 'Painel', render: V.painel },
-    { hash: '#/pipeline', ico: '🗂️', nome: 'Pipeline', render: V.pipeline },
-    { hash: '#/revisao', ico: '🔄', nome: 'Revisão', render: V.revisao },
-    { hash: '#/cadastros', ico: '📇', nome: 'Cadastros', render: V.cadastros },
+    { hash: '#/hoje', ico: '⚡', nome: 'Hoje', render: V.hoje,
+      ajuda: 'O que precisa de você agora, em ordem de urgência. Comece o dia por aqui.' },
+    { hash: '#/painel', ico: '📊', nome: 'Painel', render: V.painel,
+      ajuda: 'A carteira em números e gráficos: quanto do pipeline tem decisão madura, por mês e por segmento.' },
+    { hash: '#/pipeline', ico: '🗂️', nome: 'Pipeline', render: V.pipeline,
+      ajuda: 'Todos os negócios abertos, em lista ou kanban, agrupados pela saúde da decisão.' },
+    { hash: '#/revisao', ico: '🔄', nome: 'Revisão', render: V.revisao,
+      ajuda: 'A reunião semanal numa tela: o que mudou na decisão de cada cliente nos últimos 7 dias.' },
+    { hash: '#/cadastros', ico: '📇', nome: 'Cadastros', render: V.cadastros,
+      ajuda: 'Empresas, contatos, oportunidades, segmentos, tipos de tarefa, produtos e usuários.' },
     { hash: '#/contas', ico: '🏢', nome: 'Contas', render: V.contas, foraDasAbas: true },
     { hash: '#/playbook', ico: '🎯', nome: 'Playbook', render: V.playbook, foraDasAbas: true }
   ];
@@ -84,7 +89,8 @@
 
   function montarNav() {
     document.querySelector('nav.tabs').innerHTML = ROTAS.filter(function (r) { return !r.foraDasAbas; }).map(function (r) {
-      return '<a href="' + r.hash + '"><span class="ico">' + r.ico + '</span>' + r.nome + '</a>';
+      return '<a href="' + r.hash + '"' + (r.ajuda ? ' data-ajuda-titulo="' + r.nome + '" data-ajuda="' + U.esc(r.ajuda) + '"' : '') +
+        '><span class="ico">' + r.ico + '</span>' + r.nome + '</a>';
     }).join('');
   }
 
@@ -1312,6 +1318,7 @@
 
   document.addEventListener('DOMContentLoaded', function () {
     Store.carregar();
+    global.IADAjuda.ligar();
     montarNav();
     A.garantirAdministrador().then(render).catch(function (e) {
       console.warn('Falha ao preparar o administrador:', e);

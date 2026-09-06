@@ -590,8 +590,12 @@
         });
         return;
       }
+      /* Com nota 0 o texto era a própria pergunta da decisão, o que se lia como
+         afirmação: "O cliente reconheceu o problema" logo abaixo de "não
+         sabemos". Agora descreve o estado — que já está escrito em niveis[0] —
+         e a pergunta vai à parte, rotulada como pergunta. */
       const falta = nota === 0
-        ? d.pergunta
+        ? d.niveis[0]
         : 'Falta comprovar: hoje é ' + d.niveis[1].toLowerCase().replace(/\.$/, '') + '.';
 
       lista.push({
@@ -600,6 +604,7 @@
         nota: nota,
         titulo: d.nome,
         falta: falta,
+        pergunta: d.pergunta,
         comoProvar: d.evidencias[0],
         evidencias: d.evidencias,
         registradas: provas.length,
