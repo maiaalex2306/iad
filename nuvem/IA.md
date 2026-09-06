@@ -26,43 +26,50 @@ Cota gratuita: 30 requisições por minuto, 1.000 por dia. Isso é cerca de
 > da camada gratuita para melhorar os modelos. O que passa por aqui é a ata da
 > reunião do cliente do seu cliente. Não vai para lá.
 
-## 2. Guardar a chave no Supabase
+## 2. Publicar a função pelo painel (sem instalar nada)
 
-Com a [CLI do Supabase](https://supabase.com/docs/guides/local-development)
-instalada e o projeto vinculado:
+O painel do Supabase publica Edge Functions direto do navegador — não precisa
+da CLI, nem de Docker, nem de Deno instalado.
 
-```bash
-supabase secrets set IA_CHAVE=gsk_sua_chave_aqui
-```
+1. Abra o código da função:
+   <https://raw.githubusercontent.com/maiaalex2306/iad/claude/decisoes-estagios-vendas-eckjo0/nuvem/funcoes/assistente/index.ts>
+   Selecione tudo (Ctrl+A) e copie (Ctrl+C).
+2. No painel do projeto, vá em **Edge Functions** → **Deploy a new function** →
+   **Via Editor**.
+3. Nome da função: exatamente `assistente` (minúsculo, sem acento). O app
+   chama por esse nome.
+4. Apague o exemplo que vem no editor, cole o código e clique em **Deploy**.
 
-Opcionais, se um dia quiser trocar de provedor ou de modelo:
+## 3. Guardar a chave da IA
 
-```bash
-supabase secrets set IA_PROVEDOR=groq              # ou: anthropic
-supabase secrets set IA_MODELO=llama-3.3-70b-versatile
-```
+Ainda em **Edge Functions**, abra **Secrets** e adicione:
 
-`SUPABASE_URL` e `SUPABASE_ANON_KEY` já existem no ambiente da função — não
-precisa criar.
+| Nome | Valor |
+| --- | --- |
+| `IA_CHAVE` | a chave que você copiou do Groq |
 
-## 3. Publicar a função
+Opcionais, só se um dia quiser trocar de provedor ou de modelo:
+`IA_PROVEDOR` (`groq` ou `anthropic`) e `IA_MODELO`.
 
-```bash
-supabase functions deploy assistente --project-ref SEU_REF
-```
+`SUPABASE_URL` e `SUPABASE_ANON_KEY` já existem no ambiente — não crie.
 
-O código está em `nuvem/funcoes/assistente/index.ts`. Confira que ficou no ar:
+> Depois de adicionar ou mudar um segredo, publique a função de novo
+> (**Deploy**). Ela lê os segredos quando sobe.
 
-```bash
-curl -i https://SEU_REF.supabase.co/functions/v1/assistente \
-  -X POST -H 'content-type: application/json' -d '{}'
-```
+## 4. Conferir
 
-Deve responder **401** — a função existe e está recusando quem não está
-logado. Se responder 404, o deploy não foi. Se responder 503, a chave não foi
-configurada.
+Cole isto na barra de endereço do navegador, trocando `SEU_REF`:
 
-## 4. Pronto
+    https://SEU_REF.supabase.co/functions/v1/assistente
+
+Abrir no navegador é uma leitura (GET), e a função só aceita POST. Então:
+
+- **405** → certo. A função está no ar. Era esse o teste.
+- **404** → o deploy não foi, ou o nome ficou diferente de `assistente`.
+- **401** → também está no ar, recusando quem não está logado.
+- **503** → está no ar, mas falta o segredo `IA_CHAVE`.
+
+## 5. Pronto
 
 Entre no IAD com um usuário do servidor. As caixas ✨ aparecem sozinhas nos
 formulários. Sem nuvem configurada ou sem sessão, elas simplesmente não
@@ -74,9 +81,14 @@ existem — o app continua exatamente como era.
 
 Duas variáveis, sem tocar em uma linha de código do aplicativo:
 
+No painel, em **Edge Functions → Secrets**, mude `IA_CHAVE` para a chave da
+Anthropic e adicione `IA_PROVEDOR` com o valor `anthropic`. Depois publique a
+função de novo.
+
+Pela CLI, se preferir:
+
 ```bash
-supabase secrets set IA_PROVEDOR=anthropic
-supabase secrets set IA_CHAVE=sk-ant-...
+supabase secrets set IA_PROVEDOR=anthropic IA_CHAVE=sk-ant-...
 supabase functions deploy assistente
 ```
 

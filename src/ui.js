@@ -117,6 +117,17 @@
           '" placeholder="0,00" autocomplete="off"></label>';
       }
       if (c.tipo === 'ia') return caixaIA(c);
+      /* O olho existe nas telas de acesso desde sempre; faltava aqui dentro,
+         que é justamente onde se troca a senha. */
+      if (c.tipo === 'password') {
+        return '<label class="campo"><span>' + esc(c.rotulo) + '</span>' +
+          '<span class="campo-senha">' +
+          '<input type="password" name="' + c.id + '" value="' + esc(v) + '"' +
+          (c.placeholder ? ' placeholder="' + esc(c.placeholder) + '"' : '') + '>' +
+          '<button type="button" class="olho" data-olho="' + c.id + '"' +
+          ' aria-label="Mostrar a senha" data-ajuda="Mostra ou esconde a senha digitada.">👁</button>' +
+          '</span></label>';
+      }
       return '<label class="campo"><span>' + esc(c.rotulo) + '</span><input type="' + (c.tipo || 'text') + '" name="' + c.id + '" value="' + esc(v) + '"' + (c.placeholder ? ' placeholder="' + esc(c.placeholder) + '"' : '') + '></label>';
     }).join('');
 
@@ -127,6 +138,7 @@
 
     document.body.appendChild(dlg);
     ligarVoz(dlg);
+    ligarOlho(dlg);
     ligarIA(dlg, campos);
     ligarLimpezaDeSugestao(dlg);
     if (aoMontar) aoMontar(dlg);
@@ -296,6 +308,19 @@
       dlg.addEventListener(evento, function (e) {
         if (dlg.__aplicandoIA) return;
         limparSugestao(e.target);
+      });
+    });
+  }
+
+  function ligarOlho(dlg) {
+    dlg.querySelectorAll('[data-olho]').forEach(function (botao) {
+      botao.addEventListener('click', function () {
+        const campo = dlg.querySelector('[name="' + botao.dataset.olho + '"]');
+        if (!campo) return;
+        const escondida = campo.type === 'password';
+        campo.type = escondida ? 'text' : 'password';
+        botao.textContent = escondida ? '🙈' : '👁';
+        botao.setAttribute('aria-label', escondida ? 'Esconder a senha' : 'Mostrar a senha');
       });
     });
   }

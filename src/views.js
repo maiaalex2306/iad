@@ -1658,6 +1658,7 @@
       '<button class="btn ghost mini" onclick="App.baixarModelo(\'oportunidades\')" data-ajuda="Baixa um CSV de exemplo com as colunas certas para oportunidades.">oportunidades.csv</button></div></div>' +
 
       blocoNuvem() +
+      blocoMinhaConta() +
       blocoLinkedHelper() +
 
       '<div class="card"><h2>Backup</h2>' +
@@ -1672,6 +1673,22 @@
       '<p class="small muted">Carrega uma carteira fictícia com os grupos de pipeline para treinar a leitura do modelo.</p>' +
       '<div class="row"><button class="btn ghost" onclick="App.carregarDemo()" data-ajuda-titulo="Demonstração" data-ajuda="Carrega uma carteira fictícia com os cinco grupos de pipeline, para treinar a leitura do modelo. Substitui o que está aqui.">Carregar demonstração</button>' +
       '<button class="btn ghost" onclick="App.limpar()" data-ajuda-titulo="Apagar tudo" data-ajuda="Apaga a carteira deste aparelho. Não apaga o que já foi sincronizado no servidor, nem os acessos.">Apagar tudo</button></div></div>';
+  }
+
+  /* Senha só é senha depois de trocada por quem vai usá-la: a inicial passou
+     pela mão de quem criou o acesso. Por isso este bloco existe, e é o
+     primeiro a ser visto por quem acabou de entrar pela primeira vez. */
+  function blocoMinhaConta() {
+    const N = global.IADNuvem;
+    const e = N.estado();
+    if (!e.conectado) return '';
+    return '<div class="card"><h2>Minha conta</h2>' +
+      '<p class="small muted">Conectado como <strong>' + esc(e.email) + '</strong>.</p>' +
+      '<p class="small">Se a sua senha foi criada por outra pessoa, ou se ela já circulou em ' +
+      'e-mail, mensagem ou arquivo, troque agora. A troca vale em todos os aparelhos.</p>' +
+      '<button class="btn alt" onclick="App.trocarMinhaSenha()"' +
+      ' data-ajuda-titulo="Trocar minha senha" data-ajuda="Define uma nova senha para o seu acesso no servidor. ' +
+      'Vale a partir do próximo login, em qualquer aparelho.">Trocar minha senha</button></div>';
   }
 
   /* A nuvem é opcional: sem ela o app segue local, como sempre foi. */

@@ -104,6 +104,12 @@
     });
   }
 
+  /* Troca da própria senha. É o GoTrue que valida a sessão: sem token válido
+     ele recusa, então ninguém troca a senha de outra pessoa por aqui. */
+  function trocarMinhaSenha(nova) {
+    return chamar('/auth/v1/user', { metodo: 'PUT', corpo: { password: nova } });
+  }
+
   /* Edge Functions: o pedaço de servidor que o app tem. Existe para guardar
      o que não pode viver no navegador — hoje, a chave da IA. */
   function chamarFuncao(nome, corpo) {
@@ -410,6 +416,7 @@
     perfisDaNuvem, empresasDaNuvem, souAdminNaNuvem, existeEmpresa,
     definirEmpresaDoPerfil, definirPapelDoPerfil, salvarMeuNome,
     convitesDaNuvem, convidar, removerConvite, criarEmpresa, chamarFuncao,
+    trocarMinhaSenha,
     paraBanco, paraApp
   };
 })(window);

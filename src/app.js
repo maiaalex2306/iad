@@ -1338,6 +1338,29 @@
     /* ---------- acesso ---------- */
     telaAcesso: function (tela) { V.definirTelaAcesso(tela, null, ''); render(); },
 
+    /* Trocar a própria senha. Existe porque a senha inicial de um usuário é
+       entregue por outra pessoa — e senha que passou pela mão de alguém não é
+       mais senha até ser trocada. */
+    trocarMinhaSenha: function () {
+      const N = global.IADNuvem;
+      if (!N.conectado()) {
+        alert('Entre com sua conta do servidor para trocar a senha.');
+        return;
+      }
+      U.formulario('Trocar minha senha', [
+        { id: 'nova', rotulo: 'Nova senha', tipo: 'password', placeholder: 'mínimo 8 caracteres' },
+        { id: 'confere', rotulo: 'Repita a nova senha', tipo: 'password' }
+      ], {}, function (d) {
+        if (d.nova.length < 8) { alert('A senha precisa ter pelo menos 8 caracteres.'); return; }
+        if (d.nova !== d.confere) { alert('As duas senhas não são iguais. Tente de novo.'); return; }
+        N.trocarMinhaSenha(d.nova).then(function () {
+          alert('Senha trocada. Ela vale a partir do próximo acesso, em qualquer aparelho.');
+        }).catch(function (e) {
+          alert('Não consegui trocar a senha: ' + e.message);
+        });
+      });
+    },
+
     verSenha: function (id, botao) {
       const campo = document.getElementById(id);
       if (!campo) return;
