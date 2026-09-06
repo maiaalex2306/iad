@@ -221,6 +221,23 @@
     });
   }
 
+  /* O perfil fica guardado na sessão para não pedir ao servidor a cada envio —
+     mas isso fazia mudança de papel ou de empresa só valer depois de sair e
+     entrar. Quem administra move alguém e a pessoa continua vendo a carteira
+     antiga até fechar o app: pior do que lento, é enganoso. Relemos ao abrir. */
+  function atualizarPerfilDaNuvem() {
+    const N = global.IADNuvem;
+    if (!N.conectado()) return;
+    N.meuPerfil().then(function (perfil) {
+      if (!perfil) return;
+      const antes = N.estado().perfil || {};
+      N.guardarPerfilNaSessao(perfil);
+      const u = N.sessao().user;
+      A.espelharDaNuvem(u, perfil);
+      if (antes.papel !== perfil.papel || antes.tenant_id !== perfil.tenant_id) render();
+    }).catch(function () {});
+  }
+
   const OPCOES_SIM_NAO = [{ valor: 'nao', rotulo: 'Não' }, { valor: 'sim', rotulo: 'Sim' }];
 
   const App = {
@@ -1466,6 +1483,7 @@
     Store.carregar();
     global.IADAjuda.ligar();
     montarNav();
+    atualizarPerfilDaNuvem();
     A.garantirAdministrador().then(render).catch(function (e) {
       console.warn('Falha ao preparar o administrador:', e);
       render();
