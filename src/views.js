@@ -1895,11 +1895,17 @@
   function opcoesSegmento(escolhido) {
     /* "Outros" existe sempre: é onde cai o que a IA não soube classificar, e
        de onde a pessoa move depois. Melhor "Outros" do que segmento errado —
-       o agrupamento do painel é lido pelo dono da empresa. */
+       o agrupamento do painel é lido pelo dono da empresa.
+
+       Sem sugestão, o padrão é "Outros" e não o primeiro da lista. Sem esta
+       linha, um select sem nada marcado faz o navegador escolher o primeiro
+       item sozinho: com o assistente desligado, toda empresa importada sairia
+       carimbada com o segmento que por acaso estivesse no topo do catálogo. */
     const lista = Store.nomesDoCatalogo('segmentos').slice();
     if (lista.indexOf('Outros') === -1) lista.push('Outros');
+    const alvo = (escolhido && lista.indexOf(escolhido) !== -1) ? escolhido : 'Outros';
     return lista.map(function (n) {
-      return '<option value="' + esc(n) + '"' + (n === escolhido ? ' selected' : '') + '>' + esc(n) + '</option>';
+      return '<option value="' + esc(n) + '"' + (n === alvo ? ' selected' : '') + '>' + esc(n) + '</option>';
     }).join('');
   }
 
