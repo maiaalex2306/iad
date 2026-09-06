@@ -145,6 +145,102 @@
     }).catch(function () { return {}; });
   }
 
+  /* ---------- o retrato de uma oportunidade ----------
+     O motor já sabe o que está fraco: nextBestDecision, lacunas, gates e
+     alertas são cálculo, não opinião, e continuam sendo a fonte da verdade.
+     O que a IA acrescenta é ler o que o CLIENTE disse — as evidências em
+     texto — e transformar isso em passo executável, na linguagem dele.
+
+     Por isso o retrato leva as evidências, não só as notas. Sem elas o modelo
+     devolveria o mesmo conselho genérico que o motor já dá melhor. */
+  function retratoDaOportunidade(op, r) {
+    const P = global.IADPlaybook;
+    const E = global.IADEngine;
+    const linhas = [];
+
+    linhas.push('CONTA: ' + ((r.conta && r.conta.nome) || 'sem conta') +
+      ((r.conta && r.conta.segmento) ? ' · segmento ' + r.conta.segmento : '') +
+      ((r.conta && r.conta.porte) ? ' · porte ' + r.conta.porte : ''));
+    linhas.push('OPORTUNIDADE: ' + op.titulo + ' · etapa ' + op.etapa +
+      ' há ' + r.tempoNaEtapa + ' dias · tipo ' + (op.tipo || 'Novo negócio'));
+    linhas.push('IAD: ' + r.iad + ' de 16 · classificação ' + r.classe.rotulo +
+      ' · sem evidência nova do cliente há ' + r.evidenceAge + ' dias');
+    if (op.concorrentes) linhas.push('CONCORRENTES DECLARADOS: ' + op.concorrentes);
+    if (op.insight && op.insight.texto) {
+      linhas.push('INSIGHT (' + op.insight.estado + '): ' + op.insight.texto.slice(0, 300));
+    }
+
+    linhas.push('');
+    linhas.push('AS OITO DECISÕES:');
+    P.DIMENSOES.forEach(function (d) {
+      const nota = op.dims[d.id] || 0;
+      const provas = E.evidenciasDaDimensao(op, d.id).slice(-2).map(function (ev) {
+        return '     · ' + (ev.data || '') + ' [' + (ev.forca || 'relato') + '] ' + ev.titulo;
+      });
+      linhas.push('  ' + d.nome + ': ' + nota + '/2 — ' + d.niveis[nota]);
+      if (provas.length) linhas.push(provas.join('\n'));
+    });
+
+    const pessoas = E.stakeholdersDaOp(op);
+    linhas.push('');
+    linhas.push('GRUPO DE COMPRA (' + pessoas.length + ' pessoas):');
+    pessoas.forEach(function (p) {
+      linhas.push('  ' + p.nome + ' — ' + (p.cargo || 'cargo não informado') +
+        ' · papel ' + p.papel + ' · posição ' + p.sentimento);
+    });
+    if (!pessoas.length) linhas.push('  ninguém mapeado');
+
+    if (r.compromisso) {
+      linhas.push('');
+      linhas.push('COMBINADO: ' + r.compromisso.texto + ' · para ' + r.compromisso.data +
+        ' · a vez é ' + (r.compromisso.dono === 'cliente' ? 'do cliente' : 'nossa'));
+    }
+    const pendentes = (r.gates && r.gates.pendentes) || [];
+    if (pendentes.length) {
+      linhas.push('GATES DA PROPOSTA AINDA NÃO ATENDIDOS: ' +
+        pendentes.map(function (g) {
+          return g.nome + ' (tem ' + g.atual + ', precisa de ' + g.min + ')';
+        }).join(', '));
+    }
+    const semPapel = (r.coverage && r.coverage.faltando) || [];
+    if (semPapel.length) {
+      linhas.push('PAPÉIS CRÍTICOS SEM NINGUÉM: ' + semPapel.join(', '));
+    }
+    if (r.alertas && r.alertas.length) {
+      linhas.push('ALERTAS DO SISTEMA: ' + r.alertas.map(function (a) {
+        return a.texto || a.titulo || String(a);
+      }).join(' | '));
+    }
+
+    return linhas.join('\n');
+  }
+
+  /* Próximos passos amarrados a decisões. etapaNova, quando vem, faz a
+     análise responder "o que esta etapa exige e ainda não está provado". */
+  function planoDaOportunidade(op, r, etapaNova) {
+    if (!disponivel()) return Promise.resolve(null);
+
+    const pedido = Nuvem.chamarFuncao('assistente', {
+      tipo: 'plano',
+      texto: retratoDaOportunidade(op, r),
+      contexto: { hoje: global.IADStore.hoje(), etapaNova: etapaNova || '' }
+    });
+    const prazo = new Promise(function (resolve) {
+      setTimeout(function () { resolve(null); }, PRAZO_REUNIAO);
+    });
+
+    return Promise.race([pedido, prazo]).then(function (resp) {
+      if (!resp || resp.erro || !Array.isArray(resp.passos)) return null;
+      const dimensoes = global.IADPlaybook.DIMENSOES.map(function (d) { return d.id; });
+      return {
+        passos: resp.passos.filter(function (x) {
+          return x && x.acao && dimensoes.indexOf(x.dimensao) !== -1;
+        }),
+        atencao: resp.atencao || []
+      };
+    }).catch(function () { return null; });
+  }
+
   /* Transcrição do Meet vem como .txt ou legenda (.vtt/.srt). Anotação vem
      como .md. Nada disso precisa de biblioteca: é texto. PDF e .docx são
      binários e ficam de fora — o app não carrega dependência para abri-los. */
@@ -226,6 +322,8 @@
     extrair: extrair,
     analisarReuniao: analisarReuniao,
     classificarSegmentos: classificarSegmentos,
+    planoDaOportunidade: planoDaOportunidade,
+    retratoDaOportunidade: retratoDaOportunidade,
     lerTexto: lerTexto,
     ehTexto: ehTexto,
     fila: fila,

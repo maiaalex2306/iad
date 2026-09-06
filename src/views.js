@@ -790,6 +790,7 @@
           (op.sdr ? ' \u00b7 SDR ' + esc(op.sdr) : '') + '</p>'
         : '') +
 
+      blocoPlanoIA(op) +
       blocoAvanco(op, r) +
       blocoLacunas(op, r) +
       blocoInsight(op, r) +
@@ -1958,9 +1959,62 @@
       '</div></form>';
   }
 
+  /* ---------------- Plano sugerido pela IA ----------------
+     O bloco nasce vazio com um botão: análise custa chamada, e abrir o
+     cockpit não é pedir análise. O que volta vem sempre amarrado a uma das
+     oito decisões — passo solto, que não diz qual decisão pretende mover, é
+     conselho de LinkedIn, não método. */
+  /* O plano vive aqui, e não no app, porque render() reconstrói a tela: se o
+     resultado fosse injetado no DOM depois, criar uma tarefa a partir de um
+     passo apagaria os outros — e a pessoa só conseguiria usar o primeiro. */
+  let planoIA = null;
+
+  function definirPlano(opId, plano) { planoIA = plano ? { opId: opId, plano: plano } : null; }
+  function planoGuardado(opId) {
+    return (planoIA && planoIA.opId === opId) ? planoIA.plano : null;
+  }
+
+  function blocoPlanoIA(op) {
+    if (!U.assistenteAtivo()) return '';
+    const guardado = planoGuardado(op.id);
+    return '<div class="card" id="plano-ia"><div class="row"><h2 style="margin:0">Próximos passos</h2>' +
+      '<span class="espaco"></span>' +
+      '<button class="btn alt mini" onclick="App.planejar(\'' + op.id + '\')"' +
+      ' data-ajuda-titulo="Analisar com IA" data-ajuda="Lê as evidências deste negócio — o que o cliente disse, com as palavras dele — e propõe o que fazer agora, cada passo ligado a uma das oito decisões.">' +
+      (guardado ? 'Analisar de novo' : 'Analisar com IA') + '</button></div>' +
+      (guardado
+        ? planoDaIA(op, guardado)
+        : '<p class="small muted" style="margin:10px 0 0">O assistente lê as evidências deste negócio e propõe o que fazer agora. Ele não pontua decisão: quem pontua é você, com evidência.</p>') +
+      '</div>';
+  }
+
+  function planoDaIA(op, plano) {
+    if (!plano || !plano.passos.length) {
+      return '<p class="small muted" style="margin:10px 0 0">O assistente não encontrou passo novo a propor com o que está registrado. Registre uma evidência e tente de novo.</p>';
+    }
+    const passos = plano.passos.map(function (pa, i) {
+      const dim = P.DIMENSOES.filter(function (d) { return d.id === pa.dimensao; })[0];
+      return '<li class="achado">' +
+        '<div class="row"><span class="pill navy">' + esc(dim ? dim.nome : pa.dimensao) + '</span>' +
+        '<strong>' + esc(pa.acao) + '</strong></div>' +
+        (pa.porque ? '<p class="small muted" style="margin:6px 0 0">' + esc(pa.porque) + '</p>' : '') +
+        (pa.pergunta ? '<p class="origem">Pergunte: \u201c' + esc(pa.pergunta) + '\u201d</p>' : '') +
+        '<div class="row" style="margin-top:8px">' +
+        '<button class="btn ghost mini" onclick="App.tarefaDoPasso(\'' + op.id + '\',' + i + ')">Criar tarefa</button>' +
+        '</div></li>';
+    }).join('');
+
+    const atencao = (plano.atencao || []).map(function (a) {
+      return '<li>' + esc(a) + '</li>';
+    }).join('');
+
+    return '<ul class="achados" style="margin-top:12px">' + passos + '</ul>' +
+      (atencao ? '<div class="aviso" style="margin-top:12px"><strong>Atenção</strong><ul class="small" style="margin:6px 0 0;padding-left:18px">' + atencao + '</ul></div>' : '');
+  }
+
   global.IADViews = {
     hoje, painel, pipeline, cockpit, revisao, contas, cadastros, playbook, dados, itemArquivo, listaLeads,
-    revisaoDaReuniao, revisaoDaImportacao,
+    revisaoDaReuniao, revisaoDaImportacao, planoDaIA, definirPlano, planoGuardado,
     acesso, barraAdmin, definirTelaAcesso, definirPrimeiraEmpresa, listaUsuariosNuvem,
     pendenteAcesso: function () { return pendente; },
     definirFiltro: function (f) { filtroGrupo = f; },

@@ -406,10 +406,72 @@
       if (opId) App.moverEtapa(opId, etapa);
     },
 
+    /* Mudar de etapa é uma declaração: "este negócio avançou". O IAD existe
+       para perguntar se a decisão do cliente avançou junto. Por isso a
+       análise acontece aqui, no gesto, e não numa tela que ninguém abre. */
     moverEtapa: function (opId, etapa) {
       const op = Store.oportunidade(opId);
       if (!op || op.etapa === etapa) return;
       Store.atualizarOportunidade(opId, { etapa: etapa });
+      render();
+      if (IA.disponivel()) App.planejar(opId, etapa);
+    },
+
+    /* Análise sob demanda. Não roda ao abrir o cockpit: cada chamada custa, e
+       abrir a tela não é pedir análise. */
+    planejar: function (opId, etapaNova) {
+      const op = Store.oportunidade(opId);
+      if (!op) return;
+      if (!IA.disponivel()) { alert('O assistente não está publicado no servidor.'); return; }
+
+      const r = E.resumo(op);
+      const dlg = document.createElement('dialog');
+      dlg.className = 'revisao-ia';
+      dlg.innerHTML = '<div class="corpo"><h2>Lendo este negócio…</h2>' +
+        '<p class="small muted">' + U.esc(op.titulo) + ' · IAD ' + r.iad + '/16' +
+        (etapaNova ? ' · agora em ' + U.esc(etapaNova) : '') + '</p></div>';
+      document.body.appendChild(dlg);
+      dlg.showModal();
+
+      IA.planoDaOportunidade(op, r, etapaNova).then(function (plano) {
+        dlg.close(); dlg.remove();
+        if (!plano) { alert('Não consegui falar com o assistente agora.'); return; }
+        V.definirPlano(opId, plano);
+
+        /* Vindo da mudança de etapa, o resultado é uma janela — o vendedor
+           acabou de agir e a resposta tem de encontrá-lo ali. Vindo do botão,
+           preenche o bloco do cockpit, sem interromper. */
+        if (etapaNova) {
+          const janela = document.createElement('dialog');
+          janela.className = 'revisao-ia';
+          janela.innerHTML = '<form method="dialog"><div class="corpo">' +
+            '<h2>O que a etapa ' + U.esc(etapaNova) + ' exige</h2>' +
+            '<p class="small muted">Etapa mudou. Estas decisões ainda não acompanham.</p>' +
+            V.planoDaIA(op, plano) +
+            '</div><div class="rodape">' +
+            '<button class="btn" value="ok" type="submit">Entendi</button>' +
+            '</div></form>';
+          document.body.appendChild(janela);
+          janela.addEventListener('close', function () { janela.remove(); });
+          janela.showModal();
+          return;
+        }
+
+        render();   /* o bloco se redesenha com o plano guardado */
+      });
+    },
+
+    /* Um passo vira tarefa com a decisão-alvo já preenchida: é isso que liga
+       a sugestão ao mapa, em vez de deixá-la como texto na tela. */
+    tarefaDoPasso: function (opId, indice) {
+      const plano = V.planoGuardado ? V.planoGuardado(opId) : null;
+      const passo = plano && plano.passos[indice];
+      if (!passo) return;
+      Store.criarTarefa({
+        oportunidadeId: opId, titulo: passo.acao.slice(0, 160),
+        tipo: 'Preparar', decisaoAlvo: passo.dimensao, vencimento: Store.hoje()
+      });
+      alert('Tarefa criada, mirando ' + passo.dimensao + '. Ajuste o prazo em Hoje.');
       render();
     },
 

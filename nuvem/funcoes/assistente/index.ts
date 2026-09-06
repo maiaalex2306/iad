@@ -123,6 +123,8 @@ const FORMATOS: Record<string, Record<string, Regra>> = {
   insight: {
     texto: { como: 'texto', max: 400 }
   },
+  /* 'plano' devolve uma lista de próximos passos amarrados a decisões. */
+  plano: {},
   /* 'segmentos' classifica um lote de empresas de uma vez: uma chamada para
      a importação inteira, em vez de uma por lead. Validado à parte. */
   segmentos: {},
@@ -263,6 +265,30 @@ Regras desta tarefa:
 - O que NÓS fizemos (mandamos proposta, fizemos follow-up) não é evidência. Descarte.
 - No máximo ${ITENS_MAXIMOS} evidências. Se houver mais, fique com as mais relevantes para a decisão.
 - Nunca devolva nota ou pontuação. O vendedor escolhe item por item.`;
+  }
+
+  if (tipo === 'plano') {
+    const etapaNova = limparTexto(ctx.etapaNova, 40);
+    return `${BASE}
+
+Tarefa: você recebe o retrato de UMA oportunidade — as oito decisões com nota, as evidências que o cliente produziu, quem está no grupo de compra e o que ficou combinado. Diga o que fazer agora.
+${etapaNova ? `\nO vendedor acabou de mover este negócio para a etapa "${etapaNova}". Priorize o que essa etapa exige e que ainda não está comprovado. Uma etapa adiantada com decisão imatura é o padrão que o IAD chama de "falso avançado" — se for o caso, diga.\n` : ''}
+Devolva {"passos":[...], "atencao":[...]}.
+
+Cada item de "passos" tem:
+- dimensao: qual das oito decisões este passo pretende mover.
+- acao: o que o vendedor faz, começando por um verbo. Concreto e executável esta semana. Nada de "alinhar expectativas" ou "fortalecer relacionamento".
+- pergunta: uma pergunta para fazer ao cliente, escrita como se fala, que produza a evidência dessa decisão.
+- porque: em uma linha, o que no retrato justifica este passo. Cite o que o cliente disse, quando houver.
+
+"atencao" é uma lista de no máximo 3 frases curtas sobre risco de perder este negócio — silêncio do cliente, papel crítico ausente, resistência de quem assina, concorrente ganhando espaço. Só o que os dados sustentam.
+
+Regras desta tarefa:
+- No máximo 4 passos, na ordem em que devem ser feitos.
+- Use as palavras do cliente quando elas estiverem no retrato. Um passo que poderia servir para qualquer negócio não serve para nenhum.
+- Não sugira nota, não diga que uma decisão "deveria" valer 2. Quem pontua é o vendedor, com evidência.
+- Não invente pessoa, número, prazo ou concorrente que não esteja no retrato.
+- Português do Brasil.`;
   }
 
   if (tipo === 'segmentos') {
@@ -496,6 +522,35 @@ function validarSegmentos(bruto: Record<string, unknown>, ctx: Record<string, un
   return { itens: itens };
 }
 
+/* Passos e alertas. Passo sem dimensão válida é descartado: ele existiria
+   solto, sem dizer qual decisão pretende mover — que é o ponto do método. */
+function validarPlano(bruto: Record<string, unknown>) {
+  const dimensoes = DIMENSOES.map((d) => d[0]);
+  const brutos = Array.isArray(bruto.passos) ? bruto.passos : [];
+  const passos = [];
+
+  for (const item of brutos.slice(0, 4)) {
+    if (!item || typeof item !== 'object') continue;
+    const o = item as Record<string, unknown>;
+    const dimensao = dimensoes.find((d) => d === limparTexto(o.dimensao, 20).toLowerCase());
+    const acao = limparTexto(o.acao, 220);
+    if (!dimensao || !acao) continue;
+    passos.push({
+      dimensao: dimensao,
+      acao: acao,
+      pergunta: limparTexto(o.pergunta, 220),
+      porque: limparTexto(o.porque, 220)
+    });
+  }
+
+  const atencao = (Array.isArray(bruto.atencao) ? bruto.atencao : [])
+    .slice(0, 3)
+    .map((a) => limparTexto(a, 200))
+    .filter(Boolean);
+
+  return { passos: passos, atencao: atencao };
+}
+
 /* ---------- o site da empresa ----------
    O modelo não navega. A função navega — ela roda num servidor. Para empresa
    conhecida a descrição do próprio LinkedIn basta; o site resolve a empresa
@@ -573,7 +628,8 @@ Deno.serve(async (req: Request) => {
   if (!FORMATOS[tipo]) return responder({ erro: 'tipo desconhecido' }, 400);
 
   /* Transcrição de reunião é longa por natureza; um lote de empresas também. */
-  const limite = (tipo === 'reuniao' || tipo === 'segmentos') ? LIMITE_REUNIAO : LIMITE_TEXTO;
+  const limite = (tipo === 'reuniao' || tipo === 'segmentos' || tipo === 'plano')
+    ? LIMITE_REUNIAO : LIMITE_TEXTO;
   const texto = String(pedido.texto || '').slice(0, limite).trim();
   if (texto.length < 10) return responder({ campos: {}, frases: {} });
 
@@ -602,10 +658,12 @@ Deno.serve(async (req: Request) => {
     if (!json) {
       if (tipo === 'reuniao') return responder({ evidencias: [], contatos: [] });
       if (tipo === 'segmentos') return responder({ itens: [] });
+      if (tipo === 'plano') return responder({ passos: [], atencao: [] });
       return responder({ campos: {}, frases: {} });
     }
     if (tipo === 'reuniao') return responder(validarReuniao(json, ctx));
     if (tipo === 'segmentos') return responder(validarSegmentos(json, ctx));
+    if (tipo === 'plano') return responder(validarPlano(json));
     return responder(validar(tipo, json, ctx));
   } catch (e) {
     return responder({ erro: String((e as Error).message || e) }, 502);
