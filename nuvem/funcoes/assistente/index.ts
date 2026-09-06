@@ -125,6 +125,10 @@ const FORMATOS: Record<string, Record<string, Regra>> = {
   },
   /* 'plano' devolve uma lista de próximos passos amarrados a decisões. */
   plano: {},
+  /* 'notas' propõe as oito notas a partir do que o cliente já disse. Propõe:
+     quem grava é o vendedor, depois de conferir, e a regra de que 2 exige
+     prova confirmada continua sendo aplicada pelo motor. */
+  notas: {},
   /* 'segmentos' classifica um lote de empresas de uma vez: uma chamada para
      a importação inteira, em vez de uma por lead. Validado à parte. */
   segmentos: {},
@@ -265,6 +269,27 @@ Regras desta tarefa:
 - O que NÓS fizemos (mandamos proposta, fizemos follow-up) não é evidência. Descarte.
 - No máximo ${ITENS_MAXIMOS} evidências. Se houver mais, fique com as mais relevantes para a decisão.
 - Nunca devolva nota ou pontuação. O vendedor escolhe item por item.`;
+  }
+
+  if (tipo === 'notas') {
+    return `${BASE}
+
+Tarefa: você recebe o retrato de UMA oportunidade — as evidências que o cliente produziu, o grupo de compra, o insight e, quando houver, o texto de uma reunião que o vendedor acabou de colar. Proponha a nota de cada uma das oito decisões.
+
+Devolva {"decisoes":[{"dimensao":"problema","nota":0,"porque":"...","trecho":"..."} , ...]} com as oito, na ordem acima.
+
+Os três níveis, iguais para todas:
+  0 — não sabemos: nada do lado do cliente sustenta esta decisão.
+  1 — parcial: há sinal, mas vago, indireto ou dito por uma pessoa só.
+  2 — comprovado pelo cliente: ele descreveu, mostrou, mandou ou fez.
+
+Regras desta tarefa, e são o ponto todo:
+- A nota vem SÓ do que o CLIENTE disse ou fez. O que nós mandamos, apresentamos ou propusemos não conta e nunca sobe nota. Uma proposta enviada não é impacto aceito; um material apresentado não é problema reconhecido.
+- "trecho" tem de ser um pedaço LITERAL do retrato que sustenta a nota. Sem trecho literal, a nota é 0. Não parafraseie para justificar.
+- Na dúvida entre dois níveis, use o menor. Uma nota inflada vira pipeline falso no painel do dono da empresa, e ninguém descobre a tempo.
+- "porque" em uma linha, dizendo o que sustenta — ou, quando for 0, o que faltaria para subir.
+- Nunca invente pessoa, número, prazo ou fala que não esteja no retrato.
+- Português do Brasil.`;
   }
 
   if (tipo === 'plano') {
@@ -522,6 +547,45 @@ function validarSegmentos(bruto: Record<string, unknown>, ctx: Record<string, un
   return { itens: itens };
 }
 
+/* As oito notas propostas. Duas travas aqui, além da que o app aplica depois:
+   nota fora de 0..2 é descartada, e nota maior que zero sem trecho literal
+   cai para zero — se o modelo não consegue apontar onde o cliente disse, ele
+   está inferindo, e inferência não pontua decisão. */
+function validarNotas(bruto: Record<string, unknown>, textoOriginal: string) {
+  const dimensoes = DIMENSOES.map((d) => d[0]);
+  const brutas = Array.isArray(bruto.decisoes) ? bruto.decisoes : [];
+  const decisoes = [];
+  const vistas = new Set<string>();
+
+  for (const item of brutas.slice(0, 16)) {
+    if (!item || typeof item !== 'object') continue;
+    const o = item as Record<string, unknown>;
+    const dimensao = dimensoes.find((d) => d === limparTexto(o.dimensao, 20).toLowerCase());
+    if (!dimensao || vistas.has(dimensao)) continue;
+
+    let nota = Number(o.nota);
+    if (!isFinite(nota) || nota < 0 || nota > 2) continue;
+    nota = Math.floor(nota);
+
+    const trecho = limparTexto(o.trecho, 240);
+    /* O trecho tem de existir mesmo no retrato. Comparação frouxa, por um
+       pedaço do começo, porque o modelo costuma cortar a citação. */
+    const chave = trecho.slice(0, 40).toLowerCase();
+    const citaDeVerdade = chave.length >= 12 &&
+      textoOriginal.replace(/\s+/g, ' ').toLowerCase().indexOf(chave) !== -1;
+    if (nota > 0 && !citaDeVerdade) nota = 0;
+
+    vistas.add(dimensao);
+    decisoes.push({
+      dimensao: dimensao,
+      nota: nota,
+      porque: limparTexto(o.porque, 240),
+      trecho: citaDeVerdade ? trecho : ''
+    });
+  }
+  return { decisoes: decisoes };
+}
+
 /* Passos e alertas. Passo sem dimensão válida é descartado: ele existiria
    solto, sem dizer qual decisão pretende mover — que é o ponto do método. */
 function validarPlano(bruto: Record<string, unknown>) {
@@ -628,7 +692,7 @@ Deno.serve(async (req: Request) => {
   if (!FORMATOS[tipo]) return responder({ erro: 'tipo desconhecido' }, 400);
 
   /* Transcrição de reunião é longa por natureza; um lote de empresas também. */
-  const limite = (tipo === 'reuniao' || tipo === 'segmentos' || tipo === 'plano')
+  const limite = (tipo === 'reuniao' || tipo === 'segmentos' || tipo === 'plano' || tipo === 'notas')
     ? LIMITE_REUNIAO : LIMITE_TEXTO;
   const texto = String(pedido.texto || '').slice(0, limite).trim();
   if (texto.length < 10) return responder({ campos: {}, frases: {} });
@@ -659,11 +723,13 @@ Deno.serve(async (req: Request) => {
       if (tipo === 'reuniao') return responder({ evidencias: [], contatos: [] });
       if (tipo === 'segmentos') return responder({ itens: [] });
       if (tipo === 'plano') return responder({ passos: [], atencao: [] });
+      if (tipo === 'notas') return responder({ decisoes: [] });
       return responder({ campos: {}, frases: {} });
     }
     if (tipo === 'reuniao') return responder(validarReuniao(json, ctx));
     if (tipo === 'segmentos') return responder(validarSegmentos(json, ctx));
     if (tipo === 'plano') return responder(validarPlano(json));
+    if (tipo === 'notas') return responder(validarNotas(json, entrada));
     return responder(validar(tipo, json, ctx));
   } catch (e) {
     return responder({ erro: String((e as Error).message || e) }, 502);

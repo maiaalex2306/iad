@@ -241,6 +241,37 @@
     }).catch(function () { return null; });
   }
 
+  /* As oito notas propostas a partir do que já está registrado, mais o texto
+     de uma reunião quando o vendedor colar uma.
+
+     Isto não fere a regra de que a IA não pontua: ela PROPÕE, o vendedor
+     confere as oito de uma vez e confirma, e a trava do motor continua de pé —
+     nota 2 sem evidência confirmada cai para 1, venha de onde vier. O que
+     muda é o custo: oito formulários viram uma tela. */
+  function sugerirNotas(op, r, textoExtra) {
+    if (!disponivel()) return Promise.resolve(null);
+
+    let retrato = retratoDaOportunidade(op, r);
+    const extra = String(textoExtra || '').trim();
+    if (extra) retrato += '\n\nREUNIÃO QUE O VENDEDOR ACABOU DE COLAR:\n' + extra;
+
+    const pedido = Nuvem.chamarFuncao('assistente', {
+      tipo: 'notas', texto: retrato, contexto: { hoje: global.IADStore.hoje() }
+    });
+    const prazo = new Promise(function (resolve) {
+      setTimeout(function () { resolve(null); }, PRAZO_REUNIAO);
+    });
+
+    return Promise.race([pedido, prazo]).then(function (resp) {
+      if (!resp || resp.erro || !Array.isArray(resp.decisoes)) return null;
+      const dimensoes = global.IADPlaybook.DIMENSOES.map(function (d) { return d.id; });
+      return resp.decisoes.filter(function (d) {
+        return d && dimensoes.indexOf(d.dimensao) !== -1 &&
+          d.nota >= 0 && d.nota <= 2;
+      });
+    }).catch(function () { return null; });
+  }
+
   /* Transcrição do Meet vem como .txt ou legenda (.vtt/.srt). Anotação vem
      como .md. Nada disso precisa de biblioteca: é texto. PDF e .docx são
      binários e ficam de fora — o app não carrega dependência para abri-los. */
@@ -323,6 +354,7 @@
     analisarReuniao: analisarReuniao,
     classificarSegmentos: classificarSegmentos,
     planoDaOportunidade: planoDaOportunidade,
+    sugerirNotas: sugerirNotas,
     retratoDaOportunidade: retratoDaOportunidade,
     lerTexto: lerTexto,
     ehTexto: ehTexto,

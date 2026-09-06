@@ -461,6 +461,76 @@
       });
     },
 
+    /* Ler o que está registrado e propor as oito notas de uma vez.
+
+       Isto não quebra a regra de que a IA não pontua. Ela propõe, o vendedor
+       confere as oito numa tela e confirma — e a trava do motor continua de
+       pé: nota 2 sem evidência confirmada cai para 1, venha de onde vier.
+       O que muda é o custo. Oito formulários é o motivo de ninguém pontuar. */
+    lerDecisoes: function (opId) {
+      const op = Store.oportunidade(opId);
+      if (!op) return;
+      if (!IA.disponivel()) { alert('O assistente não está publicado no servidor.'); return; }
+
+      U.formulario('Ler as oito decisões', [
+        { id: 'texto', rotulo: 'Cole uma reunião, se tiver (opcional)', tipo: 'textarea', voz: true,
+          placeholder: 'Deixe vazio para o assistente ler só o que já está registrado nesta oportunidade.' }
+      ], {}, function (d) {
+        const r = E.resumo(op);
+        const espera = document.createElement('dialog');
+        espera.innerHTML = '<div class="corpo"><h2>Lendo as evidências…</h2>' +
+          '<p class="small muted">Comparando o que o cliente disse com as oito decisões.</p></div>';
+        document.body.appendChild(espera);
+        espera.showModal();
+
+        IA.sugerirNotas(op, r, d.texto).then(function (decisoes) {
+          espera.close(); espera.remove();
+          if (!decisoes) { alert('Não consegui falar com o assistente agora.'); return; }
+          App.revisarNotas(opId, decisoes);
+        });
+      });
+    },
+
+    revisarNotas: function (opId, decisoes) {
+      const op = Store.oportunidade(opId);
+      if (!op) return;
+      const dlg = document.createElement('dialog');
+      dlg.className = 'revisao-ia';
+      dlg.innerHTML = V.revisaoDasNotas(op, decisoes);
+      document.body.appendChild(dlg);
+
+      dlg.addEventListener('close', function () {
+        if (dlg.returnValue === 'ok') {
+          let mudadas = 0, rebaixadas = 0;
+          P.DIMENSOES.forEach(function (d) {
+            const campo = dlg.querySelector('[data-nota="' + d.id + '"]');
+            if (!campo || campo.value === 'manter') return;
+            const alvo = Store.oportunidade(opId);
+            const pedida = Number(campo.value);
+            /* A mesma regra de sempre, aplicada aqui também: 2 é "comprovado",
+               e só relato não comprova. Vale para a IA como vale para todo mundo. */
+            const permitida = (pedida === 2 && !E.podeComprovar(alvo, d.id))
+              ? Math.max(1, alvo.dims[d.id] || 0)
+              : pedida;
+            if (permitida !== (alvo.dims[d.id] || 0)) {
+              Store.pontuar(opId, d.id, permitida, 'Lido pelo assistente e confirmado');
+              mudadas++;
+              if (permitida !== pedida) rebaixadas++;
+            }
+          });
+          const depois = E.iad(Store.oportunidade(opId));
+          alert(mudadas
+            ? mudadas + (mudadas === 1 ? ' decisão gravada' : ' decisões gravadas') +
+              '. IAD agora: ' + depois + '/16.' +
+              (rebaixadas ? '\n\n' + rebaixadas + ' ficou em 1: para 2 é preciso evidência confirmada ou documentada.' : '')
+            : 'Nada mudou.');
+          render();
+        }
+        dlg.remove();
+      });
+      dlg.showModal();
+    },
+
     /* Um passo vira tarefa com a decisão-alvo já preenchida: é isso que liga
        a sugestão ao mapa, em vez de deixá-la como texto na tela. */
     tarefaDoPasso: function (opId, indice) {

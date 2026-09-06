@@ -1979,6 +1979,8 @@
     const guardado = planoGuardado(op.id);
     return '<div class="card" id="plano-ia"><div class="row"><h2 style="margin:0">Próximos passos</h2>' +
       '<span class="espaco"></span>' +
+      '<button class="btn ghost mini" onclick="App.lerDecisoes(\'' + op.id + '\')"' +
+      ' data-ajuda-titulo="Ler as oito decisões" data-ajuda="Lê o que já está registrado — e a reunião que você colar — e propõe a nota de cada uma das oito. Você confere as oito numa tela só e grava.">Ler as 8 decisões</button>' +
       '<button class="btn alt mini" onclick="App.planejar(\'' + op.id + '\')"' +
       ' data-ajuda-titulo="Analisar com IA" data-ajuda="Lê as evidências deste negócio — o que o cliente disse, com as palavras dele — e propõe o que fazer agora, cada passo ligado a uma das oito decisões.">' +
       (guardado ? 'Analisar de novo' : 'Analisar com IA') + '</button></div>' +
@@ -2012,9 +2014,74 @@
       (atencao ? '<div class="aviso" style="margin-top:12px"><strong>Atenção</strong><ul class="small" style="margin:6px 0 0;padding-left:18px">' + atencao + '</ul></div>' : '');
   }
 
+  /* ---------------- Conferência das oito notas ----------------
+     A tela existe porque a alternativa é o vendedor não pontuar. Oito
+     formulários viram oito linhas com a nota proposta, o trecho literal em
+     que ela se apoia e um select para discordar. Quem grava é ele. */
+  function revisaoDasNotas(op, decisoes) {
+    const linhas = P.DIMENSOES.map(function (d) {
+      const s = decisoes.filter(function (x) { return x.dimensao === d.id; })[0] ||
+        { dimensao: d.id, nota: 0, porque: '', trecho: '' };
+      const atual = op.dims[d.id] || 0;
+      const podeDois = E.podeComprovar(op, d.id);
+
+      /* A proposta é rebaixada aqui, na tela, e não escondida atrás de um
+         "manter" sem explicação: 2 significa comprovado, e só relato não
+         comprova. Mostrar "0 → 2" com o select em "manter" seria a tela se
+         contradizendo na frente de quem vai gravar. */
+      const rebaixada = (s.nota === 2 && !podeDois);
+      const proposta = rebaixada ? 1 : s.nota;
+      const sobe = proposta > atual;
+
+      const opcoes = ['manter'].concat([0, 1, 2]).map(function (v) {
+        if (v === 'manter') {
+          return '<option value="manter"' + (sobe ? '' : ' selected') + '>Manter em ' + atual + '</option>';
+        }
+        const bloqueada = (v === 2 && !podeDois);
+        return '<option value="' + v + '"' +
+          (bloqueada ? ' disabled' : '') +
+          (sobe && v === proposta ? ' selected' : '') + '>' +
+          v + ' \u2014 ' + esc(d.niveis[v]) + (bloqueada ? ' (exige prova confirmada)' : '') +
+          '</option>';
+      }).join('');
+
+      return '<li class="achado">' +
+        '<div class="row"><span class="pill' + (sobe ? ' navy' : '') + '">' + esc(d.nome) + '</span>' +
+        '<strong>' + atual + ' \u2192 ' + (sobe ? proposta : atual) + '</strong>' +
+        '<span class="espaco"></span>' +
+        (sobe ? '' : '<span class="tiny muted">sem mudança</span>') + '</div>' +
+        (s.porque ? '<p class="small muted" style="margin:6px 0 0">' + esc(s.porque) + '</p>' : '') +
+        (rebaixada ? '<p class="compromisso small" style="margin:6px 0 0">O assistente propôs 2. Fica em 1: as evidências desta decisão são todas de relato, e relato não comprova.</p>' : '') +
+        (s.trecho ? '<p class="origem">\u201c' + esc(s.trecho) + '\u201d</p>' : '') +
+        '<div class="row escolhas">' +
+          '<label class="campo mini"><span>Como fica</span>' +
+          '<select data-nota="' + d.id + '">' + opcoes + '</select></label>' +
+        '</div></li>';
+    }).join('');
+
+    const sobem = decisoes.filter(function (s) {
+      const podeDois = E.podeComprovar(op, s.dimensao);
+      const proposta = (s.nota === 2 && !podeDois) ? 1 : s.nota;
+      return proposta > (op.dims[s.dimensao] || 0);
+    }).length;
+
+    return '<form method="dialog"><div class="corpo">' +
+      '<h2>As oito decisões, lidas do que está registrado</h2>' +
+      '<p class="small muted">O assistente propõe; quem grava \u00e9 voc\u00ea. Cada nota acima de zero precisou citar ' +
+      'um trecho literal \u2014 sem citação, ela volta a zero. Nota 2 continua exigindo evid\u00eancia confirmada ou documentada.</p>' +
+      (sobem
+        ? '<p class="small"><strong>' + sobem + (sobem === 1 ? ' decisão sobe' : ' decisões sobem') + '</strong> com o que já está registrado.</p>'
+        : '<div class="aviso">Nada sobe. O que está registrado não sustenta nenhuma das oito \u2014 e isso é uma resposta, não uma falha: falta evid\u00eancia do cliente.</div>') +
+      '<ul class="achados">' + linhas + '</ul>' +
+      '</div><div class="rodape">' +
+      '<button class="btn ghost" value="cancelar" type="submit">Cancelar</button>' +
+      '<button class="btn" value="ok" type="submit">Gravar as notas</button>' +
+      '</div></form>';
+  }
+
   global.IADViews = {
     hoje, painel, pipeline, cockpit, revisao, contas, cadastros, playbook, dados, itemArquivo, listaLeads,
-    revisaoDaReuniao, revisaoDaImportacao, planoDaIA, definirPlano, planoGuardado,
+    revisaoDaReuniao, revisaoDaImportacao, planoDaIA, definirPlano, planoGuardado, revisaoDasNotas,
     acesso, barraAdmin, definirTelaAcesso, definirPrimeiraEmpresa, listaUsuariosNuvem,
     pendenteAcesso: function () { return pendente; },
     definirFiltro: function (f) { filtroGrupo = f; },
