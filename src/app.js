@@ -1279,10 +1279,37 @@
       espera.showModal();
 
       global.IADIntegracoes.buscar().then(function (lista) {
-        espera.close(); espera.remove();
         leads = lista;
-        if (!lista.length) { alert('Nenhuma resposta nova na ponte.'); return; }
-        App.revisarImportacao(lista);
+        if (!lista.length) {
+          espera.close(); espera.remove();
+          alert('Nenhuma resposta nova na ponte.');
+          return;
+        }
+
+        /* Várias SDRs mandam prospects de segmentos diferentes. Classificar
+           empresa por empresa à mão é o que faz ninguém classificar — e sem
+           segmento o painel por segmento não diz nada. Uma chamada só para o
+           lote inteiro, e o vendedor corrige o que quiser na tela seguinte. */
+        const semSegmento = lista.filter(function (l) { return l.empresa; });
+        if (!IA.disponivel() || !semSegmento.length) {
+          espera.close(); espera.remove();
+          return App.revisarImportacao(lista);
+        }
+
+        espera.querySelector('h2').textContent = 'Classificando os segmentos…';
+        espera.querySelector('p').textContent =
+          semSegmento.length === 1 ? '1 empresa' : semSegmento.length + ' empresas';
+
+        IA.classificarSegmentos(semSegmento.map(function (l) {
+          return {
+            nome: l.empresa, dominio: l.empresaDominio, setor: l.empresaSetor,
+            descricao: l.empresaDescricao, oQueFazLa: l.oQueFazLa
+          };
+        })).then(function (mapa) {
+          semSegmento.forEach(function (l, i) { if (mapa[i]) l.segmentoSugerido = mapa[i]; });
+          espera.close(); espera.remove();
+          App.revisarImportacao(lista);
+        });
       }).catch(function (e) {
         espera.close(); espera.remove();
         alert(e.message);
@@ -1301,7 +1328,11 @@
             const marca = dlg.querySelector('[data-lead="' + i + '"]');
             return marca && marca.checked;
           });
-          const feitos = escolhidos.map(importarUmLead).filter(Boolean);
+          const feitos = escolhidos.map(function (l) {
+            const i = lista.indexOf(l);
+            const escolha = dlg.querySelector('[data-segmento="' + i + '"]');
+            return importarUmLead(l, escolha ? escolha.value : '');
+          }).filter(Boolean);
           if (feitos.length) {
             global.IADIntegracoes.marcarProcessados(escolhidos.map(function (l) { return l.id; }));
             leads = (leads || []).filter(function (l) {
@@ -1756,15 +1787,20 @@
   /* Um lead vira três registros. Sem janela e sem digitação: o que não veio
      do LinkedIn fica em branco para o vendedor completar depois — melhor um
      campo vazio do que um palpite virando fato no painel. */
-  function importarUmLead(lead) {
+  function importarUmLead(lead, segmento) {
     const nome = lead.empresa || ('Contato ' + (lead.nome || 'do LinkedIn'));
+    if (segmento) Store.criarNoCatalogo('segmentos', { nome: segmento });
+
     let conta = Store.dados().contas.find(function (c) {
       return lead.empresa && c.nome.toLowerCase().indexOf(lead.empresa.toLowerCase().slice(0, 12)) !== -1;
     });
     if (!conta) {
       conta = Store.criarConta({
-        nome: nome, site: lead.empresaSite || '', cidade: lead.empresaCidade || ''
+        nome: nome, segmento: segmento || '',
+        site: lead.empresaSite || '', cidade: lead.empresaCidade || ''
       });
+    } else if (segmento && !conta.segmento) {
+      conta.segmento = segmento;   /* conta antiga sem segmento ganha o daqui */
     }
 
     const contato = Store.criarContato({
@@ -1779,7 +1815,13 @@
       contaId: conta.id,
       titulo: (lead.empresa ? lead.empresa : (lead.nome || 'LinkedIn')) + ' — origem LH',
       etapa: lead.resposta ? 'Conexão' : 'Prospecção',
+      /* Com várias SDRs mandando prospect, saber de quem veio e de qual
+         campanha é o que permite ler o resultado depois, por pessoa e por
+         campanha. Fica em campo próprio, não perdido dentro das notas. */
       origem: 'Linked Helper',
+      campanha: lead.campanha || '',
+      sdr: lead.operador || '',
+      sdrEmail: lead.operadorEmail || '',
       notas: 'ORIGEM LH' + (lead.campanha ? ' · campanha: ' + lead.campanha : '') +
         (lead.operador ? ' · prospecção de ' + lead.operador : '') +
         (lead.linkedin ? '\n' + lead.linkedin : '') +

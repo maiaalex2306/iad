@@ -100,6 +100,51 @@
     });
   }
 
+  /* Classifica um lote de empresas nos segmentos já cadastrados. Uma chamada
+     para a importação inteira, não uma por lead.
+
+     O modelo não navega na internet — quem navega é a função no servidor, e
+     só para alguns domínios. Na maioria dos casos nem precisa: a descrição da
+     empresa já veio no payload do Linked Helper. Quando nada resolve, o
+     resultado é "Outros", que é melhor que um segmento errado: o gráfico por
+     segmento é lido pelo dono da empresa. */
+  function classificarSegmentos(empresas) {
+    if (!disponivel() || !empresas.length) return Promise.resolve({});
+
+    const linhas = empresas.map(function (e, i) {
+      return [
+        (i + 1) + '. ' + (e.nome || 'sem nome'),
+        e.dominio ? '   domínio: ' + e.dominio : '',
+        e.setor ? '   setor informado: ' + e.setor : '',
+        e.descricao ? '   sobre: ' + e.descricao : '',
+        e.oQueFazLa ? '   o contato faz lá: ' + e.oQueFazLa : ''
+      ].filter(Boolean).join('\n');
+    }).join('\n\n');
+
+    const Store = global.IADStore;
+    const pedido = Nuvem.chamarFuncao('assistente', {
+      tipo: 'segmentos',
+      texto: linhas,
+      contexto: {
+        segmentos: Store.nomesDoCatalogo('segmentos'),
+        dominios: empresas.map(function (e) { return e.dominio; }).filter(Boolean)
+      }
+    });
+    const prazo = new Promise(function (resolve) {
+      setTimeout(function () { resolve(null); }, PRAZO_REUNIAO);
+    });
+
+    return Promise.race([pedido, prazo]).then(function (r) {
+      const mapa = {};
+      if (!r || !Array.isArray(r.itens)) return mapa;
+      r.itens.forEach(function (it) {
+        const i = Number(it.n) - 1;
+        if (empresas[i] && it.segmento) mapa[i] = it.segmento;
+      });
+      return mapa;
+    }).catch(function () { return {}; });
+  }
+
   /* Transcrição do Meet vem como .txt ou legenda (.vtt/.srt). Anotação vem
      como .md. Nada disso precisa de biblioteca: é texto. PDF e .docx são
      binários e ficam de fora — o app não carrega dependência para abri-los. */
@@ -180,6 +225,7 @@
     verificar: verificar,
     extrair: extrair,
     analisarReuniao: analisarReuniao,
+    classificarSegmentos: classificarSegmentos,
     lerTexto: lerTexto,
     ehTexto: ehTexto,
     fila: fila,

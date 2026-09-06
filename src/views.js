@@ -662,7 +662,9 @@
       const d = P.DESFECHOS.find(function (x) { return x.id === op.desfecho.tipo; }) || { rotulo: op.desfecho.tipo, classe: '' };
       const conta = Store.conta(op.contaId);
       return '<button class="item" onclick="App.abrir(\'' + op.id + '\')">' +
-        '<div class="row"><span class="tit">' + esc(op.titulo) + '</span><span class="espaco"></span>' +
+        '<div class="row"><span class="tit">' + esc(op.titulo) + '</span>' +
+        (op.origem === 'Linked Helper' ? '<span class="pill">LH</span>' : '') +
+        '<span class="espaco"></span>' +
         '<span class="pill ' + d.classe + '">' + esc(d.rotulo) + '</span></div>' +
         '<div class="small muted">' + esc((conta && conta.nome) || '') + ' · ' + U.compacto(op.desfecho.valorFinal) + ' · encerrado em ' + U.data(op.desfecho.data) + '</div>' +
         '<div class="tiny muted" style="margin-top:6px">IAD no fechamento: ' + op.desfecho.iadFinal + '/16 · grupo comprador ' + (op.desfecho.coverageFinal || 0) + '%' +
@@ -779,6 +781,13 @@
       (op.fechamentoPrevisto ? ' · previsão ' + U.data(op.fechamentoPrevisto) : '') + '</p>' +
       (op.concorrentes
         ? '<p class="tiny muted" style="margin:-6px 0 0">Contra: ' + esc(op.concorrentes) + '</p>'
+        : '') +
+      /* De onde veio e de quem: com várias SDRs prospectando, é isso que
+         permite ler o resultado por pessoa e por campanha depois. */
+      (op.origem
+        ? '<p class="tiny muted" style="margin:2px 0 0">Origem: ' + esc(op.origem) +
+          (op.campanha ? ' \u00b7 campanha ' + esc(op.campanha) : '') +
+          (op.sdr ? ' \u00b7 SDR ' + esc(op.sdr) : '') + '</p>'
         : '') +
 
       blocoAvanco(op, r) +
@@ -1883,6 +1892,17 @@
     return '';
   }
 
+  function opcoesSegmento(escolhido) {
+    /* "Outros" existe sempre: é onde cai o que a IA não soube classificar, e
+       de onde a pessoa move depois. Melhor "Outros" do que segmento errado —
+       o agrupamento do painel é lido pelo dono da empresa. */
+    const lista = Store.nomesDoCatalogo('segmentos').slice();
+    if (lista.indexOf('Outros') === -1) lista.push('Outros');
+    return lista.map(function (n) {
+      return '<option value="' + esc(n) + '"' + (n === escolhido ? ' selected' : '') + '>' + esc(n) + '</option>';
+    }).join('');
+  }
+
   function revisaoDaImportacao(leads) {
     const linhas = leads.map(function (l, i) {
       const duvida = motivoDeDuvida(l);
@@ -1900,8 +1920,14 @@
         '<span class="espaco"></span>' +
         '<span class="pill' + (duvida ? '' : ' navy') + '">' + esc(l.empresa || 'sem empresa') + '</span>' +
         '</label>' +
-        (rede ? '<p class="small muted" style="margin:6px 0 0">' + esc(rede) +
-          (l.operador ? ' \u00b7 ' + esc(l.operador) : '') + '</p>' : '') +
+        '<div class="row escolhas">' +
+          '<label class="campo mini"><span>Segmento' + (l.segmentoSugerido ? ' \u00b7 sugerido' : '') + '</span>' +
+          '<select data-segmento="' + i + '">' + opcoesSegmento(l.segmentoSugerido) + '</select></label>' +
+        '</div>' +
+        '<p class="small muted" style="margin:6px 0 0">' +
+          (l.operador ? 'SDR: <strong>' + esc(l.operador) + '</strong>' : 'SDR não identificado') +
+          (l.campanha ? ' \u00b7 campanha: ' + esc(l.campanha) : '') +
+          (rede ? ' \u00b7 ' + esc(rede) : '') + '</p>' +
         (duvida ? '<p class="compromisso small" style="margin:6px 0 0">' + esc(duvida) + '</p>' : '') +
         (l.resposta ? '<p class="origem">\u201c' + esc(l.resposta) + '\u201d</p>' : '') +
         (l.insight ? '<p class="tiny muted" style="margin:6px 0 0">Insight da campanha entra como rascunho.</p>' : '') +

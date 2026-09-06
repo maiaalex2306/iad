@@ -281,6 +281,12 @@
       concorrentes: '',
       produto: '',
       dono: '',
+      /* De onde o negócio veio. Com várias SDRs prospectando, sem isto não
+         dá para dizer qual campanha e qual pessoa produziram pipeline real. */
+      origem: '',
+      campanha: '',
+      sdr: '',
+      sdrEmail: '',
       criadoEm: hoje(),
       fechamentoPrevisto: '',
       adiamentos: 0,

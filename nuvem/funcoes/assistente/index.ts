@@ -123,6 +123,9 @@ const FORMATOS: Record<string, Record<string, Regra>> = {
   insight: {
     texto: { como: 'texto', max: 400 }
   },
+  /* 'segmentos' classifica um lote de empresas de uma vez: uma chamada para
+     a importação inteira, em vez de uma por lead. Validado à parte. */
+  segmentos: {},
   /* 'reuniao' é o único tipo que devolve uma lista. Validado à parte, em
      validarReuniao, porque cada item passa pelas mesmas regras da evidência. */
   reuniao: {}
@@ -260,6 +263,23 @@ Regras desta tarefa:
 - O que NÓS fizemos (mandamos proposta, fizemos follow-up) não é evidência. Descarte.
 - No máximo ${ITENS_MAXIMOS} evidências. Se houver mais, fique com as mais relevantes para a decisão.
 - Nunca devolva nota ou pontuação. O vendedor escolhe item por item.`;
+  }
+
+  if (tipo === 'segmentos') {
+    return `Você classifica empresas nos segmentos usados por uma equipe de vendas B2B brasileira.
+
+Segmentos disponíveis, e SÓ estes:
+${(Array.isArray(ctx.segmentos) ? ctx.segmentos.map(String) : []).map((x) => '- ' + x).join('\n')}
+- Outros
+
+Regras absolutas:
+- Responda SOMENTE com um objeto JSON: {"itens":[{"n":1,"segmento":"..."},...]}
+- O valor de "segmento" tem de ser copiado EXATAMENTE de uma das linhas acima, incluindo acentos e maiúsculas.
+- Se nenhum couber com clareza, use "Outros". É melhor "Outros" do que um segmento errado: o gráfico por segmento é lido pelo dono da empresa.
+- Um item de saída para cada empresa da entrada, com o mesmo "n".
+- Nada de texto fora do JSON.
+
+A entrada traz, para cada empresa: nome, domínio, o que a pessoa faz lá e, quando disponível, a descrição da empresa e o texto do site.`;
   }
 
   if (tipo === 'insight') {
@@ -457,6 +477,57 @@ function validarReuniao(bruto: Record<string, unknown>, ctx: Record<string, unkn
   return { evidencias: evidencias, contatos: contatos };
 }
 
+/* Um lote de empresas classificadas. Segmento fora da lista do tenant vira
+   "Outros" — nunca um nome novo, que quebraria o agrupamento do painel. */
+function validarSegmentos(bruto: Record<string, unknown>, ctx: Record<string, unknown>) {
+  const validos = (Array.isArray(ctx.segmentos) ? ctx.segmentos.map(String) : []).concat(['Outros']);
+  const brutos = Array.isArray(bruto.itens) ? bruto.itens : [];
+  const itens: Array<{ n: number; segmento: string }> = [];
+
+  for (const item of brutos.slice(0, 100)) {
+    if (!item || typeof item !== 'object') continue;
+    const o = item as Record<string, unknown>;
+    const n = Number(o.n);
+    if (!isFinite(n) || n < 1) continue;
+    const bruta = limparTexto(o.segmento, 80);
+    const achado = validos.find((v) => v.toLowerCase() === bruta.toLowerCase());
+    itens.push({ n: n, segmento: achado || 'Outros' });
+  }
+  return { itens: itens };
+}
+
+/* ---------- o site da empresa ----------
+   O modelo não navega. A função navega — ela roda num servidor. Para empresa
+   conhecida a descrição do próprio LinkedIn basta; o site resolve a empresa
+   pequena, de que ninguém nunca ouviu falar. Falha de rede não derruba a
+   classificação: segue sem o site. */
+async function textoDoSite(dominio: string): Promise<string> {
+  const limpo = String(dominio || '').trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+  if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(limpo)) return '';
+  const controle = new AbortController();
+  const corta = setTimeout(() => controle.abort(), 4000);
+  try {
+    const r = await fetch('https://' + limpo + '/', {
+      signal: controle.signal,
+      headers: { 'user-agent': 'IAD-CRM/1.0 (classificacao de segmento)' }
+    });
+    if (!r.ok) return '';
+    const html = (await r.text()).slice(0, 120000);
+    return html
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&[a-z]+;/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 1200);
+  } catch {
+    return '';
+  } finally {
+    clearTimeout(corta);
+  }
+}
+
 /* ---------- quem pode chamar ---------- */
 
 async function autenticado(req: Request): Promise<boolean> {
@@ -501,8 +572,8 @@ Deno.serve(async (req: Request) => {
   const tipo = String(pedido.tipo || '');
   if (!FORMATOS[tipo]) return responder({ erro: 'tipo desconhecido' }, 400);
 
-  /* Transcrição de reunião é longa por natureza; os outros tipos, não. */
-  const limite = tipo === 'reuniao' ? LIMITE_REUNIAO : LIMITE_TEXTO;
+  /* Transcrição de reunião é longa por natureza; um lote de empresas também. */
+  const limite = (tipo === 'reuniao' || tipo === 'segmentos') ? LIMITE_REUNIAO : LIMITE_TEXTO;
   const texto = String(pedido.texto || '').slice(0, limite).trim();
   if (texto.length < 10) return responder({ campos: {}, frases: {} });
 
@@ -511,11 +582,30 @@ Deno.serve(async (req: Request) => {
     : {};
 
   try {
-    const bruto = await chamarIA(promptDe(tipo, ctx), texto);
+    let entrada = texto;
+
+    /* Empresa conhecida se resolve pela descrição que já veio do LinkedIn.
+       O site entra para a empresa pequena, que ninguém conhece — e só para
+       algumas, porque cada busca custa tempo de resposta. */
+    if (tipo === 'segmentos') {
+      const dominios = (Array.isArray(ctx.dominios) ? ctx.dominios : []).slice(0, 6);
+      const sites = await Promise.all(dominios.map(async (d) => {
+        const t = await textoDoSite(String(d));
+        return t ? `\n[site de ${d}] ${t}` : '';
+      }));
+      entrada = texto + sites.join('');
+    }
+
+    const bruto = await chamarIA(promptDe(tipo, ctx), entrada);
     const json = lerJSON(bruto);
     /* JSON torto devolve vazio. Nunca dado inventado no formulário do vendedor. */
-    if (!json) return responder(tipo === 'reuniao' ? { evidencias: [], contatos: [] } : { campos: {}, frases: {} });
+    if (!json) {
+      if (tipo === 'reuniao') return responder({ evidencias: [], contatos: [] });
+      if (tipo === 'segmentos') return responder({ itens: [] });
+      return responder({ campos: {}, frases: {} });
+    }
     if (tipo === 'reuniao') return responder(validarReuniao(json, ctx));
+    if (tipo === 'segmentos') return responder(validarSegmentos(json, ctx));
     return responder(validar(tipo, json, ctx));
   } catch (e) {
     return responder({ erro: String((e as Error).message || e) }, 502);

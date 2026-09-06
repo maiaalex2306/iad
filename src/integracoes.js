@@ -105,7 +105,10 @@
       cargo: primeiro(plano, ['organization_title_1', 'current_company_position',
         'position', 'title', 'job_title']),
       site: primeiro(plano, ['organization_website_1']),
+      dominio: primeiro(plano, ['organization_domain_1']),
       cidade: primeiro(plano, ['organization_location_1']),
+      setor: primeiro(plano, ['current_company_industry', 'industry']),
+      descricao: primeiro(plano, ['organization_description_1']),
       fim: primeiro(plano, ['organization_end_1'])
     };
   }
@@ -174,7 +177,13 @@
       /* empresa onde trabalha (ou trabalhava) */
       empresa: emprego.nome,
       empresaSite: emprego.site,
+      empresaDominio: emprego.dominio,
       empresaCidade: emprego.cidade,
+      empresaSetor: emprego.setor,
+      /* Matéria-prima para classificar o segmento sem sair para a internet:
+         na maioria das vezes a descrição que o próprio LinkedIn traz basta. */
+      empresaDescricao: String(emprego.descricao || '').replace(/\s+/g, ' ').slice(0, 600),
+      oQueFazLa: String(primeiro(plano, ['position_description_1']) || '').replace(/\s+/g, ' ').slice(0, 300),
       saiuEm: saidaNoPassado(emprego.fim),
 
       /* conversa — a única camada que é evidência do cliente */
