@@ -37,23 +37,43 @@
       '</div></div></div>';
   }
 
-  /* O painel escuro existe para que a primeira tela já diga do que se trata:
-     quem abre o app pela primeira vez precisa saber por que ele é diferente
-     de um CRM de funil. Some abaixo de 940px, onde só atrapalharia. */
+  /* O painel escuro é a única chance de explicar o método antes de a pessoa
+     usar. Listar características não explica: o que prende é a pergunta que o
+     modelo responde e que nenhum CRM de funil responde. Some abaixo de 940px,
+     onde viraria uma parede de texto antes do campo de senha. */
   function painelAcesso() {
-    const pilares = [
-      ['1', 'Oito decisões, não oito etapas', 'O IAD mede o que mudou na cabeça do cliente — de 0 a 16.'],
-      ['2', 'Só evidência do cliente conta', 'Proposta enviada e follow-up feito não movem o índice.'],
-      ['3', 'A próxima decisão, explícita', 'O app aponta qual decisão provocar agora, e por qual canal.']
+    const decisoes = P.DIMENSOES.map(function (d) {
+      return '<span class="chip">' + esc(d.nome) + '</span>';
+    }).join('');
+
+    const passos = [
+      ['Oito decisões, não oito etapas',
+       'Antes de comprar, o cliente toma oito decisões dentro da empresa dele. Elas são o negócio; a etapa do funil é só onde você anotou.'],
+      ['De 0 a 16',
+       'Cada decisão vale 0 (não sabemos), 1 (parcial) ou 2 (comprovado pelo cliente). A soma é o IAD. Acima de 11, decisão madura.'],
+      ['Só o cliente move o índice',
+       'Proposta enviada, follow-up feito, reunião marcada por você: nada disso conta. Conta o que ele fez — mandou o dado, apresentou ao financeiro, marcou a reunião interna.'],
+      ['O app diz o que falta',
+       'Cruzando IAD, tempo sem evidência, cobertura do grupo comprador e etapa, ele classifica cada negócio e aponta qual decisão provocar agora.']
     ];
+
     return '<div class="acesso-painel">' +
       '<div><div class="marca-acesso">IAD <span>CRM</span></div>' +
       '<p class="lema">O funil organiza. A decisão fecha.</p></div>' +
-      '<ul>' + pilares.map(function (p) {
-        return '<li><span class="num">' + p[0] + '</span>' +
-          '<span><strong>' + esc(p[1]) + '</strong>' +
-          '<span class="diz">' + esc(p[2]) + '</span></span></li>';
+
+      '<p class="tese">Todo CRM sabe em que etapa o negócio está. ' +
+      'Nenhum sabe se o cliente já decidiu — e é a decisão dele que fecha a venda, ou não.</p>' +
+
+      '<div class="chips">' + decisoes + '</div>' +
+
+      '<ul>' + passos.map(function (p, i) {
+        return '<li><span class="num">' + (i + 1) + '</span>' +
+          '<span><strong>' + esc(p[0]) + '</strong>' +
+          '<span class="diz">' + esc(p[1]) + '</span></span></li>';
       }).join('') + '</ul>' +
+
+      '<p class="fecho">Um pipeline de dois milhões com IAD médio 6 não é um pipeline de dois milhões. ' +
+      'É a conta que ninguém fez.</p>' +
       '</div>';
   }
 
