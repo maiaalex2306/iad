@@ -1538,11 +1538,17 @@
       return '<tr><td><strong>' + esc(c.email) + '</strong></td>' +
         '<td>' + esc(nomeDa(c.tenant_id)) + '</td>' +
         '<td>' + esc(c.papel === 'admin' ? 'Administrador' : 'Usuário') + '</td>' +
-        '<td class="right"><button class="btn ghost mini" onclick="App.cancelarConvite(\'' + esc(c.email) + '\')"' +
+        '<td class="right" style="white-space:nowrap">' +
+        '<button class="btn alt mini" onclick="App.enviarConvite(\'' + esc(c.email) + '\')"' +
+        ' data-ajuda-titulo="Enviar convite" data-ajuda="Abre seu programa de e-mail com a mensagem pronta. O sistema não envia sozinho: quem envia é você, do seu endereço.">Enviar</button> ' +
+        '<button class="btn ghost mini" onclick="App.copiarConvite(\'' + esc(c.email) + '\')"' +
+        ' data-ajuda="Copia o texto do convite para colar no WhatsApp ou em outro lugar.">Copiar</button> ' +
+        '<button class="btn ghost mini" onclick="App.cancelarConvite(\'' + esc(c.email) + '\')"' +
         ' data-ajuda="Cancela o registro. A pessoa ainda poderá criar acesso, mas entrará sem empresa.">Cancelar</button></td></tr>';
     }).join('');
     return '<h4 style="margin:18px 0 6px">Aguardando primeiro acesso</h4>' +
-      '<p class="tiny muted" style="margin:0 0 8px">Já registradas. Quando criarem o acesso com este e-mail, entram direto na empresa indicada.</p>' +
+      '<p class="tiny muted" style="margin:0 0 8px">Já registradas. Quando criarem o acesso com este e-mail, entram direto na empresa indicada. ' +
+      '<strong>O sistema não envia e-mail:</strong> use Enviar ou Copiar e mande você mesmo.</p>' +
       tabela(['E-mail', 'Empresa', 'Papel', ''], linhas, '');
   }
 

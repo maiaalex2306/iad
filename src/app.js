@@ -238,6 +238,22 @@
     }).catch(function () {});
   }
 
+  function textoDoConvite(email) {
+    const c = (convitesNuvem || []).find(function (x) { return x.email === email; }) || {};
+    const t = (empresasNuvem || []).find(function (x) { return x.id === c.tenant_id; });
+    const endereco = location.origin + location.pathname;
+    return 'Olá,\n\n' +
+      'Criei o seu acesso ao IAD CRM' + (t ? ', na ' + t.nome : '') + '.\n\n' +
+      'Para entrar, uma vez só:\n\n' +
+      '1. Abra ' + endereco + '\n' +
+      '2. Clique em "Criar meu acesso"\n' +
+      '3. Use este e-mail: ' + email + '\n' +
+      '4. Escolha a senha que quiser\n\n' +
+      'A empresa já está definida — você não precisa escolher nada. ' +
+      'Depois disso é só entrar com o e-mail e a senha.\n\n' +
+      'Qualquer dúvida, me chame.';
+  }
+
   const OPCOES_SIM_NAO = [{ valor: 'nao', rotulo: 'Não' }, { valor: 'sim', rotulo: 'Sim' }];
 
   const App = {
@@ -1300,14 +1316,36 @@
             perfisNuvem = null;
             pintarUsuariosNuvem(true);
             const empresa = empresas.find(function (t) { return t.id === d.tenantId; });
-            alert('Registrado.\n\nAvise ' + email + ':\n\n' +
-              '1. Abrir ' + location.origin + location.pathname + '\n' +
-              '2. Clicar em "Criar meu acesso" com este mesmo e-mail\n' +
-              '3. Escolher a própria senha\n\n' +
-              'Ela entra direto em ' + ((empresa && empresa.nome) || 'sua empresa') + ', sem escolher nada.');
+            if (U.confirmar('Registrada em ' + ((empresa && empresa.nome) || 'sua empresa') + '.\n\n' +
+                'O sistema não envia e-mail — quem envia é você.\n\nAbrir seu e-mail com o convite pronto?')) {
+              App.enviarConvite(email.toLowerCase());
+            }
           })
           .catch(function (e) { alert('Não foi possível registrar: ' + e.message); });
       });
+    },
+
+    /* O sistema não manda e-mail — o do Supabase é limitado a poucos por hora e
+       foi ele que travou o time. Então o app monta a mensagem e entrega pronta:
+       quem envia é o administrador, do próprio endereço, que é mais confiável
+       do que qualquer serviço gratuito. */
+    enviarConvite: function (email) {
+      const t = textoDoConvite(email);
+      const url = 'mailto:' + encodeURIComponent(email) +
+        '?subject=' + encodeURIComponent('Seu acesso ao IAD CRM') +
+        '&body=' + encodeURIComponent(t);
+      location.href = url;
+    },
+
+    copiarConvite: function (email) {
+      const t = textoDoConvite(email);
+      const pronto = function () { alert('Convite copiado. Cole no WhatsApp, no e-mail, onde preferir.'); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(t).then(pronto, function () { U.formulario('Convite', [
+          { id: 'texto', rotulo: 'Copie e envie', tipo: 'textarea', padrao: t }], {}, function () {}); });
+      } else {
+        U.formulario('Convite', [{ id: 'texto', rotulo: 'Copie e envie', tipo: 'textarea', padrao: t }], {}, function () {});
+      }
     },
 
     cancelarConvite: function (email) {
