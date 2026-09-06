@@ -443,7 +443,16 @@ td .tiny { display: block; }
 .tem-ajuda { position: relative; }
 .tem-ajuda .ajuda { display: none; }
 
-@media (hover: hover) and (min-width: 700px) {
+/* Sem consultar a capacidade do aparelho. A versão anterior perguntava por
+   "hover", que responde pelo dispositivo PRINCIPAL: num notebook com tela
+   sensível ao toque o principal pode ser o dedo, e a regra inteira era
+   descartada — o balão nunca aparecia, mesmo com o mouse ligado. Nem
+   "any-hover" é confiável.
+
+   Então a decisão passa a ser só de largura: acima de 700px há espaço para o
+   balão. No toque ele pode ficar visível até o próximo toque em outro lugar,
+   o que é bem menos ruim do que a ajuda simplesmente não existir. */
+@media (min-width: 700px) {
   .tem-ajuda .ajuda {
     display: block;
     position: absolute;
