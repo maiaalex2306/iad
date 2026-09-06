@@ -1,5 +1,5 @@
 /* Service worker: cache-first do app shell. Offline no celular e no desktop. */
-const CACHE = 'iad-crm-v25';
+const CACHE = 'iad-crm-v27';
 const ARQUIVOS = [
   './', './index.html', './manifest.webmanifest',
   './assets/styles.css',
@@ -24,15 +24,33 @@ self.addEventListener('activate', function (e) {
   }).then(function () { return self.clients.claim(); }));
 });
 
+/* Rede primeiro, cache como rede de segurança.
+   Era cache primeiro, o que é mais rápido e foi a causa de metade dos problemas
+   de uma noite inteira: correções publicadas e invisíveis, "não aparece" que era
+   código velho, gente vendo telas que já não existiam. A diferença de velocidade
+   num app deste tamanho é imperceptível; a diferença de confiança não é.
+   Offline continua funcionando: sem rede, responde o que está guardado. */
 self.addEventListener('fetch', function (e) {
   if (e.request.method !== 'GET') return;
+  /* cache: 'no-cache' revalida com o servidor em vez de aceitar o que o cache
+     HTTP do navegador tiver. Sem isto, "rede primeiro" ainda entrega arquivo
+     velho: o service worker busca, e quem responde é o cache do navegador.
+     Não é download completo — vai com ETag, e o servidor responde 304 quando
+     nada mudou. */
+  const mesmaOrigem = e.request.url.indexOf(self.location.origin) === 0;
+  const pedido = mesmaOrigem
+    ? new Request(e.request.url, { cache: 'no-cache', credentials: 'same-origin' })
+    : e.request;
+
   e.respondWith(
-    caches.match(e.request).then(function (resposta) {
-      return resposta || fetch(e.request).then(function (rede) {
-        const copia = rede.clone();
-        caches.open(CACHE).then(function (c) { c.put(e.request, copia); });
-        return rede;
-      }).catch(function () { return caches.match('./index.html'); });
+    fetch(pedido).then(function (rede) {
+      const copia = rede.clone();
+      caches.open(CACHE).then(function (c) { c.put(e.request, copia); }).catch(function () {});
+      return rede;
+    }).catch(function () {
+      return caches.match(e.request).then(function (guardado) {
+        return guardado || caches.match('./index.html');
+      });
     })
   );
 });
