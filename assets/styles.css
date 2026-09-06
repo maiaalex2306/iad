@@ -434,6 +434,16 @@ td .tiny { display: block; }
 .celula.q2 .marca { color: var(--ok); }
 .celula.q2.sem-prova { border-color: var(--risk); background: rgba(212,118,26,.1); border-style: dashed; }
 
+/* Campo de senha com o olho: revela o que foi digitado sem guardar nada. */
+.campo-senha { position: relative; display: block; }
+.campo-senha input { width: 100%; padding-right: 42px; }
+.campo-senha .olho {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  width: 34px; height: 34px; border: 0; background: transparent;
+  cursor: pointer; font-size: 1rem; line-height: 1; border-radius: 8px; opacity: .65;
+}
+.campo-senha .olho:hover, .campo-senha .olho:focus-visible { opacity: 1; background: var(--bg); }
+
 /* Antes de sincronizar, para qual empresa vai. Mandar dado para a empresa
    errada é silencioso e chato de desfazer — então a resposta fica à vista. */
 .aviso-empresa {

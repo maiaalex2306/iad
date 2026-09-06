@@ -202,6 +202,46 @@
     });
   }
 
+  /* Existe alguma empresa no servidor? Decide se quem entra sem vínculo monta a
+     casa ou espera ser ligado. A leitura é limitada pelas políticas, então um
+     usuário comum de uma empresa existente vê a dele — o que já basta para a
+     resposta ser "não é a primeira". */
+  function existeEmpresa() {
+    return chamar('/rest/v1/tenants?select=id&limit=1').then(
+      function (linhas) { return !!(linhas && linhas.length); },
+      function () { return true; }   /* na dúvida, não ofereça criar */
+    );
+  }
+
+  function convitesDaNuvem() {
+    return chamar('/rest/v1/convites?select=*&order=criado_em.desc');
+  }
+
+  function convidar(email, tenantId, papel) {
+    const s = sessao();
+    return chamar('/rest/v1/convites', {
+      metodo: 'POST',
+      cabecalhos: { Prefer: 'resolution=merge-duplicates,return=representation' },
+      corpo: {
+        email: String(email || '').trim().toLowerCase(),
+        tenant_id: tenantId,
+        papel: papel || 'usuario',
+        criado_por: (s && s.user) ? s.user.id : null
+      }
+    });
+  }
+
+  function removerConvite(email) {
+    return chamar('/rest/v1/convites?email=eq.' + encodeURIComponent(String(email).toLowerCase()), { metodo: 'DELETE' });
+  }
+
+  function criarEmpresa(nome, cnpj) {
+    return chamar('/rest/v1/tenants', {
+      metodo: 'POST', cabecalhos: { Prefer: 'return=representation' },
+      corpo: { nome: nome, cnpj: cnpj || '' }
+    }).then(function (linhas) { return (linhas && linhas[0]) || null; });
+  }
+
   function souAdminNaNuvem() {
     const perfil = sessaoPerfil();
     return !!(perfil && perfil.papel === 'admin');
@@ -341,7 +381,8 @@
     config, salvarConfig, configurada, conectado, mandaNoAcesso, estado, sessao,
     cadastrar, entrar, sair, renovar, eu, meuPerfil, salvarPerfil, criarMinhaEmpresa,
     guardarPerfilNaSessao, empurrar, puxar, sincronizar, ultimaSincronizacao,
-    perfisDaNuvem, empresasDaNuvem, ligarPerfil, souAdminNaNuvem,
+    perfisDaNuvem, empresasDaNuvem, ligarPerfil, souAdminNaNuvem, existeEmpresa,
+    convitesDaNuvem, convidar, removerConvite, criarEmpresa,
     paraBanco, paraApp
   };
 })(window);

@@ -7,8 +7,11 @@
 
   /* ---------------- Acesso: login, primeiro acesso e confirmação ---------------- */
   let telaAcesso = 'login';
+  let primeiraEmpresa = false;   /* nenhuma empresa no servidor: quem entra monta a casa */
   let pendente = null;      /* usuário no meio do primeiro acesso */
   let recadoAcesso = '';
+
+  function definirPrimeiraEmpresa(sim) { primeiraEmpresa = !!sim; }
 
   function definirTelaAcesso(tela, usuario, recado) {
     telaAcesso = tela;
@@ -55,6 +58,16 @@
   }
 
   function campo(id, rotulo, tipo, valor, extra) {
+    /* Senha digitada às cegas é onde nasce o "não consigo entrar" que é só erro
+       de digitação. O olho revela o que foi escrito, sem guardar nada. */
+    if (tipo === 'password') {
+      return '<label class="campo"><span>' + esc(rotulo) + '</span>' +
+        '<span class="campo-senha">' +
+        '<input id="' + id + '" type="password" value="' + esc(valor || '') + '"' + (extra || '') + '>' +
+        '<button type="button" class="olho" onclick="App.verSenha(\'' + id + '\', this)"' +
+        ' aria-label="Mostrar a senha" data-ajuda="Mostra ou esconde a senha digitada.">👁</button>' +
+        '</span></label>';
+    }
     return '<label class="campo"><span>' + esc(rotulo) + '</span>' +
       '<input id="' + id + '" type="' + (tipo || 'text') + '" value="' + esc(valor || '') + '"' +
       (extra || '') + '></label>';
@@ -110,10 +123,24 @@
       '<button class="btn alt" style="width:100%" onclick="App.telaAcesso(\'login\')">Já confirmei, quero entrar</button>';
   }
 
+  /* Duas telas diferentes, e a diferença importa: quem monta a casa cria a
+     primeira empresa; quem chega depois não cria nada, espera ser ligado. Dar o
+     formulário a todo mundo foi o que produziu empresas paralelas e carteiras
+     divididas. */
   function telaEmpresaNuvem() {
+    if (!primeiraEmpresa) {
+      return '<h2 style="margin-bottom:6px">Falta ligar você a uma empresa</h2>' +
+        '<p class="small muted" style="margin-bottom:14px">Sua conta existe e a senha está certa. ' +
+        'O que falta é quem administra o sistema ligar você à empresa — sem isso não há carteira para mostrar.</p>' +
+        '<div class="aviso" style="margin-bottom:14px">Avise quem administra e diga o e-mail que você usou. ' +
+        'Leva um minuto do lado dele.</div>' +
+        '<button class="btn alt" style="width:100%" onclick="App.tentarDeNovo()">Já me ligaram, tentar de novo</button>' +
+        '<p class="small muted" style="margin:14px 0 0">' +
+        '<a href="#" onclick="event.preventDefault();App.sair(true)">Sair</a></p>';
+    }
     return '<h2 style="margin-bottom:6px">Sua empresa</h2>' +
-      '<p class="tiny muted" style="margin-bottom:14px">É ela que separa a sua carteira das outras. ' +
-      'Se você entra num time que já usa o sistema, não crie: peça a quem administra para ligar você à empresa dele.</p>' +
+      '<p class="tiny muted" style="margin-bottom:14px">Você é o primeiro a entrar, então cria a empresa e passa a administrá-la. ' +
+      'Quem vier depois não cria: você liga cada pessoa à empresa dela.</p>' +
       campo('ac-empresa-nova', 'Nome da empresa', 'text') +
       campo('ac-cnpj', 'CNPJ', 'text') +
       '<button class="btn alt" style="width:100%;margin-top:6px" onclick="App.criarEmpresaAcesso()">Criar e entrar</button>' +
@@ -1487,11 +1514,36 @@
 
     return '<div class="card" style="margin-bottom:14px"><div class="row"><h3 style="margin:0">Usuários no servidor</h3>' +
       '<span class="espaco"></span><span class="pill navy">administrador</span>' +
+      '<button class="btn alt mini" onclick="App.novaEmpresaNuvem()"' +
+      ' data-ajuda-titulo="Nova empresa" data-ajuda="Cria uma empresa no servidor. Só quem administra pode.">+ Empresa</button>' +
+      '<button class="btn alt mini" onclick="App.convidarPessoa()"' +
+      ' data-ajuda-titulo="Registrar pessoa" data-ajuda="Reserva o e-mail da pessoa numa empresa. Quando ela criar o acesso, entra já ligada — sem escolher empresa e sem poder escolher errado.">+ Pessoa</button>' +
       '<button class="btn ghost mini" onclick="App.recarregarUsuariosNuvem()"' +
       ' data-ajuda="Relê a lista do servidor.">Atualizar</button></div>' +
       '<p class="tiny muted" style="margin:6px 0 10px">Quem está sem empresa entra no app mas não enxerga carteira nenhuma. ' +
       'Ligue a pessoa à empresa aqui em vez de escrever SQL.</p>' +
-      tabela(['Pessoa', 'Empresa', 'Papel', 'Situação'], linhas, 'Nenhum usuário.') + '</div>';
+      tabela(['Pessoa', 'Empresa', 'Papel', 'Situação'], linhas, 'Nenhum usuário.') +
+      listaConvites(arguments[3], empresas) + '</div>';
+  }
+
+  /* Pessoas registradas que ainda não criaram o acesso. Ficar de olho nelas é o
+     que evita a pergunta "cadastrei e não entrou" virar mistério. */
+  function listaConvites(convites, empresas) {
+    if (!convites || !convites.length) return '';
+    const nomeDa = function (id) {
+      const t = empresas.find(function (x) { return x.id === id; });
+      return t ? t.nome : '—';
+    };
+    const linhas = convites.map(function (c) {
+      return '<tr><td><strong>' + esc(c.email) + '</strong></td>' +
+        '<td>' + esc(nomeDa(c.tenant_id)) + '</td>' +
+        '<td>' + esc(c.papel === 'admin' ? 'Administrador' : 'Usuário') + '</td>' +
+        '<td class="right"><button class="btn ghost mini" onclick="App.cancelarConvite(\'' + esc(c.email) + '\')"' +
+        ' data-ajuda="Cancela o registro. A pessoa ainda poderá criar acesso, mas entrará sem empresa.">Cancelar</button></td></tr>';
+    }).join('');
+    return '<h4 style="margin:18px 0 6px">Aguardando primeiro acesso</h4>' +
+      '<p class="tiny muted" style="margin:0 0 8px">Já registradas. Quando criarem o acesso com este e-mail, entram direto na empresa indicada.</p>' +
+      tabela(['E-mail', 'Empresa', 'Papel', ''], linhas, '');
   }
 
   /* ---------------- Playbook ---------------- */
@@ -1646,7 +1698,7 @@
 
   global.IADViews = {
     hoje, painel, pipeline, cockpit, revisao, contas, cadastros, playbook, dados, itemArquivo, listaLeads,
-    acesso, barraAdmin, definirTelaAcesso, listaUsuariosNuvem,
+    acesso, barraAdmin, definirTelaAcesso, definirPrimeiraEmpresa, listaUsuariosNuvem,
     pendenteAcesso: function () { return pendente; },
     definirFiltro: function (f) { filtroGrupo = f; },
     definirFiltroHistorico: function (f) { filtroHistorico = f; },

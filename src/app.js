@@ -26,7 +26,14 @@
 
   function render() {
     const conteudo = document.getElementById('conteudo');
-    const logado = A.atual();
+    let logado = A.atual();
+
+    /* Com o servidor no comando, só vale sessão que veio dele. Uma sessão local
+       antiga — ou o Adm de fábrica — não pode abrir a porta de um app público. */
+    if (logado && global.IADNuvem.mandaNoAcesso() && !logado.naNuvem) {
+      A.encerrarSessao();
+      logado = null;
+    }
 
     /* Registro sem empresa fica invisível. Aqui, com a sessão já conhecida,
        o que tiver nascido assim é adotado antes de a tela ser desenhada. */
@@ -139,7 +146,7 @@
   /* Os usuários do servidor só chegam por rede, então a tela desenha primeiro e
      se completa depois. Guardamos o resultado para não repetir a consulta a
      cada redesenho — que aqui acontece a cada clique. */
-  let perfisNuvem = null, empresasNuvem = null;
+  let perfisNuvem = null, empresasNuvem = null, convitesNuvem = null;
 
   function pintarUsuariosNuvem(recarregar) {
     const alvo = document.getElementById('usuarios-nuvem');
@@ -147,18 +154,19 @@
     const N = global.IADNuvem;
 
     if (perfisNuvem && !recarregar) {
-      alvo.innerHTML = V.listaUsuariosNuvem(perfisNuvem, empresasNuvem, (N.sessao().user || {}).id);
+      alvo.innerHTML = V.listaUsuariosNuvem(perfisNuvem, empresasNuvem, (N.sessao().user || {}).id, convitesNuvem);
       return;
     }
-    Promise.all([N.perfisDaNuvem(), N.empresasDaNuvem()])
+    Promise.all([N.perfisDaNuvem(), N.empresasDaNuvem(), N.convitesDaNuvem().catch(function () { return []; })])
       .then(function (r) {
         perfisNuvem = r[0] || [];
         empresasNuvem = r[1] || [];
+        convitesNuvem = r[2] || [];
         pintarUsuariosNuvem();
       })
       .catch(function (e) {
         const destino = document.getElementById('usuarios-nuvem');
-        if (destino) destino.innerHTML = V.listaUsuariosNuvem({ erro: e.message }, [], null);
+        if (destino) destino.innerHTML = V.listaUsuariosNuvem({ erro: e.message }, [], null, null);
       });
   }
 
@@ -193,8 +201,14 @@
         return render();
       }
       if (!perfil.tenant_id) {
-        V.definirTelaAcesso('empresa', { email: u.email }, '');
-        return render();
+        /* Sem empresa no servidor, quem entra é o primeiro e monta a casa.
+           Havendo empresas, criar mais uma é decisão de quem administra — e o
+           formulário simplesmente não aparece. */
+        return N.existeEmpresa().then(function (existe) {
+          V.definirPrimeiraEmpresa(!existe);
+          V.definirTelaAcesso('empresa', { email: u.email }, '');
+          render();
+        });
       }
 
       A.abrirSessao(A.espelharDaNuvem(u, perfil));
@@ -1073,15 +1087,35 @@
     /* ---------- acesso ---------- */
     telaAcesso: function (tela) { V.definirTelaAcesso(tela, null, ''); render(); },
 
+    verSenha: function (id, botao) {
+      const campo = document.getElementById(id);
+      if (!campo) return;
+      const escondida = campo.type === 'password';
+      campo.type = escondida ? 'text' : 'password';
+      botao.textContent = escondida ? '🙈' : '👁';
+      botao.setAttribute('aria-label', escondida ? 'Esconder a senha' : 'Mostrar a senha');
+    },
+
+    /* Quem esperava ser ligado a uma empresa tenta de novo sem sair e voltar. */
+    tentarDeNovo: function () {
+      V.definirTelaAcesso('empresa', null, 'Consultando o servidor…');
+      render();
+      concluirEntradaNaNuvem().catch(function (e) {
+        V.definirTelaAcesso('empresa', null, e.message);
+        render();
+      });
+    },
+
     entrar: function () {
       const login = (document.getElementById('ac-login') || {}).value || '';
       const senha = (document.getElementById('ac-senha') || {}).value || '';
       if (!login || !senha) { V.definirTelaAcesso('login', null, 'Informe login e senha.'); return render(); }
 
-      /* Com a nuvem configurada é o servidor que confere a senha. A exceção é
-         o login local que nunca esteve na nuvem — o Adm —, que continua sendo
-         a porta de serviço para entrar sem internet. */
-      if (global.IADNuvem.mandaNoAcesso() && !A.ehLocal(login)) return entrarPelaNuvem(login, senha);
+      /* Com a nuvem configurada, quem confere a senha é o servidor — sem exceção.
+         O antigo atalho local abria o app público para quem soubesse a senha de
+         fábrica, que está no repositório. Offline continua funcionando: a sessão
+         já aberta persiste no aparelho. */
+      if (global.IADNuvem.mandaNoAcesso()) return entrarPelaNuvem(login, senha);
 
       A.entrar(login, senha).then(function () {
         V.definirTelaAcesso('login', null, '');
@@ -1217,6 +1251,54 @@
     },
 
     recarregarUsuariosNuvem: function () { perfisNuvem = null; pintarUsuariosNuvem(true); },
+
+    novaEmpresaNuvem: function () {
+      U.formulario('Nova empresa', [
+        { id: 'nome', rotulo: 'Nome da empresa' },
+        { id: 'cnpj', rotulo: 'CNPJ' }
+      ], {}, function (d) {
+        if (!d.nome) return;
+        global.IADNuvem.criarEmpresa(d.nome, d.cnpj)
+          .then(function () { perfisNuvem = null; pintarUsuariosNuvem(true); })
+          .catch(function (e) { alert('Não foi possível criar a empresa: ' + e.message); });
+      });
+    },
+
+    /* Registrar antes de a pessoa existir é o que faz o vínculo ser decidido
+       aqui, e não por ela na tela de cadastro. */
+    convidarPessoa: function () {
+      const empresas = empresasNuvem || [];
+      if (!empresas.length) { alert('Crie uma empresa antes de registrar pessoas nela.'); return; }
+      U.formulario('Registrar pessoa', [
+        { id: 'email', rotulo: 'E-mail que ela vai usar', tipo: 'email' },
+        { id: 'tenantId', rotulo: 'Empresa', tipo: 'select',
+          opcoes: empresas.map(function (t) { return { valor: t.id, rotulo: t.nome }; }) },
+        { id: 'papel', rotulo: 'Papel', tipo: 'select', opcoes: [
+          { valor: 'usuario', rotulo: 'Usuário' }, { valor: 'admin', rotulo: 'Administrador' }] }
+      ], {}, function (d) {
+        const email = (d.email || '').trim();
+        if (!email || email.indexOf('@') === -1) { alert('Informe um e-mail válido.'); return; }
+        global.IADNuvem.convidar(email, d.tenantId, d.papel)
+          .then(function () {
+            perfisNuvem = null;
+            pintarUsuariosNuvem(true);
+            const empresa = empresas.find(function (t) { return t.id === d.tenantId; });
+            alert('Registrado.\n\nAvise ' + email + ':\n\n' +
+              '1. Abrir ' + location.origin + location.pathname + '\n' +
+              '2. Clicar em "Criar meu acesso" com este mesmo e-mail\n' +
+              '3. Escolher a própria senha\n\n' +
+              'Ela entra direto em ' + ((empresa && empresa.nome) || 'sua empresa') + ', sem escolher nada.');
+          })
+          .catch(function (e) { alert('Não foi possível registrar: ' + e.message); });
+      });
+    },
+
+    cancelarConvite: function (email) {
+      if (!U.confirmar('Cancelar o registro de ' + email + '?')) return;
+      global.IADNuvem.removerConvite(email)
+        .then(function () { perfisNuvem = null; pintarUsuariosNuvem(true); })
+        .catch(function (e) { alert('Não foi possível cancelar: ' + e.message); });
+    },
 
     filtrarTenant: function (valor) { A.definirFiltros({ tenant: valor, usuario: 'todos' }); render(); },
     filtrarUsuarioAdmin: function (valor) { A.definirFiltros({ usuario: valor }); render(); },

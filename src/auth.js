@@ -251,8 +251,21 @@
     return !!u && !u.naNuvem;
   }
 
-  /* O administrador padrão nasce com o sistema; sem ele ninguém entra. */
+  /* O administrador padrão nasce com o sistema; sem ele ninguém entra.
+     Menos quando o servidor manda no acesso: aí ele é porta dos fundos. A senha
+     dele está no repositório, que é público, e o app está numa URL pública —
+     qualquer pessoa que abrisse o endereço entraria. Com a nuvem configurada,
+     quem autoriza é o Supabase, e este atalho deixa de existir. */
   function garantirAdministrador() {
+    const N = global.IADNuvem;
+    if (N && N.mandaNoAcesso()) {
+      const estado0 = Store.obter();
+      estado0.usuarios = (estado0.usuarios || []).filter(function (u) {
+        return u.naNuvem || u.login !== 'Adm';
+      });
+      return Promise.resolve(null);
+    }
+
     const estado = Store.obter();
     estado.usuarios = estado.usuarios || [];
     estado.tenants = estado.tenants || [];
