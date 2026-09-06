@@ -727,7 +727,7 @@
 
       blocoAvanco(op, r) +
       blocoLacunas(op, r) +
-      blocoInsight(op) +
+      blocoInsight(op, r) +
       blocoProximoPasso(op, r) +
       blocoAlertas(r) +
       detalhe('As 8 decisões', 'pontue aqui', blocoDimensoes(op)) +
@@ -860,9 +860,18 @@
              insight: 'Teach', compromisso: 'sem data' }[l.tipo] || 'pendente');
       const classe = l.tipo === 'dimensao' && l.nota === 1 ? 'warn' : (l.tipo === 'papel' ? 'risk' : 'dead');
 
-      const acoes = l.dimensao
-        ? '<button class="btn alt mini" onclick="App.novaEvidencia(\'' + op.id + '\',null,\'' + l.dimensao.id + '\')" data-ajuda-titulo="Registrar evidência" data-ajuda="Descreva o que o CLIENTE fez, não o que você fez. A nota da decisão é atualizada na mesma janela.">Registrar evidência</button>' +
-          '<button class="btn ghost mini" onclick="App.novaTarefa(\'' + op.id + '\',\'' + l.dimensao.id + '\')" data-ajuda-titulo="Criar tarefa" data-ajuda="O que VOCÊ vai fazer para provocar esta decisão. Atividade sua não move o índice, mas aparece em Hoje.">Criar tarefa</button>'
+      /* O mesmo texto para as oito decisões não ajuda: o que muda é o que conta
+         como evidência em cada uma. Os balões saem do próprio playbook. */
+      const d = l.dimensao;
+      const acoes = d
+        ? '<button class="btn alt mini" onclick="App.novaEvidencia(\'' + op.id + '\',null,\'' + d.id + '\')"' +
+            ' data-ajuda-titulo="Evidência de ' + esc(d.nome) + '"' +
+            ' data-ajuda="' + esc('O que o CLIENTE fez nesta decisão. Conta, por exemplo: ' +
+                d.evidencias.slice(0, 2).join('; ').toLowerCase() + '. O que você apresentou não conta.') + '">Registrar evidência</button>' +
+          '<button class="btn ghost mini" onclick="App.novaTarefa(\'' + op.id + '\',\'' + d.id + '\')"' +
+            ' data-ajuda-titulo="Tarefa para ' + esc(d.nome) + '"' +
+            ' data-ajuda="' + esc('O que VOCÊ vai fazer para provocar esta decisão. Por exemplo: ' +
+                d.canais.whatsapp + ' Tarefa é atividade sua: aparece em Hoje, mas não move o índice.') + '">Criar tarefa</button>'
         : (l.tipo === 'compromisso'
             ? '<button class="btn alt mini" onclick="App.definirCompromisso(\'' + op.id + '\')" data-ajuda-titulo="Combinar data" data-ajuda="Registra o próximo passo e a data. Negócio sem próximo passo combinado é negócio no ar.">Combinar data</button>'
             : (l.tipo === 'insight'
@@ -887,18 +896,69 @@
   }
 
   /* Teach, do Challenger: o reenquadramento que o cliente não teria sozinho. */
-  function blocoInsight(op) {
+  function blocoInsight(op, r) {
     const ins = op.insight || { estado: 'nenhum', texto: '' };
     const estado = P.ESTADOS_INSIGHT.find(function (e) { return e.id === ins.estado; }) || P.ESTADOS_INSIGHT[0];
     const classe = { nenhum: 'dead', formulado: 'warn', apresentado: 'warn', aceito: 'ok' }[ins.estado] || '';
 
     return '<div class="card"><div class="row"><h2 style="margin:0">Insight comercial</h2><span class="espaco"></span>' +
       '<span class="pill ' + classe + '">' + esc(estado.rotulo) + '</span>' +
-      '<button class="btn ghost mini" onclick="App.definirInsight(\'' + op.id + '\')">' + (ins.texto ? 'Editar' : 'Definir') + '</button></div>' +
+      '<button class="btn ghost mini" onclick="App.definirInsight(\'' + op.id + '\')"' +
+      ' data-ajuda-titulo="Insight comercial" data-ajuda="O reenquadramento do Challenger: a verdade sobre o negócio do cliente que ele não enxerga sozinho. Sem isso a conversa começa no problema que ele já conhece — e aí quem decide é o preço.">' +
+      (ins.texto ? 'Editar' : 'Definir') + '</button></div>' +
       (ins.texto
         ? '<p class="small" style="margin:10px 0 0">' + esc(ins.texto) + '</p>'
         : '<p class="small muted" style="margin:10px 0 0">Qual verdade sobre o negócio do cliente ele não enxerga sozinho? Sem isso, a conversa começa no problema que ele já sabe que tem — e aí o preço decide.</p>') +
+      dicasDoInsight(op, r, ins) +
       '</div>';
+  }
+
+  /* ---------------- Dicas: o que fazer agora, tiradas deste negócio ----------------
+     O bloco dizia o que é um insight e parava aí. Estas dicas são montadas com o
+     que já está gravado — a lacuna do topo, o compromisso, quem está no grupo,
+     o concorrente declarado — em vez de conselho genérico de venda. */
+  function dicasDoInsight(op, r, ins) {
+    if (!r) return '';
+    const dicas = [];
+    const conta = r.conta;
+
+    if (ins.estado === 'nenhum') {
+      dicas.push({ urgencia: 'agora', texto: 'Escreva o reenquadramento antes da próxima conversa. Comece por: "o que ' +
+        ((conta && conta.nome) || 'este cliente') + ' trata como custo de operação e na verdade é perda de receita?"' });
+      if (op.concorrentes) {
+        dicas.push({ urgencia: '', texto: 'Você anotou "' + op.concorrentes + '" como concorrência. O insight precisa mudar o critério de escolha, senão a comparação vira preço.' });
+      }
+    } else if (ins.estado === 'formulado') {
+      dicas.push({ urgencia: 'agora', texto: 'O insight existe mas não foi apresentado. Leve-o à próxima conversa e registre a reação como evidência.' });
+    } else if (ins.estado === 'apresentado') {
+      dicas.push({ urgencia: 'agora', texto: 'Apresentado, ainda não adotado. Só conta quando o cliente repetir o reenquadramento como se fosse dele — ouça isso e registre como evidência de Problema.' });
+    } else {
+      dicas.push({ urgencia: '', texto: 'O cliente adotou o reenquadramento. Agora use os critérios dele: peça que a avaliação inclua o que o insight revelou.' });
+    }
+
+    const primeira = (r.lacunas || [])[0];
+    if (primeira) {
+      dicas.push({ urgencia: 'depois', texto: 'A lacuna do topo é ' + primeira.titulo + '. ' + primeira.comoProvar + '.' });
+    }
+
+    const c = r.compromisso;
+    if (!c) {
+      dicas.push({ urgencia: 'agora', texto: 'Não há próximo passo combinado com data. Sem isso não dá para saber se o negócio atrasou.' });
+    } else if (c.vencido) {
+      dicas.push({ urgencia: 'agora', texto: 'O compromisso "' + c.texto + '" venceu há ' + c.diasAtraso + ' dia(s). Retome ou combine outro.' });
+    }
+
+    if (r.coverage && r.coverage.mapeados <= 1) {
+      dicas.push({ urgencia: 'depois', texto: 'O negócio depende de uma pessoa só. Peça a ela a apresentação a quem paga e a quem usa.' });
+    }
+
+    return '<div class="dicas">' +
+      '<span class="dicas-rot">O que fazer agora</span>' +
+      dicas.slice(0, 4).map(function (d) {
+        return '<span class="dica' + (d.urgencia === 'agora' ? ' urgente' : '') + '">' +
+          (d.urgencia === 'agora' ? '<span class="sino">!</span>' : '<span class="sino">·</span>') +
+          '<span>' + esc(d.texto) + '</span></span>';
+      }).join('') + '</div>';
   }
 
   /* ---------------- Próximo passo: compromisso + recomendação ---------------- */

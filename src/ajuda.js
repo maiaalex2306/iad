@@ -72,7 +72,10 @@
     });
     document.addEventListener('focusout', esconder);
     document.addEventListener('click', esconder);
-    global.addEventListener('scroll', esconder, true);
+    /* Sem esconder ao rolar: a posição é gravada em coordenadas do documento,
+       então o balão acompanha o elemento. Esconder ali apagava a ajuda de quem
+       rolava a página para chegar até o botão — que é como se chega à maioria
+       deles. Redimensionar muda o layout, aí sim o cálculo perde a validade. */
     global.addEventListener('resize', esconder);
   }
 
