@@ -733,3 +733,10 @@ dialog.revisao-ia { width: min(680px, 96vw); }
 .achado .campo.mini select { padding: 7px 9px; font-size: .82rem; }
 .achado:has(input[data-ev]:not(:checked)),
 .achado:has(input[data-ct]:not(:checked)) { opacity: .5; border-left-color: var(--line); }
+
+/* Tarefa concluída: o quadro vira marca, não botão — não há o que clicar. */
+.tarefa-linha .quadro.feito {
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--ok); border-color: var(--ok); background: transparent; cursor: default;
+}
+.tarefa-linha .btn.mini { flex: none; }

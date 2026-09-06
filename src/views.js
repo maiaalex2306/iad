@@ -790,8 +790,9 @@
           (op.sdr ? ' \u00b7 SDR ' + esc(op.sdr) : '') + '</p>'
         : '') +
 
-      blocoPlanoIA(op) +
+      painelTarefas(op) +
       blocoAvanco(op, r) +
+      blocoPlanoIA(op) +
       blocoLacunas(op, r) +
       blocoInsight(op, r) +
       blocoProximoPasso(op, r) +
@@ -1158,6 +1159,102 @@
     if (!perfil || perfil.grupo === 'indefinido') return '<div class="tiny muted">perfil não classificado</div>';
     const classe = { mobilizador: 'ok', falador: 'warn', bloqueador: 'dead' }[perfil.grupo] || '';
     return '<div style="margin-top:5px"><span class="pill ' + classe + '" title="' + esc(perfil.dica) + '">' + esc(perfil.rotulo) + '</span></div>';
+  }
+
+  /* ---------------- Painel de tarefas, no topo do cockpit ----------------
+     Fica antes do avanço da decisão porque é o que o vendedor abriu a tela
+     para fazer: ver o que deve, e registrar o que aconteceu. E é aqui que a
+     reunião entra — no gesto de fechar a tarefa, que ele já faz de qualquer
+     jeito, em vez de num formulário separado que ninguém procura. */
+  let filtroTarefas = 'abertas';
+  let periodoTarefas = 'tudo';
+
+  const SITUACOES_TAREFA = [
+    ['abertas', 'Abertas'], ['atrasadas', 'Atrasadas'],
+    ['concluidas', 'Concluídas'], ['todas', 'Todas']
+  ];
+  const PERIODOS_TAREFA = [
+    ['semana', 'Semana'], ['mes', 'Mês'], ['ano', 'Ano'], ['tudo', 'Tudo']
+  ];
+
+  function dentroDoPeriodo(data, periodo) {
+    if (periodo === 'tudo' || !data) return true;
+    const dias = { semana: 7, mes: 31, ano: 365 }[periodo] || 99999;
+    const limite = new Date();
+    limite.setDate(limite.getDate() - dias);
+    const adiante = new Date();
+    adiante.setDate(adiante.getDate() + dias);
+    return data >= limite.toISOString().slice(0, 10) && data <= adiante.toISOString().slice(0, 10);
+  }
+
+  function painelTarefas(op) {
+    const hoje = Store.hoje();
+    const todas = Store.tarefasDaOportunidade(op.id)
+      .sort(function (a, b) { return a.vencimento.localeCompare(b.vencimento); });
+
+    const abertas = todas.filter(function (t) { return t.status === 'aberta'; });
+    const atrasadas = abertas.filter(function (t) { return t.vencimento < hoje; });
+    const concluidas = todas.filter(function (t) { return t.status !== 'aberta'; });
+
+    const visiveis = todas.filter(function (t) {
+      /* Para a tarefa feita, o que situa no tempo é quando foi feita, não
+         quando venceria. Filtrar "esta semana" pelo vencimento esconderia
+         justamente o que se concluiu esta semana. */
+      if (!dentroDoPeriodo(t.concluidaEm || t.vencimento, periodoTarefas)) return false;
+      if (filtroTarefas === 'abertas') return t.status === 'aberta';
+      if (filtroTarefas === 'atrasadas') return t.status === 'aberta' && t.vencimento < hoje;
+      if (filtroTarefas === 'concluidas') return t.status !== 'aberta';
+      return true;
+    });
+
+    const pill = function (chave, rotulo, ativo, acao) {
+      return '<button class="pill' + (ativo ? ' orange' : '') + '" onclick="App.' + acao +
+        '(\'' + chave + '\')">' + esc(rotulo) + '</button>';
+    };
+
+    const linhas = visiveis.map(function (t) {
+      const d = P.DIMENSOES.filter(function (x) { return x.id === t.decisaoAlvo; })[0];
+      const feita = t.status !== 'aberta';
+      const atrasada = !feita && t.vencimento < hoje;
+      return '<div class="tarefa-linha">' +
+        (feita
+          ? '<span class="quadro feito" title="Concluída">\u2713</span>'
+          : '<button class="quadro" onclick="App.concluirTarefa(\'' + t.id + '\')" title="Concluir sem registrar reunião"></button>') +
+        '<span class="small' + (feita ? ' muted' : '') + '">' + esc(t.titulo) +
+        (d ? ' <span class="tiny muted">\u2192 ' + esc(d.nome) + '</span>' : '') + '</span>' +
+        '<span class="espaco"></span>' +
+        '<span class="tiny ' + (atrasada ? 'atrasado' : 'muted') + '">' +
+        (feita ? 'feita ' + U.data(t.concluidaEm || t.vencimento) : U.data(t.vencimento)) + '</span>' +
+        (feita ? '' : '<button class="btn ghost mini" onclick="App.registrarReuniao(\'' + op.id + '\',\'' + t.id + '\')"' +
+          ' data-ajuda-titulo="Fechar com a ata" data-ajuda="Cole ou anexe o que aconteceu. O assistente separa as evidências, relê as oito decisões e registra o próximo passo — tudo no mesmo gesto de concluir a tarefa.">Fechar com ata</button>') +
+        '<button class="btn ghost mini" onclick="App.excluirTarefa(\'' + t.id + '\')">\u2715</button></div>';
+    }).join('');
+
+    return '<div class="card"><div class="row"><h2 style="margin:0">Tarefas</h2>' +
+      '<span class="espaco"></span>' +
+      (U.assistenteAtivo()
+        ? '<button class="btn alt mini" onclick="App.registrarReuniao(\'' + op.id + '\')"' +
+          ' data-ajuda-titulo="Registrar reunião" data-ajuda="Cole a ata ou anexe o arquivo. O assistente lê, propõe as evidências e as oito notas, e você confirma.">Registrar reunião</button>'
+        : '') +
+      '<button class="btn mini" onclick="App.novaTarefa(\'' + op.id + '\')">+ Tarefa</button></div>' +
+
+      '<p class="small muted" style="margin:8px 0 0">' +
+      abertas.length + ' aberta(s) \u00b7 ' +
+      '<span class="' + (atrasadas.length ? 'atrasado' : '') + '">' + atrasadas.length + ' atrasada(s)</span> \u00b7 ' +
+      concluidas.length + ' concluída(s)</p>' +
+
+      '<div class="row filtros-pipeline" style="margin:10px 0 4px">' +
+      SITUACOES_TAREFA.map(function (f) {
+        return pill(f[0], f[1], filtroTarefas === f[0], 'filtrarTarefas');
+      }).join(' ') + '</div>' +
+      '<div class="row filtros-pipeline" style="margin:0 0 10px">' +
+      '<span class="tiny muted" style="align-self:center">Período:</span> ' +
+      PERIODOS_TAREFA.map(function (f) {
+        return pill(f[0], f[1], periodoTarefas === f[0], 'periodoTarefas');
+      }).join(' ') + '</div>' +
+
+      (linhas || '<div class="vazio small">Nenhuma tarefa neste filtro.</div>') +
+      '</div>';
   }
 
   function blocoTarefas(op) {
@@ -2087,6 +2184,8 @@
     definirFiltro: function (f) { filtroGrupo = f; },
     definirFiltroHistorico: function (f) { filtroHistorico = f; },
     definirFiltroHoje: function (f) { filtroHoje = f; },
+    definirFiltroTarefas: function (f) { filtroTarefas = f; },
+    definirPeriodoTarefas: function (f) { periodoTarefas = f; },
     definirModoPipeline: function (m) { modoPipeline = m; },
     definirAbaCadastro: function (a) { abaCadastro = a; buscaCadastro = ''; },
     definirBuscaCadastro: function (b) { buscaCadastro = b; },

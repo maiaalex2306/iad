@@ -894,7 +894,7 @@
       });
     },
 
-    processarReuniao: function (opId, texto) {
+    processarReuniao: function (opId, texto, relerNotas) {
       const op = Store.oportunidade(opId);
       if (!op) return;
       const aviso = document.createElement('dialog');
@@ -911,14 +911,14 @@
           alert('Li o texto e não encontrei nada que o CLIENTE tenha feito. Atividade nossa não conta como evidência.');
           return;
         }
-        App.revisarReuniao(opId, r);
+        App.revisarReuniao(opId, r, relerNotas ? texto : null);
       });
     },
 
     /* A lista de conferência. Nada entra na base sem alguém marcar — cada
        evidência mexe no Evidence Age, e cada nota mexe no IAD que o dono da
        empresa vê. O assistente propõe; quem esteve na reunião assina. */
-    revisarReuniao: function (opId, resultado) {
+    revisarReuniao: function (opId, resultado, textoParaNotas) {
       const op = Store.oportunidade(opId);
       if (!op) return;
       const dlg = document.createElement('dialog');
@@ -978,6 +978,16 @@
           if (pessoas) partes.push(pessoas + (pessoas === 1 ? ' pessoa' : ' pessoas'));
           if (partes.length) alert('Registrado: ' + partes.join(', ') + '.');
           render();
+
+          /* Com as evidências novas gravadas, a releitura das oito acontece
+             sobre o retrato atualizado — e a trava do 2 já enxerga as provas
+             que acabaram de entrar. */
+          if (textoParaNotas) {
+            const atual = Store.oportunidade(opId);
+            IA.sugerirNotas(atual, E.resumo(atual), textoParaNotas).then(function (decisoes) {
+              if (decisoes && decisoes.length) App.revisarNotas(opId, decisoes);
+            });
+          }
         }
         dlg.remove();
       });
@@ -1052,6 +1062,68 @@
     },
 
     /* ---------- Tarefas ---------- */
+    filtrarTarefas: function (v) { V.definirFiltroTarefas(v); render(); },
+    periodoTarefas: function (v) { V.definirPeriodoTarefas(v); render(); },
+
+    /* ---------- A reunião entra pela tarefa ----------
+       O vendedor já vai fechar a tarefa depois da conversa. Fazer disso o
+       ponto onde tudo se atualiza aproveita um gesto que já existe, em vez
+       de pedir um segundo — que é o que ninguém faz.
+
+       O encadeamento é: ata → evidências (ele confere) → as oito notas
+       relidas com as evidências novas (ele confere) → compromisso. Duas
+       confirmações, porque são duas coisas diferentes: o que aconteceu, e o
+       quanto isso moveu a decisão. */
+    registrarReuniao: function (opId, tarefaId) {
+      const op = Store.oportunidade(opId);
+      if (!op) return;
+      if (!IA.disponivel()) { alert('O assistente não está publicado no servidor.'); return; }
+      const tarefa = tarefaId ? Store.dados().tarefas.filter(function (t) { return t.id === tarefaId; })[0] : null;
+
+      U.formulario(tarefa ? 'Fechar: ' + tarefa.titulo : 'Registrar reunião', [
+        { id: 'texto', rotulo: 'Cole a ata, a transcrição ou o que aconteceu', tipo: 'textarea', voz: true,
+          placeholder: 'Cole aqui o resumo automático da call, a transcrição ou suas anotações.' },
+        { id: 'arquivo', rotulo: 'Ou escolha um arquivo de texto (.txt, .md, .vtt, .srt)', tipo: 'file' },
+        { id: 'compromissoTexto', rotulo: 'Próximo passo combinado' },
+        { id: 'compromissoData', rotulo: 'Para quando', tipo: 'date' },
+        { id: 'compromissoDono', rotulo: 'A vez é de quem', tipo: 'select',
+          opcoes: [{ valor: 'cliente', rotulo: 'Do cliente' }, { valor: 'nos', rotulo: 'Nossa' }] }
+      ], {}, function (d) {
+        /* O compromisso e o fechamento da tarefa não dependem da IA: são
+           fatos que o vendedor acabou de informar. Gravam primeiro. */
+        if (d.compromissoData) {
+          Store.registrarEvento(opId, {
+            tipo: 'activity', titulo: 'Próximo passo combinado', canal: 'Reunião',
+            compromisso: {
+              texto: d.compromissoTexto || 'Próximo passo combinado',
+              data: d.compromissoData, dono: d.compromissoDono || 'cliente'
+            }
+          });
+        }
+        if (tarefa) Store.concluirTarefa(tarefa.id);
+
+        if (!d.texto || d.texto.length < 60) {
+          if (d.texto) alert('Texto curto demais para eu separar evidências. O resto foi gravado.');
+          render();
+          return;
+        }
+        App.processarReuniao(opId, d.texto, true);
+      }, function (dlg) {
+        const entrada = dlg.querySelector('[name="arquivo"]');
+        const caixa = dlg.querySelector('[name="texto"]');
+        if (!entrada) return;
+        entrada.setAttribute('accept', '.txt,.md,.vtt,.srt,.csv,.log,text/*');
+        entrada.addEventListener('change', function () {
+          const arquivo = entrada.files && entrada.files[0];
+          if (!arquivo) return;
+          IA.lerTexto(arquivo).then(function (t) {
+            caixa.value = t;
+            caixa.dispatchEvent(new Event('input'));
+          }).catch(function (e) { alert(e.message); });
+        });
+      });
+    },
+
     novaTarefa: function (opId, decisaoAlvo) {
       const op = Store.oportunidade(opId);
       if (!op) return;
