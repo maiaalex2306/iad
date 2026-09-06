@@ -156,6 +156,8 @@
       usuario: u,
       tenantId: u.tenantId,
       admin: u.papel === 'admin',
+      /* Gestor enxerga a empresa inteira; administrador também, e mais. */
+      gestor: u.papel === 'gestor' || u.papel === 'admin',
       filtros: A.filtros()
     };
   }
@@ -168,13 +170,24 @@
     return (estado.tenants[0] || {}).id || null;
   }
 
+  /* Três níveis, e a regra de verdade está no banco (correcao-05-gestor.sql).
+     Aqui é o reflexo: sem isto a tela mostraria o que a cópia local tem, que é
+     o que o servidor já entregou filtrado — mas quem trabalha offline continua
+     precisando do filtro certo. */
   function visivel(registro, comDono) {
     const ctx = contexto();
     if (!ctx.usuario) return false;
-    if (!ctx.admin) return registro.tenantId === ctx.tenantId;
-    if (ctx.filtros.tenant !== 'todas' && registro.tenantId !== ctx.filtros.tenant) return false;
-    if (comDono && ctx.filtros.usuario !== 'todos' && registro.donoId !== ctx.filtros.usuario) return false;
-    return true;
+
+    if (ctx.admin) {
+      if (ctx.filtros.tenant !== 'todas' && registro.tenantId !== ctx.filtros.tenant) return false;
+      if (comDono && ctx.filtros.usuario !== 'todos' && registro.donoId !== ctx.filtros.usuario) return false;
+      return true;
+    }
+
+    if (registro.tenantId !== ctx.tenantId) return false;
+    if (!comDono || ctx.gestor) return true;
+    /* Registro sem dono é da empresa: não some para ninguém. */
+    return !registro.donoId || registro.donoId === ctx.usuario.id;
   }
 
   /* Mesma forma do estado, já filtrado. As telas leem daqui, nunca de obter(). */
@@ -184,8 +197,8 @@
     return {
       tenants: estado.tenants,
       usuarios: estado.usuarios,
-      contas: porTenant(estado.contas),
-      contatos: porTenant(estado.contatos),
+      contas: porDono(estado.contas),
+      contatos: porDono(estado.contatos),
       oportunidades: porDono(estado.oportunidades),
       tarefas: porDono(estado.tarefas),
       segmentos: porTenant(estado.segmentos),
@@ -229,7 +242,7 @@
   function oportunidade(id) { return estado.oportunidades.find(function (o) { return o.id === id; }); }
   function tarefa(id) { return estado.tarefas.find(function (t) { return t.id === id; }); }
   function contatosDaConta(contaId) {
-    return estado.contatos.filter(function (c) { return c.contaId === contaId && visivel(c, false); });
+    return estado.contatos.filter(function (c) { return c.contaId === contaId && visivel(c, true); });
   }
   function tarefasDaOportunidade(opId) {
     return estado.tarefas.filter(function (t) { return t.oportunidadeId === opId && visivel(t, true); });
@@ -239,7 +252,7 @@
     const nova = Object.assign({
       id: uid('acc'), nome: '', razaoSocial: '', cnpj: '', segmento: '', porte: '',
       cidade: '', uf: '', site: '', telefone: '', relacaoAtual: 'Prospect', criadoEm: hoje()
-    }, carimbo(false), dados);
+    }, carimbo(true), dados);
     estado.contas.push(nova);
     salvar();
     return nova;
@@ -250,7 +263,7 @@
       id: uid('ctt'), contaId: null, nome: '', cargo: '', papel: 'Usuário',
       email: '', telefone: '', linkedin: '', influencia: 2, reportaA: null,
       canalPreferido: '', perfil: 'nao_classificado', sentimento: 'nao_acessado', criadoEm: hoje()
-    }, carimbo(false), dados);
+    }, carimbo(true), dados);
     estado.contatos.push(novo);
     salvar();
     return novo;

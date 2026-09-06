@@ -222,7 +222,8 @@
     u.login = u.email;
     u.nome = (perfil && perfil.nome) || meta.nome || u.nome || u.email;
     u.whatsapp = (perfil && perfil.whatsapp) || meta.whatsapp || u.whatsapp || '';
-    u.papel = (perfil && perfil.papel === 'admin') ? 'admin' : 'usuario';
+    /* O papel vem do servidor: usuario, gestor ou admin. */
+    u.papel = (perfil && ['admin', 'gestor'].indexOf(perfil.papel) !== -1) ? perfil.papel : 'usuario';
     u.tenantId = (perfil && perfil.tenant_id) || null;
     u.ativo = true;
     u.emailConfirmado = true;

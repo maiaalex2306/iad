@@ -1271,14 +1271,14 @@
 
   /* ---------------- Cadastros ---------------- */
   const AJUDA_NOVO = {
-    empresas: 'Cadastra uma empresa.', contatos: 'Cadastra uma pessoa e a liga a uma empresa.',
+    empresas: 'Cadastra uma conta — uma empresa cliente.', contatos: 'Cadastra uma pessoa e a liga a uma empresa.',
     oportunidades: 'Cria um negócio.', segmentos: 'Acrescenta um segmento à lista.',
     tiposTarefa: 'Acrescenta um tipo de tarefa.', produtos: 'Cadastra um produto com preço de referência.',
     usuarios: 'Cadastra um usuário neste aparelho. Com a nuvem ligada, as contas ficam no servidor.'
   };
 
   const AJUDA_CADASTRO = {
-    empresas: 'As contas. O segmento aqui é o que agrupa o painel; a relação atual separa quem já compra de quem nunca comprou.',
+    empresas: 'As empresas clientes que você atende. Não confundir com as empresas que usam o sistema, que ficam no painel do administrador.',
     contatos: 'As pessoas. O papel na compra e a posição são o que alimenta a cobertura e os alertas do grupo comprador.',
     oportunidades: 'Os negócios. A etapa organiza o funil; quem mede o avanço são as oito decisões dentro de cada um.',
     segmentos: 'A lista que alimenta o campo Segmento das empresas e a análise por segmento no painel.',
@@ -1287,8 +1287,11 @@
     usuarios: 'Quem tem acesso. Com a nuvem ligada, as contas ficam no servidor — cadastrar aqui só afeta este aparelho.'
   };
 
+  /* "Empresa" era duas coisas com o mesmo nome: a empresa cliente e a empresa
+     que usa o sistema. Aqui a aba passa a se chamar Contas — que é o cliente —,
+     e as empresas do sistema ficam no painel do administrador, onde só ele mexe. */
   const ABAS_CADASTRO = [
-    ['empresas', 'Empresas'], ['contatos', 'Contatos'], ['oportunidades', 'Oportunidades'],
+    ['empresas', 'Contas'], ['contatos', 'Contatos'], ['oportunidades', 'Oportunidades'],
     ['segmentos', 'Segmentos'], ['tiposTarefa', 'Tipos de tarefa'], ['produtos', 'Produtos'],
     ['usuarios', 'Usuários']
   ];
@@ -1504,15 +1507,17 @@
           opcoes(p.tenant_id) + '</select></td>' +
         '<td><select onchange="App.papelDoPerfil(\'' + p.id + '\', this.value)"' +
           (souEu ? ' disabled' : '') +
-          ' data-ajuda="Administrador enxerga todas as empresas e pode ligar pessoas a elas.">' +
-          '<option value="usuario"' + (p.papel !== 'admin' ? ' selected' : '') + '>Usuário</option>' +
-          '<option value="admin"' + (p.papel === 'admin' ? ' selected' : '') + '>Administrador</option>' +
+          ' data-ajuda="Usuário vê só a própria carteira. Gestor vê a de toda a empresa. Administrador vê todas as empresas e move pessoas entre elas.">' +
+          '<option value="usuario"' + (p.papel === 'usuario' || !p.papel ? ' selected' : '') + '>Usuário — vê o que é dele</option>' +
+          '<option value="gestor"' + (p.papel === 'gestor' ? ' selected' : '') + '>Gestor — vê a empresa inteira</option>' +
+          '<option value="admin"' + (p.papel === 'admin' ? ' selected' : '') + '>Administrador — vê todas as empresas</option>' +
           '</select></td>' +
         '<td>' + (p.tenant_id ? '<span class="pill ok">ativo</span>' : '<span class="pill warn">sem empresa</span>') + '</td>' +
         '</tr>';
     }).join('');
 
-    return '<div class="card" style="margin-bottom:14px"><div class="row"><h3 style="margin:0">Usuários no servidor</h3>' +
+    return listaEmpresasDoSistema(empresas) +
+      '<div class="card" style="margin-bottom:14px"><div class="row"><h3 style="margin:0">Usuários no servidor</h3>' +
       '<span class="espaco"></span><span class="pill navy">administrador</span>' +
       '<button class="btn alt mini" onclick="App.novaEmpresaNuvem()"' +
       ' data-ajuda-titulo="Nova empresa" data-ajuda="Cria uma empresa no servidor. Só quem administra pode.">+ Empresa</button>' +
@@ -1524,6 +1529,23 @@
       'Ligue a pessoa à empresa aqui em vez de escrever SQL.</p>' +
       tabela(['Pessoa', 'Empresa', 'Papel', 'Situação'], linhas, 'Nenhum usuário.') +
       listaConvites(arguments[3], empresas) + '</div>';
+  }
+
+  /* As empresas que USAM o sistema — não as empresas clientes, que são as
+     Contas. Duas coisas diferentes que dividiam a mesma palavra e por isso
+     produziram carteiras em empresas paralelas. */
+  function listaEmpresasDoSistema(empresas) {
+    if (!empresas || !empresas.length) return '';
+    const linhas = empresas.map(function (t) {
+      return '<tr><td><strong>' + esc(t.nome) + '</strong></td>' +
+        '<td>' + esc(t.cnpj || '—') + '</td>' +
+        '<td class="tiny muted">' + esc(String(t.id).slice(0, 8)) + '…</td></tr>';
+    }).join('');
+    return '<div class="card" style="margin-bottom:14px"><div class="row"><h3 style="margin:0">Empresas que usam o sistema</h3>' +
+      '<span class="espaco"></span><span class="pill">' + empresas.length + '</span></div>' +
+      '<p class="tiny muted" style="margin:6px 0 10px">Cada uma tem carteira separada: ninguém de uma enxerga a da outra. ' +
+      'Não confundir com as <strong>Contas</strong>, que são as empresas clientes que sua equipe atende.</p>' +
+      tabela(['Empresa', 'CNPJ', 'Identificador'], linhas, 'Nenhuma.') + '</div>';
   }
 
   /* Pessoas registradas que ainda não criaram o acesso. Ficar de olho nelas é o

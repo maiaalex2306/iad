@@ -1307,7 +1307,9 @@
         { id: 'tenantId', rotulo: 'Empresa', tipo: 'select',
           opcoes: empresas.map(function (t) { return { valor: t.id, rotulo: t.nome }; }) },
         { id: 'papel', rotulo: 'Papel', tipo: 'select', opcoes: [
-          { valor: 'usuario', rotulo: 'Usuário' }, { valor: 'admin', rotulo: 'Administrador' }] }
+          { valor: 'usuario', rotulo: 'Usuário — vê o que é dele' },
+          { valor: 'gestor', rotulo: 'Gestor — vê a empresa inteira' },
+          { valor: 'admin', rotulo: 'Administrador — vê todas as empresas' }] }
       ], {}, function (d) {
         const email = (d.email || '').trim();
         if (!email || email.indexOf('@') === -1) { alert('Informe um e-mail válido.'); return; }
@@ -1426,7 +1428,8 @@
       });
       campos.push({
         id: 'papel', rotulo: 'Papel', tipo: 'select',
-        opcoes: [{ valor: 'usuario', rotulo: 'Usuário' }, { valor: 'admin', rotulo: 'Administrador' }]
+        opcoes: [{ valor: 'usuario', rotulo: 'Usuário' }, { valor: 'gestor', rotulo: 'Gestor' },
+                 { valor: 'admin', rotulo: 'Administrador' }]
       });
     }
     return campos;
