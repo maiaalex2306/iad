@@ -158,7 +158,14 @@
       N.guardarPerfilNaSessao(perfil);
       const u = N.sessao().user;
 
-      if (!perfil || !perfil.tenant_id) {
+      if (!perfil) {
+        /* Autenticado e sem linha de perfil é falha de instalação, não falta de
+           empresa: mandar criar empresa aqui esconderia a causa. */
+        V.definirTelaAcesso('login', null,
+          'Entrou, mas o seu perfil não existe no banco. Rode nuvem/schema.sql no Supabase — é ele que cria o perfil no cadastro.');
+        return render();
+      }
+      if (!perfil.tenant_id) {
         V.definirTelaAcesso('empresa', { email: u.email }, '');
         return render();
       }
@@ -1151,7 +1158,19 @@
       recado('empresa', 'Criando empresa…');
       global.IADNuvem.criarMinhaEmpresa(nome, v('ac-cnpj').trim())
         .then(function () { return concluirEntradaNaNuvem(); })
-        .catch(function (e) { recado('empresa', e.message); });
+        .catch(function (e) {
+          /* "já está ligado a uma empresa" chegando nesta tela é contradição: a
+             tela só aparece quando o perfil veio sem empresa. Em vez de virar
+             beco sem saída, relemos o perfil — na maioria das vezes a empresa
+             está lá e a pessoa simplesmente entra. */
+          if (/já está ligado/i.test(e.message)) {
+            return concluirEntradaNaNuvem().catch(function () {
+              recado('empresa', 'O servidor diz que você já tem empresa, mas ela não veio na leitura do seu perfil. ' +
+                'Saia e entre de novo; se repetir, é um problema de permissão no banco.');
+            });
+          }
+          recado('empresa', e.message);
+        });
     },
 
     filtrarTenant: function (valor) { A.definirFiltros({ tenant: valor, usuario: 'todos' }); render(); },

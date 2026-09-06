@@ -146,13 +146,21 @@
     return chamar('/auth/v1/user', {}).then(function (u) { return u; });
   }
 
-  /* O perfil vem com a empresa embutida (tenants é chave estrangeira de perfis),
-     porque quem pergunta "quem sou eu" quase sempre quer também "de onde". */
+  /* Duas leituras separadas de propósito. A pergunta "este usuário tem empresa?"
+     decide se a pessoa entra ou fica presa na tela de empresa — e não pode
+     depender de conseguir LER a empresa, que é outra permissão. Juntar as duas
+     numa consulta só fazia uma falha na segunda derrubar a primeira. */
   function meuPerfil() {
     const s = sessao();
     if (!s || !s.user) return Promise.resolve(null);
-    return chamar('/rest/v1/perfis?id=eq.' + s.user.id + '&select=*,tenants(id,nome,cnpj)').then(function (linhas) {
-      return (linhas && linhas[0]) || null;
+    return chamar('/rest/v1/perfis?id=eq.' + s.user.id + '&select=*').then(function (linhas) {
+      const perfil = (linhas && linhas[0]) || null;
+      if (!perfil || !perfil.tenant_id) return perfil;
+      /* O nome da empresa é enfeite: se não vier, o perfil continua valendo. */
+      return chamar('/rest/v1/tenants?id=eq.' + perfil.tenant_id + '&select=id,nome,cnpj').then(
+        function (ts) { perfil.tenants = (ts && ts[0]) || null; return perfil; },
+        function () { return perfil; }
+      );
     });
   }
 
