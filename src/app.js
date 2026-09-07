@@ -2609,11 +2609,10 @@
           .concat(segmentos.map(function (n) { return { valor: n, rotulo: n }; })) },
       { id: 'relacaoAtual', rotulo: 'Relação atual', tipo: 'select', largura: 'metade',
         opcoes: P.RELACOES_CONTA },
-      /* Setor é o que o LinkedIn diz que a empresa faz; segmento é a nossa
-         gaveta comercial. Guardar os dois deixa a IA acertar a gaveta e a
-         pessoa conferir de onde veio o palpite. */
-      { id: 'setor', rotulo: 'Setor (como o mercado a chama)', largura: 'metade',
-        placeholder: 'Ex.: Farmacêutica, Saneamento, Alimentos' },
+      /* Setor saiu da ficha: repetia o segmento aos olhos de quem preenche, e
+         campo que parece repetido é campo que fica vazio. O setor que o Linked
+         Helper traz continua sendo usado — como sinal para a IA escolher o
+         segmento, que é onde ele de fato serve, e não como mais uma caixa. */
       { id: 'porte', rotulo: 'Porte (faturamento ou funcionários)', largura: 'metade' },
 
       { tipo: 'secao', rotulo: 'Onde fica e como falar' },

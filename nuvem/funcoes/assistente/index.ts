@@ -109,10 +109,6 @@ const FORMATOS: Record<string, Record<string, Regra>> = {
     pais:        { como: 'texto', max: 40 },
     site:        { como: 'texto', max: 100 },
     linkedin:    { como: 'texto', max: 140 },
-    /* Setor é o que o mercado chama a empresa; segmento é a gaveta comercial
-       de quem usa o CRM, e vem de uma lista fechada. Separados de propósito:
-       o modelo acerta muito o primeiro e erra o segundo quando inventa. */
-    setor:       { como: 'texto', max: 60 },
     descricao:   { como: 'texto', max: 400 }
   },
   contato: {
@@ -220,10 +216,9 @@ Nada mais.`;
 
 Tarefa: extraia os dados cadastrais da empresa cliente do texto.
 
-Campos: nome, razaoSocial, cnpj, segmento, setor, descricao, telefone, porte,
+Campos: nome, razaoSocial, cnpj, segmento, descricao, telefone, porte,
 cidade, uf, pais, site, linkedin.
 
-setor é como o mercado chama a empresa (Farmacêutica, Saneamento, Alimentos).
 segmento tem de sair da lista fechada acima — se nenhum servir, deixe vazio.
 descricao é o que ela produz e para quem vende, em uma ou duas frases.
 
