@@ -273,7 +273,9 @@
       '<div class="vazio">Nada neste filtro.</div>';
 
     return '<div class="row"><h1>Hoje</h1><span class="espaco"></span>' +
-      '<button class="btn alt mini" onclick="App.capturaRapida()" data-ajuda-titulo="Registrar evidência" data-ajuda="O cliente se moveu. Só isso zera o tempo sem evidência e permite subir a nota da decisão.">+ Evidência</button></div>' +
+      '<button class="btn alt mini" onclick="App.capturaRapida()" data-ajuda-titulo="Nova tarefa" data-ajuda="Acabei de falar com um cliente. A tarefa é a evidência: escolha o negócio, o canal, e conte o que aconteceu — o assistente separa o que o CLIENTE fez e relê as oito decisões.">+ Tarefa</button>' +
+      '<button class="btn ghost mini" onclick="location.hash=\'#/playbook\'" aria-label="O método"' +
+      ' data-ajuda-titulo="O método" data-ajuda="Como uma tarefa vira avanço, o que conta como evidência em cada uma das oito decisões, e o que fazer em cada canal.">?</button></div>' +
       '<p class="muted small">' + (grupos[0].qtd
         ? grupos[0].qtd + ' negócio(s) precisam de você agora · ' + U.compacto(grupos[0].valor) + ' envolvidos'
         : 'Nada urgente hoje.') + '</p>' +
@@ -322,7 +324,7 @@
       '<div class="tiny muted" style="margin-top:6px">Falta: ' + falta + '</div>' +
       (tarefas ? '<div class="tarefas">' + tarefas + '</div>' : '') +
       '<div class="row" style="margin-top:10px">' +
-      '<button class="btn alt mini" onclick="App.novaEvidencia(\'' + r.op.id + '\')" data-ajuda-titulo="Registrar evidência" data-ajuda="O que o cliente fez nesta semana. Se nada mudou do lado dele, não houve avanço — e é isso que a revisão quer expor.">Registrar evidência</button>' +
+      '<button class="btn alt mini" onclick="App.novaTarefa(\'' + r.op.id + '\',\'\',{situacao:\'feita\'})" data-ajuda-titulo="Nova tarefa" data-ajuda="O que aconteceu com este cliente nesta semana. Se nada mudou do lado dele, não houve avanço — e é isso que a revisão quer expor.">+ Tarefa</button>' +
       '<button class="btn ghost mini" onclick="App.abrir(\'' + r.op.id + '\')">Abrir</button></div></div>';
   }
 
@@ -1256,8 +1258,10 @@
        pergunta "a fazer ou já foi feita?" está dentro do formulário. */
     return '<div class="card"><div class="row"><h2 style="margin:0">Tarefas</h2>' +
       '<span class="espaco"></span>' +
+      '<button class="btn ghost mini" onclick="IADUI.fecharDialogos();location.hash=\'#/playbook\'"' +
+      ' data-ajuda-titulo="O método" data-ajuda="A teoria inteira: o que conta como evidência em cada uma das oito decisões, o que fazer em cada canal, e por que atividade nossa não move o índice.">? Método</button>' +
       '<button class="btn mini" onclick="App.novaTarefa(\'' + op.id + '\')"' +
-      ' data-ajuda-titulo="Nova tarefa" data-ajuda="Reunião, visita, telefonema, WhatsApp ou e-mail. Se já aconteceu, marque “Já foi feita” e cole a ata ou anexe os arquivos: o assistente separa as evidências e relê as oito decisões.">+ Tarefa</button></div>' +
+      ' data-ajuda-titulo="Nova tarefa" data-ajuda="Reunião, visita, telefonema, WhatsApp ou e-mail. Se já aconteceu, marque “Já foi feita” e conte o que aconteceu: cole a ata, responda quatro perguntas, ou registre uma evidência direta. O assistente relê as oito decisões.">+ Tarefa</button></div>' +
 
       '<p class="small muted" style="margin:8px 0 0">' +
       abertas.length + ' aberta(s) \u00b7 ' +
@@ -1389,7 +1393,7 @@
             (comp.vencido ? ' (vencido há ' + comp.diasAtraso + 'd)' : '') + '</p>'
           : '<p class="tiny atrasado">Sem próximo passo combinado com data.</p>') +
         '<p class="small muted">Próxima decisão a provocar: ' + esc(r.nbd.decisao) + '</p>' +
-        '<div class="row"><button class="btn alt mini" onclick="App.novaEvidencia(\'' + r.op.id + '\')" data-ajuda-titulo="Registrar evidência" data-ajuda="O que o cliente fez nesta semana. Se nada mudou do lado dele, não houve avanço — e é isso que a revisão quer expor.">Registrar evidência</button>' +
+        '<div class="row"><button class="btn alt mini" onclick="App.novaTarefa(\'' + r.op.id + '\',\'\',{situacao:\'feita\'})" data-ajuda-titulo="Nova tarefa" data-ajuda="O que aconteceu com este cliente nesta semana. Se nada mudou do lado dele, não houve avanço — e é isso que a revisão quer expor.">+ Tarefa</button>' +
         '<button class="btn ghost mini" onclick="App.definirCompromisso(\'' + r.op.id + '\')" data-ajuda-titulo="Definir compromisso" data-ajuda="O próximo passo e a data. Sem isso o negócio fica no ar e o app marca em vermelho.">Definir compromisso</button>' +
         '<button class="btn ghost mini" onclick="App.abrir(\'' + r.op.id + '\')" data-ajuda-titulo="Abrir cockpit" data-ajuda="A tela completa do negócio: as oito decisões, lacunas, grupo comprador, gate e histórico.">Abrir cockpit</button></div></div>';
     }).join('');
@@ -1878,10 +1882,63 @@
       return '<tr><td><strong>' + esc(f.rotulo) + '</strong></td><td>' + esc(f.desc) + '</td></tr>';
     }).join('');
 
-    return '<h1>Playbook da decisão</h1>' +
+    /* A teoria toda numa tela só, e começando pela parte que o vendedor usa
+       todo dia: como uma tarefa vira avanço. Antes esta tela abria pelas oito
+       decisões, que é o fim da história — quem chega aqui quer saber o que
+       fazer amanhã de manhã, não a taxonomia. */
+    const tiposDeTarefa = Store.nomesDoCatalogo('tiposTarefa').map(function (t) {
+      return '<span class="pill">' + esc(t) + '</span>';
+    }).join(' ');
+
+    return '<h1>O método</h1>' +
       '<div class="card"><h2>A regra</h2>' +
       '<p>O estágio mostra onde a oportunidade está. As decisões mostram se ela realmente avançou.</p>' +
+      '<p class="small">Só o cliente move o índice. O que <strong>nós</strong> fazemos — apresentar, ' +
+      'propor, cobrar, dar follow-up — é trabalho, e trabalho não é avanço.</p>' +
       '<p class="small muted">Não conta como avanço:</p><div class="row">' + naoContam + '</div></div>' +
+
+      '<div class="card"><h2>Tudo entra por tarefa</h2>' +
+      '<p class="small">Uma evidência nunca aparece do nada: ela vem de uma conversa, uma visita, ' +
+      'um e-mail. Por isso há um botão só — <strong>+ Tarefa</strong> — e a tarefa é o lugar onde ' +
+      'a decisão anda. Sem isso, o sistema registra o efeito e perde a causa: ninguém sabe depois ' +
+      'por qual canal aquele negócio andou, nem qual canal funciona nesta conta.</p>' +
+      '<p class="small"><strong>A fazer</strong> é o que você marcou para fazer. ' +
+      '<strong>Já foi feita</strong> é o que aconteceu e você está anotando. As duas contam no ' +
+      'funil e não contam igual no método: a primeira mostra planejamento, a segunda mostra ' +
+      'corrida atrás do histórico. O sistema guarda a diferença e o assistente a lê.</p>' +
+      '<p class="small muted" style="margin-top:10px">Canais disponíveis (você edita a lista em Cadastros):</p>' +
+      '<div class="row">' + tiposDeTarefa + '</div></div>' +
+
+      '<div class="card"><h2>Quando a tarefa já aconteceu, há quatro modos de contar</h2>' +
+      '<div class="tabela-rolagem"><table><tbody>' +
+      '<tr><td style="white-space:nowrap"><strong>Colar a ata</strong></td>' +
+      '<td>Cole a transcrição ou anexe os documentos (Word, PDF, Excel, vários de uma vez). ' +
+      'O assistente separa o que o <em>cliente</em> fez, propõe uma evidência por decisão e depois ' +
+      'relê as oito com as evidências novas. É o caminho mais completo: uma reunião costuma mover ' +
+      'três ou quatro decisões de uma vez.</td></tr>' +
+      '<tr><td style="white-space:nowrap"><strong>Quatro perguntas</strong></td>' +
+      '<td>Entrou alguém novo? Ficou número acordado? Ficou próximo passo com data? Apareceu ' +
+      'bloqueio novo? Cada “sim” vira evidência sem você digitar — é o caminho de quem está no ' +
+      'carro depois da visita. As oito são relidas em seguida, do mesmo jeito.</td></tr>' +
+      '<tr><td style="white-space:nowrap"><strong>Evidência direta</strong></td>' +
+      '<td>Uma coisa só aconteceu e você sabe qual decisão ela move. Abre a tela de evidência já ' +
+      'com o canal e a data da tarefa.</td></tr>' +
+      '<tr><td style="white-space:nowrap"><strong>Nada a registrar</strong></td>' +
+      '<td>A tarefa aconteceu e o cliente não se moveu. Isso também é informação: o negócio ' +
+      'consumiu trabalho e não andou.</td></tr>' +
+      '</tbody></table></div></div>' +
+
+      '<div class="card"><h2>O que faz uma reunião valer</h2>' +
+      '<p class="small">Quanto mais reuniões <em>com evidência</em> uma conta acumula, melhor ela fica — ' +
+      'e reunião sem evidência é reunião que não aconteceu, para o índice. Três perguntas antes de ' +
+      'marcar a próxima:</p>' +
+      '<p class="small">1. <strong>Qual das oito eu vou provocar?</strong> A tarefa pede isso no ' +
+      'campo “decisão que pretende provocar”, e o painel ali mostra o que conta como evidência dela ' +
+      'e o que fazer no canal escolhido.</p>' +
+      '<p class="small">2. <strong>Quem precisa estar?</strong> Venda que depende de uma pessoa só é ' +
+      'o maior risco silencioso — o alerta do cockpit avisa.</p>' +
+      '<p class="small">3. <strong>O que vai ficar combinado, com data e com dono?</strong> Negócio ' +
+      'sem próximo passo combinado não dá para saber se atrasou.</p></div>' +
       '<div class="card"><h2>Força da evidência</h2>' +
       '<p class="small">Uma decisão só chega a 2 com evidência confirmada ou documentada.</p>' +
       '<div class="tabela-rolagem"><table><tbody>' + forcas + '</tbody></table></div></div>' +

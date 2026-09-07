@@ -18,7 +18,10 @@
     { hash: '#/cadastros', ico: '📇', nome: 'Cadastros', render: V.cadastros,
       ajuda: 'Empresas, contatos, oportunidades, segmentos, tipos de tarefa, produtos e usuários.' },
     { hash: '#/contas', ico: '🏢', nome: 'Contas', render: V.contas, foraDasAbas: true },
-    { hash: '#/playbook', ico: '🎯', nome: 'Playbook', render: V.playbook, foraDasAbas: true }
+    /* Deixou de ser tela escondida: é a teoria que o vendedor precisa antes de
+       marcar a próxima reunião, e teoria fora do menu é teoria que ninguém lê. */
+    { hash: '#/playbook', ico: '❓', nome: 'Método', render: V.playbook,
+      ajuda: 'A teoria inteira: como uma tarefa vira avanço, o que conta como evidência em cada uma das oito decisões e o que fazer em cada canal.' }
   ];
 
   /* Uma função do servidor pode faltar por dois motivos, e o navegador não
@@ -1042,10 +1045,23 @@
     },
 
     /* ---------- Evidências ---------- */
+    /* O botão do alto da tela: "acabei de falar com um cliente". Também entra
+       por tarefa — a tarefa é a evidência, e uma evidência sem a interação
+       que a produziu é um efeito sem causa. A única pergunta a mais é em qual
+       negócio, e ela só aparece quando há mais de um. */
     capturaRapida: function () {
       const abertas = Store.dados().oportunidades.filter(function (o) { return !o.desfecho; });
-      if (!abertas.length) { alert('Nenhuma oportunidade aberta para registrar evidência.'); return; }
-      App.novaEvidencia(null, abertas);
+      if (!abertas.length) { alert('Nenhum negócio aberto para registrar uma tarefa.'); return; }
+      if (abertas.length === 1) { App.novaTarefa(abertas[0].id, '', { situacao: 'feita' }); return; }
+      U.formulario('Em qual negócio?', [{
+        id: 'oportunidadeId', rotulo: 'Negócio', tipo: 'select',
+        opcoes: abertas.map(function (o) {
+          const c = Store.conta(o.contaId);
+          return { valor: o.id, rotulo: ((c && c.nome) ? c.nome + ' — ' : '') + o.titulo };
+        })
+      }], {}, function (d) {
+        if (d.oportunidadeId) App.novaTarefa(d.oportunidadeId, '', { situacao: 'feita' });
+      });
     },
 
     /* Evidência = o cliente se moveu. É o único registro que altera Evidence Age. */
@@ -1406,6 +1422,7 @@
           padrao: decisaoAlvo || (r.nbd.dimensao ? r.nbd.dimensao.id : 'problema'),
           opcoes: P.DIMENSOES.map(function (d) { return { valor: d.id, rotulo: d.nome }; })
         },
+        { tipo: 'slot', slot: 'metodo' },
         { id: 'vencimento', rotulo: 'Para quando', tipo: 'date', padrao: Store.hoje() },
 
         { id: 'secaoRelato', tipo: 'secao', rotulo: 'O que aconteceu',
@@ -1423,7 +1440,52 @@
         { id: 'arquivo', rotulo: 'Ou carregue documentos (Word, PDF, Excel, PowerPoint, texto) — pode escolher vários', tipo: 'file' }
       ];
 
-      /* As quatro perguntas fechadas do fim de reunião. Cada "sim" vira
+      /* O método na hora de fazer a tarefa, e não numa tela que ninguém abre.
+
+     A pergunta da decisão, o que conta como evidência dela e o que fazer no
+     canal escolhido — os três mudam junto com os dois selects logo acima.
+     Escrever a teoria só no Playbook é escrever para quem já sabe: quem
+     precisa dela está aqui, criando a tarefa, decidindo o que vai falar. */
+  function ligarPainelDeMetodo(dlg) {
+    const caixa = dlg.querySelector('[data-metodo]');
+    const alvo = dlg.querySelector('[name="decisaoAlvo"]');
+    const canal = dlg.querySelector('[name="tipo"]');
+    if (!caixa || !alvo) return;
+
+    /* Os canais do playbook são quatro; os tipos de tarefa são nove e o
+       usuário cria os dele. O de-para leva cada tipo ao conselho mais
+       próximo, e o que não tem correspondência cai no de e-mail, que é o
+       mais genérico dos quatro. */
+    const PARA_CANAL = {
+      'WhatsApp': 'whatsapp', 'Telefonema': 'whatsapp', 'Reunião': 'whatsapp', 'Visita': 'whatsapp',
+      'E-mail': 'email', 'Proposta': 'email', 'Apresentação': 'email',
+      'LinkedIn': 'linkedin', 'Preparação': 'linkedin', 'Cobrar retorno': 'whatsapp'
+    };
+
+    const pintar = function () {
+      const d = P.DIMENSOES.filter(function (x) { return x.id === alvo.value; })[0];
+      if (!d) { caixa.innerHTML = ''; return; }
+      const tipo = canal ? canal.value : '';
+      const chave = PARA_CANAL[tipo] || 'email';
+      const nomeCanal = (P.CANAIS.filter(function (c) { return c.id === chave; })[0] || {}).nome || '';
+      caixa.innerHTML = '<div class="metodo-tarefa">' +
+        '<span class="rotulo">Como esta tarefa faz ' + U.esc(d.nome) + ' andar</span>' +
+        '<p class="pergunta">' + U.esc(d.pergunta) + '</p>' +
+        (tipo ? '<p class="conselho"><strong>' + U.esc(tipo) + '</strong> — ' +
+          U.esc(d.canais[chave]) + ' <em>(cadência de ' + U.esc(nomeCanal) + ')</em></p>' : '') +
+        '<p class="conta"><strong>Conta como evidência:</strong> ' +
+        U.esc(d.evidencias.slice(0, 3).join(' · ')) + '</p>' +
+        '<p class="tiny muted">Para a nota 2 a evidência precisa ser confirmada ou documentada. ' +
+        'O que nós fizemos — apresentar, propor, cobrar — não conta.</p>' +
+        '</div>';
+    };
+
+    alvo.addEventListener('change', pintar);
+    if (canal) canal.addEventListener('change', pintar);
+    pintar();
+  }
+
+  /* As quatro perguntas fechadas do fim de reunião. Cada "sim" vira
          evidência sem digitação — é o caminho de quem está no carro depois da
          visita e não vai colar transcrição nenhuma. */
       P.FECHAMENTO_REUNIAO.forEach(function (q) {
@@ -1468,6 +1530,7 @@
         }
       }, function (dlg) {
         U.ligarDocumentos(dlg, 'arquivo', 'relato');
+        ligarPainelDeMetodo(dlg);
         const situacao = dlg.querySelector('[name="situacao"]');
         const comoContar = dlg.querySelector('[name="comoContar"]');
         const ajustar = function () {

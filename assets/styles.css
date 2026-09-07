@@ -262,6 +262,23 @@ dialog .corpo > label.campo.meia { grid-column: span 1; }
   font-weight: 700; color: var(--navy-2);
 }
 .secao-form em { display: block; font-style: normal; font-size: .75rem; color: var(--muted); margin-top: 2px; }
+/* O método na hora de criar a tarefa. Fica com a cara de um aviso, e não de
+   um campo: não é para preencher, é para ler antes de escolher o que falar. */
+.metodo-tarefa {
+  grid-column: 1 / -1; margin: 0 0 12px; padding: 10px 12px; border-radius: 10px;
+  background: var(--bg); border: 1px solid var(--line); border-left: 3px solid var(--orange);
+}
+.metodo-tarefa .rotulo {
+  display: block; font-size: .68rem; text-transform: uppercase; letter-spacing: .09em;
+  font-weight: 700; color: var(--orange);
+}
+.metodo-tarefa p { margin: 6px 0 0; font-size: .78rem; line-height: 1.45; }
+.metodo-tarefa .pergunta { font-weight: 600; color: var(--navy-2); }
+.metodo-tarefa .conselho { color: var(--text); }
+.metodo-tarefa .conselho em { color: var(--muted); font-style: normal; }
+.metodo-tarefa .conta { color: var(--muted); }
+.metodo-tarefa .conta strong { color: var(--text); }
+
 .nota-form {
   grid-column: 1 / -1; margin: 0 0 12px; padding: 8px 11px; border-radius: 9px;
   background: var(--bg); border: 1px solid var(--line);
