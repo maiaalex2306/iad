@@ -106,7 +106,7 @@
       texto: f.mensagem || 'Sem detalhe. Veja os logs da função no painel do Supabase.' };
   }
 
-  /* Uma extração. Resolve com {campos, frases} ou null — nunca rejeita. */
+
   /* O que cabe num pedido. Quatro propostas em Word passam de duzentos mil
      caracteres, e nenhum modelo aceita isso num pedido só — o servidor recusa
      e o app dizia "não consegui falar com o assistente", que manda procurar
@@ -114,6 +114,17 @@
      dizemos que cortamos: material demais some, e some justamente a parte que
      a pessoa carregou por último. */
   const LIMITE_PEDIDO = 24000;
+
+  /* O corpo que voltou, legível e curto. `mensagem` é o campo que o nuvem.js
+     usa quando a resposta não era JSON — ali está o texto cru, que é
+     justamente o que interessa quando nada mais faz sentido. */
+  function amostraDaResposta(r) {
+    let t;
+    if (r && typeof r.mensagem === 'string') t = r.mensagem;
+    else { try { t = JSON.stringify(r); } catch (e) { t = String(r); } }
+    t = String(t || '').replace(/\s+/g, ' ').trim();
+    return t.length > 180 ? t.slice(0, 180) + '…' : (t || '(nada)');
+  }
 
   /* Devolve {campos, frases} quando deu certo, {erro} quando não. Antes
      devolvia null para tudo — tempo esgotado, recusa do servidor, texto curto
@@ -154,7 +165,16 @@
       const r = x.resposta;
       if (!r) return { erro: 'O servidor respondeu vazio.' };
       if (r.erro) return { erro: r.erro };
-      if (!r.campos) return { erro: 'O assistente não devolveu campos.' };
+      /* A função sempre devolve `campos`, nem que venha vazio. Chegar aqui sem
+         ele quer dizer que o que respondeu não foi a função — corpo que não é
+         JSON, página de erro do gateway, worker que caiu no meio. Dizer só
+         "não devolveu campos" põe a culpa na função e esconde o que veio.
+         Então mostramos o que veio, cortado, e a próxima pessoa não precisa
+         abrir o console para descobrir. */
+      if (!r.campos) {
+        return { erro: 'O assistente respondeu, mas não no formato esperado. ' +
+          'Voltou: ' + amostraDaResposta(r) };
+      }
       return { campos: r.campos, frases: r.frases || {}, cortado: cortado };
     });
   }

@@ -27,7 +27,12 @@ const ANON = Deno.env.get('IAD_CHAVE_PUBLICA') ||
   Deno.env.get('SUPABASE_PUBLISHABLE_KEY') ||
   Deno.env.get('SUPABASE_ANON_KEY') || '';
 
-const LIMITE_TEXTO = 8000;
+/* 8000 servia para "cole o que você sabe da empresa", que é um parágrafo.
+   Desde que a caixa lê Word, Excel e PDF, o que chega é um relatório de
+   reunião inteiro — e cortar em 8000 joga fora justamente o miolo, ficando
+   com cabeçalho e sumário. 16000 caracteres são cerca de 4 mil tokens: cabe
+   no modelo, e o pedido continua respondendo em segundos. */
+const LIMITE_TEXTO = 16000;
 const LIMITE_REUNIAO = 40000;   /* transcrição de call cabe; base de dados não */
 const LIMITE_LISTA = 120;
 
