@@ -116,6 +116,35 @@
     return chamar('/auth/v1/user', { metodo: 'PUT', corpo: { password: nova } });
   }
 
+  /* Convite e "esqueci a senha" não voltam por uma resposta de chamada: o
+     GoTrue manda a pessoa de volta ao app com os tokens no pedaço do endereço
+     depois do #. Quem clica no link do e-mail chega aqui já autenticado, sem
+     nunca ter digitado senha — e é justamente por isso que o passo seguinte,
+     no app, é escolher uma.
+
+     O fragmento traz só os tokens, não a pessoa. Então guardamos a sessão
+     primeiro (senão a chamada abaixo não teria com que se autenticar) e
+     perguntamos ao servidor quem é. Se essa pergunta falhar, desfazemos: uma
+     sessão sem dono espalharia o problema por todo o resto do app. */
+  function adotarTokens(t) {
+    if (!t || !t.access_token) return Promise.reject(new Error('O link não trouxe credencial.'));
+    guardarSessao({
+      access_token: t.access_token,
+      refresh_token: t.refresh_token || '',
+      token_type: t.token_type || 'bearer',
+      expires_in: Number(t.expires_in || 3600)
+    });
+    return chamar('/auth/v1/user').then(function (u) {
+      const s = sessao();
+      s.user = u;
+      guardarSessao(s);
+      return u;
+    }).catch(function (e) {
+      guardarSessao(null);
+      throw e;
+    });
+  }
+
   /* Edge Functions: o pedaço de servidor que o app tem. Existe para guardar
      o que não pode viver no navegador — hoje, a chave da IA. */
   function chamarFuncao(nome, corpo) {
@@ -422,6 +451,7 @@
     perfisDaNuvem, empresasDaNuvem, souAdminNaNuvem, existeEmpresa,
     definirEmpresaDoPerfil, definirPapelDoPerfil, salvarMeuNome,
     convitesDaNuvem, convidar, removerConvite, criarEmpresa, chamarFuncao,
+    adotarTokens,
     trocarMinhaSenha,
     paraBanco, paraApp
   };

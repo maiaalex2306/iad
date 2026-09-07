@@ -95,7 +95,11 @@
   }
 
   /* Diálogo genérico: recebe HTML de formulário e devolve os campos preenchidos. */
-  function formulario(titulo, campos, valores, aoConfirmar, aoMontar) {
+  /* aoCancelar existe porque desistir nem sempre é neutro: na caixa que define
+     a senha de quem chegou pelo convite, fechar sem preencher deixa a pessoa
+     dentro do app e sem como voltar amanhã. Quem chama precisa poder dizer
+     isso. Nas outras caixas o parâmetro não é passado e nada muda. */
+  function formulario(titulo, campos, valores, aoConfirmar, aoMontar, aoCancelar) {
     const dlg = document.createElement('dialog');
     const html = campos.map(function (c) {
       const v = (valores && valores[c.id] != null) ? valores[c.id] : (c.padrao != null ? c.padrao : '');
@@ -153,6 +157,8 @@
             : el.value.trim();
         });
         aoConfirmar(dados);
+      } else if (aoCancelar) {
+        aoCancelar();
       }
       dlg.remove();
     });

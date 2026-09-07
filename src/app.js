@@ -237,8 +237,8 @@
      antiga até fechar o app: pior do que lento, é enganoso. Relemos ao abrir. */
   function atualizarPerfilDaNuvem() {
     const N = global.IADNuvem;
-    if (!N.conectado()) return;
-    N.meuPerfil().then(function (perfil) {
+    if (!N.conectado()) return Promise.resolve();
+    const lendo = N.meuPerfil().then(function (perfil) {
       if (!perfil) return;
       const antes = N.estado().perfil || {};
       N.guardarPerfilNaSessao(perfil);
@@ -248,8 +248,107 @@
     }).catch(function () {});
 
     /* A função do assistente é publicada à mão, num passo separado do login.
-       Perguntamos ao servidor se ela existe antes de oferecer a caixa ✨. */
+       Perguntamos ao servidor se ela existe antes de oferecer a caixa ✨.
+       Esta não entra na promessa devolvida: ninguém deve esperar por ela para
+       ver a tela — se o assistente estiver no ar, a caixa aparece sozinha. */
     IA.verificar().then(function (mudou) { if (mudou) render(); });
+
+    return lendo;
+  }
+
+  /* ---------- chegada pelo link do e-mail ---------- */
+
+  /* O convite e o "esqueci a senha" trazem a pessoa de volta com tudo depois
+     do #, no formato de um formulário: access_token, refresh_token, type. O
+     roteador do app também usa o #, e não reconhecia nada disso — a pessoa
+     clicava no link, chegava com a credencial na mão e via a tela de login,
+     que é exatamente o que ela não consegue passar: ela não tem senha ainda. */
+  function credencialNoEndereco() {
+    const bruto = (location.hash || '').replace(/^#/, '');
+    if (bruto.indexOf('access_token=') === -1 && bruto.indexOf('error=') === -1) return null;
+    const p = new URLSearchParams(bruto);
+    return {
+      access_token: p.get('access_token') || '',
+      refresh_token: p.get('refresh_token') || '',
+      expires_in: p.get('expires_in') || '',
+      tipo: p.get('type') || '',
+      erro: p.get('error_code') || p.get('error') || '',
+      detalhe: (p.get('error_description') || '').replace(/\+/g, ' ')
+    };
+  }
+
+  /* Fora do endereço assim que lido. Um access_token no histórico do navegador
+     vaza pelo botão de voltar, pelos favoritos e por qualquer captura de tela —
+     e ele vale como senha até expirar. */
+  function limparEndereco() {
+    const limpo = location.pathname + location.search;
+    if (history.replaceState) history.replaceState(null, '', limpo);
+    else location.hash = '';
+  }
+
+  function recusaDoLink(c) {
+    if (/expired/i.test(c.erro) || /expired/i.test(c.detalhe)) {
+      return 'O link deste e-mail já expirou.\n\n' +
+        'Peça ao administrador para enviar o convite de novo — o link novo funciona.';
+    }
+    if (/access_denied|otp/i.test(c.erro)) {
+      return 'Este link não vale mais. Ele serve uma vez só, e já foi usado ou substituído.\n\n' +
+        'Se você ainda não definiu sua senha, peça um convite novo ao administrador.';
+    }
+    return 'O servidor recusou este link: ' + (c.detalhe || c.erro || 'motivo não informado') + '.';
+  }
+
+  /* Depois de entrar pelo link, escolher a senha é o único passo que falta —
+     e é o que transforma um acesso de uma vez só em conta de verdade. Quem
+     desiste continua dentro, com a sessão válida, mas fica sem como voltar
+     amanhã: por isso a desistência avisa onde terminar depois, em vez de
+     empurrar a caixa de novo. */
+  function pedirSenhaNova(nome) {
+    U.formulario('Bem-vindo' + (nome ? ', ' + nome : '') + ' — escolha sua senha', [
+      { id: 'nova', rotulo: 'Sua senha', tipo: 'password', placeholder: 'mínimo 8 caracteres' },
+      { id: 'confere', rotulo: 'Repita a senha', tipo: 'password' }
+    ], {}, function (d) {
+      if (d.nova.length < 8) { alert('A senha precisa ter pelo menos 8 caracteres.'); pedirSenhaNova(nome); return; }
+      if (d.nova !== d.confere) { alert('As duas senhas não são iguais. Tente de novo.'); pedirSenhaNova(nome); return; }
+      global.IADNuvem.trocarMinhaSenha(d.nova).then(function () {
+        alert('Senha definida. A partir de agora você entra com o seu e-mail e esta senha, ' +
+          'em qualquer aparelho.');
+        atualizarPerfilDaNuvem();
+        render();
+      }).catch(function (e) {
+        alert('Não consegui gravar a senha: ' + e.message + '\n\nTente de novo.');
+        pedirSenhaNova(nome);
+      });
+    }, null, function () {
+      alert('Você está dentro, mas ainda sem senha — e sem ela não dá para voltar amanhã.\n\n' +
+        'Defina a sua em ⚙︎ → Minha conta, antes de fechar o app.');
+    });
+  }
+
+  /* Roda antes de qualquer desenho de tela. Devolve promessa porque o boot
+     precisa esperar: desenhar a tela de login e só depois descobrir que a
+     pessoa já estava autenticada faria a tela piscar do errado para o certo. */
+  function adotarCredencialDoEndereco() {
+    const c = credencialNoEndereco();
+    if (!c) return Promise.resolve('');
+    limparEndereco();
+
+    if (c.erro || !c.access_token) {
+      alert(recusaDoLink(c));
+      return Promise.resolve('');
+    }
+
+    return global.IADNuvem.adotarTokens(c).then(function (u) {
+      /* Convite e recuperação chegam pelo mesmo caminho e terminam igual: nos
+         dois casos a pessoa está sem senha utilizável. Quem pede a senha é o
+         boot, depois de desenhar a tela — pedir agora poria a caixa sobre a
+         tela de login, que é justamente a que vai sumir. */
+      return (u && u.user_metadata && u.user_metadata.nome) || ' ';
+    }).catch(function (e) {
+      alert('Entrei no servidor com o seu link, mas não consegui carregar a sua conta: ' +
+        e.message + '\n\nTente abrir o link de novo.');
+      return '';
+    });
   }
 
   function textoDoConvite(email) {
@@ -2239,9 +2338,22 @@
     Store.carregar();
     global.IADAjuda.ligar();
     montarNav();
-    atualizarPerfilDaNuvem();
-    A.garantirAdministrador().then(function (adm) {
+
+    /* Antes de tudo: quem chega pelo link do e-mail já vem autenticado, e
+       precisa ser reconhecido antes que a tela de login apareça. Só depois
+       disso é que vale ler o perfil no servidor — a leitura depende da sessão
+       que a linha de cima acabou de criar. */
+    let chegouPeloLink = '';
+    adotarCredencialDoEndereco().then(function (nome) {
+      chegouPeloLink = nome;
+      /* Esperar o perfil evita o pisca-pisca: sem isso a tela de login apareceria
+         por um instante para alguém que acabou de entrar. */
+      return atualizarPerfilDaNuvem();
+    }).then(function () {
+      return A.garantirAdministrador();
+    }).then(function (adm) {
       render();
+      if (chegouPeloLink) pedirSenhaNova(chegouPeloLink.trim());
       /* A senha sorteada aparece uma vez, aqui, porque não existe em lugar
          nenhum além deste aparelho: se ninguém anotar, ninguém entra. */
       if (adm && adm.senhaInicial) {

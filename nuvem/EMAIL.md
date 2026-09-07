@@ -124,6 +124,30 @@ Essa chave é secreta de verdade: ela ignora todas as políticas RLS. Ela vive
 aqui, nos segredos da função, e em lugar nenhum além — nunca em `src/config.js`,
 nunca num arquivo do repositório, nunca numa mensagem.
 
+## 4. Para onde o link do e-mail leva
+
+Sem este passo o convite sai, chega, e o link cai em `localhost:3000` — a tela
+"Não é possível acessar esse site". O endereço vem de uma configuração do
+projeto que nasce apontando para a máquina de quem desenvolve.
+
+Painel do Supabase → **Authentication** → **URL Configuration**:
+
+**Site URL** (para onde o GoTrue manda quem não tem destino explícito):
+
+    https://maiaalex2306.github.io/iad/
+
+**Redirect URLs** (a lista do que é permitido; sem estar aqui, o pedido do app
+é ignorado e vale o Site URL):
+
+    https://maiaalex2306.github.io/iad/**
+
+O `**` no fim cobre qualquer caminho abaixo do endereço. É uma lista de
+permissão de propósito: sem ela, quem descobrisse a função poderia mandar o
+convidado para um site qualquer com o token na mão.
+
+Se um dia o app mudar de endereço, é aqui que se muda também — em nenhum outro
+lugar.
+
 ## Conferir
 
 Primeiro, que a função subiu. Cole na barra de endereço:
