@@ -473,7 +473,14 @@ async function explicarRecusa(r: Response, modelo: string): Promise<string> {
     return 'O provedor recusou a chave da IA (' + r.status + '). Confira o segredo IA_CHAVE.';
   }
   if (r.status === 429) {
-    return 'Limite de uso do provedor atingido. Espere um pouco, ou troque de plano.';
+    /* O provedor diz QUAL limite estourou — tokens por minuto, requisições
+       por dia — e quanto falta para liberar. Essa frase é a diferença entre
+       "espere um minuto" e "só amanhã", e era jogada fora aqui. */
+    const detalhe = (curto.match(/"message"\s*:\s*"([^"]+)"/) || [])[1] || curto;
+    return 'Limite de uso do provedor atingido no modelo "' + modelo + '".' +
+      (detalhe ? '\n\n' + detalhe : '') +
+      '\n\nSe o limite for por minuto, espere e tente de novo. Se for por dia, ' +
+      'troque o modelo no segredo IA_MODELO ou mude de plano no provedor.';
   }
   if (r.status === 413 || /context|too large|maximum/i.test(curto)) {
     return 'Material grande demais para o modelo. Analise menos documentos de uma vez.';
@@ -506,20 +513,36 @@ async function chamarIA(sistema: string, usuario: string): Promise<string> {
 
   /* Groq — API compatível com o formato OpenAI. */
   const modelo = MODELO || 'llama-3.3-70b-versatile';
-  const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: { authorization: 'Bearer ' + CHAVE, 'content-type': 'application/json' },
-    body: JSON.stringify({
+
+  const pedir = (comJson: boolean) => {
+    const corpo: Record<string, unknown> = {
       model: modelo,
       temperature: 0.1,
       max_tokens: 2500,
-      response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: sistema },
         { role: 'user', content: usuario }
       ]
-    })
-  });
+    };
+    if (comJson) corpo.response_format = { type: 'json_object' };
+    return fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + CHAVE, 'content-type': 'application/json' },
+      body: JSON.stringify(corpo)
+    });
+  };
+
+  let r = await pedir(true);
+  /* Nem todo modelo aceita o modo JSON — os agênticos da Groq (compound) e
+     alguns outros recusam o parâmetro com 400. Recusar por causa disso seria
+     tirar do usuário justamente os modelos com limite de tokens mais folgado,
+     que são a saída de quem estoura o limite. Sem o parâmetro o modelo ainda
+     responde JSON, porque a instrução pede — e o que vem torto já era
+     descartado antes deste commit. */
+  if (r.status === 400) {
+    const aviso = await r.clone().text().catch(() => '');
+    if (/response_format|json_object|json mode/i.test(aviso)) r = await pedir(false);
+  }
   if (!r.ok) throw new Error(await explicarRecusa(r, modelo));
   const j = await r.json();
   return j?.choices?.[0]?.message?.content || '';
