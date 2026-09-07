@@ -21,6 +21,16 @@
     { hash: '#/playbook', ico: '🎯', nome: 'Playbook', render: V.playbook, foraDasAbas: true }
   ];
 
+  /* Uma função do servidor pode faltar por dois motivos, e o navegador não
+     sabe distinguir os dois: ou ela não foi publicada, ou foi publicada com o
+     "Verify JWT" ligado — e aí o porteiro do Supabase recusa o pedido de
+     permissão que todo navegador manda antes (o preflight, que por definição
+     vai sem token), o navegador bloqueia a chamada e o erro chega aqui sem
+     status nenhum. Dizer só "não está publicado" manda a pessoa procurar no
+     lugar errado, então a mensagem cita os dois. */
+  const SEM_FUNCAO = 'não foi publicada, ou foi publicada com o "Verify JWT" ' +
+    'ligado — e nesse caso o navegador nem chega a mandar o pedido.';
+
   let promptInstalacao = null;
   let leads = null;
 
@@ -422,7 +432,8 @@
     planejar: function (opId, etapaNova) {
       const op = Store.oportunidade(opId);
       if (!op) return;
-      if (!IA.disponivel()) { alert('O assistente não está publicado no servidor.'); return; }
+      if (!IA.disponivel()) { alert('Não consegui falar com o assistente. A função "assistente" ' +
+        SEM_FUNCAO + '\n\nVeja nuvem/IA.md.');  return; }
 
       const r = E.resumo(op);
       const dlg = document.createElement('dialog');
@@ -470,7 +481,8 @@
     lerDecisoes: function (opId) {
       const op = Store.oportunidade(opId);
       if (!op) return;
-      if (!IA.disponivel()) { alert('O assistente não está publicado no servidor.'); return; }
+      if (!IA.disponivel()) { alert('Não consegui falar com o assistente. A função "assistente" ' +
+        SEM_FUNCAO + '\n\nVeja nuvem/IA.md.');  return; }
 
       U.formulario('Ler as oito decisões', [
         { id: 'texto', rotulo: 'Cole uma reunião, se tiver (opcional)', tipo: 'textarea', voz: true,
@@ -1077,7 +1089,8 @@
     registrarReuniao: function (opId, tarefaId) {
       const op = Store.oportunidade(opId);
       if (!op) return;
-      if (!IA.disponivel()) { alert('O assistente não está publicado no servidor.'); return; }
+      if (!IA.disponivel()) { alert('Não consegui falar com o assistente. A função "assistente" ' +
+        SEM_FUNCAO + '\n\nVeja nuvem/IA.md.');  return; }
       const tarefa = tarefaId ? Store.dados().tarefas.filter(function (t) { return t.id === tarefaId; })[0] : null;
 
       U.formulario(tarefa ? 'Fechar: ' + tarefa.titulo : 'Registrar reunião', [
@@ -1897,18 +1910,18 @@
         alert('Convite enviado para ' + email + '.\n\nA pessoa recebe um link para definir a senha dela.');
         render();
       }).catch(function (e) {
-        /* Função não publicada não chega como 404: o gateway do Supabase
-           recusa a rota antes, e sem cabeçalho de CORS o navegador nem deixa
-           ler a resposta — o fetch falha e o erro sai sem status. Era esse o
-           caso que o desvio não pegava, e que aparecia para o administrador
-           como "não foi possível falar com o servidor".
+        /* Erro sem status quer dizer que a resposta nem chegou ao navegador:
+           o gateway do Supabase recusou a chamada antes, e sem cabeçalho de
+           CORS não há o que ler. Isso acontece tanto com função que não
+           existe quanto com função publicada de Verify JWT ligado — daqui os
+           dois são iguais, então a mensagem cita os dois (ver SEM_FUNCAO).
 
-           A regra passa a ser: erro sem status, ou 404, quer dizer que o
-           envio automático não existe. Para quem está usando dá no mesmo, e
-           o caminho manual continua servindo. */
+           Nos dois casos o caminho manual continua servindo, que é o que
+           importa para quem está com o convite na mão. */
         if (!e.status || e.status === 404) {
-          alert('O envio automático de e-mail ainda não está publicado no servidor ' +
-            '(a função "convite" — veja nuvem/EMAIL.md).\n\n' +
+          alert('Não consegui falar com o envio automático de e-mail. ' +
+            'A função "convite" ' + SEM_FUNCAO + '\n\n' +
+            'O passo a passo está em nuvem/EMAIL.md.\n\n' +
             'Abrindo seu programa de e-mail com a mensagem pronta.');
           return App.enviarPeloProgramaDeEmail(email);
         }
