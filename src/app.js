@@ -304,13 +304,30 @@
      amanhã: por isso a desistência avisa onde terminar depois, em vez de
      empurrar a caixa de novo. */
   function pedirSenhaNova(nome) {
-    U.formulario('Bem-vindo' + (nome ? ', ' + nome : '') + ' — escolha sua senha', [
-      { id: 'nova', rotulo: 'Sua senha', tipo: 'password', placeholder: 'mínimo 8 caracteres' },
-      { id: 'confere', rotulo: 'Repita a senha', tipo: 'password' }
-    ], {}, function (d) {
+    /* Quem foi convidado pode chegar sem nome: o convite do GoTrue cria a conta
+       só com o e-mail. Perguntamos aqui, que é a única tela por onde essa
+       pessoa passa antes de virar um usuário como os outros — e ela é a fonte
+       certa para o próprio nome. Quem já tem nome não é perguntado de novo. */
+    const faltaNome = !nome;
+    const campos = [];
+    if (faltaNome) campos.push({ id: 'nome', rotulo: 'Seu nome', tipo: 'text' });
+    campos.push({ id: 'nova', rotulo: 'Sua senha', tipo: 'password', placeholder: 'mínimo 8 caracteres' });
+    campos.push({ id: 'confere', rotulo: 'Repita a senha', tipo: 'password' });
+
+    U.formulario('Bem-vindo' + (nome ? ', ' + nome : '') + ' — escolha sua senha', campos, {}, function (d) {
       if (d.nova.length < 8) { alert('A senha precisa ter pelo menos 8 caracteres.'); pedirSenhaNova(nome); return; }
       if (d.nova !== d.confere) { alert('As duas senhas não são iguais. Tente de novo.'); pedirSenhaNova(nome); return; }
-      global.IADNuvem.trocarMinhaSenha(d.nova).then(function () {
+
+      /* O nome vai primeiro, e sozinho não impede nada: se ele falhar, a senha
+         ainda precisa ser gravada — sem senha a pessoa não volta amanhã, e é
+         esse o passo que não pode se perder. */
+      const gravarNome = (faltaNome && d.nome)
+        ? global.IADNuvem.salvarMeuNome({ nome: d.nome, whatsapp: '' }).catch(function () {})
+        : Promise.resolve();
+
+      gravarNome.then(function () {
+        return global.IADNuvem.trocarMinhaSenha(d.nova);
+      }).then(function () {
         alert('Senha definida. A partir de agora você entra com o seu e-mail e esta senha, ' +
           'em qualquer aparelho.');
         atualizarPerfilDaNuvem();
@@ -1948,6 +1965,44 @@
         .catch(function (e) { alert('Não foi possível mudar o papel: ' + e.message); pintarUsuariosNuvem(true); });
     },
 
+    /* Manda o e-mail de senha nova. O link volta para o app com os tokens
+       depois do #, e o boot faz o resto — é o mesmo caminho do convite.
+
+       A resposta é a mesma para e-mail cadastrado e não cadastrado, de
+       propósito: distinguir os dois faria desta tela uma forma de descobrir
+       quem usa o sistema. */
+    recuperarSenha: function () {
+      const N = global.IADNuvem;
+      if (!N.mandaNoAcesso()) { alert('Sem servidor configurado, a senha é deste aparelho.'); return; }
+      U.formulario('Esqueci minha senha', [
+        { id: 'email', rotulo: 'Seu e-mail', tipo: 'email' }
+      ], {}, function (d) {
+        const email = (d.email || '').trim();
+        if (!email || email.indexOf('@') === -1) { alert('Informe um e-mail válido.'); return; }
+        N.recuperarSenha(email, location.origin + location.pathname).then(function () {
+          alert('Se este e-mail tiver conta, o link para definir a senha já está a caminho.\n\n' +
+            'Abra o link no mesmo navegador, e o app pede a senha nova.');
+        }).catch(function (e) {
+          alert('Não consegui pedir o e-mail: ' + e.message);
+        });
+      });
+    },
+
+    /* Escrever o nome de outra pessoa. Quem confere se pode é o banco, na
+       função definir_nome_do_perfil — daqui só sai o pedido. */
+    nomeDoPerfil: function (id) {
+      const p = (perfisNuvem || []).find(function (x) { return x.id === id; }) || {};
+      U.formulario('Nome desta pessoa', [
+        { id: 'nome', rotulo: 'Nome', tipo: 'text', padrao: p.nome || '' }
+      ], {}, function (d) {
+        const nome = (d.nome || '').trim();
+        if (!nome) { alert('Escreva um nome.'); return; }
+        global.IADNuvem.definirNomeDoPerfil(id, nome)
+          .then(function () { perfisNuvem = null; pintarUsuariosNuvem(true); })
+          .catch(function (e) { alert('Não foi possível gravar o nome: ' + e.message); });
+      });
+    },
+
     recarregarUsuariosNuvem: function () { perfisNuvem = null; pintarUsuariosNuvem(true); },
 
     novaEmpresaNuvem: function () {
@@ -1968,6 +2023,7 @@
       const empresas = empresasNuvem || [];
       if (!empresas.length) { alert('Crie uma empresa antes de registrar pessoas nela.'); return; }
       U.formulario('Registrar pessoa', [
+        { id: 'nome', rotulo: 'Nome da pessoa', tipo: 'text', placeholder: 'como ela aparece na lista' },
         { id: 'email', rotulo: 'E-mail que ela vai usar', tipo: 'email' },
         { id: 'tenantId', rotulo: 'Empresa', tipo: 'select',
           opcoes: empresas.map(function (t) { return { valor: t.id, rotulo: t.nome }; }) },
@@ -1978,7 +2034,7 @@
       ], {}, function (d) {
         const email = (d.email || '').trim();
         if (!email || email.indexOf('@') === -1) { alert('Informe um e-mail válido.'); return; }
-        global.IADNuvem.convidar(email, d.tenantId, d.papel)
+        global.IADNuvem.convidar(email, d.tenantId, d.papel, d.nome)
           .then(function () {
             perfisNuvem = null;
             pintarUsuariosNuvem(true);

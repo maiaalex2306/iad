@@ -101,7 +101,11 @@
       campo('ac-senha', 'Senha', 'password', '', ' autocomplete="current-password" onkeydown="if(event.key===\'Enter\')App.entrar()"') +
       '<button class="btn alt" style="width:100%;margin-top:6px" onclick="App.entrar()">Entrar</button>' +
       '<p class="small muted" style="margin:16px 0 0">Primeiro acesso? ' +
-      '<a href="#" onclick="event.preventDefault();App.telaAcesso(\'cadastro\')">Criar meu acesso</a></p>';
+      '<a href="#" onclick="event.preventDefault();App.telaAcesso(\'cadastro\')">Criar meu acesso</a></p>' +
+      /* Quem foi convidado e perdeu o link cai aqui: a conta já existe, então
+         um convite novo é recusado, e sem este caminho não haveria nenhum. */
+      (naNuvem ? '<p class="small muted" style="margin:6px 0 0">' +
+        '<a href="#" onclick="event.preventDefault();App.recuperarSenha()">Esqueci minha senha</a></p>' : '');
   }
 
   function telaCadastro() {
@@ -1640,7 +1644,15 @@
 
     const linhas = perfis.map(function (p) {
       const souEu = eu && p.id === eu;
-      return '<tr><td><strong>' + esc(p.nome || '—') + (souEu ? ' <span class="pill">você</span>' : '') + '</strong>' +
+      /* Nome vazio acontece com quem entrou pelo convite antes da correção 8:
+         a conta do GoTrue nasce só com o e-mail. Um traço sozinho não diz de
+         quem é a linha, e a própria pessoa só consertaria entrando — o que ela
+         talvez ainda não consiga. Então quem administra escreve o nome aqui. */
+      const semNome = !p.nome;
+      return '<tr><td><strong>' + esc(p.nome || 'Sem nome') + (souEu ? ' <span class="pill">você</span>' : '') + '</strong>' +
+        ' <button class="btn ghost mini" onclick="App.nomeDoPerfil(\'' + p.id + '\')"' +
+        ' data-ajuda="Escreve o nome desta pessoa. Serve para quem entrou pelo convite e chegou sem nome.">' +
+        (semNome ? 'Dar nome' : 'Renomear') + '</button>' +
         '<span class="tiny muted">' + esc(p.id.slice(0, 8)) + '…</span></td>' +
         '<td><select onchange="App.empresaDoPerfil(\'' + p.id + '\', this.value)"' +
           ' data-ajuda="Liga esta pessoa a uma empresa. É a empresa que decide qual carteira ela enxerga.">' +
@@ -1706,7 +1718,8 @@
       return t ? t.nome : '—';
     };
     const linhas = convites.map(function (c) {
-      return '<tr><td><strong>' + esc(c.email) + '</strong></td>' +
+      return '<tr><td><strong>' + esc(c.nome || '—') + '</strong>' +
+        '<span class="tiny muted">' + esc(c.email) + '</span></td>' +
         '<td>' + esc(nomeDa(c.tenant_id)) + '</td>' +
         '<td>' + esc(rotuloDoPapel(c.papel)) + '</td>' +
         '<td class="right" style="white-space:nowrap">' +
@@ -1721,7 +1734,7 @@
       '<p class="tiny muted" style="margin:0 0 8px">Já registradas. Quando criarem o acesso com este e-mail, entram direto na empresa indicada. ' +
       '<strong>Enviar</strong> manda o e-mail pelo servidor, com o link para a pessoa criar a senha dela. ' +
       'Enquanto o envio automático não estiver publicado, o botão abre seu programa de e-mail com a mensagem pronta.</p>' +
-      tabela(['E-mail', 'Empresa', 'Papel', ''], linhas, '');
+      tabela(['Pessoa', 'Empresa', 'Papel', ''], linhas, '');
   }
 
   /* ---------------- Playbook ---------------- */

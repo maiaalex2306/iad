@@ -253,6 +253,14 @@
     });
   }
 
+  /* Nome de outra pessoa é coisa de administrador, e quem confere isso é o
+     banco: a função é security definer e recusa quem não for. */
+  function definirNomeDoPerfil(id, nome) {
+    return chamar('/rest/v1/rpc/definir_nome_do_perfil', {
+      metodo: 'POST', corpo: { p_id: id, p_nome: String(nome || '').trim() }
+    });
+  }
+
   function definirPapelDoPerfil(id, papel) {
     return chamar('/rest/v1/rpc/definir_papel_do_perfil', {
       metodo: 'POST', corpo: { p_id: id, p_papel: papel }
@@ -284,17 +292,37 @@
     return chamar('/rest/v1/convites?select=*&order=criado_em.desc');
   }
 
-  function convidar(email, tenantId, papel) {
+  /* O nome viaja junto porque o convite do GoTrue não passa pela tela de
+     cadastro: ele cria a conta a partir do e-mail e nada mais. Sem isto a
+     pessoa nasce sem nome, e só ela mesma poderia consertar — entrando, que é
+     justamente o que ela ainda não conseguiu fazer. */
+  function convidar(email, tenantId, papel, nome) {
     const s = sessao();
     return chamar('/rest/v1/convites', {
       metodo: 'POST',
       cabecalhos: { Prefer: 'resolution=merge-duplicates,return=representation' },
       corpo: {
         email: String(email || '').trim().toLowerCase(),
+        nome: String(nome || '').trim(),
         tenant_id: tenantId,
         papel: papel || 'usuario',
         criado_por: (s && s.user) ? s.user.id : null
       }
+    });
+  }
+
+  /* "Esqueci minha senha". Chega de volta pelo mesmo caminho do convite — o
+     GoTrue devolve os tokens depois do # e o app pede a senha nova —, então
+     quem já tem conta e nunca definiu senha se resolve por aqui, sem depender
+     de outro convite.
+
+     Não é autenticado, e responde igual para e-mail que existe e e-mail que
+     não existe: dizer "esta conta não existe" transformaria a tela numa lista
+     de quem usa o sistema. */
+  function recuperarSenha(email, destino) {
+    return chamar('/auth/v1/recover' + (destino ? '?redirect_to=' + encodeURIComponent(destino) : ''), {
+      metodo: 'POST', autenticado: false,
+      corpo: { email: String(email || '').trim().toLowerCase() }
     });
   }
 
@@ -449,8 +477,8 @@
     cadastrar, entrar, sair, renovar, eu, meuPerfil, salvarPerfil, criarMinhaEmpresa,
     guardarPerfilNaSessao, empurrar, puxar, sincronizar, ultimaSincronizacao,
     perfisDaNuvem, empresasDaNuvem, souAdminNaNuvem, existeEmpresa,
-    definirEmpresaDoPerfil, definirPapelDoPerfil, salvarMeuNome,
-    convitesDaNuvem, convidar, removerConvite, criarEmpresa, chamarFuncao,
+    definirEmpresaDoPerfil, definirPapelDoPerfil, definirNomeDoPerfil, salvarMeuNome,
+    convitesDaNuvem, convidar, removerConvite, recuperarSenha, criarEmpresa, chamarFuncao,
     adotarTokens,
     trocarMinhaSenha,
     paraBanco, paraApp
