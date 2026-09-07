@@ -204,14 +204,23 @@
 
      Quem pergunta o motivo é o banco: bloqueado não consegue ler a linha da
      empresa, então a tela não teria como distinguir "você foi bloqueado" de
-     "sua empresa foi bloqueada". */
-  function recusarSeBloqueado() {
+     "sua empresa foi bloqueada".
+
+     O papel entra aqui porque o banco e a tela precisam concordar, e não
+     concordavam: nas políticas, administrador com a empresa bloqueada continua
+     entrando — é ele quem desbloqueia, e tirar o acesso dele junto tranca o
+     sistema por fora. Esta função não abria essa exceção, e o primeiro
+     administrador que bloqueou a própria empresa ficou de fora do próprio
+     sistema. Bloqueio da PESSOA continua valendo para todos, administrador
+     inclusive: aí quem destrava é outro administrador, ou o SQL Editor. */
+  function recusarSeBloqueado(perfil) {
     return global.IADNuvem.minhaSituacao().then(function (s) {
       if (!s) return null;
       if (s.perfil_ativo === false) {
         return 'Seu acesso está bloqueado. Procure quem administra o sistema.';
       }
       if (s.empresa_ativa === false) {
+        if (perfil && perfil.papel === 'admin') return null;
         return 'O acesso da ' + (s.empresa_nome || 'sua empresa') +
           ' está bloqueado. Procure quem administra o sistema.';
       }
@@ -219,26 +228,24 @@
     }).catch(function () { return null; });   /* servidor sem a correção 09 não barra ninguém */
   }
 
+  /* O perfil vem antes da checagem porque é ele que diz o papel — e sem o
+     papel a checagem não sabe quem pode entrar apesar do bloqueio. */
   function concluirEntradaNaNuvem() {
     const N = global.IADNuvem;
-    return recusarSeBloqueado().then(function (motivo) {
-      if (motivo) {
+    return N.meuPerfil().then(function (perfil) {
+      return recusarSeBloqueado(perfil).then(function (motivo) {
+        if (!motivo) return seguirEntradaNaNuvem(perfil);
         return N.sair().catch(function () {}).then(function () {
           V.definirTelaAcesso('login', null, motivo);
           render();
-          return 'bloqueado';
         });
-      }
-      return null;
-    }).then(function (parou) {
-      if (parou) return;
-      return seguirEntradaNaNuvem();
+      });
     });
   }
 
-  function seguirEntradaNaNuvem() {
+  function seguirEntradaNaNuvem(jaLido) {
     const N = global.IADNuvem;
-    return N.meuPerfil().then(function (perfil) {
+    return Promise.resolve(jaLido !== undefined ? jaLido : N.meuPerfil()).then(function (perfil) {
       N.guardarPerfilNaSessao(perfil);
       const u = N.sessao().user;
 
@@ -279,17 +286,20 @@
     if (!N.conectado()) return Promise.resolve();
 
     /* Bloqueio aplicado com a pessoa já dentro só valeria no próximo login, e
-       sessão do Supabase dura muito. Relemos ao abrir, junto com o perfil. */
-    recusarSeBloqueado().then(function (motivo) {
-      if (!motivo) return;
-      N.sair().catch(function () {}).then(function () {
-        A.encerrarSessao();
-        V.definirTelaAcesso('login', null, motivo);
-        render();
-      });
-    });
-
+       sessão do Supabase dura muito. Relemos ao abrir, junto com o perfil —
+       e depois dele, porque a checagem precisa do papel para saber quem entra
+       apesar da empresa bloqueada. */
     const lendo = N.meuPerfil().then(function (perfil) {
+      return recusarSeBloqueado(perfil).then(function (motivo) {
+        if (!motivo) return perfil;
+        return N.sair().catch(function () {}).then(function () {
+          A.encerrarSessao();
+          V.definirTelaAcesso('login', null, motivo);
+          render();
+          return null;
+        });
+      });
+    }).then(function (perfil) {
       if (!perfil) return;
       const antes = N.estado().perfil || {};
       N.guardarPerfilNaSessao(perfil);
@@ -2089,9 +2099,15 @@
     bloquearEmpresa: function (id, estaBloqueada) {
       const t = (empresasNuvem || []).find(function (x) { return x.id === id; }) || {};
       const quantos = (perfisNuvem || []).filter(function (p) { return p.tenant_id === id; }).length;
+      /* Bloquear a própria empresa assusta: some a carteira e parece que o
+         sistema quebrou. Não é impedido — administrador continua entrando, e
+         é ele quem desbloqueia —, mas tem de estar dito antes, não depois. */
+      const meu = global.IADNuvem.estado().perfil || {};
+      const minhaEmpresa = meu.tenant_id === id;
       if (!estaBloqueada && !U.confirmar('Bloquear a ' + (t.nome || 'empresa') + '?\n\n' +
           'Ninguém dela entra mais' + (quantos ? ' — são ' + quantos + ' pessoa' + (quantos > 1 ? 's' : '') : '') + '. ' +
           'Só quem administra continua enxergando, e é quem desbloqueia.\n\n' +
+          (minhaEmpresa ? 'Atenção: esta é a SUA empresa. Você continua entrando, porque administra o sistema, mas todo o resto da equipe dela fica de fora.\n\n' : '') +
           'Nenhum registro é apagado.')) return;
       global.IADNuvem.definirBloqueioDaEmpresa(id, estaBloqueada)
         .then(function () { empresasNuvem = null; perfisNuvem = null; pintarUsuariosNuvem(true); })
