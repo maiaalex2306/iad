@@ -227,7 +227,12 @@ Tarefa: extraia os dados cadastrais da empresa cliente do texto.
 Campos: nome, razaoSocial, cnpj, segmento, descricao, necessidades, telefone,
 porte, cidade, uf, pais, site, linkedin.
 
-segmento tem de sair da lista fechada acima — se nenhum servir, deixe vazio.
+segmento: escolha o MAIS PRÓXIMO da lista fechada acima, usando julgamento
+sobre o que a empresa faz — não procure o nome exato no texto. Fábrica de
+biscoitos é Alimentos. Abatedouro de aves é Proteína Animal. Concessionária de
+água é Saneamento. Shopping é Real Estate e Facilities. Escreva o nome como
+está na lista. Só deixe vazio quando a empresa não tiver nada a ver com
+nenhum item — e nesse caso deixe vazio mesmo, não force o mais parecido.
 descricao é o que ela produz e para quem vende, em uma ou duas frases.
 necessidades é o que ESTA empresa precisa resolver, do ponto de vista de quem
 vai vender para ela: a dor, o gargalo, a exigência, o prazo. Escreva em tópicos
@@ -489,6 +494,57 @@ async function chamarIA(sistema: string, usuario: string): Promise<string> {
   return j?.choices?.[0]?.message?.content || '';
 }
 
+/* Comparação exata derrubava respostas certas. A lista tem "Alimentos"; o
+   modelo responde "Alimentos e Bebidas", "Indústria de alimentos", "ALIMENTOS"
+   — e nada disso batia, então o segmento ficava vazio com o catálogo cheio na
+   tela ao lado. O modelo estava acertando e a validação recusando.
+
+   Três tentativas, da mais estrita para a mais frouxa, e todas continuam
+   presas ao catálogo: o valor que sai daqui é sempre um item da lista, nunca
+   o que o modelo escreveu. Afrouxar a comparação não é afrouxar a regra.
+
+   O que não fazemos é adivinhar por semelhança vaga: "Bebidas" não vira
+   "Alimentos" só porque são parecidos. Sem correspondência, fica vazio — que
+   é a resposta honesta quando nenhuma gaveta serve. */
+function melhorOpcao(valor: string, opcoes: string[]): string {
+  const t = semAcento(valor).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!t || !opcoes.length) return '';
+
+  const normal = opcoes.map((o) => ({
+    o,
+    n: semAcento(o).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim()
+  }));
+
+  const igual = normal.find((x) => x.n === t);
+  if (igual) return igual.o;
+
+  /* Um contém o outro por inteiro: "alimentos" dentro de "industria de
+     alimentos", ou "acucar etanol e bioenergia" quando o modelo devolveu
+     "acucar e etanol". Palavra inteira, para "cor" não casar com "corrosao". */
+  const dentro = normal.find((x) => {
+    const re = (p: string) => new RegExp('(^| )' + p.replace(/ /g, ' ') + '( |$)');
+    return re(x.n).test(t) || re(t).test(x.n);
+  });
+  if (dentro) return dentro.o;
+
+  /* Última tentativa: a primeira palavra significativa em comum. Pega
+     "Alimentos e Bebidas" → "Alimentos", e recusa quando nada coincide.
+
+     Quatro letras e não cinco por causa de "Óleo e Gás": com cinco, nenhuma
+     palavra dele passava e um segmento óbvio caía fora. Quatro exige a lista
+     de palavras vazias — sem ela, "para" e "pela" casariam com qualquer
+     coisa. */
+  const VAZIAS = ['para', 'pela', 'pelo', 'como', 'onde', 'esta', 'este', 'isso',
+                  'mais', 'menos', 'todo', 'toda', 'seus', 'suas', 'entre'];
+  const palavras = t.split(' ')
+    .filter((p) => p.length >= 4 && VAZIAS.indexOf(p) === -1);
+  for (const p of palavras) {
+    const acha = normal.find((x) => new RegExp('(^| )' + p + '( |$)').test(x.n));
+    if (acha) return acha.o;
+  }
+  return '';
+}
+
 /* A segunda passada viu tudo o que a primeira viu, mais o site e a Receita.
    Então ela manda no que preencheu; onde ficou vazia, fica o que a primeira
    tinha achado — o dossiê às vezes traz o telefone do contato que o site não
@@ -560,10 +616,7 @@ function validar(tipo: string, bruto: Record<string, unknown>, ctx: Record<strin
       const t = dataValida(v, hoje);
       if (t) saida[campo] = t;
     } else {
-      const t = limparTexto(v, 160);
-      const achado = (regra.opcoes || []).find(
-        (o) => o.toLowerCase() === t.toLowerCase()
-      );
+      const achado = melhorOpcao(limparTexto(v, 160), regra.opcoes || []);
       if (achado) saida[campo] = achado;
     }
   }
