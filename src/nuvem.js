@@ -253,12 +253,39 @@
     });
   }
 
-  /* Nome de outra pessoa é coisa de administrador, e quem confere isso é o
-     banco: a função é security definer e recusa quem não for. */
-  function definirNomeDoPerfil(id, nome) {
-    return chamar('/rest/v1/rpc/definir_nome_do_perfil', {
-      metodo: 'POST', corpo: { p_id: id, p_nome: String(nome || '').trim() }
+  /* Bloquear e desbloquear: atribuição do administrador, conferida no banco.
+     Não existe excluir de propósito — desligar um vendedor não pode apagar a
+     carteira que ele atendia. Ver nuvem/correcao-09-bloqueio.sql. */
+  function definirBloqueioDoPerfil(id, ativo) {
+    return chamar('/rest/v1/rpc/definir_bloqueio_do_perfil', {
+      metodo: 'POST', corpo: { p_id: id, p_ativo: !!ativo }
     });
+  }
+
+  function definirBloqueioDaEmpresa(id, ativo) {
+    return chamar('/rest/v1/rpc/definir_bloqueio_da_empresa', {
+      metodo: 'POST', corpo: { p_id: id, p_ativo: !!ativo }
+    });
+  }
+
+  function definirDadosDaEmpresa(id, nome, cnpj) {
+    return chamar('/rest/v1/rpc/definir_dados_da_empresa', {
+      metodo: 'POST', corpo: { p_id: id, p_nome: nome, p_cnpj: cnpj || '' }
+    });
+  }
+
+  function definirDadosDoPerfil(id, nome, whatsapp) {
+    return chamar('/rest/v1/rpc/definir_dados_do_perfil', {
+      metodo: 'POST', corpo: { p_id: id, p_nome: nome, p_whatsapp: whatsapp || '' }
+    });
+  }
+
+  /* Por que não entrei. Quem está bloqueado não lê a linha da empresa — as
+     políticas já negaram —, então sem esta pergunta o app saberia que a pessoa
+     não tem acesso e não saberia dizer o motivo. */
+  function minhaSituacao() {
+    return chamar('/rest/v1/rpc/minha_situacao', { metodo: 'POST', corpo: {} })
+      .then(function (r) { return (Array.isArray(r) ? r[0] : r) || null; });
   }
 
   function definirPapelDoPerfil(id, papel) {
@@ -477,7 +504,9 @@
     cadastrar, entrar, sair, renovar, eu, meuPerfil, salvarPerfil, criarMinhaEmpresa,
     guardarPerfilNaSessao, empurrar, puxar, sincronizar, ultimaSincronizacao,
     perfisDaNuvem, empresasDaNuvem, souAdminNaNuvem, existeEmpresa,
-    definirEmpresaDoPerfil, definirPapelDoPerfil, definirNomeDoPerfil, salvarMeuNome,
+    definirEmpresaDoPerfil, definirPapelDoPerfil, salvarMeuNome,
+    definirBloqueioDoPerfil, definirBloqueioDaEmpresa,
+    definirDadosDaEmpresa, definirDadosDoPerfil, minhaSituacao,
     convitesDaNuvem, convidar, removerConvite, recuperarSenha, criarEmpresa, chamarFuncao,
     adotarTokens,
     trocarMinhaSenha,

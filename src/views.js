@@ -1648,11 +1648,9 @@
          a conta do GoTrue nasce só com o e-mail. Um traço sozinho não diz de
          quem é a linha, e a própria pessoa só consertaria entrando — o que ela
          talvez ainda não consiga. Então quem administra escreve o nome aqui. */
-      const semNome = !p.nome;
-      return '<tr><td><strong>' + esc(p.nome || 'Sem nome') + (souEu ? ' <span class="pill">você</span>' : '') + '</strong>' +
-        ' <button class="btn ghost mini" onclick="App.nomeDoPerfil(\'' + p.id + '\')"' +
-        ' data-ajuda="Escreve o nome desta pessoa. Serve para quem entrou pelo convite e chegou sem nome.">' +
-        (semNome ? 'Dar nome' : 'Renomear') + '</button>' +
+      const bloqueado = p.ativo === false;
+      return '<tr' + (bloqueado ? ' class="bloqueada"' : '') + '><td>' +
+        '<strong>' + esc(p.nome || 'Sem nome') + (souEu ? ' <span class="pill">você</span>' : '') + '</strong>' +
         '<span class="tiny muted">' + esc(p.id.slice(0, 8)) + '…</span></td>' +
         '<td><select onchange="App.empresaDoPerfil(\'' + p.id + '\', this.value)"' +
           ' data-ajuda="Liga esta pessoa a uma empresa. É a empresa que decide qual carteira ela enxerga.">' +
@@ -1664,8 +1662,25 @@
           '<option value="gestor"' + (p.papel === 'gestor' ? ' selected' : '') + '>Gestor — vê a empresa inteira</option>' +
           '<option value="admin"' + (p.papel === 'admin' ? ' selected' : '') + '>Administrador — vê todas as empresas</option>' +
           '</select></td>' +
-        '<td>' + (p.tenant_id ? '<span class="pill ok">ativo</span>' : '<span class="pill warn">sem empresa</span>') + '</td>' +
-        '</tr>';
+        /* A coluna dizia "ativo" para todo mundo, olhando só se a pessoa tinha
+           empresa. Agora ela diz o que de fato decide a entrada — e as duas
+           informações são diferentes: dá para estar liberada e sem empresa. */
+        '<td>' + (bloqueado
+          ? '<span class="pill warn">bloqueado</span>'
+          : (p.tenant_id ? '<span class="pill ok">ativo</span>' : '<span class="pill warn">sem empresa</span>')) + '</td>' +
+        '<td class="right" style="white-space:nowrap">' +
+        '<button class="btn ghost mini" onclick="App.editarPessoaNuvem(\'' + p.id + '\')"' +
+        ' data-ajuda="Corrige o nome e o WhatsApp desta pessoa. Serve para quem entrou pelo convite e chegou sem nome.">Editar</button> ' +
+        (souEu
+          ? '<span class="tiny muted" data-ajuda="Bloquear a si mesmo trancaria o sistema por fora: não sobraria quem desbloqueasse.">—</span>'
+          : '<button class="btn ' + (bloqueado ? 'alt' : 'ghost') + ' mini"' +
+            ' onclick="App.bloquearPessoa(\'' + p.id + '\', ' + (bloqueado ? 'true' : 'false') + ')"' +
+            ' data-ajuda-titulo="' + (bloqueado ? 'Desbloquear' : 'Bloquear') + '"' +
+            ' data-ajuda="' + (bloqueado
+              ? 'Devolve o acesso desta pessoa. Ela volta a ver o que era dela — nada foi apagado.'
+              : 'Tira o acesso desta pessoa. Ela não entra mais, e os registros dela continuam na empresa. Dá para desbloquear depois.') + '">' +
+            (bloqueado ? 'Desbloquear' : 'Bloquear') + '</button>') +
+        '</td></tr>';
     }).join('');
 
     return listaEmpresasDoSistema(empresas) +
@@ -1679,7 +1694,7 @@
       ' data-ajuda="Relê a lista do servidor.">Atualizar</button></div>' +
       '<p class="tiny muted" style="margin:6px 0 10px">Quem está sem empresa entra no app mas não enxerga carteira nenhuma. ' +
       'Ligue a pessoa à empresa aqui em vez de escrever SQL.</p>' +
-      tabela(['Pessoa', 'Empresa', 'Papel', 'Situação'], linhas, 'Nenhum usuário.') +
+      tabela(['Pessoa', 'Empresa', 'Papel', 'Situação', ''], linhas, 'Nenhum usuário.') +
       listaConvites(arguments[3], empresas) + '</div>';
   }
 
@@ -1689,15 +1704,30 @@
   function listaEmpresasDoSistema(empresas) {
     if (!empresas || !empresas.length) return '';
     const linhas = empresas.map(function (t) {
-      return '<tr><td><strong>' + esc(t.nome) + '</strong></td>' +
+      const bloqueada = t.ativo === false;
+      return '<tr' + (bloqueada ? ' class="bloqueada"' : '') + '>' +
+        '<td><strong>' + esc(t.nome) + '</strong></td>' +
         '<td>' + esc(t.cnpj || '—') + '</td>' +
-        '<td class="tiny muted">' + esc(String(t.id).slice(0, 8)) + '…</td></tr>';
+        '<td>' + (bloqueada
+          ? '<span class="pill warn">bloqueada</span>'
+          : '<span class="pill ok">ativa</span>') + '</td>' +
+        '<td class="tiny muted">' + esc(String(t.id).slice(0, 8)) + '…</td>' +
+        '<td class="right" style="white-space:nowrap">' +
+        '<button class="btn ghost mini" onclick="App.editarEmpresaNuvem(\'' + t.id + '\')"' +
+        ' data-ajuda="Corrige o nome e o CNPJ desta empresa.">Editar</button> ' +
+        '<button class="btn ' + (bloqueada ? 'alt' : 'ghost') + ' mini"' +
+        ' onclick="App.bloquearEmpresa(\'' + t.id + '\', ' + (bloqueada ? 'true' : 'false') + ')"' +
+        ' data-ajuda-titulo="' + (bloqueada ? 'Desbloquear empresa' : 'Bloquear empresa') + '"' +
+        ' data-ajuda="' + (bloqueada
+          ? 'Devolve o acesso da empresa inteira. Todo mundo dela volta a entrar — nada foi apagado.'
+          : 'Tira o acesso de todo mundo desta empresa de uma vez. Só quem administra continua enxergando, e é quem pode desbloquear. Nenhum registro é apagado.') + '">' +
+        (bloqueada ? 'Desbloquear' : 'Bloquear') + '</button></td></tr>';
     }).join('');
     return '<div class="card" style="margin-bottom:14px"><div class="row"><h3 style="margin:0">Empresas que usam o sistema</h3>' +
       '<span class="espaco"></span><span class="pill">' + empresas.length + '</span></div>' +
       '<p class="tiny muted" style="margin:6px 0 10px">Cada uma tem carteira separada: ninguém de uma enxerga a da outra. ' +
       'Não confundir com as <strong>Contas</strong>, que são as empresas clientes que sua equipe atende.</p>' +
-      tabela(['Empresa', 'CNPJ', 'Identificador'], linhas, 'Nenhuma.') + '</div>';
+      tabela(['Empresa', 'CNPJ', 'Situação', 'Identificador', ''], linhas, 'Nenhuma.') + '</div>';
   }
 
   /* Pessoas registradas que ainda não criaram o acesso. Ficar de olho nelas é o

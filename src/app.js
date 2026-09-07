@@ -197,7 +197,46 @@
       });
   }
 
+  /* Bloqueio tem de barrar na porta, não só nos dados. As políticas do banco
+     já negam tudo a quem está bloqueado, mas então a pessoa entraria e veria
+     um app vazio — que é a pior explicação possível. Aqui ela é recusada com o
+     motivo, e a sessão é encerrada para não ficar meio dentro.
+
+     Quem pergunta o motivo é o banco: bloqueado não consegue ler a linha da
+     empresa, então a tela não teria como distinguir "você foi bloqueado" de
+     "sua empresa foi bloqueada". */
+  function recusarSeBloqueado() {
+    return global.IADNuvem.minhaSituacao().then(function (s) {
+      if (!s) return null;
+      if (s.perfil_ativo === false) {
+        return 'Seu acesso está bloqueado. Procure quem administra o sistema.';
+      }
+      if (s.empresa_ativa === false) {
+        return 'O acesso da ' + (s.empresa_nome || 'sua empresa') +
+          ' está bloqueado. Procure quem administra o sistema.';
+      }
+      return null;
+    }).catch(function () { return null; });   /* servidor sem a correção 09 não barra ninguém */
+  }
+
   function concluirEntradaNaNuvem() {
+    const N = global.IADNuvem;
+    return recusarSeBloqueado().then(function (motivo) {
+      if (motivo) {
+        return N.sair().catch(function () {}).then(function () {
+          V.definirTelaAcesso('login', null, motivo);
+          render();
+          return 'bloqueado';
+        });
+      }
+      return null;
+    }).then(function (parou) {
+      if (parou) return;
+      return seguirEntradaNaNuvem();
+    });
+  }
+
+  function seguirEntradaNaNuvem() {
     const N = global.IADNuvem;
     return N.meuPerfil().then(function (perfil) {
       N.guardarPerfilNaSessao(perfil);
@@ -238,6 +277,18 @@
   function atualizarPerfilDaNuvem() {
     const N = global.IADNuvem;
     if (!N.conectado()) return Promise.resolve();
+
+    /* Bloqueio aplicado com a pessoa já dentro só valeria no próximo login, e
+       sessão do Supabase dura muito. Relemos ao abrir, junto com o perfil. */
+    recusarSeBloqueado().then(function (motivo) {
+      if (!motivo) return;
+      N.sair().catch(function () {}).then(function () {
+        A.encerrarSessao();
+        V.definirTelaAcesso('login', null, motivo);
+        render();
+      });
+    });
+
     const lendo = N.meuPerfil().then(function (perfil) {
       if (!perfil) return;
       const antes = N.estado().perfil || {};
@@ -1988,19 +2039,63 @@
       });
     },
 
-    /* Escrever o nome de outra pessoa. Quem confere se pode é o banco, na
-       função definir_nome_do_perfil — daqui só sai o pedido. */
-    nomeDoPerfil: function (id) {
+    /* Editar os dados de outra pessoa, e bloquear ou desbloquear. As três
+       são atribuições do administrador, e quem confere isso é o banco: a tela
+       pode esconder o botão, mas esconder não é impedir. Ver a correção 09.
+
+       Não há excluir, e é decisão, não esquecimento: desligar um vendedor não
+       pode apagar a carteira que ele atendia — cliente continua cliente depois
+       que o vendedor sai. Bloqueio faz o mesmo trabalho e volta atrás. */
+    editarPessoaNuvem: function (id) {
       const p = (perfisNuvem || []).find(function (x) { return x.id === id; }) || {};
-      U.formulario('Nome desta pessoa', [
-        { id: 'nome', rotulo: 'Nome', tipo: 'text', padrao: p.nome || '' }
+      U.formulario('Editar pessoa', [
+        { id: 'nome', rotulo: 'Nome', tipo: 'text', padrao: p.nome || '' },
+        { id: 'whatsapp', rotulo: 'WhatsApp', tipo: 'text', padrao: p.whatsapp || '',
+          placeholder: '(00) 00000-0000' }
       ], {}, function (d) {
         const nome = (d.nome || '').trim();
         if (!nome) { alert('Escreva um nome.'); return; }
-        global.IADNuvem.definirNomeDoPerfil(id, nome)
+        global.IADNuvem.definirDadosDoPerfil(id, nome, d.whatsapp)
           .then(function () { perfisNuvem = null; pintarUsuariosNuvem(true); })
-          .catch(function (e) { alert('Não foi possível gravar o nome: ' + e.message); });
+          .catch(function (e) { alert('Não foi possível gravar: ' + e.message); });
       });
+    },
+
+    bloquearPessoa: function (id, estaBloqueada) {
+      const p = (perfisNuvem || []).find(function (x) { return x.id === id; }) || {};
+      const quem = p.nome || 'esta pessoa';
+      if (!estaBloqueada && !U.confirmar('Bloquear ' + quem + '?\n\n' +
+          'Ela não entra mais no sistema. Nada é apagado: os registros dela ' +
+          'continuam na empresa, e você pode desbloquear quando quiser.')) return;
+      global.IADNuvem.definirBloqueioDoPerfil(id, estaBloqueada)
+        .then(function () { perfisNuvem = null; pintarUsuariosNuvem(true); })
+        .catch(function (e) { alert('Não foi possível: ' + e.message); });
+    },
+
+    editarEmpresaNuvem: function (id) {
+      const t = (empresasNuvem || []).find(function (x) { return x.id === id; }) || {};
+      U.formulario('Editar empresa', [
+        { id: 'nome', rotulo: 'Nome', tipo: 'text', padrao: t.nome || '' },
+        { id: 'cnpj', rotulo: 'CNPJ', tipo: 'text', padrao: t.cnpj || '' }
+      ], {}, function (d) {
+        const nome = (d.nome || '').trim();
+        if (!nome) { alert('A empresa precisa de um nome.'); return; }
+        global.IADNuvem.definirDadosDaEmpresa(id, nome, d.cnpj)
+          .then(function () { empresasNuvem = null; perfisNuvem = null; pintarUsuariosNuvem(true); })
+          .catch(function (e) { alert('Não foi possível gravar: ' + e.message); });
+      });
+    },
+
+    bloquearEmpresa: function (id, estaBloqueada) {
+      const t = (empresasNuvem || []).find(function (x) { return x.id === id; }) || {};
+      const quantos = (perfisNuvem || []).filter(function (p) { return p.tenant_id === id; }).length;
+      if (!estaBloqueada && !U.confirmar('Bloquear a ' + (t.nome || 'empresa') + '?\n\n' +
+          'Ninguém dela entra mais' + (quantos ? ' — são ' + quantos + ' pessoa' + (quantos > 1 ? 's' : '') : '') + '. ' +
+          'Só quem administra continua enxergando, e é quem desbloqueia.\n\n' +
+          'Nenhum registro é apagado.')) return;
+      global.IADNuvem.definirBloqueioDaEmpresa(id, estaBloqueada)
+        .then(function () { empresasNuvem = null; perfisNuvem = null; pintarUsuariosNuvem(true); })
+        .catch(function (e) { alert('Não foi possível: ' + e.message); });
     },
 
     recarregarUsuariosNuvem: function () { perfisNuvem = null; pintarUsuariosNuvem(true); },

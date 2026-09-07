@@ -119,6 +119,12 @@ nav.tabs a.ativo { color: var(--orange); font-weight: 700; }
 .pill.risk { color: var(--risk); border-color: rgba(212,118,26,.35); background: rgba(212,118,26,.1); }
 .pill.dead { color: var(--dead); border-color: rgba(179,45,45,.35); background: rgba(179,45,45,.1); }
 .pill.navy { color: #fff; background: var(--navy); border-color: var(--navy); }
+
+/* Linha bloqueada: some do olhar sem sumir da tela. Quem administra precisa
+   continuar enxergando quem bloqueou — é como se desbloqueia — mas a linha não
+   pode competir com as ativas na hora de bater o olho na lista. */
+tr.bloqueada > td { opacity: .55; }
+tr.bloqueada > td:last-child { opacity: 1; }
 .pill.orange { color: #fff; background: var(--orange); border-color: var(--orange); }
 
 button.btn {
