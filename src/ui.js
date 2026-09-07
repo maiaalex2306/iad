@@ -268,7 +268,7 @@
       '</div>' +
       '<div class="anexos-ia" data-ia-lista="' + c.id + '"></div>' +
       '<div class="contatos-ia" data-ia-contatos="' + c.id + '"></div>' +
-      '<p class="rodape-ia">O assistente sugere. Quem confirma é você — e a nota da decisão continua sendo sua.</p>' +
+      '<p class="rodape-ia">O assistente sugere e você confirma. Isto aqui preenche campos de cadastro; quem move as oito decisões é a tarefa concluída.</p>' +
     '</div>';
   }
 

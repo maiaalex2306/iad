@@ -2133,85 +2133,6 @@
     }).join('') + '</div>';
   }
 
-  /* ---------------- Revisão do que o assistente leu na reunião ----------------
-     A tela existe porque o assistente não pode escrever direto na base: cada
-     linha aqui mexe no Evidence Age, e cada nota mexe no IAD que aparece no
-     painel do gestor. Então tudo vem marcado como proposta, com o trecho do
-     documento ao lado, e quem esteve na reunião confirma linha a linha. */
-  function revisaoDaReuniao(op, resultado) {
-    const dimensaoDe = function (id) {
-      return P.DIMENSOES.filter(function (d) { return d.id === id; })[0];
-    };
-
-    const linhas = resultado.evidencias.map(function (ev, i) {
-      const dim = dimensaoDe(ev.dimensao);
-      const atual = op.dims[ev.dimensao] || 0;
-      const podeDois = ev.forca !== 'relato';
-
-      const forcas = P.FORCAS.map(function (f) {
-        return '<option value="' + f.id + '"' + (f.id === ev.forca ? ' selected' : '') + '>' +
-          esc(f.rotulo) + '</option>';
-      }).join('');
-
-      /* As opções de nota mostram o texto do nível daquela decisão, não um
-         número solto: assim dá para escolher sem abrir o playbook. */
-      const notas = ['<option value="manter" selected>Manter em ' + atual + '</option>']
-        .concat([0, 1, 2].map(function (n) {
-          const bloqueada = (n === 2 && !podeDois);
-          return '<option value="' + n + '"' + (bloqueada ? ' disabled' : '') + '>' +
-            n + ' — ' + esc(dim ? dim.niveis[n] : '') + (bloqueada ? ' (exige prova confirmada)' : '') +
-            '</option>';
-        })).join('');
-
-      const compromisso = ev.compromissoData
-        ? '<p class="small compromisso">Combinado: ' + esc(ev.compromissoTexto || 'próximo passo') +
-          ' — ' + U.data(ev.compromissoData) +
-          ' (' + (ev.compromissoDono === 'nos' ? 'nossa vez' : 'vez do cliente') + ')</p>'
-        : '';
-
-      return '<li class="achado">' +
-        '<label class="linha-achado"><input type="checkbox" data-ev="' + i + '" checked>' +
-        '<span class="pill navy">' + esc(dim ? dim.nome : ev.dimensao) + '</span>' +
-        '<strong>' + esc(ev.titulo) + '</strong></label>' +
-        (ev.frase ? '<p class="origem">“' + esc(ev.frase) + '”</p>' : '') +
-        (ev.contato ? '<p class="small muted">Quem falou: ' + esc(ev.contato) + '</p>' : '') +
-        compromisso +
-        '<div class="row escolhas">' +
-          '<label class="campo mini"><span>Força</span><select data-forca="' + i + '">' + forcas + '</select></label>' +
-          '<label class="campo mini"><span>Como fica esta decisão</span><select data-nota="' + i + '">' + notas + '</select></label>' +
-        '</div>' +
-      '</li>';
-    }).join('');
-
-    const novos = (resultado.contatos || []).filter(function (c) {
-      return !Store.contatosDaConta(op.contaId).some(function (x) {
-        return String(x.nome || '').toLowerCase().indexOf(String(c.nome).toLowerCase().split(' ')[0]) !== -1;
-      });
-    });
-
-    const pessoas = novos.length
-      ? '<h3>Pessoas novas que apareceram</h3><ul class="achados">' +
-        novos.map(function (c, i) {
-          return '<li class="achado"><label class="linha-achado">' +
-            '<input type="checkbox" data-ct="' + resultado.contatos.indexOf(c) + '" checked>' +
-            '<strong>' + esc(c.nome) + '</strong>' +
-            (c.cargo ? '<span class="muted"> — ' + esc(c.cargo) + '</span>' : '') +
-            (c.papel ? '<span class="pill">' + esc(c.papel) + '</span>' : '') +
-          '</label>' + (c.frase ? '<p class="origem">“' + esc(c.frase) + '”</p>' : '') + '</li>';
-        }).join('') + '</ul>'
-      : '';
-
-    return '<form method="dialog"><div class="corpo">' +
-      '<h2>O que o assistente encontrou</h2>' +
-      '<p class="small muted">Marque o que realmente aconteceu. Cada item marcado vira uma evidência do cliente, ' +
-      'na decisão indicada. A nota de cada decisão continua sendo sua escolha — por padrão nada muda.</p>' +
-      '<ul class="achados">' + linhas + '</ul>' + pessoas +
-      '</div><div class="rodape">' +
-      '<button class="btn ghost" value="cancelar" type="submit">Descartar</button>' +
-      '<button class="btn" value="ok" type="submit">Registrar o que está marcado</button>' +
-      '</div></form>';
-  }
-
   /* ---------------- Conferência da importação do Linked Helper ----------------
      Importar tudo sem olhar encheria o pipeline de oportunidade que não é
      oportunidade — e um pipeline assim derruba o IAD médio e faz a
@@ -2317,7 +2238,7 @@
       (guardado ? 'Analisar de novo' : 'Analisar com IA') + '</button></div>' +
       (guardado
         ? planoDaIA(op, guardado)
-        : '<p class="small muted" style="margin:10px 0 0">O assistente lê as evidências deste negócio e propõe o que fazer agora. Ele não pontua decisão: quem pontua é você, com evidência.</p>') +
+        : '<p class="small muted" style="margin:10px 0 0">O assistente lê as evidências deste negócio e propõe o que fazer agora. As notas ele já grava sozinho ao concluir uma tarefa — só sobe, e nota 2 continua exigindo evidência confirmada ou documentada.</p>') +
       '</div>';
   }
 
@@ -2343,6 +2264,50 @@
 
     return '<ul class="achados" style="margin-top:12px">' + passos + '</ul>' +
       (atencao ? '<div class="aviso" style="margin-top:12px"><strong>Atenção</strong><ul class="small" style="margin:6px 0 0;padding-left:18px">' + atencao + '</ul></div>' : '');
+  }
+
+  /* O relatório do que o assistente aplicou. Não tem caixa para marcar nem
+     select para escolher: já está gravado. Isso é de propósito — a função do
+     vendedor é fazer a tarefa e concluir; conferir duas telas depois de já ter
+     feito a reunião e escrito a ata era exatamente onde o gesto morria, e o
+     índice ficava zerado no painel do gestor não porque nada aconteceu, mas
+     porque ninguém teve paciência de confirmar duas vezes.
+
+     O que ele precisa é ver o que mudou e por quê, com o trecho que originou
+     cada nota. Discordar continua possível, num clique. */
+  function resumoDaLeitura(op, base, mudancas) {
+    const r = E.resumo(op);
+    const entrou = [];
+    if (base.evidencias) entrou.push(base.evidencias + (base.evidencias === 1 ? ' evidência do cliente' : ' evidências do cliente'));
+    if (base.pessoas) entrou.push(base.pessoas + (base.pessoas === 1 ? ' pessoa nova' : ' pessoas novas'));
+
+    const linhas = mudancas.map(function (m) {
+      return '<li class="achado">' +
+        '<div class="row"><span class="pill navy">' + esc(m.nome) + '</span>' +
+        '<strong>' + m.de + ' \u2192 ' + m.para + '</strong><span class="espaco"></span></div>' +
+        (m.porque ? '<p class="small muted" style="margin:6px 0 0">' + esc(m.porque) + '</p>' : '') +
+        (m.trecho ? '<p class="origem">\u201c' + esc(m.trecho) + '\u201d</p>' : '') +
+        (m.travada ? '<p class="compromisso small" style="margin:6px 0 0">O assistente propôs 2. Ficou em 1: as evidências desta decisão são todas de relato, e relato não comprova.</p>' : '') +
+        '</li>';
+    }).join('');
+
+    return '<form method="dialog"><div class="corpo">' +
+      '<h2>Pronto — o assistente já registrou</h2>' +
+      (entrou.length
+        ? '<p class="small">Entrou nesta oportunidade: <strong>' + esc(entrou.join(' e ')) + '</strong>.</p>'
+        : '') +
+      (mudancas.length
+        ? '<p class="small"><strong>' + mudancas.length +
+          (mudancas.length === 1 ? ' decisão subiu' : ' decisões subiram') +
+          '.</strong> IAD agora: <strong>' + r.iad + '/16</strong>.</p>' +
+          '<ul class="achados">' + linhas + '</ul>'
+        : '<div class="aviso">Nenhuma das oito subiu. O que entrou não sustenta uma nota maior — e isso é uma resposta, não uma falha: falta evidência do cliente.</div>') +
+      '<p class="tiny muted">Nota só sobe sozinha, e nota 2 continua exigindo evidência confirmada ou documentada. ' +
+      'Se discordar de alguma, ajuste — as oito ficam abertas para edição.</p>' +
+      '</div><div class="rodape">' +
+      '<button class="btn ghost" value="ajustar" type="submit">Ajustar as oito</button>' +
+      '<button class="btn" value="ok" type="submit">Fechar</button>' +
+      '</div></form>';
   }
 
   /* ---------------- Conferência das oito notas ----------------
@@ -2412,7 +2377,7 @@
 
   global.IADViews = {
     hoje, painel, pipeline, cockpit, revisao, contas, cadastros, playbook, dados, itemArquivo, listaLeads,
-    revisaoDaReuniao, revisaoDaImportacao, planoDaIA, definirPlano, planoGuardado, revisaoDasNotas,
+    revisaoDaImportacao, resumoDaLeitura, planoDaIA, definirPlano, planoGuardado, revisaoDasNotas,
     acesso, barraAdmin, definirTelaAcesso, definirPrimeiraEmpresa, listaUsuariosNuvem,
     pendenteAcesso: function () { return pendente; },
     definirFiltro: function (f) { filtroGrupo = f; },

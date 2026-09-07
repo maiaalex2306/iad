@@ -1281,87 +1281,60 @@
           alert('Li o texto e não encontrei nada que o CLIENTE tenha feito. Atividade nossa não conta como evidência.');
           return;
         }
-        App.revisarReuniao(opId, r, relerNotas ? texto : null);
+        App.aplicarLeituraDaIA(opId, r, relerNotas ? texto : null);
       });
     },
 
     /* A lista de conferência. Nada entra na base sem alguém marcar — cada
        evidência mexe no Evidence Age, e cada nota mexe no IAD que o dono da
        empresa vê. O assistente propõe; quem esteve na reunião assina. */
-    revisarReuniao: function (opId, resultado, textoParaNotas) {
+    /* ---------- O assistente aplica; o vendedor só fez a tarefa ----------
+       Antes havia duas telas de conferência: uma para as evidências e outra
+       para as oito notas. Duas telas depois de já ter feito a reunião e já
+       ter escrito a ata é onde o gesto morria — e o índice ficava zerado no
+       painel do gestor não porque nada aconteceu, mas porque ninguém teve
+       paciência de confirmar duas vezes.
+
+       Agora entra sozinho, e o que segura a qualidade não é o clique da
+       pessoa: é a mesma trava de sempre, do motor. Nota 2 exige evidência
+       confirmada ou documentada; relato não comprova, venha de quem vier.
+       Dimensão que a IA inventa é descartada dos dois lados. E nota só sobe
+       sozinha — rebaixar sem ninguém olhar apagaria trabalho de quem pontuou
+       à mão, e isso não se desfaz.
+
+       O que a pessoa recebe é o relatório do que mudou, com uma porta para
+       ajustar. Ler não é trabalho; preencher é. */
+    aplicarLeituraDaIA: function (opId, resultado, textoParaNotas) {
       const op = Store.oportunidade(opId);
       if (!op) return;
-      const dlg = document.createElement('dialog');
-      dlg.className = 'revisao-ia';
-      dlg.innerHTML = V.revisaoDaReuniao(op, resultado);
-      document.body.appendChild(dlg);
 
-      dlg.addEventListener('close', function () {
-        if (dlg.returnValue === 'ok') {
-          let evidencias = 0, notas = 0, pessoas = 0;
-
-          resultado.evidencias.forEach(function (ev, i) {
-            const marca = dlg.querySelector('[data-ev="' + i + '"]');
-            if (!marca || !marca.checked) return;
-            const forca = dlg.querySelector('[data-forca="' + i + '"]').value;
-            const nota = dlg.querySelector('[data-nota="' + i + '"]').value;
-            const contatoId = contatoPeloNome(op.contaId, ev.contato);
-
-            Store.registrarEvento(opId, {
-              tipo: 'decision', titulo: ev.titulo, dimensao: ev.dimensao, forca: forca,
-              contatoId: contatoId, canal: ev.canal || 'Reunião', data: ev.data || Store.hoje(),
-              compromisso: ev.compromissoData
-                ? { texto: ev.compromissoTexto || 'Próximo passo combinado',
-                    data: ev.compromissoData, dono: ev.compromissoDono || 'cliente' }
-                : null
-            });
-            evidencias++;
-
-            /* Mesma regra da evidência avulsa: 2 exige prova confirmada.
-               Aqui isso importa mais, porque são várias notas de uma vez. */
-            if (nota !== 'manter') {
-              const alvo = Store.oportunidade(opId);
-              const n = Number(nota);
-              const permitida = (n === 2 && !E.podeComprovar(alvo, ev.dimensao))
-                ? Math.max(1, alvo.dims[ev.dimensao] || 0)
-                : n;
-              Store.pontuar(opId, ev.dimensao, permitida);
-              notas++;
-            }
-          });
-
-          (resultado.contatos || []).forEach(function (c, i) {
-            const marca = dlg.querySelector('[data-ct="' + i + '"]');
-            if (!marca || !marca.checked) return;
-            if (contatoPeloNome(op.contaId, c.nome)) return;   /* já existe */
-            Store.criarContato({
-              contaId: op.contaId, nome: c.nome, cargo: c.cargo || '',
-              papel: c.papel || 'Usuário', sentimento: 'neutro',
-              perfil: 'nao_classificado', influencia: 2
-            });
-            pessoas++;
-          });
-
-          const partes = [];
-          if (evidencias) partes.push(evidencias + (evidencias === 1 ? ' evidência' : ' evidências'));
-          if (notas) partes.push(notas + (notas === 1 ? ' nota' : ' notas'));
-          if (pessoas) partes.push(pessoas + (pessoas === 1 ? ' pessoa' : ' pessoas'));
-          if (partes.length) alert('Registrado: ' + partes.join(', ') + '.');
-          render();
-
-          /* Com as evidências novas gravadas, a releitura das oito acontece
-             sobre o retrato atualizado — e a trava do 2 já enxerga as provas
-             que acabaram de entrar. */
-          if (textoParaNotas) {
-            const atual = Store.oportunidade(opId);
-            IA.sugerirNotas(atual, E.resumo(atual), textoParaNotas).then(function (decisoes) {
-              if (decisoes && decisoes.length) App.revisarNotas(opId, decisoes);
-            });
-          }
-        }
-        dlg.remove();
+      let evidencias = 0, pessoas = 0;
+      (resultado.evidencias || []).forEach(function (ev) {
+        Store.registrarEvento(opId, {
+          tipo: 'decision', titulo: ev.titulo, dimensao: ev.dimensao,
+          forca: ev.forca || 'relato', contatoId: contatoPeloNome(op.contaId, ev.contato),
+          canal: ev.canal || 'Reunião', data: ev.data || Store.hoje(),
+          compromisso: ev.compromissoData
+            ? { texto: ev.compromissoTexto || 'Próximo passo combinado',
+                data: ev.compromissoData, dono: ev.compromissoDono || 'cliente' }
+            : null
+        });
+        evidencias++;
       });
-      dlg.showModal();
+
+      (resultado.contatos || []).forEach(function (c) {
+        if (!c || !c.nome) return;
+        if (contatoPeloNome(op.contaId, c.nome)) return;   /* já existe */
+        Store.criarContato({
+          contaId: op.contaId, nome: c.nome, cargo: c.cargo || '',
+          papel: c.papel || 'Usuário', sentimento: 'neutro',
+          perfil: 'nao_classificado', influencia: 2
+        });
+        pessoas++;
+      });
+
+      render();
+      relerAsOito(opId, textoParaNotas, { evidencias: evidencias, pessoas: pessoas });
     },
 
     removerEvento: function (opId, evId) {
@@ -1522,7 +1495,7 @@
           alert('Texto curto demais para eu separar evidências. A tarefa e o resto foram gravados.');
         }
         render();
-        if (respondidas) relerAsOito(opId);
+        if (respondidas) relerAsOito(opId, '', { evidencias: respondidas });
         /* A evidência direta abre depois de a tarefa existir: assim ela nasce
            com o canal e a data da tarefa, e não solta no ar. */
         if (d.comoContar === 'evidencia') {
@@ -1591,7 +1564,7 @@
           alert('Texto curto demais para eu separar evidências. A tarefa e o resto foram gravados.');
         }
         render();
-        if (respondidas) relerAsOito(opId);
+        if (respondidas) relerAsOito(opId, '', { evidencias: respondidas });
         if (d.comoContar === 'evidencia') {
           App.novaEvidencia(opId, null, tarefa.decisaoAlvo, { canal: tarefa.tipo, data: quando });
         }
@@ -2730,13 +2703,62 @@
      caminho sem digitação gravava a evidência e deixava o índice parado —
      e quem respondeu "sim, entrou alguém novo" vai olhar o mapa esperando
      ver Stakeholders andar. */
-  function relerAsOito(opId, textoExtra) {
-    if (!IA.disponivel()) return;
+  function relerAsOito(opId, textoExtra, jaFeito) {
+    const base = jaFeito || {};
+    if (!IA.disponivel()) { if (base.evidencias || base.pessoas) mostrarResumo(opId, base, [], []); return; }
     const atual = Store.oportunidade(opId);
     if (!atual) return;
     IA.sugerirNotas(atual, E.resumo(atual), textoExtra || '').then(function (decisoes) {
-      if (decisoes && decisoes.length) App.revisarNotas(opId, decisoes);
+      const mudancas = aplicarNotasDaIA(opId, decisoes || []);
+      render();
+      mostrarResumo(opId, base, mudancas, decisoes || []);
     });
+  }
+
+  /* Aplica as notas propostas. Duas travas, e as duas são do motor, não da
+     tela: nota 2 sem evidência confirmada ou documentada cai para 1; e nota
+     nunca desce sozinha — a IA relê o mesmo retrato a cada tarefa e propor 0
+     para uma decisão que alguém pontuou à mão apagaria esse trabalho sem
+     ninguém ver. Devolve o que mudou, para o relatório. */
+  function aplicarNotasDaIA(opId, decisoes) {
+    const mudancas = [];
+    (decisoes || []).forEach(function (proposta) {
+      const d = P.DIMENSOES.filter(function (x) { return x.id === proposta.dimensao; })[0];
+      if (!d) return;
+      const alvo = Store.oportunidade(opId);
+      const atual = alvo.dims[d.id] || 0;
+      const pedida = Number(proposta.nota);
+      if (!(pedida >= 0 && pedida <= 2)) return;
+
+      const travada = (pedida === 2 && !E.podeComprovar(alvo, d.id));
+      const permitida = travada ? Math.max(1, atual) : pedida;
+      if (permitida <= atual) return;                        /* só sobe */
+
+      Store.pontuar(opId, d.id, permitida, 'Lido pelo assistente na conclusão da tarefa');
+      mudancas.push({ nome: d.nome, de: atual, para: permitida,
+        travada: travada, porque: proposta.porque || '', trecho: proposta.trecho || '' });
+    });
+    return mudancas;
+  }
+
+  /* O relatório do que entrou. Não é uma tela de conferência: não há nada
+     para marcar. Fica a porta de ajuste, para quem discordar. */
+  function mostrarResumo(opId, base, mudancas, decisoes) {
+    const op = Store.oportunidade(opId);
+    if (!op) return;
+    if (!base.evidencias && !base.pessoas && !mudancas.length) return;
+    const dlg = document.createElement('dialog');
+    dlg.className = 'revisao-ia';
+    dlg.innerHTML = V.resumoDaLeitura(op, base, mudancas);
+    document.body.appendChild(dlg);
+    dlg.addEventListener('close', function () {
+      const ajustar = dlg.returnValue === 'ajustar';
+      dlg.remove();
+      /* Discordar é a única coisa que ainda pede um clique — e é a tela que
+         já existia, com as oito e o motivo de cada uma. */
+      if (ajustar) App.revisarNotas(opId, decisoes || []);
+    });
+    dlg.showModal();
   }
 
   /* O que a pessoa acabou de informar ao fechar uma tarefa — o compromisso e
