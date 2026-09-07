@@ -395,7 +395,14 @@ async function modelosDoGroq(): Promise<string[]> {
     });
     if (!r.ok) return [];
     const j = await r.json();
-    return (j?.data || []).map((m: { id?: string }) => String(m.id || '')).filter(Boolean);
+    const todos = (j?.data || []).map((m: { id?: string }) => String(m.id || '')).filter(Boolean);
+    /* A lista do provedor mistura tudo: whisper transcreve áudio, orpheus e
+       playai geram voz, safeguard é classificador de segurança. Nenhum deles
+       preenche formulário, e oferecê-los a quem está escolhendo é oferecer o
+       erro. Sobra o que conversa. */
+    const conversa = todos.filter((id: string) =>
+      !/whisper|orpheus|playai|tts|guard|embed|rerank|moderation/i.test(id));
+    return conversa.length ? conversa : todos;
   } catch {
     return [];
   }
@@ -409,7 +416,7 @@ async function explicarRecusa(r: Response, modelo: string): Promise<string> {
     const nomes = PROVEDOR === 'anthropic' ? [] : await modelosDoGroq();
     return 'O modelo "' + modelo + '" não existe mais no provedor. ' +
       (nomes.length
-        ? 'Os que existem agora: ' + nomes.slice(0, 10).join(', ') + '. ' +
+        ? 'Os que conversam agora: ' + nomes.slice(0, 20).join(', ') + '. ' +
           'Ponha um deles no segredo IA_MODELO e publique a função de novo.'
         : 'Veja a lista no painel do provedor e ponha um nome válido no segredo IA_MODELO.');
   }
