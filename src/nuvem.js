@@ -80,7 +80,13 @@
       headers: Object.assign(cabecalhos(o.autenticado), o.cabecalhos || {}),
       body: o.corpo ? JSON.stringify(o.corpo) : undefined
     }).catch(function () {
-      /* "Failed to fetch" não ajuda ninguém: quase sempre é endereço errado ou sem internet. */
+      /* "Failed to fetch" não ajuda ninguém: quase sempre é endereço errado ou sem internet.
+
+         O erro sai SEM status de propósito, e quem chama usa isso: um erro
+         com status veio do servidor e é resposta dele; um erro sem status
+         significa que a resposta nem chegou ao navegador. Função não
+         publicada cai aqui, e não num 404 — o gateway recusa antes, e o
+         CORS impede o navegador de ler o que voltou. */
       throw new Error('Não foi possível falar com o servidor. Confira o endereço do projeto e sua conexão.');
     }).then(function (resposta) {
       if (resposta.status === 204) return null;

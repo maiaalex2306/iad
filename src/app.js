@@ -1897,10 +1897,19 @@
         alert('Convite enviado para ' + email + '.\n\nA pessoa recebe um link para definir a senha dela.');
         render();
       }).catch(function (e) {
-        /* 404 é a função ainda não publicada: não é falha do administrador, e
-           não custa nada continuar pelo caminho manual. */
-        if (e.status === 404) {
-          alert('O envio automático ainda não está publicado no servidor. Abrindo seu programa de e-mail com a mensagem pronta.');
+        /* Função não publicada não chega como 404: o gateway do Supabase
+           recusa a rota antes, e sem cabeçalho de CORS o navegador nem deixa
+           ler a resposta — o fetch falha e o erro sai sem status. Era esse o
+           caso que o desvio não pegava, e que aparecia para o administrador
+           como "não foi possível falar com o servidor".
+
+           A regra passa a ser: erro sem status, ou 404, quer dizer que o
+           envio automático não existe. Para quem está usando dá no mesmo, e
+           o caminho manual continua servindo. */
+        if (!e.status || e.status === 404) {
+          alert('O envio automático de e-mail ainda não está publicado no servidor ' +
+            '(a função "convite" — veja nuvem/EMAIL.md).\n\n' +
+            'Abrindo seu programa de e-mail com a mensagem pronta.');
           return App.enviarPeloProgramaDeEmail(email);
         }
         alert('Não consegui enviar: ' + e.message);
