@@ -270,7 +270,20 @@
   ];
   const FORCA_MINIMA_PARA_COMPROVAR = 2;
 
-  const TIPOS_TAREFA = ['Ligar', 'Enviar material', 'Reunião', 'Preparar', 'Visitar', 'Cobrar retorno'];
+  /* Tipo de tarefa é, antes de tudo, o canal por onde se falou com o cliente:
+     é isso que permite comparar o que funciona — reunião presencial move mais
+     decisão do que WhatsApp? — e é isso que a metodologia lê depois. Reunião
+     não é um botão separado: é um destes tipos. */
+  const TIPOS_TAREFA = ['Reunião', 'Visita', 'Telefonema', 'WhatsApp', 'E-mail',
+    'Apresentação', 'Proposta', 'Preparação', 'Cobrar retorno'];
+
+  /* Os nomes antigos, que existiam antes de a lista virar canal. Renomeados
+     no lugar, e não acrescentados: acrescentar deixaria "Ligar" e "Telefonema"
+     na mesma lista, e ninguém saberia qual escolher. */
+  const TIPOS_TAREFA_RENOMEADOS = {
+    'Ligar': 'Telefonema', 'Visitar': 'Visita',
+    'Enviar material': 'E-mail', 'Preparar': 'Preparação'
+  };
 
   const CATEGORIAS_ARQUIVO = [
     'Business case', 'Critérios de avaliação', 'Proposta', 'Contrato',
@@ -306,7 +319,7 @@
 
   global.IADPlaybook = {
     DIMENSOES, ETAPAS, GATES_PROPOSTA, PAPEIS, PAPEIS_CRITICOS, DESFECHOS,
-    FORCAS, FORCA_MINIMA_PARA_COMPROVAR, TIPOS_TAREFA, CATEGORIAS_ARQUIVO,
+    FORCAS, FORCA_MINIMA_PARA_COMPROVAR, TIPOS_TAREFA, TIPOS_TAREFA_RENOMEADOS, CATEGORIAS_ARQUIVO,
     PERFIS, PERFIS_MOBILIZADORES, ESTADOS_INSIGHT,
     RELACOES_CONTA, TIPOS_OPORTUNIDADE, FECHAMENTO_REUNIAO,
     CANAIS, FAIXAS_EVIDENCIA, ATIVIDADES_QUE_NAO_CONTAM

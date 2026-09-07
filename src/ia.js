@@ -313,6 +313,30 @@
       linhas.push('COMBINADO: ' + r.compromisso.texto + ' · para ' + r.compromisso.data +
         ' · a vez é ' + (r.compromisso.dono === 'cliente' ? 'do cliente' : 'nossa'));
     }
+    /* Disciplina de método: o assistente precisa distinguir o vendedor que
+       planeja e cumpre do que anota depois — e o canal por onde ele fala.
+       Sem isto, "o que fazer agora" sai igual para os dois, e não é. */
+    const tarefas = global.IADStore.tarefasDaOportunidade(op.id);
+    if (tarefas.length) {
+      const feitas = tarefas.filter(function (t) { return t.status !== 'aberta'; });
+      const planejadas = feitas.filter(function (t) { return t.origem !== 'registrada'; });
+      const comAta = feitas.filter(function (t) { return t.comRelato; });
+      const abertas = tarefas.filter(function (t) { return t.status === 'aberta'; });
+      const canais = {};
+      feitas.forEach(function (t) { if (t.tipo) canais[t.tipo] = (canais[t.tipo] || 0) + 1; });
+      linhas.push('');
+      linhas.push('TAREFAS: ' + feitas.length + ' feita(s) — ' + planejadas.length +
+        ' planejada(s) antes e ' + (feitas.length - planejadas.length) +
+        ' anotada(s) depois de acontecer · ' + comAta.length + ' com ata lida · ' +
+        abertas.length + ' em aberto');
+      const porCanal = Object.keys(canais).map(function (c) { return c + ' ' + canais[c]; });
+      if (porCanal.length) linhas.push('CANAIS USADOS: ' + porCanal.join(', '));
+      abertas.slice(0, 4).forEach(function (t) {
+        linhas.push('  em aberto: ' + (t.tipo ? '[' + t.tipo + '] ' : '') + t.titulo +
+          ' · para ' + t.vencimento);
+      });
+    }
+
     const pendentes = (r.gates && r.gates.pendentes) || [];
     if (pendentes.length) {
       linhas.push('GATES DA PROPOSTA AINDA NÃO ATENDIDOS: ' +

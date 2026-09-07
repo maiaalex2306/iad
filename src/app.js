@@ -1447,73 +1447,111 @@
     filtrarTarefas: function (v) { V.definirFiltroTarefas(v); render(); },
     periodoTarefas: function (v) { V.definirPeriodoTarefas(v); render(); },
 
-    /* ---------- A reunião entra pela tarefa ----------
-       O vendedor já vai fechar a tarefa depois da conversa. Fazer disso o
-       ponto onde tudo se atualiza aproveita um gesto que já existe, em vez
-       de pedir um segundo — que é o que ninguém faz.
+    /* ---------- Uma tarefa só, e reunião é um tipo dela ----------
+       Antes havia dois botões: "+ Tarefa" para o que eu vou fazer e
+       "Registrar reunião" para o que eu já fiz. São o mesmo objeto em dois
+       momentos, e separá-los deixava metade do trabalho fora da conta: a
+       reunião registrada não virava tarefa, então o painel dizia "0 tarefas"
+       para quem tinha passado o dia inteiro em visita.
 
-       O encadeamento é: ata → evidências (ele confere) → as oito notas
-       relidas com as evidências novas (ele confere) → compromisso. Duas
-       confirmações, porque são duas coisas diferentes: o que aconteceu, e o
-       quanto isso moveu a decisão. */
-    registrarReuniao: function (opId, tarefaId) {
-      const op = Store.oportunidade(opId);
-      if (!op) return;
-      if (!IA.disponivel()) { alert('Não consegui falar com o assistente. A função "assistente" ' +
-        SEM_FUNCAO + '\n\nVeja nuvem/IA.md.');  return; }
-      const tarefa = tarefaId ? Store.dados().tarefas.filter(function (t) { return t.id === tarefaId; })[0] : null;
-
-      U.formulario(tarefa ? 'Fechar: ' + tarefa.titulo : 'Registrar reunião', [
-        { id: 'texto', rotulo: 'Cole a ata, a transcrição ou o que aconteceu', tipo: 'textarea', voz: true,
-          placeholder: 'Cole aqui o resumo automático da call, a transcrição ou suas anotações.' },
-        { id: 'arquivo', rotulo: 'Ou carregue documentos (Word, PDF, Excel, PowerPoint, texto) — pode escolher vários', tipo: 'file' },
-        { id: 'compromissoTexto', rotulo: 'Próximo passo combinado' },
-        { id: 'compromissoData', rotulo: 'Para quando', tipo: 'date' },
-        { id: 'compromissoDono', rotulo: 'A vez é de quem', tipo: 'select',
-          opcoes: [{ valor: 'cliente', rotulo: 'Do cliente' }, { valor: 'nos', rotulo: 'Nossa' }] }
-      ], {}, function (d, docs) {
-        /* O compromisso e o fechamento da tarefa não dependem da IA: são
-           fatos que o vendedor acabou de informar. Gravam primeiro. */
-        if (d.compromissoData) {
-          Store.registrarEvento(opId, {
-            tipo: 'activity', titulo: 'Próximo passo combinado', canal: 'Reunião',
-            compromisso: {
-              texto: d.compromissoTexto || 'Próximo passo combinado',
-              data: d.compromissoData, dono: d.compromissoDono || 'cliente'
-            }
-          });
-        }
-        if (tarefa) Store.concluirTarefa(tarefa.id);
-
-        if (!d.texto || d.texto.length < 60) {
-          if (d.texto) alert('Texto curto demais para eu separar evidências. O resto foi gravado.');
-          anexarAoRegistro(docs, { oportunidadeId: opId, contaId: op.contaId, categoria: 'Ata de reunião' });
-          render();
-          return;
-        }
-        App.processarReuniao(opId, d.texto, true, docs);
-      }, function (dlg) {
-        U.ligarDocumentos(dlg, 'arquivo', 'texto');
-      });
-    },
-
+       Aqui a pergunta é uma: esta tarefa é para fazer, ou já foi feita? A
+       resposta muda o formulário e muda o que o sistema aprende. Tarefa
+       planejada que se conclui mostra disciplina de método; tarefa registrada
+       depois mostra o vendedor correndo atrás do próprio histórico. As duas
+       contam no funil, e não contam igual na metodologia — é por isso que a
+       origem fica gravada, e não apenas o "concluída". */
     novaTarefa: function (opId, decisaoAlvo) {
       const op = Store.oportunidade(opId);
       if (!op) return;
       const r = E.resumo(op);
+      const DO_RELATO = ['relato', 'arquivo', 'feitaEm', 'compromissoTexto',
+        'compromissoData', 'compromissoDono', 'secaoRelato'];
+
       U.formulario('Nova tarefa', [
         { id: 'titulo', rotulo: 'O que fazer' },
-        { id: 'tipo', rotulo: 'Tipo', tipo: 'select', opcoes: Store.nomesDoCatalogo('tiposTarefa') },
+        { id: 'tipo', rotulo: 'Como (canal)', tipo: 'select', largura: 'metade',
+          opcoes: Store.nomesDoCatalogo('tiposTarefa') },
+        { id: 'situacao', rotulo: 'Situação', tipo: 'select', largura: 'metade',
+          opcoes: [{ valor: 'afazer', rotulo: 'A fazer' }, { valor: 'feita', rotulo: 'Já foi feita' }] },
         {
           id: 'decisaoAlvo', rotulo: 'Decisão que pretende provocar', tipo: 'select',
           padrao: decisaoAlvo || (r.nbd.dimensao ? r.nbd.dimensao.id : 'problema'),
           opcoes: P.DIMENSOES.map(function (d) { return { valor: d.id, rotulo: d.nome }; })
         },
-        { id: 'vencimento', rotulo: 'Para quando', tipo: 'date', padrao: Store.hoje() }
-      ], {}, function (d) {
+        { id: 'vencimento', rotulo: 'Para quando', tipo: 'date', padrao: Store.hoje() },
+
+        { id: 'secaoRelato', tipo: 'secao', rotulo: 'O que aconteceu',
+          ajuda: 'O assistente lê, separa o que o CLIENTE fez e relê as oito decisões. Atividade nossa não conta como evidência.' },
+        { id: 'feitaEm', rotulo: 'Quando foi feita', tipo: 'date', padrao: Store.hoje() },
+        { id: 'relato', rotulo: 'Cole a ata, a transcrição ou o que aconteceu', tipo: 'textarea', voz: true,
+          placeholder: 'Cole aqui o resumo automático da call, a transcrição ou suas anotações.' },
+        { id: 'arquivo', rotulo: 'Ou carregue documentos (Word, PDF, Excel, PowerPoint, texto) — pode escolher vários', tipo: 'file' },
+        { id: 'compromissoTexto', rotulo: 'Próximo passo combinado' },
+        { id: 'compromissoData', rotulo: 'Para quando', tipo: 'date', largura: 'metade' },
+        { id: 'compromissoDono', rotulo: 'A vez é de quem', tipo: 'select', largura: 'metade',
+          opcoes: [{ valor: 'cliente', rotulo: 'Do cliente' }, { valor: 'nos', rotulo: 'Nossa' }] }
+      ], {}, function (d, docs) {
         if (!d.titulo) return;
-        Store.criarTarefa(Object.assign({ oportunidadeId: opId }, d));
-        render();
+        const feita = d.situacao === 'feita';
+        const quando = feita ? (d.feitaEm || Store.hoje()) : (d.vencimento || Store.hoje());
+        const temRelato = feita && d.relato && d.relato.length >= 60;
+
+        const tarefa = Store.criarTarefa({
+          oportunidadeId: opId, titulo: d.titulo, tipo: d.tipo,
+          decisaoAlvo: d.decisaoAlvo, vencimento: quando,
+          origem: feita ? 'registrada' : 'planejada'
+        });
+        if (!feita) { render(); return; }
+
+        Store.concluirTarefa(tarefa.id, quando, temRelato);
+        registrarFechamento(op, d, temRelato ? null : docs);
+        if (!temRelato) {
+          if (d.relato) alert('Texto curto demais para eu separar evidências. A tarefa e o resto foram gravados.');
+          render();
+          return;
+        }
+        App.processarReuniao(opId, d.relato, true, docs);
+      }, function (dlg) {
+        U.ligarDocumentos(dlg, 'arquivo', 'relato');
+        const situacao = dlg.querySelector('[name="situacao"]');
+        const ajustar = function () {
+          const feita = situacao.value === 'feita';
+          U.mostrarCampos(dlg, DO_RELATO, feita);
+          U.mostrarCampos(dlg, ['vencimento'], !feita);
+        };
+        situacao.addEventListener('change', ajustar);
+        ajustar();
+      });
+    },
+
+    /* Concluir uma tarefa que já estava aberta: a mesma pergunta do "já foi
+       feita", sem repetir o que a tarefa já sabe (título, canal, decisão). */
+    concluirComRelato: function (opId, tarefaId) {
+      const op = Store.oportunidade(opId);
+      const tarefa = Store.dados().tarefas.filter(function (t) { return t.id === tarefaId; })[0];
+      if (!op || !tarefa) return;
+
+      U.formulario('Concluir: ' + tarefa.titulo, [
+        { id: 'feitaEm', rotulo: 'Quando foi feita', tipo: 'date', padrao: Store.hoje() },
+        { id: 'relato', rotulo: 'Cole a ata, a transcrição ou o que aconteceu', tipo: 'textarea', voz: true,
+          placeholder: 'Cole aqui o resumo automático da call, a transcrição ou suas anotações.' },
+        { id: 'arquivo', rotulo: 'Ou carregue documentos (Word, PDF, Excel, PowerPoint, texto) — pode escolher vários', tipo: 'file' },
+        { id: 'compromissoTexto', rotulo: 'Próximo passo combinado' },
+        { id: 'compromissoData', rotulo: 'Para quando', tipo: 'date', largura: 'metade' },
+        { id: 'compromissoDono', rotulo: 'A vez é de quem', tipo: 'select', largura: 'metade',
+          opcoes: [{ valor: 'cliente', rotulo: 'Do cliente' }, { valor: 'nos', rotulo: 'Nossa' }] }
+      ], {}, function (d, docs) {
+        const temRelato = d.relato && d.relato.length >= 60;
+        Store.concluirTarefa(tarefaId, d.feitaEm || Store.hoje(), temRelato);
+        registrarFechamento(op, d, temRelato ? null : docs);
+        if (!temRelato) {
+          if (d.relato) alert('Texto curto demais para eu separar evidências. A tarefa e o resto foram gravados.');
+          render();
+          return;
+        }
+        App.processarReuniao(op.id, d.relato, true, docs);
+      }, function (dlg) {
+        U.ligarDocumentos(dlg, 'arquivo', 'relato');
       });
     },
 
@@ -2614,6 +2652,24 @@
       });
     });
     return partes.join('\n');
+  }
+
+  /* O que a pessoa acabou de informar ao fechar uma tarefa — o compromisso e
+     os documentos — não depende da IA e grava primeiro. Se o assistente
+     estiver fora do ar, ou o texto for curto demais, isto já está salvo. */
+  function registrarFechamento(op, d, docs) {
+    if (d.compromissoData) {
+      Store.registrarEvento(op.id, {
+        tipo: 'activity', titulo: 'Próximo passo combinado', canal: 'Reunião',
+        data: d.feitaEm || Store.hoje(),
+        compromisso: {
+          texto: d.compromissoTexto || 'Próximo passo combinado',
+          data: d.compromissoData, dono: d.compromissoDono || 'cliente'
+        }
+      });
+    }
+    anexarAoRegistro(docs, { oportunidadeId: op.id, contaId: op.contaId,
+      categoria: 'Ata de reunião' });
   }
 
   /* O que foi carregado para a IA ler fica anexado ao registro. É o que o

@@ -1220,27 +1220,34 @@
       const d = P.DIMENSOES.filter(function (x) { return x.id === t.decisaoAlvo; })[0];
       const feita = t.status !== 'aberta';
       const atrasada = !feita && t.vencimento < hoje;
+      /* O canal fica visível na linha: é o que permite ler depois por onde a
+         decisão andou — e uma lista de tarefas sem canal é uma lista de
+         lembretes. A marca "registrada" distingue a tarefa que eu planejei e
+         cumpri da que eu anotei depois de acontecer; contam igual no funil e
+         não contam igual na metodologia. */
       return '<div class="tarefa-linha">' +
         (feita
           ? '<span class="quadro feito" title="Concluída">\u2713</span>'
-          : '<button class="quadro" onclick="App.concluirTarefa(\'' + t.id + '\')" title="Concluir sem registrar reunião"></button>') +
-        '<span class="small' + (feita ? ' muted' : '') + '">' + esc(t.titulo) +
-        (d ? ' <span class="tiny muted">\u2192 ' + esc(d.nome) + '</span>' : '') + '</span>' +
+          : '<button class="quadro" onclick="App.concluirTarefa(\'' + t.id + '\')" title="Concluir sem registrar o que aconteceu"></button>') +
+        '<span class="small' + (feita ? ' muted' : '') + '">' +
+        (t.tipo ? '<span class="pill tiny">' + esc(t.tipo) + '</span> ' : '') + esc(t.titulo) +
+        (d ? ' <span class="tiny muted">\u2192 ' + esc(d.nome) + '</span>' : '') +
+        (feita && t.origem === 'registrada' ? ' <span class="tiny muted" title="Anotada depois de acontecer">· registrada</span>' : '') +
+        (feita && t.comRelato ? ' <span class="tiny muted" title="Teve ata lida pelo assistente">· com ata</span>' : '') + '</span>' +
         '<span class="espaco"></span>' +
         '<span class="tiny ' + (atrasada ? 'atrasado' : 'muted') + '">' +
         (feita ? 'feita ' + U.data(t.concluidaEm || t.vencimento) : U.data(t.vencimento)) + '</span>' +
-        (feita ? '' : '<button class="btn ghost mini" onclick="App.registrarReuniao(\'' + op.id + '\',\'' + t.id + '\')"' +
-          ' data-ajuda-titulo="Fechar com a ata" data-ajuda="Cole ou anexe o que aconteceu. O assistente separa as evidências, relê as oito decisões e registra o próximo passo — tudo no mesmo gesto de concluir a tarefa.">Fechar com ata</button>') +
+        (feita ? '' : '<button class="btn ghost mini" onclick="App.concluirComRelato(\'' + op.id + '\',\'' + t.id + '\')"' +
+          ' data-ajuda-titulo="Concluir com o que aconteceu" data-ajuda="Cole ou anexe o que aconteceu. O assistente separa as evidências, relê as oito decisões e registra o próximo passo — tudo no mesmo gesto de concluir a tarefa.">Concluir</button>') +
         '<button class="btn ghost mini" onclick="App.excluirTarefa(\'' + t.id + '\')">\u2715</button></div>';
     }).join('');
 
+    /* Um botão só. Reunião não é um gesto à parte: é um tipo de tarefa, e a
+       pergunta "a fazer ou já foi feita?" está dentro do formulário. */
     return '<div class="card"><div class="row"><h2 style="margin:0">Tarefas</h2>' +
       '<span class="espaco"></span>' +
-      (U.assistenteAtivo()
-        ? '<button class="btn alt mini" onclick="App.registrarReuniao(\'' + op.id + '\')"' +
-          ' data-ajuda-titulo="Registrar reunião" data-ajuda="Cole a ata ou anexe o arquivo. O assistente lê, propõe as evidências e as oito notas, e você confirma.">Registrar reunião</button>'
-        : '') +
-      '<button class="btn mini" onclick="App.novaTarefa(\'' + op.id + '\')">+ Tarefa</button></div>' +
+      '<button class="btn mini" onclick="App.novaTarefa(\'' + op.id + '\')"' +
+      ' data-ajuda-titulo="Nova tarefa" data-ajuda="Reunião, visita, telefonema, WhatsApp ou e-mail. Se já aconteceu, marque “Já foi feita” e cole a ata ou anexe os arquivos: o assistente separa as evidências e relê as oito decisões.">+ Tarefa</button></div>' +
 
       '<p class="small muted" style="margin:8px 0 0">' +
       abertas.length + ' aberta(s) \u00b7 ' +
@@ -1897,8 +1904,9 @@
       '<p class="small" style="margin:8px 0 0;white-space:pre-line">' + esc(d.texto) + '</p>' +
       (d.situacao === 'ok'
         ? '<p class="tiny muted" style="margin:8px 0 0">Onde ele aparece: o cartão ' +
-          '<strong>Próximos passos</strong> no cockpit, o botão <strong>Registrar reunião</strong> ' +
-          'nas tarefas, e a caixa ✨ no alto dos formulários de conta, contato, oportunidade e evidência.</p>'
+          '<strong>Próximos passos</strong> no cockpit, a tarefa marcada como ' +
+          '<strong>já foi feita</strong> (ou o botão <strong>Concluir</strong> de uma tarefa aberta), ' +
+          'e a caixa ✨ no alto dos formulários de conta, contato, oportunidade e evidência.</p>'
         : '<div class="row" style="margin-top:10px">' +
           '<button class="btn ghost mini" onclick="App.reverAssistente()"' +
           ' data-ajuda="Pergunta ao servidor de novo, sem recarregar a página.">Verificar de novo</button></div>') +

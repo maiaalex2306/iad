@@ -25,6 +25,37 @@
   const ouvintes = [];
 
   /* Migração: um export da v1 precisa continuar abrindo. */
+  /* A lista de tipos virou canal ("Telefonema", "WhatsApp"), e quem já usava o
+     app tem a lista antiga ("Ligar", "Visitar"). Renomear no lugar mantém o id
+     — e portanto a mesma linha na nuvem — e evita a lista com os dois nomes.
+     O que o usuário criou não é tocado; o que falta entra.
+
+     Roda no boot e de novo depois de cada sincronização: a lista antiga volta
+     do servidor a cada `puxar`, e uma correção que só acontece no boot seria
+     desfeita pela primeira sincronização do dia. */
+  function padronizarTiposTarefa(dados) {
+    if (!global.IADPlaybook || !dados || !dados.tiposTarefa) return false;
+    const renomeados = global.IADPlaybook.TIPOS_TAREFA_RENOMEADOS || {};
+    let mudou = false;
+
+    dados.tiposTarefa.forEach(function (t) {
+      if (!renomeados[t.nome]) return;
+      const antigo = t.nome;
+      t.nome = renomeados[antigo];
+      (dados.tarefas || []).forEach(function (tf) { if (tf.tipo === antigo) tf.tipo = t.nome; });
+      mudou = true;
+    });
+
+    const tem = {};
+    dados.tiposTarefa.forEach(function (t) { tem[t.nome] = true; });
+    global.IADPlaybook.TIPOS_TAREFA.forEach(function (nome) {
+      if (tem[nome]) return;
+      dados.tiposTarefa.push({ id: uid('tpt'), nome: nome, ativo: true });
+      mudou = true;
+    });
+    return mudou;
+  }
+
   function migrar(dados) {
     if (!dados || !Array.isArray(dados.oportunidades)) return null;
     dados.tarefas = dados.tarefas || [];
@@ -59,9 +90,19 @@
       });
     }
     if (!dados.tiposTarefa || !dados.tiposTarefa.length) {
-      dados.tiposTarefa = (global.IADPlaybook ? global.IADPlaybook.TIPOS_TAREFA : ['Ligar'])
+      dados.tiposTarefa = (global.IADPlaybook ? global.IADPlaybook.TIPOS_TAREFA : ['Reunião'])
         .map(function (nome) { return { id: uid('tpt'), nome: nome, ativo: true }; });
+    } else {
+      padronizarTiposTarefa(dados);
     }
+    /* Tarefa nasce planejada (marquei para fazer) ou registrada (aconteceu e
+       eu anotei depois). As duas concluídas contam igual no funil e não contam
+       igual na metodologia: a primeira mostra disciplina de planejamento, a
+       segunda mostra o vendedor correndo atrás do próprio histórico. */
+    dados.tarefas.forEach(function (t) {
+      if (!t.origem) t.origem = 'planejada';
+      if (t.comRelato == null) t.comRelato = false;
+    });
     dados.contatos.forEach(function (c) {
       if (c.influencia == null) c.influencia = 2;
       if (c.reportaA === undefined) c.reportaA = null;
@@ -227,13 +268,16 @@
     const ctx = contexto();
     if (!ctx.usuario || ctx.admin || !ctx.tenantId) return 0;
     let adotados = 0;
+    /* A padronização vem antes da adoção, e não depois: o tipo que ela
+       acrescenta nasce sem empresa e ficaria invisível até o render seguinte. */
+    const padronizou = padronizarTiposTarefa(estado);
     ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos']
       .forEach(function (colecao) {
         (estado[colecao] || []).forEach(function (r) {
           if (!r.tenantId) { r.tenantId = ctx.tenantId; adotados++; }
         });
       });
-    if (adotados) salvar();
+    if (adotados || padronizou) salvar();
     return adotados;
   }
 
@@ -466,26 +510,32 @@
   /* ---------- Tarefas ---------- */
   function criarTarefa(dados) {
     const nova = Object.assign({
-      id: uid('tsk'), titulo: '', tipo: 'Ligar', oportunidadeId: null,
+      id: uid('tsk'), titulo: '', tipo: 'Reunião', oportunidadeId: null,
       contatoId: null, decisaoAlvo: '', vencimento: hoje(),
-      status: 'aberta', concluidaEm: null, criadoEm: hoje()
+      status: 'aberta', concluidaEm: null, criadoEm: hoje(),
+      origem: 'planejada', comRelato: false
     }, carimbo(true), dados);
     estado.tarefas.push(nova);
     salvar();
     return nova;
   }
 
-  function concluirTarefa(id) {
+  /* A data vem de fora porque a tarefa registrada depois aconteceu ontem, não
+     hoje — e datar tudo como hoje faria o Evidence Age mentir. O canal entra
+     no título do evento: é o que permite ler depois por onde a decisão andou. */
+  function concluirTarefa(id, quando, comRelato) {
     const t = tarefa(id);
     if (!t) return null;
     t.status = 'concluida';
-    t.concluidaEm = hoje();
+    t.concluidaEm = quando || hoje();
+    if (comRelato) t.comRelato = true;
     if (t.oportunidadeId) {
       const op = oportunidade(t.oportunidadeId);
       if (op) {
         op.eventos.unshift({
-          id: uid('evt'), tipo: 'activity', data: hoje(),
-          titulo: 'Tarefa concluída: ' + t.titulo, dimensao: t.decisaoAlvo || ''
+          id: uid('evt'), tipo: 'activity', data: t.concluidaEm,
+          titulo: (t.tipo ? t.tipo + ': ' : 'Tarefa concluída: ') + t.titulo,
+          canal: t.tipo || '', dimensao: t.decisaoAlvo || ''
         });
       }
     }

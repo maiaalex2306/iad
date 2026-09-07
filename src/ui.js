@@ -110,7 +110,8 @@
          vez. Sem as duas, o formulário fica com cara de banco de dados
          exposto — que era o caso. */
       if (c.tipo === 'secao') {
-        return '<div class="secao-form"><span>' + esc(c.rotulo) + '</span>' +
+        return '<div class="secao-form"' + (c.id ? ' data-secao="' + esc(c.id) + '"' : '') +
+          '><span>' + esc(c.rotulo) + '</span>' +
           (c.ajuda ? '<em>' + esc(c.ajuda) + '</em>' : '') + '</div>';
       }
       if (c.tipo === 'aviso') {
@@ -322,6 +323,23 @@
      arquivos ficam em dlg.documentosIA, para quem salva anexá-los ao
      registro. */
   const ACEITA_DOCUMENTOS = '.pdf,.docx,.xlsx,.pptx,.txt,.md,.csv,.tsv,.json,.rtf,.vtt,.srt';
+
+  /* Mostra ou esconde um pedaço do formulário. Existe porque há formulários
+     que fazem duas perguntas diferentes conforme a resposta da primeira — a
+     tarefa que vou fazer não pede ata, a que já fiz pede — e mostrar as duas
+     ao mesmo tempo é o jeito mais rápido de a pessoa não preencher nenhuma. */
+  function mostrarCampos(dlg, ids, mostrar) {
+    ids.forEach(function (id) {
+      const campo = dlg.querySelector('[name="' + id + '"]');
+      const alvo = campo ? campo.closest('label.campo') : dlg.querySelector('[data-secao="' + id + '"]');
+      if (!alvo) return;
+      /* `hidden` sozinho não basta: label.campo é display:flex, e a regra de
+         display da folha de estilo vence o hidden do navegador. O campo ficava
+         na tela como se nada tivesse sido escondido — foi o que o teste pegou. */
+      alvo.hidden = !mostrar;
+      alvo.style.display = mostrar ? '' : 'none';
+    });
+  }
 
   function ligarDocumentos(dlg, idArquivo, idTexto) {
     const entrada = dlg.querySelector('[name="' + idArquivo + '"]');
@@ -554,6 +572,7 @@
 
   global.IADUI = {
     ligarDocumentos: ligarDocumentos,
+    mostrarCampos: mostrarCampos,
     /* O link do aviso leva para outra tela, e o diálogo modal ficaria por
        cima dela. Fechar antes de navegar é o mínimo. */
     fecharDialogos: function () {
