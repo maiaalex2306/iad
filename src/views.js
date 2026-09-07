@@ -1550,20 +1550,64 @@
     return tabela(['Oportunidade', 'Empresa', 'Etapa', 'Valor', 'IAD', ''], linhas, 'Nenhuma oportunidade encontrada.');
   }
 
+  /* Listas longas separadas por ponto e vírgula viram etiquetas: o vendedor
+     bate o olho e acha "frigoríficos" sem ler a linha inteira. Um parágrafo
+     corrido de quinze itens ninguém lê — e é justamente para ser consultado
+     de relance que este cadastro existe. */
+  function etiquetas(texto) {
+    const itens = String(texto || '').split(';').map(function (t) { return t.trim(); })
+      .filter(function (t) { return t; });
+    if (!itens.length) return '<span class="tiny muted">—</span>';
+    return '<div class="etiquetas">' + itens.map(function (t) {
+      return '<span>' + esc(t) + '</span>';
+    }).join('') + '</div>';
+  }
+
   function listaCatalogo(est, nome) {
     const usos = function (item) {
       if (nome === 'segmentos') return est.contas.filter(function (c) { return c.segmento === item.nome; }).length;
       return est.tarefas.filter(function (t) { return t.tipo === item.nome; }).length;
     };
-    const linhas = Store.catalogo(nome).filter(function (i) { return combina(i.nome); }).map(function (i) {
+    /* A busca do segmento vale para os três campos novos: procurar
+       "frigorífico" e não achar Alimentos seria pior do que não ter busca. */
+    const cabe = function (i) {
+      if (combina(i.nome)) return true;
+      if (nome !== 'segmentos') return false;
+      return combina(i.subsegmentos) || combina(i.oportunidades) || combina(i.personas);
+    };
+    const acoes = function (i) {
+      return '<td class="right" style="white-space:nowrap">' +
+        '<button class="btn ghost mini" onclick="App.editarItemCatalogo(\'' + nome + '\',\'' + i.id + '\')">Editar</button> ' +
+        '<button class="btn ghost mini" onclick="App.excluirItemCatalogo(\'' + nome + '\',\'' + i.id + '\')">Excluir</button></td>';
+    };
+    const situacao = function (i) {
+      return '<td>' + (i.ativo === false ? '<span class="pill">inativo</span>' : '<span class="pill ok">ativo</span>') + '</td>';
+    };
+
+    const itens = Store.catalogo(nome).filter(cabe);
+
+    if (nome === 'segmentos') {
+      const linhas = itens.map(function (i) {
+        return '<tr><td style="min-width:150px"><strong>' + esc(i.nome) + '</strong>' +
+          '<span class="tiny muted">' + usos(i) + ' conta' + (usos(i) === 1 ? '' : 's') + '</span></td>' +
+          '<td>' + etiquetas(i.subsegmentos) + '</td>' +
+          '<td>' + etiquetas(i.oportunidades) + '</td>' +
+          '<td>' + etiquetas(i.personas) + '</td>' +
+          situacao(i) + acoes(i) + '</tr>';
+      }).join('');
+      return '<p class="tiny muted" style="margin:0 0 8px">Os segmentos são <strong>desta empresa</strong>. ' +
+        'Outra empresa no sistema tem os seus, e uma não enxerga os da outra.</p>' +
+        tabela(['Segmento', 'Subsegmentos', 'Oportunidades', 'Principais personas', 'Situação', ''],
+          linhas, 'Nenhum segmento cadastrado ainda.');
+    }
+
+    const linhas = itens.map(function (i) {
       return '<tr><td><strong>' + esc(i.nome) + '</strong></td>' +
-        '<td>' + (i.ativo === false ? '<span class="pill">inativo</span>' : '<span class="pill ok">ativo</span>') + '</td>' +
+        situacao(i) +
         '<td class="right">' + usos(i) + '</td>' +
-        '<td class="right" style="white-space:nowrap">' +
-          '<button class="btn ghost mini" onclick="App.editarItemCatalogo(\'' + nome + '\',\'' + i.id + '\')">Editar</button> ' +
-          '<button class="btn ghost mini" onclick="App.excluirItemCatalogo(\'' + nome + '\',\'' + i.id + '\')">Excluir</button></td></tr>';
+        acoes(i) + '</tr>';
     }).join('');
-    return tabela([nome === 'segmentos' ? 'Segmento' : 'Tipo de tarefa', 'Situação', 'Em uso', ''], linhas, 'Nada cadastrado ainda.');
+    return tabela(['Tipo de tarefa', 'Situação', 'Em uso', ''], linhas, 'Nada cadastrado ainda.');
   }
 
   function listaProdutos(est) {

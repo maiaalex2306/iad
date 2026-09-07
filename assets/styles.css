@@ -125,6 +125,18 @@ nav.tabs a.ativo { color: var(--orange); font-weight: 700; }
    pode competir com as ativas na hora de bater o olho na lista. */
 tr.bloqueada > td { opacity: .55; }
 tr.bloqueada > td:last-child { opacity: 1; }
+
+/* Subsegmentos, oportunidades e personas são listas de dez a quinze itens.
+   Em parágrafo corrido ninguém lê; em etiquetas o olho encontra o item certo
+   sem ler o resto — e é para consulta de relance que o cadastro existe. */
+/* Nome próprio: .etiqueta já existe, escopado na barra do administrador. Um
+   .etiqueta genérico aqui vazaria border e color para lá. */
+.etiquetas { display: flex; flex-wrap: wrap; gap: 4px; }
+.etiquetas > span {
+  display: inline-block; padding: 2px 7px; border-radius: 5px;
+  font-size: .7rem; line-height: 1.5;
+  border: 1px solid var(--line); background: var(--bg); color: var(--muted);
+}
 .pill.orange { color: #fff; background: var(--orange); border-color: var(--orange); }
 
 button.btn {

@@ -464,11 +464,33 @@
       if (campo) { campo.focus(); campo.setSelectionRange(campo.value.length, campo.value.length); }
     },
 
+    /* O segmento carrega o mapa do mercado; o tipo de tarefa é só um nome.
+       Os três campos existem para responder o que o vendedor se pergunta ao
+       abrir um prospect novo: isto é desse segmento? o que vendo? com quem
+       falo? Cada empresa tem os seus — a tabela é por empresa desde sempre. */
+    camposDoCatalogo: function (nome) {
+      const campos = [{ id: 'nome', rotulo: 'Nome' }];
+      if (nome !== 'segmentos') return campos;
+      return campos.concat([
+        { id: 'subsegmentos', rotulo: 'Subsegmentos', tipo: 'textarea',
+          placeholder: 'Frigoríficos; abatedouros; laticínios; massas' },
+        { id: 'oportunidades', rotulo: 'Oportunidades', tipo: 'textarea',
+          placeholder: 'Água de processo; CIP; ETA; ETE; reúso' },
+        { id: 'personas', rotulo: 'Principais personas', tipo: 'textarea',
+          placeholder: 'Gerente de Utilidades; Gerente de Qualidade' }
+      ]);
+    },
+
     novoItemCatalogo: function (nome) {
       const titulo = nome === 'segmentos' ? 'Novo segmento' : 'Novo tipo de tarefa';
-      U.formulario(titulo, [{ id: 'nome', rotulo: 'Nome' }], {}, function (d) {
+      U.formulario(titulo, App.camposDoCatalogo(nome), {}, function (d) {
         if (!d.nome) return;
-        Store.criarNoCatalogo(nome, { nome: d.nome });
+        Store.criarNoCatalogo(nome, {
+          nome: d.nome,
+          subsegmentos: d.subsegmentos || '',
+          oportunidades: d.oportunidades || '',
+          personas: d.personas || ''
+        });
         render();
       });
     },
@@ -476,11 +498,23 @@
     editarItemCatalogo: function (nome, id) {
       const item = Store.catalogo(nome).find(function (i) { return i.id === id; });
       if (!item) return;
-      U.formulario('Editar', [
-        { id: 'nome', rotulo: 'Nome' },
+      const campos = App.camposDoCatalogo(nome).concat([
         { id: 'ativo', rotulo: 'Situação', tipo: 'select', opcoes: [{ valor: 'sim', rotulo: 'Ativo' }, { valor: 'nao', rotulo: 'Inativo' }] }
-      ], { nome: item.nome, ativo: item.ativo === false ? 'nao' : 'sim' }, function (d) {
-        Store.atualizarNoCatalogo(nome, id, { nome: d.nome, ativo: d.ativo === 'sim' });
+      ]);
+      U.formulario('Editar', campos, {
+        nome: item.nome,
+        subsegmentos: item.subsegmentos || '',
+        oportunidades: item.oportunidades || '',
+        personas: item.personas || '',
+        ativo: item.ativo === false ? 'nao' : 'sim'
+      }, function (d) {
+        const mudancas = { nome: d.nome, ativo: d.ativo === 'sim' };
+        if (nome === 'segmentos') {
+          mudancas.subsegmentos = d.subsegmentos || '';
+          mudancas.oportunidades = d.oportunidades || '';
+          mudancas.personas = d.personas || '';
+        }
+        Store.atualizarNoCatalogo(nome, id, mudancas);
         render();
       });
     },
