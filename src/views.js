@@ -2321,7 +2321,15 @@
              o vendedor por um erro do servidor. */
           ? '<div class="aviso">As oito não foram relidas: ' + esc(erroDaReleitura) +
             '<br><span class="tiny">O que está acima já ficou gravado. Use <strong>Ler as 8 decisões</strong> para tentar de novo.</span></div>'
-          : '<div class="aviso">Nenhuma das oito subiu. O que entrou não sustenta uma nota maior — e isso é uma resposta, não uma falha: falta evidência do cliente.</div>') +
+          /* Quando o valor e a etapa mudaram e nenhuma das oito subiu, a causa
+             quase sempre é a mesma: o material era NOSSO. Dizer só "falta
+             evidência do cliente" nesse caso soa como defeito, porque o
+             vendedor acabou de ver o negócio inteiro se atualizar na tela. */
+          : (base.negocio || []).length
+            ? '<div class="aviso">O negócio andou, mas <strong>nenhuma das oito subiu</strong> — e isso costuma estar certo: ' +
+              'proposta, apresentação e material nosso não são evidência de que o cliente decidiu. ' +
+              'O que sobe as oito é o que <strong>ele</strong> fez: confirmou um número, apresentou alguém, marcou uma data.</div>'
+            : '<div class="aviso">Nenhuma das oito subiu. O que entrou não sustenta uma nota maior — e isso é uma resposta, não uma falha: falta evidência do cliente.</div>') +
       '<p class="tiny muted">Nota só sobe sozinha, e nota 2 continua exigindo evidência confirmada ou documentada. ' +
       'Se discordar de alguma, ajuste — as oito ficam abertas para edição.</p>' +
       '</div><div class="rodape">' +

@@ -301,7 +301,7 @@ Tarefa: o vendedor enviou a transcrição de uma reunião, a ata ou as anotaçõ
 Devolva {"evidencias": [ ... ], "contatos": [ ... ], "negocio": { ... }, "decisoes": [ ... ]}.
 
 Cada item de "evidencias" tem:
-- dimensao: uma das oito. Um receio, uma objeção ou um impedimento vai para "risco". Uma exigência de comparação ou de especificação vai para "criterios". Alguém novo entrando na conversa vai para "stakeholders". O caminho formal até a assinatura vai para "processo".
+- dimensao: uma das oito. Vale a mesma observação das notas: num documento nosso, os dados que o cliente forneceu ou confirmou — a operação atual dele, os números da unidade, a rotina que ele descreveu — são evidência dele, com força "documentado". Nossa recomendação e nosso preço não são. Um receio, uma objeção ou um impedimento vai para "risco". Uma exigência de comparação ou de especificação vai para "criterios". Alguém novo entrando na conversa vai para "stakeholders". O caminho formal até a assinatura vai para "processo".
 - titulo: uma linha começando pelo lado do cliente. Ex.: "Jurídico exigiu cláusula de rescisão em 30 dias".
 - forca:
 ${listaForcas()}
@@ -314,7 +314,7 @@ ${listaForcas()}
 Cada item de "contatos" é uma pessoa do lado do cliente que apareceu no documento: {nome, cargo, papel, frase}. papel é um de ${PAPEIS.join(' | ')}.
 
 "negocio" é o que o material diz sobre o NEGÓCIO em si. Devolva apenas os campos que o material realmente informa; omita o resto. Nunca invente número, data nem etapa.
-- valor: o valor deste negócio para nós, em reais, só o número (ex.: 91379.04). É o que o cliente pagaria. Quando o material é uma proposta com implantação e mensalidade, valor é a implantação mais 12 mensalidades. Economia estimada, benefício, ROI e payback NÃO são o valor do negócio — são argumento de venda; não os devolva aqui.
+- valor: o valor deste negócio para nós, em reais, só o número (ex.: 91379.04). É o que o cliente pagaria em doze meses. Quando o material é uma proposta com implantação e mensalidade, valor é a implantação mais DOZE mensalidades — sempre doze, mesmo que o documento mostre um cálculo com menos (é comum a tabela de ROI usar seis por causa de carência; esse número é do cálculo de retorno, não do contrato). Economia estimada, benefício, ROI e payback NÃO são o valor do negócio — são argumento de venda; não os devolva aqui.
 - valorFrase: o trecho literal de onde tirou o valor.
 - etapa: a etapa do funil que o material comprova ter sido atingida${etapas ? `, uma de ${etapas}` : ''}. Só devolva se o material for prova disso — uma proposta formal com preço comprova "Proposta"; um contrato assinado comprova "Fechamento". Conversa sobre preço não comprova nada. Se o material for só ata de reunião, omita.
 - etapaFrase: o trecho literal que comprova a etapa.
@@ -330,6 +330,7 @@ Os três níveis, iguais para todas:
 
 Regras das notas, e são o ponto todo:
 - A nota vem SÓ do que o CLIENTE disse ou fez. O que nós mandamos, apresentamos ou propusemos não conta e nunca sobe nota. Uma proposta enviada não é impacto aceito; um material apresentado não é problema reconhecido.
+- Mas atenção a um caso que não é exceção à regra, é aplicação dela: um documento NOSSO — proposta, diagnóstico, levantamento — costuma conter dados que o CLIENTE forneceu ou confirmou. Trechos marcados como "dados confirmados", "informado pelo cliente", "levantamento na unidade", ou números da operação dele (consumo, volumes, quantidade de pontos, equipamentos, rotina atual) são evidência DELE, com força "documentado", ainda que apareçam num material que nós escrevemos. Quem produziu o dado é o cliente; nós só o organizamos. O que não conta é a nossa recomendação, a nossa solução e o nosso preço.
 - "trecho" tem de ser um pedaço LITERAL do que você recebeu. Sem trecho literal, a nota é 0. Não parafraseie para justificar.
 - Na dúvida entre dois níveis, use o menor. Nota inflada vira pipeline falso no painel do dono da empresa.
 - "porque" em uma linha, dizendo o que sustenta — ou, quando for 0, o que faltaria para subir.
