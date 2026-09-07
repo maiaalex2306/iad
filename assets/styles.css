@@ -290,6 +290,18 @@ dialog .corpo > label.campo.meia { grid-column: span 1; }
   font-size: .78rem; color: var(--muted);
 }
 .ia-fora a { color: var(--navy-2); }
+
+/* Pessoas achadas no material, para marcar quem entra. Ficam dentro da caixa
+   do assistente porque é uma proposta dele, não um campo do formulário. */
+.contatos-ia:not(:empty) { margin-top: 10px; padding-top: 9px; border-top: 1px dashed var(--line); }
+.contatos-ia > .rotulo {
+  display: block; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--navy-2); font-weight: 600; margin-bottom: 6px;
+}
+.pessoa-ia { display: flex; gap: 8px; align-items: flex-start; padding: 4px 0; cursor: pointer; }
+.pessoa-ia input { margin-top: 3px; flex: 0 0 auto; }
+.pessoa-ia span { font-size: .8rem; line-height: 1.35; }
+.pessoa-ia em { display: block; font-style: normal; font-size: .72rem; color: var(--muted); }
 dialog .rodape { display: flex; gap: 8px; justify-content: flex-end; padding: 12px 18px; border-top: 1px solid var(--line); }
 
 table { width: 100%; border-collapse: collapse; font-size: .88rem; }

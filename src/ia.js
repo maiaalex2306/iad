@@ -175,7 +175,8 @@
         return { erro: 'O assistente respondeu, mas não no formato esperado. ' +
           'Voltou: ' + amostraDaResposta(r) };
       }
-      return { campos: r.campos, frases: r.frases || {}, cortado: cortado };
+      return { campos: r.campos, frases: r.frases || {},
+        contatos: Array.isArray(r.contatos) ? r.contatos : [], cortado: cortado };
     });
   }
 
@@ -458,6 +459,12 @@
     if (contaId) {
       ctx.contatos = Store.contatosDaConta(contaId).map(function (c) { return c.nome; });
     }
+    /* Nosso próprio domínio, para o servidor não propor a nossa equipe como
+       contato do cliente. Todo dossiê é assinado por nós, e sem isto a lista
+       viria cheia de colegas do próprio vendedor. */
+    const eu = (global.IADNuvem.estado().email || '').toLowerCase();
+    const arroba = eu.indexOf('@');
+    if (arroba > 0) ctx.nossoDominio = eu.slice(arroba + 1);
     return ctx;
   }
 

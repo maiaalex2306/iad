@@ -802,22 +802,29 @@
 
     /* ---------- Contas e contatos ---------- */
     novaConta: function () {
-      U.formulario('Nova conta', camposConta(), {}, function (d, docs) {
+      U.formulario('Nova conta', camposConta(), {}, function (d, docs, pessoas) {
         if (!d.nome) return;
         const nova = Store.criarConta(d);
         anexarAoRegistro(docs, { contaId: nova.id });
+        const n = criarContatosPropostos(nova.id, pessoas);
         location.hash = '#/contas';
         render();
+        if (n) {
+          alert(nova.nome + ' cadastrada com ' +
+            (n === 1 ? '1 contato' : n + ' contatos') + '.\n\n' +
+            'Confira o papel de cada um na compra — é ele que alimenta a cobertura do grupo comprador.');
+        }
       });
     },
 
     editarConta: function (id) {
       const c = Store.conta(id);
       if (!c) return;
-      U.formulario('Editar conta', camposConta(), c, function (d, docs) {
+      U.formulario('Editar conta', camposConta(), c, function (d, docs, pessoas) {
         Object.assign(c, d);
         Store.salvar();
         anexarAoRegistro(docs, { contaId: id });
+        criarContatosPropostos(id, pessoas);
         render();
       });
     },
@@ -2553,6 +2560,36 @@
     });
   }
 
+  /* As pessoas que o vendedor marcou na caixa do assistente viram contatos da
+     conta. Nascem com papel e influência neutros de propósito: quem decide se
+     alguém é o econômico ou o técnico é quem conversou com a pessoa, e chutar
+     isso encheria a cobertura do grupo comprador de certeza falsa — que é
+     justamente o que este CRM existe para não fazer.
+
+     Repetido não entra: o mesmo dossiê analisado duas vezes não pode duplicar
+     a Aline. */
+  function criarContatosPropostos(contaId, pessoas) {
+    if (!contaId || !pessoas || !pessoas.length) return 0;
+    const chave = function (t) {
+      return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    };
+    const existentes = Store.contatosDaConta(contaId).map(function (c) { return chave(c.nome); });
+    let n = 0;
+    pessoas.forEach(function (p) {
+      if (!p || !p.nome || existentes.indexOf(chave(p.nome)) !== -1) return;
+      Store.criarContato({
+        contaId: contaId,
+        nome: p.nome,
+        cargo: p.cargo || p.area || '',
+        email: p.email || '',
+        telefone: p.telefone || ''
+      });
+      existentes.push(chave(p.nome));
+      n++;
+    });
+    return n;
+  }
+
   /* ---------- campos reutilizados ---------- */
   function camposProduto() {
     return [
@@ -2602,8 +2639,14 @@
       { id: 'razaoSocial', rotulo: 'Razão social', largura: 'metade' },
       { id: 'cnpj', rotulo: 'CNPJ', largura: 'metade' },
 
+      /* A IA escolhe o segmento de uma lista fechada — a desta empresa. Ela não
+         inventa "Alimentos" se "Alimentos" não estiver cadastrado, e é por isso
+         que o campo fica vazio em sistema recém-instalado: não há de onde
+         escolher. Dizer isso vale mais que explicar a arquitetura. */
       { tipo: 'secao', rotulo: 'Classificação',
-        ajuda: 'O segmento é da sua empresa — cada uma tem a sua lista, em Cadastros → Segmentos.' },
+        ajuda: segmentos.length
+          ? 'A IA escolhe entre os ' + segmentos.length + ' segmentos da sua empresa.'
+          : 'Sua empresa ainda não tem segmentos cadastrados — por isso a IA não preenche este campo. Cadastre em Cadastros → Segmentos.' },
       { id: 'segmento', rotulo: 'Segmento', tipo: 'select', largura: 'metade',
         opcoes: [{ valor: '', rotulo: '— sem segmento —' }]
           .concat(segmentos.map(function (n) { return { valor: n, rotulo: n }; })) },

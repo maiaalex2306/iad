@@ -174,6 +174,11 @@ Regras absolutas:
 - Use apenas informação que está no texto do vendedor. Nunca invente nome, número, empresa ou data.
 - Se um campo não estiver no texto, omita a chave. Campo ausente é melhor que campo errado.
 - Escreva em português do Brasil.
+- Para empresa, inclua também "contatos": lista das pessoas DA EMPRESA CLIENTE
+  citadas no material, cada uma com nome, cargo, email, telefone e area. Só
+  quem trabalha no cliente — quem assina o documento do nosso lado não entra.
+  Não invente e-mail nem telefone: só o que estiver escrito. Sem ninguém
+  identificável, devolva lista vazia.
 - Além dos campos pedidos, inclua "frases": um objeto que liga cada campo preenchido ao trecho literal do texto que justificou o valor. Trechos curtos.
 - Nunca devolva nota, pontuação, valor financeiro, etapa do funil ou data de fechamento. Isso não é seu.`;
 
@@ -576,7 +581,48 @@ function validar(tipo: string, bruto: Record<string, unknown>, ctx: Record<strin
     }
   }
 
-  return { campos: saida, frases: frases };
+  const saidaFinal: Record<string, unknown> = { campos: saida, frases: frases };
+  if (tipo === 'conta') saidaFinal.contatos = validarContatos(bruto.contatos, ctx);
+  return saidaFinal;
+}
+
+/* As pessoas da empresa cliente citadas no material. Vêm junto da conta porque
+   é junto que elas aparecem: um dossiê de reunião traz o nome, o cargo e o
+   e-mail de quem respondeu, e obrigar o vendedor a redigitar isso depois é a
+   maneira mais certa de nunca ter grupo comprador cadastrado.
+
+   Duas recusas importam mais que a extração. A primeira: gente da nossa
+   equipe. Todo material nosso é assinado por nós, e sem esta linha a lista
+   viria cheia de colegas do próprio vendedor. A segunda: e-mail inventado —
+   só entra o que estiver escrito, porque e-mail errado num CRM é pior que
+   e-mail nenhum: alguém escreve para o vazio e acha que falou. */
+function validarContatos(bruto: unknown, ctx: Record<string, unknown>): Record<string, string>[] {
+  if (!Array.isArray(bruto)) return [];
+  const nosso = String(ctx.nossoDominio || '').toLowerCase();
+  const jaTem = (Array.isArray(ctx.contatos) ? ctx.contatos : []).map((n) => semAcento(String(n)));
+
+  const saida: Record<string, string>[] = [];
+  for (const item of bruto.slice(0, 12)) {
+    if (!item || typeof item !== 'object') continue;
+    const c = item as Record<string, unknown>;
+    const nome = limparTexto(c.nome, 80);
+    if (!nome || nome.split(/\s+/).length < 2) continue;   /* "Aline" sozinho não é contato */
+
+    const email = limparTexto(c.email, 120).toLowerCase();
+    const valido = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) ? email : '';
+    if (valido && nosso && valido.endsWith('@' + nosso)) continue;   /* somos nós */
+    if (jaTem.indexOf(semAcento(nome)) !== -1) continue;   /* já cadastrado nesta conta */
+
+    saida.push({
+      nome: nome,
+      cargo: limparTexto(c.cargo, 80),
+      email: valido,
+      telefone: limparTexto(c.telefone, 24),
+      area: limparTexto(c.area, 60)
+    });
+    if (saida.length >= 8) break;
+  }
+  return saida;
 }
 
 /* Uma reunião vira uma lista. Cada item passa pelas mesmas regras da

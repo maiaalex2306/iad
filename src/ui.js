@@ -164,12 +164,17 @@
         const dados = {};
         campos.forEach(function (c) {
           if (c.tipo === 'ia') return;          /* caixa de assistente não é dado */
-          const el = dlg.querySelector('[name="' + c.id + '"]');
+          const el = c.id ? dlg.querySelector('[name="' + c.id + '"]') : null;
+          /* Seção e aviso são texto na tela, não campo: não têm elemento com
+             name, e ler o valor deles derrubava o salvar inteiro. O formulário
+             morria calado e a conta não era criada — apareceu no primeiro teste
+             que de fato clicou em Salvar. */
+          if (!el) return;
           dados[c.id] = (c.tipo === 'moeda' || c.tipo === 'number')
             ? numeroDigitado(el.value)
             : el.value.trim();
         });
-        aoConfirmar(dados, dlg.documentosIA || []);
+        aoConfirmar(dados, dlg.documentosIA || [], dlg.contatosIA || []);
       } else if (aoCancelar) {
         aoCancelar();
       }
@@ -255,8 +260,41 @@
         '<span class="estado" data-ia-estado="' + c.id + '"></span>' +
       '</div>' +
       '<div class="anexos-ia" data-ia-lista="' + c.id + '"></div>' +
+      '<div class="contatos-ia" data-ia-contatos="' + c.id + '"></div>' +
       '<p class="rodape-ia">O assistente sugere. Quem confirma é você — e a nota da decisão continua sendo sua.</p>' +
     '</div>';
+  }
+
+  /* As pessoas que o assistente achou no material, para o vendedor marcar
+     quem entra. Propostas marcadas, não gravadas: a mesma regra dos campos —
+     o assistente sugere, quem confirma é você. Só que aqui a confirmação é
+     por pessoa, porque um dossiê cita quem participou e também quem foi
+     apenas mencionado, e são coisas diferentes. */
+  function pintarContatos(dlg, id, contatos) {
+    const caixa = dlg.querySelector('[data-ia-contatos="' + id + '"]');
+    if (!caixa) return 0;
+    if (!contatos.length) { caixa.innerHTML = ''; dlg.contatosIA = []; return 0; }
+
+    caixa.innerHTML = '<span class="rotulo">Pessoas encontradas no material</span>' +
+      contatos.map(function (p, i) {
+        const detalhe = [p.cargo, p.area, p.email, p.telefone].filter(Boolean).join(' · ');
+        return '<label class="pessoa-ia">' +
+          '<input type="checkbox" checked data-pessoa="' + i + '">' +
+          '<span><strong>' + esc(p.nome) + '</strong>' +
+          (detalhe ? '<em>' + esc(detalhe) + '</em>' : '') + '</span></label>';
+      }).join('');
+
+    const marcadas = function () {
+      return contatos.filter(function (_, i) {
+        const el = caixa.querySelector('[data-pessoa="' + i + '"]');
+        return el && el.checked;
+      });
+    };
+    dlg.contatosIA = marcadas();
+    caixa.querySelectorAll('[data-pessoa]').forEach(function (el) {
+      el.addEventListener('change', function () { dlg.contatosIA = marcadas(); });
+    });
+    return contatos.length;
   }
 
   function tamanhoLegivel(bytes) {
@@ -357,10 +395,14 @@
              mandava procurar rede e chave quando o problema era volume. */
           if (r.erro) { estado.textContent = r.erro; return; }
           const n = aplicarSugestoes(dlg, campos, r, c.nunca);
+          const quantos = pintarContatos(dlg, c.id, r.contatos || []);
           const corte = r.cortado ? ' Li só o começo do material — era muito.' : '';
+          const gente = quantos
+            ? ' E ' + (quantos === 1 ? 'uma pessoa' : quantos + ' pessoas') + ' — marque quem entra.'
+            : '';
           estado.textContent = (n
             ? (n === 1 ? '1 campo preenchido — confira.' : n + ' campos preenchidos — confira.')
-            : 'Não achei nada para preencher neste material.') + corte;
+            : 'Não achei nada para preencher neste material.') + gente + corte;
           if (c.aoAplicar) c.aoAplicar(dlg, r, n);
         });
       });
