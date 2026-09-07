@@ -109,7 +109,10 @@ const FORMATOS: Record<string, Record<string, Regra>> = {
     pais:        { como: 'texto', max: 40 },
     site:        { como: 'texto', max: 100 },
     linkedin:    { como: 'texto', max: 140 },
-    descricao:   { como: 'texto', max: 400 }
+    descricao:   { como: 'texto', max: 400 },
+    /* O que a empresa precisa, nas palavras do material. É o campo que o
+       vendedor lê antes de ligar — e o único aqui que não é cadastro. */
+    necessidades: { como: 'texto', max: 600 }
   },
   contato: {
     nome:       { como: 'texto', max: 80 },
@@ -216,11 +219,21 @@ Nada mais.`;
 
 Tarefa: extraia os dados cadastrais da empresa cliente do texto.
 
-Campos: nome, razaoSocial, cnpj, segmento, descricao, telefone, porte,
-cidade, uf, pais, site, linkedin.
+Campos: nome, razaoSocial, cnpj, segmento, descricao, necessidades, telefone,
+porte, cidade, uf, pais, site, linkedin.
 
 segmento tem de sair da lista fechada acima — se nenhum servir, deixe vazio.
 descricao é o que ela produz e para quem vende, em uma ou duas frases.
+necessidades é o que ESTA empresa precisa resolver, do ponto de vista de quem
+vai vender para ela: a dor, o gargalo, a exigência, o prazo. Escreva em tópicos
+curtos separados por ponto e vírgula, com os números que aparecerem no
+material. Se o material não disser nada disso, deixe vazio — não deduza a
+necessidade a partir do setor.
+
+Quando o material trouxer blocos marcados [site ...] ou [Receita Federal ...],
+eles são fonte oficial: prefira-os para razão social, CNPJ, endereço e
+telefone. O resto do material é anotação comercial e vale para o que a empresa
+precisa, não para o que ela é no papel.
 
 - nome: nome fantasia, curto. razaoSocial: a razão social completa, se o texto trouxer.
 - cnpj e telefone: formatados no padrão brasileiro, só se estiverem no texto.
@@ -471,6 +484,26 @@ async function chamarIA(sistema: string, usuario: string): Promise<string> {
   return j?.choices?.[0]?.message?.content || '';
 }
 
+/* A segunda passada viu tudo o que a primeira viu, mais o site e a Receita.
+   Então ela manda no que preencheu; onde ficou vazia, fica o que a primeira
+   tinha achado — o dossiê às vezes traz o telefone do contato que o site não
+   publica. */
+function juntarPassadas(
+  primeira: Record<string, unknown>,
+  segunda: Record<string, unknown>
+): Record<string, unknown> {
+  const saida: Record<string, unknown> = { ...primeira };
+  for (const [k, v] of Object.entries(segunda)) {
+    if (v == null || v === '') continue;
+    if (k === 'frases' && saida.frases && typeof saida.frases === 'object') {
+      saida.frases = { ...(saida.frases as Record<string, unknown>), ...(v as Record<string, unknown>) };
+      continue;
+    }
+    saida[k] = v;
+  }
+  return saida;
+}
+
 /* ---------- validação ----------
    Nada do que a IA devolve chega ao formulário sem passar por aqui. */
 
@@ -690,13 +723,13 @@ function validarPlano(bruto: Record<string, unknown>) {
    conhecida a descrição do próprio LinkedIn basta; o site resolve a empresa
    pequena, de que ninguém nunca ouviu falar. Falha de rede não derruba a
    classificação: segue sem o site. */
-async function textoDoSite(dominio: string): Promise<string> {
+async function textoDoSite(dominio: string, caminho = '/', limite = 1200): Promise<string> {
   const limpo = String(dominio || '').trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
   if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(limpo)) return '';
   const controle = new AbortController();
   const corta = setTimeout(() => controle.abort(), 4000);
   try {
-    const r = await fetch('https://' + limpo + '/', {
+    const r = await fetch('https://' + limpo + caminho, {
       signal: controle.signal,
       headers: { 'user-agent': 'IAD-CRM/1.0 (classificacao de segmento)' }
     });
@@ -709,12 +742,118 @@ async function textoDoSite(dominio: string): Promise<string> {
       .replace(/&[a-z]+;/gi, ' ')
       .replace(/\s+/g, ' ')
       .trim()
-      .slice(0, 1200);
+      .slice(0, limite);
   } catch {
     return '';
   } finally {
     clearTimeout(corta);
   }
+}
+
+/* ---------- buscar o que o documento não tem ----------
+   Dossiê interno fala de dor, projeto e concorrente; não fala do CNPJ nem do
+   endereço da empresa. Antes o formulário ficava com três campos preenchidos e
+   o vendedor ia catar o resto à mão — que é o trabalho que este app existe
+   para evitar.
+
+   A regra que sustenta tudo aqui: só entra o que veio de uma fonte de verdade.
+   O site oficial e a Receita Federal são fontes; o modelo não é. Ele nunca
+   inventa CNPJ — quando o número aparece, veio do rodapé do site da empresa ou
+   da consulta pública, e o endereço vem da Receita, não de um palpite. */
+
+/* Dígitos verificadores. Sem isto, qualquer sequência de 14 números no texto
+   — número de nota, protocolo, código de barras — vira CNPJ. */
+function cnpjValido(bruto: string): boolean {
+  const n = String(bruto || '').replace(/\D/g, '');
+  if (n.length !== 14 || /^(\d)\1{13}$/.test(n)) return false;
+  const digito = (ate: number) => {
+    let soma = 0, peso = ate - 7;
+    for (let i = 0; i < ate; i++) {
+      soma += Number(n[i]) * peso;
+      peso = peso - 1 < 2 ? 9 : peso - 1;
+    }
+    const r = soma % 11;
+    return r < 2 ? 0 : 11 - r;
+  };
+  return digito(12) === Number(n[12]) && digito(13) === Number(n[13]);
+}
+
+function acharCnpj(texto: string): string {
+  const achados = String(texto || '').match(/\d{2}[.\s]?\d{3}[.\s]?\d{3}[\/\s]?\d{4}[-\s]?\d{2}/g) || [];
+  for (const a of achados) {
+    if (cnpjValido(a)) return a.replace(/\D/g, '');
+  }
+  return '';
+}
+
+/* Domínios citados no próprio material. Vêm do documento, não do modelo — é o
+   que garante que não estamos lendo o site de outra empresa de nome parecido.
+   Fora os que não são da empresa: rede social, buscador, encurtador, e o nosso
+   próprio, que aparece em toda proposta que nós mesmos escrevemos. */
+const DOMINIO_ALHEIO = /(linkedin|facebook|instagram|twitter|x\.com|youtube|google|gmail|hotmail|outlook|bit\.ly|whatsapp|wa\.me|sharepoint|onedrive|zoom|teams|biowatercare)/i;
+
+function dominiosNoTexto(texto: string): string[] {
+  const achados = String(texto || '')
+    .match(/\b(?:https?:\/\/)?(?:www\.)?([a-z0-9][a-z0-9-]{1,60}\.(?:com\.br|ind\.br|net\.br|agr\.br|com|net|org|io|co)(?:\.[a-z]{2})?)\b/gi) || [];
+  const limpos = achados
+    .map((d) => d.replace(/^https?:\/\//i, '').replace(/^www\./i, '').toLowerCase())
+    .filter((d) => !DOMINIO_ALHEIO.test(d));
+  return Array.from(new Set(limpos)).slice(0, 2);
+}
+
+/* Consulta pública da Receita. Devolve texto pronto para o modelo ler, com a
+   origem escrita: sem isso ele mistura o que veio da Receita com o que leu no
+   dossiê, e some a diferença entre dado oficial e anotação de vendedor. */
+async function dadosDaReceita(cnpj: string): Promise<string> {
+  const controle = new AbortController();
+  const corta = setTimeout(() => controle.abort(), 5000);
+  try {
+    const r = await fetch('https://brasilapi.com.br/api/cnpj/v1/' + cnpj, { signal: controle.signal });
+    if (!r.ok) return '';
+    const j = await r.json();
+    const partes = [
+      j.razao_social ? 'Razão social: ' + j.razao_social : '',
+      j.nome_fantasia ? 'Nome fantasia: ' + j.nome_fantasia : '',
+      'CNPJ: ' + cnpj,
+      j.cnae_fiscal_descricao ? 'Atividade principal: ' + j.cnae_fiscal_descricao : '',
+      [j.descricao_tipo_de_logradouro, j.logradouro, j.numero, j.complemento]
+        .filter(Boolean).join(' ').trim(),
+      j.bairro || '',
+      [j.municipio, j.uf].filter(Boolean).join(' / '),
+      j.cep ? 'CEP ' + j.cep : '',
+      j.ddd_telefone_1 ? 'Telefone: ' + j.ddd_telefone_1 : '',
+      j.descricao_situacao_cadastral ? 'Situação: ' + j.descricao_situacao_cadastral : ''
+    ].filter(Boolean);
+    return partes.length ? '[Receita Federal, consulta pública]\n' + partes.join('\n') : '';
+  } catch {
+    return '';
+  } finally {
+    clearTimeout(corta);
+  }
+}
+
+/* Junta ao material o que dá para buscar. Nunca substitui o documento: soma,
+   com a origem escrita em cada bloco. */
+async function enriquecerConta(texto: string, siteConhecido: string): Promise<string> {
+  const dominios = dominiosNoTexto(siteConhecido + ' ' + texto);
+  const paginas: string[] = [];
+
+  for (const d of dominios) {
+    /* Rodapé é onde mora o CNPJ, e ele está no fim do HTML: por isso o limite
+       aqui é grande, e a página de contato entra junto. */
+    const [inicio, contato] = await Promise.all([
+      textoDoSite(d, '/', 6000),
+      textoDoSite(d, '/contato', 6000)
+    ]);
+    const junto = (inicio + ' ' + contato).trim();
+    if (junto) paginas.push('[site ' + d + ']\n' + junto.slice(0, 5000));
+  }
+
+  const cnpj = acharCnpj(texto + ' ' + paginas.join(' '));
+  const receita = cnpj ? await dadosDaReceita(cnpj) : '';
+
+  const extras = paginas.concat(receita ? [receita] : []);
+  return extras.length ? texto + '\n\n' + extras.join('\n\n') : texto;
 }
 
 /* ---------- quem pode chamar ---------- */
@@ -811,8 +950,35 @@ Deno.serve(async (req: Request) => {
       entrada = texto + sites.join('');
     }
 
-    const bruto = await chamarIA(promptDe(tipo, ctx), entrada);
-    const json = lerJSON(bruto);
+    let bruto = await chamarIA(promptDe(tipo, ctx), entrada);
+    let json = lerJSON(bruto);
+
+    /* Segunda passada para empresa, e só quando a primeira achou de quem se
+       trata. Ordem importa: primeiro leio o documento e descubro o nome e o
+       site; depois vou ao site e à Receita; depois releio tudo junto. Buscar
+       antes seria buscar sem saber o quê.
+
+       Custa uma chamada a mais e uns segundos. Vale: é a diferença entre três
+       campos preenchidos e a ficha inteira — e o que entra na segunda vem do
+       site oficial e da consulta pública, não do palpite do modelo. */
+    if (tipo === 'conta' && json && !pedido.semBusca) {
+      const nome = String((json as Record<string, unknown>).nome || '');
+      const site = String((json as Record<string, unknown>).site || '');
+      if (nome) {
+        const comBusca = await enriquecerConta(entrada, site);
+        if (comBusca !== entrada) {
+          const brutoDois = await chamarIA(promptDe(tipo, ctx), comBusca);
+          const jsonDois = lerJSON(brutoDois);
+          /* O que a segunda achou vence onde a primeira estava vazia, e vence
+             também no que é dado oficial — razão social, CNPJ e endereço saem
+             melhor da Receita do que de um dossiê comercial. */
+          if (jsonDois) {
+            bruto = brutoDois;
+            json = juntarPassadas(json as Record<string, unknown>, jsonDois);
+          }
+        }
+      }
+    }
     /* JSON torto devolve vazio. Nunca dado inventado no formulário do vendedor. */
     if (!json) {
       if (tipo === 'reuniao') return responder({ evidencias: [], contatos: [] });

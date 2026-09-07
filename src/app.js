@@ -2624,10 +2624,12 @@
       { id: 'linkedin', rotulo: 'LinkedIn da empresa', largura: 'metade',
         placeholder: 'linkedin.com/company/...' },
 
-      { tipo: 'secao', rotulo: 'O que ela faz',
-        ajuda: 'É daqui que a IA tira o segmento quando o nome da empresa não diz nada.' },
+      { tipo: 'secao', rotulo: 'O que ela faz e do que precisa',
+        ajuda: 'A descrição é de onde a IA tira o segmento. As necessidades são o que você lê antes de ligar.' },
       { id: 'descricao', rotulo: 'Descrição', tipo: 'textarea',
-        placeholder: 'O que a empresa produz, para quem vende, onde opera.' }
+        placeholder: 'O que a empresa produz, para quem vende, onde opera.' },
+      { id: 'necessidades', rotulo: 'Necessidades e dores', tipo: 'textarea',
+        placeholder: 'O gargalo, a exigência, o prazo — com os números que aparecerem.' }
     ]);
   }
 
