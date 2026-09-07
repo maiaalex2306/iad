@@ -2275,7 +2275,7 @@
 
      O que ele precisa é ver o que mudou e por quê, com o trecho que originou
      cada nota. Discordar continua possível, num clique. */
-  function resumoDaLeitura(op, base, mudancas) {
+  function resumoDaLeitura(op, base, mudancas, erroDaReleitura) {
     const r = E.resumo(op);
     const entrou = [];
     if (base.evidencias) entrou.push(base.evidencias + (base.evidencias === 1 ? ' evidência do cliente' : ' evidências do cliente'));
@@ -2315,7 +2315,13 @@
           (mudancas.length === 1 ? ' decisão subiu' : ' decisões subiram') +
           '.</strong> IAD agora: <strong>' + r.iad + '/16</strong>.</p>' +
           '<ul class="achados">' + linhas + '</ul>'
-        : '<div class="aviso">Nenhuma das oito subiu. O que entrou não sustenta uma nota maior — e isso é uma resposta, não uma falha: falta evidência do cliente.</div>') +
+        : erroDaReleitura
+          /* Releitura que falhou não é "nada subiu": é uma pergunta sem
+             resposta, e dizer "falta evidência do cliente" aqui seria culpar
+             o vendedor por um erro do servidor. */
+          ? '<div class="aviso">As oito não foram relidas: ' + esc(erroDaReleitura) +
+            '<br><span class="tiny">O que está acima já ficou gravado. Use <strong>Ler as 8 decisões</strong> para tentar de novo.</span></div>'
+          : '<div class="aviso">Nenhuma das oito subiu. O que entrou não sustenta uma nota maior — e isso é uma resposta, não uma falha: falta evidência do cliente.</div>') +
       '<p class="tiny muted">Nota só sobe sozinha, e nota 2 continua exigindo evidência confirmada ou documentada. ' +
       'Se discordar de alguma, ajuste — as oito ficam abertas para edição.</p>' +
       '</div><div class="rodape">' +

@@ -185,25 +185,43 @@
   /* Uma reunião inteira. Devolve {evidencias:[], contatos:[]} ou null.
      Prazo maior porque aqui o modelo lê uma transcrição, não uma frase. */
   function analisarReuniao(texto, contexto) {
-    if (!disponivel()) return Promise.resolve(null);
+    if (!disponivel()) {
+      return Promise.resolve({ erro: 'O assistente não está no ar. Veja ⚙︎ Dados → Assistente de IA.' });
+    }
     const t = String(texto || '').trim();
-    if (t.length < 60) return Promise.resolve(null);
+    if (t.length < 60) return Promise.resolve({ erro: 'Texto curto demais para eu separar evidências.' });
 
     const pedido = Nuvem.chamarFuncao('assistente', {
       tipo: 'reuniao', texto: t, contexto: contexto || {}
     });
     const prazo = new Promise(function (resolve) {
-      setTimeout(function () { resolve(null); }, PRAZO_REUNIAO);
+      setTimeout(function () { resolve({ estourou: true }); }, PRAZO_REUNIAO);
     });
 
     return Promise.race([pedido, prazo]).then(function (r) {
-      if (!r || r.erro || !Array.isArray(r.evidencias)) return null;
+      if (r && r.estourou) {
+        return { erro: 'O assistente demorou mais de ' + Math.round(PRAZO_REUNIAO / 1000) +
+          ' segundos e eu parei de esperar. Material muito grande costuma ser a causa: ' +
+          'tire um documento e tente de novo.' };
+      }
+      if (!r) return { erro: 'O servidor respondeu vazio.' };
+      /* A explicação vem do servidor e é mostrada como veio. Jogá-la fora e
+         dizer "não consegui falar com o assistente" — que era o que esta
+         função fazia — manda procurar rede e chave quando o problema é chave
+         da IA vencida, modelo que saiu do ar ou limite de uso estourado. */
+      if (r.erro) return { erro: r.erro };
+      if (!Array.isArray(r.evidencias)) {
+        return { erro: 'O assistente respondeu, mas não no formato esperado. ' +
+          'Voltou: ' + amostraDaResposta(r) };
+      }
       return {
         evidencias: apenasConhecidas(r.evidencias),
         contatos: r.contatos || [],
         negocio: (r.negocio && typeof r.negocio === 'object') ? r.negocio : {}
       };
-    }).catch(function () { return null; });
+    }).catch(function (e) {
+      return { erro: (e && e.message) || 'O servidor recusou a análise.' };
+    });
   }
 
   /* A função no servidor já descarta dimensão fora das oito. Aqui é descartado
@@ -395,7 +413,9 @@
      nota 2 sem evidência confirmada cai para 1, venha de onde vier. O que
      muda é o custo: oito formulários viram uma tela. */
   function sugerirNotas(op, r, textoExtra) {
-    if (!disponivel()) return Promise.resolve(null);
+    if (!disponivel()) {
+      return Promise.resolve({ erro: 'O assistente não está no ar. Veja ⚙︎ Dados → Assistente de IA.' });
+    }
 
     let retrato = retratoDaOportunidade(op, r);
     const extra = String(textoExtra || '').trim();
@@ -405,17 +425,27 @@
       tipo: 'notas', texto: retrato, contexto: { hoje: global.IADStore.hoje() }
     });
     const prazo = new Promise(function (resolve) {
-      setTimeout(function () { resolve(null); }, PRAZO_REUNIAO);
+      setTimeout(function () { resolve({ estourou: true }); }, PRAZO_REUNIAO);
     });
 
     return Promise.race([pedido, prazo]).then(function (resp) {
-      if (!resp || resp.erro || !Array.isArray(resp.decisoes)) return null;
+      if (resp && resp.estourou) {
+        return { erro: 'O assistente demorou mais de ' + Math.round(PRAZO_REUNIAO / 1000) +
+          ' segundos para reler as oito e eu parei de esperar.' };
+      }
+      if (!resp) return { erro: 'O servidor respondeu vazio.' };
+      if (resp.erro) return { erro: resp.erro };
+      if (!Array.isArray(resp.decisoes)) {
+        return { erro: 'O assistente respondeu, mas não no formato esperado. ' +
+          'Voltou: ' + amostraDaResposta(resp) };
+      }
       const dimensoes = global.IADPlaybook.DIMENSOES.map(function (d) { return d.id; });
-      return resp.decisoes.filter(function (d) {
-        return d && dimensoes.indexOf(d.dimensao) !== -1 &&
-          d.nota >= 0 && d.nota <= 2;
-      });
-    }).catch(function () { return null; });
+      return { decisoes: resp.decisoes.filter(function (d) {
+        return d && dimensoes.indexOf(d.dimensao) !== -1 && d.nota >= 0 && d.nota <= 2;
+      }) };
+    }).catch(function (e) {
+      return { erro: (e && e.message) || 'O servidor recusou a releitura.' };
+    });
   }
 
   /* Transcrição do Meet vem como .txt ou legenda (.vtt/.srt). Anotação vem

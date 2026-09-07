@@ -722,10 +722,10 @@
         document.body.appendChild(espera);
         espera.showModal();
 
-        IA.sugerirNotas(op, r, d.texto).then(function (decisoes) {
+        IA.sugerirNotas(op, r, d.texto).then(function (resp) {
           espera.close(); espera.remove();
-          if (!decisoes) { alert('Não consegui falar com o assistente agora.'); return; }
-          App.revisarNotas(opId, decisoes);
+          if (!resp || resp.erro) { alert((resp && resp.erro) || 'O servidor respondeu vazio.'); return; }
+          App.revisarNotas(opId, resp.decisoes || []);
         });
       });
     },
@@ -1276,8 +1276,15 @@
       IA.analisarReuniao(texto, IA.contextoDaOportunidade(op)).then(function (r) {
         aviso.close();
         aviso.remove();
-        if (!r) {
-          alert('Não consegui falar com o assistente agora. Tente de novo em instantes.');
+        /* O motivo vem do servidor e aparece como veio. A frase única de antes
+           — "não consegui falar com o assistente" — servia para tempo
+           esgotado, chave da IA vencida, modelo fora do ar e material grande
+           demais, e mandava procurar rede quando o problema era outro. A
+           tarefa e os anexos já estão gravados: só a leitura falhou. */
+        if (!r || r.erro) {
+          alert('A tarefa e os documentos foram gravados. O que falhou foi a leitura:\n\n' +
+            ((r && r.erro) || 'O servidor respondeu vazio.'));
+          render();
           if (depois) depois();
           return;
         }
@@ -2723,10 +2730,15 @@
       else if (depois) depois();
       return;
     }
-    IA.sugerirNotas(atual, E.resumo(atual), textoExtra || '').then(function (decisoes) {
-      const mudancas = aplicarNotasDaIA(opId, decisoes || []);
+    IA.sugerirNotas(atual, E.resumo(atual), textoExtra || '').then(function (resp) {
+      const decisoes = (resp && resp.decisoes) || [];
+      const mudancas = aplicarNotasDaIA(opId, decisoes);
       render();
-      mostrarResumo(opId, base, mudancas, decisoes || [], depois);
+      /* Falhar na releitura não apaga o que já entrou: as evidências e o que
+         mudou no negócio estão gravados, e é isso que o resumo mostra — com o
+         motivo da releitura não ter acontecido. */
+      mostrarResumo(opId, base, mudancas, decisoes, depois,
+        (resp && resp.erro) ? resp.erro : '');
     });
   }
 
@@ -2820,16 +2832,16 @@
 
   /* O relatório do que entrou. Não é uma tela de conferência: não há nada
      para marcar. Fica a porta de ajuste, para quem discordar. */
-  function mostrarResumo(opId, base, mudancas, decisoes, depois) {
+  function mostrarResumo(opId, base, mudancas, decisoes, depois, erroDaReleitura) {
     const op = Store.oportunidade(opId);
     const mexeuNoNegocio = (base.negocio || []).length;
-    if (!op || (!base.evidencias && !base.pessoas && !mudancas.length && !mexeuNoNegocio)) {
+    if (!op || (!base.evidencias && !base.pessoas && !mudancas.length && !mexeuNoNegocio && !erroDaReleitura)) {
       if (depois) depois();
       return;
     }
     const dlg = document.createElement('dialog');
     dlg.className = 'revisao-ia';
-    dlg.innerHTML = V.resumoDaLeitura(op, base, mudancas);
+    dlg.innerHTML = V.resumoDaLeitura(op, base, mudancas, erroDaReleitura);
     document.body.appendChild(dlg);
     dlg.addEventListener('close', function () {
       const ajustar = dlg.returnValue === 'ajustar';
