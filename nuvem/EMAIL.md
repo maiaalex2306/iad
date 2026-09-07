@@ -74,6 +74,25 @@ Estar logado não basta.
 
 ---
 
+### Desligue o "Verify JWT" desta função
+
+Depois de publicar, abra a função no painel → **Settings** (ou **Details**) →
+desligue **Verify JWT** (aparece também como *Verify JWT with legacy secret*) →
+Save.
+
+Sem isso o app não consegue chamá-la, e o erro é confuso: antes de um POST com
+cabeçalhos próprios, o navegador manda uma pergunta de permissão (a preflight,
+um OPTIONS) que **não leva credencial nenhuma** — é assim por definição. O
+porteiro do Supabase vê um pedido sem autorização, recusa com 401 sem os
+cabeçalhos de CORS, e o navegador bloqueia a chamada inteira. O app relata
+apenas que não conseguiu falar com o servidor — a mesma frase de estar sem
+internet.
+
+Isso não afrouxa a segurança, aperta. O porteiro só verifica se o token é
+válido no projeto: qualquer pessoa logada passa. A função verifica quem é a
+pessoa e o que ela pode fazer, lendo o papel dela no banco. A tranca que fica é
+a mais forte das duas.
+
 ## Conferir
 
 Primeiro, que a função subiu. Cole na barra de endereço:
