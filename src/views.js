@@ -1883,7 +1883,9 @@
     const cor = d.situacao === 'ok' ? 'ok' : (d.situacao === 'desconhecido' ? '' : 'warn');
     return '<div class="card"><div class="row"><h2 style="margin:0">Assistente de IA</h2>' +
       '<span class="espaco"></span><span class="pill ' + cor + '">' + esc(d.titulo) + '</span></div>' +
-      '<p class="small" style="margin:8px 0 0">' + esc(d.texto) + '</p>' +
+      /* pre-line porque os diagnósticos separam sintoma de correção com uma
+         linha em branco, e um parágrafo corrido junta as duas coisas. */
+      '<p class="small" style="margin:8px 0 0;white-space:pre-line">' + esc(d.texto) + '</p>' +
       (d.situacao === 'ok'
         ? '<p class="tiny muted" style="margin:8px 0 0">Onde ele aparece: o cartão ' +
           '<strong>Próximos passos</strong> no cockpit, o botão <strong>Registrar reunião</strong> ' +
@@ -1972,8 +1974,14 @@
 
     const perfil = e.perfil || {};
     const semEmpresa = !perfil.tenant_id;
+    /* O botão de alterar só existia enquanto desconectado — e é justamente
+       conectado que se descobre que a chave é a errada: o app entra, lê e
+       grava, e só as Edge Functions recusam. Sem este botão a saída era
+       editar src/config.js e publicar de novo. */
     return '<div class="card"><div class="row"><h2 style="margin:0">Nuvem (Supabase)</h2><span class="espaco"></span>' +
-      '<span class="pill ok">conectado</span></div>' +
+      '<span class="pill ok">conectado</span>' +
+      '<button class="btn ghost mini" onclick="App.configurarNuvem()"' +
+      ' data-ajuda-titulo="Alterar nuvem" data-ajuda="Endereço e chave pública do projeto. Troque a chave se as Edge Functions recusarem a chamada — o Supabase mudou o formato, e a antiga (eyJ...) já não vale para elas.">Alterar</button></div>' +
       '<p class="small muted" style="margin:8px 0 4px">' + esc(e.email) +
       (perfil.nome ? ' · ' + esc(perfil.nome) : '') +
       (perfil.papel === 'admin' ? ' · <strong>administrador</strong>' : '') + '</p>' +

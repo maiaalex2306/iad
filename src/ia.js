@@ -67,6 +67,20 @@
        melhor que esta tela faz é repetir o que ela disse. */
     if (situacao === 'desconhecido') {
       const f401 = ultimaFalha || {};
+      /* Esta recusa não vem da função: vem do porteiro do Supabase, antes
+         dela. Quem ele recusou foi a chave que o próprio app manda em toda
+         chamada — e o resto do app continua funcionando porque o banco e o
+         login ainda aceitam a chave antiga; só o portão das Edge Functions
+         passou a exigir a nova. Por isso o sintoma é "tudo funciona menos a
+         IA", que não parece problema de chave nenhuma. */
+      if (/matched no key|auth mode/i.test(f401.mensagem || '')) {
+        return { situacao: 'ausente', titulo: 'A chave do app é a antiga',
+          texto: 'O Supabase recusou a chave que este app usa. O formato mudou: ' +
+            'a antiga (eyJ...) ainda vale para o banco e o login, mas já não vale ' +
+            'para as Edge Functions.\n\nCorreção: Settings → API Keys → copie a ' +
+            'chave publishable (sb_publishable_...). Depois, aqui nesta tela, ' +
+            'Nuvem (Supabase) → Alterar → cole no campo da chave.' };
+      }
       if (f401.status === 401) {
         return { situacao: 'ausente', titulo: 'A função recusou a chamada',
           texto: f401.mensagem ||
