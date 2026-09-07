@@ -309,6 +309,60 @@
     return (bytes / 1048576).toFixed(1) + ' MB';
   }
 
+  /* Documentos numa caixa que não é a do assistente — a de registrar reunião,
+     por exemplo. Word, PDF, Excel e PowerPoint valem aqui como valem no
+     cadastro: é o mesmo material. Enquanto isto só aceitava texto puro, a ata
+     que chega em .docx e a proposta em PDF batiam num "só consigo ler texto",
+     e a reunião simplesmente não era registrada — que é o pior desfecho
+     possível para o único gesto que move a decisão.
+
+     Vários de uma vez pelo mesmo motivo: ninguém sai de uma visita com um
+     arquivo só. O conteúdo entra na caixa de texto, anunciado pelo nome do
+     arquivo, para a pessoa ver exatamente o que vai ser enviado — e os
+     arquivos ficam em dlg.documentosIA, para quem salva anexá-los ao
+     registro. */
+  const ACEITA_DOCUMENTOS = '.pdf,.docx,.xlsx,.pptx,.txt,.md,.csv,.tsv,.json,.rtf,.vtt,.srt';
+
+  function ligarDocumentos(dlg, idArquivo, idTexto) {
+    const entrada = dlg.querySelector('[name="' + idArquivo + '"]');
+    const caixa = dlg.querySelector('[name="' + idTexto + '"]');
+    if (!entrada || !caixa) return;
+
+    entrada.setAttribute('multiple', 'multiple');
+    entrada.setAttribute('accept', ACEITA_DOCUMENTOS);
+
+    const estado = document.createElement('small');
+    estado.className = 'origem';
+    if (entrada.parentNode) entrada.parentNode.appendChild(estado);
+
+    const docs = [];
+    dlg.documentosIA = docs;
+
+    entrada.addEventListener('change', function () {
+      const escolhidos = Array.prototype.slice.call(entrada.files || []);
+      if (!escolhidos.length) return;
+      estado.textContent = 'Lendo ' + escolhidos.length + ' arquivo' + (escolhidos.length > 1 ? 's' : '') + '…';
+
+      global.IADDocumentos.lerVarios(escolhidos).then(function (lidos) {
+        lidos.forEach(function (d, i) { d.arquivo = escolhidos[i]; docs.push(d); });
+        dlg.documentosIA = docs;
+        entrada.value = '';                       /* deixa reescolher o mesmo arquivo */
+
+        const blocos = lidos.filter(function (d) { return d.texto; })
+          .map(function (d) { return '=== ' + d.nome + ' ===\n' + d.texto; });
+        if (blocos.length) {
+          caixa.value = [caixa.value.trim(), blocos.join('\n\n')].filter(Boolean).join('\n\n');
+          caixa.dispatchEvent(new Event('input'));
+        }
+
+        const ruins = lidos.filter(function (d) { return d.erro; });
+        estado.textContent = ruins.length
+          ? ruins.map(function (d) { return d.nome + ': ' + d.erro; }).join(' · ')
+          : docs.length + ' documento' + (docs.length > 1 ? 's' : '') + ' lido' + (docs.length > 1 ? 's' : '') + '.';
+      });
+    });
+  }
+
   function ligarIA(dlg, campos) {
     campos.forEach(function (c) {
       if (c.tipo !== 'ia') return;
@@ -499,6 +553,7 @@
   }
 
   global.IADUI = {
+    ligarDocumentos: ligarDocumentos,
     /* O link do aviso leva para outra tela, e o diálogo modal ficaria por
        cima dela. Fechar antes de navegar é o mínimo. */
     fecharDialogos: function () {

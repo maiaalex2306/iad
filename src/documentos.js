@@ -254,7 +254,9 @@
     const ext = extensao(arquivo.name);
 
     if (['txt', 'md', 'csv', 'tsv', 'vtt', 'srt', 'json', 'rtf'].indexOf(ext) !== -1) {
-      return arquivo.text().then(cortar);
+      return arquivo.text().then(function (t) {
+        return cortar(ext === 'vtt' || ext === 'srt' ? limparLegenda(t) : t);
+      });
     }
     return arquivo.arrayBuffer().then(function (buffer) {
       if (ext === 'pdf') return lerPdf(buffer);
@@ -264,6 +266,18 @@
       if (ext === 'pptx') return lerPptx(zip);
       throw new Error('Não sei ler arquivos .' + ext + '.');
     }).then(cortar);
+  }
+
+  /* Legenda tem uma linha de tempo a cada fala. Sem limpar, metade do que a
+     IA lê é "00:04:12.480 --> 00:04:15.120" — e a cota do documento se gasta
+     em carimbo de relógio, não no que o cliente disse. */
+  function limparLegenda(texto) {
+    return String(texto || '')
+      .replace(/^WEBVTT.*$/gm, '')
+      .replace(/^\d+\s*$/gm, '')
+      .replace(/^\d{2}:\d{2}:\d{2}[.,]\d{3}\s*-->.*$/gm, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
   }
 
   function cortar(t) {

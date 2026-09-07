@@ -1256,34 +1256,29 @@
       U.formulario('Analisar reunião ou documento', [
         { id: 'texto', rotulo: 'Cole a transcrição, a ata ou suas anotações', tipo: 'textarea', voz: true,
           placeholder: 'Cole aqui a transcrição do Meet, o resumo automático da call ou o que você anotou durante a reunião.' },
-        { id: 'arquivo', rotulo: 'Ou escolha um arquivo de texto (.txt, .md, .vtt, .srt)', tipo: 'file' }
-      ], {}, function (d) {
+        { id: 'arquivo', rotulo: 'Ou carregue documentos (Word, PDF, Excel, PowerPoint, texto) — pode escolher vários', tipo: 'file' }
+      ], {}, function (d, docs) {
         if (!d.texto || d.texto.length < 60) {
           alert('Preciso de mais texto para separar as evidências.');
           return;
         }
-        App.processarReuniao(opId, d.texto);
+        App.processarReuniao(opId, d.texto, null, docs);
       }, function (dlg) {
-        /* O arquivo não é anexado: ele é lido para dentro da caixa, onde a
-           pessoa vê exatamente o que vai ser enviado ao assistente. */
-        const entrada = dlg.querySelector('[name="arquivo"]');
-        const caixa = dlg.querySelector('[name="texto"]');
-        if (!entrada) return;
-        entrada.setAttribute('accept', '.txt,.md,.vtt,.srt,.csv,.log,text/*');
-        entrada.addEventListener('change', function () {
-          const arquivo = entrada.files && entrada.files[0];
-          if (!arquivo) return;
-          IA.lerTexto(arquivo).then(function (t) {
-            caixa.value = t;
-            caixa.dispatchEvent(new Event('input'));
-          }).catch(function (e) { alert(e.message); });
-        });
+        /* Os documentos são lidos para dentro da caixa, onde a pessoa vê
+           exatamente o que vai ser enviado ao assistente — e ficam guardados
+           para serem anexados à oportunidade depois. */
+        U.ligarDocumentos(dlg, 'arquivo', 'texto');
       });
     },
 
-    processarReuniao: function (opId, texto, relerNotas) {
+    processarReuniao: function (opId, texto, relerNotas, docs) {
       const op = Store.oportunidade(opId);
       if (!op) return;
+      /* A ata que a IA acabou de ler fica anexada ao negócio, como no RD
+         Station: ler é momento, anexar é memória. Sem isto, quem carregou o
+         .docx da reunião ficava só com as evidências e perdia o documento. */
+      anexarAoRegistro(docs, { oportunidadeId: opId, contaId: op.contaId,
+        categoria: 'Ata de reunião' });
       const aviso = document.createElement('dialog');
       aviso.innerHTML = '<div class="corpo"><h2>Lendo a reunião…</h2>' +
         '<p class="small muted">Separando o que o cliente fez, por decisão. Leva alguns segundos.</p></div>';
@@ -1471,12 +1466,12 @@
       U.formulario(tarefa ? 'Fechar: ' + tarefa.titulo : 'Registrar reunião', [
         { id: 'texto', rotulo: 'Cole a ata, a transcrição ou o que aconteceu', tipo: 'textarea', voz: true,
           placeholder: 'Cole aqui o resumo automático da call, a transcrição ou suas anotações.' },
-        { id: 'arquivo', rotulo: 'Ou escolha um arquivo de texto (.txt, .md, .vtt, .srt)', tipo: 'file' },
+        { id: 'arquivo', rotulo: 'Ou carregue documentos (Word, PDF, Excel, PowerPoint, texto) — pode escolher vários', tipo: 'file' },
         { id: 'compromissoTexto', rotulo: 'Próximo passo combinado' },
         { id: 'compromissoData', rotulo: 'Para quando', tipo: 'date' },
         { id: 'compromissoDono', rotulo: 'A vez é de quem', tipo: 'select',
           opcoes: [{ valor: 'cliente', rotulo: 'Do cliente' }, { valor: 'nos', rotulo: 'Nossa' }] }
-      ], {}, function (d) {
+      ], {}, function (d, docs) {
         /* O compromisso e o fechamento da tarefa não dependem da IA: são
            fatos que o vendedor acabou de informar. Gravam primeiro. */
         if (d.compromissoData) {
@@ -1492,23 +1487,13 @@
 
         if (!d.texto || d.texto.length < 60) {
           if (d.texto) alert('Texto curto demais para eu separar evidências. O resto foi gravado.');
+          anexarAoRegistro(docs, { oportunidadeId: opId, contaId: op.contaId, categoria: 'Ata de reunião' });
           render();
           return;
         }
-        App.processarReuniao(opId, d.texto, true);
+        App.processarReuniao(opId, d.texto, true, docs);
       }, function (dlg) {
-        const entrada = dlg.querySelector('[name="arquivo"]');
-        const caixa = dlg.querySelector('[name="texto"]');
-        if (!entrada) return;
-        entrada.setAttribute('accept', '.txt,.md,.vtt,.srt,.csv,.log,text/*');
-        entrada.addEventListener('change', function () {
-          const arquivo = entrada.files && entrada.files[0];
-          if (!arquivo) return;
-          IA.lerTexto(arquivo).then(function (t) {
-            caixa.value = t;
-            caixa.dispatchEvent(new Event('input'));
-          }).catch(function (e) { alert(e.message); });
-        });
+        U.ligarDocumentos(dlg, 'arquivo', 'texto');
       });
     },
 
@@ -1572,10 +1557,13 @@
             /* Anexo de texto guarda muito mais do que "chegou um documento":
                guarda o que o cliente disse. Em vez de exigir que a pessoa
                lembre de analisar depois, o convite aparece na hora. */
-            if (IA.disponivel() && IA.ehTexto(arquivo)) {
+            if (IA.disponivel() && global.IADDocumentos.aceito(arquivo)) {
               if (U.confirmar('Quer que eu leia “' + arquivo.name + '” e separe as evidências desta reunião?')) {
-                IA.lerTexto(arquivo)
-                  .then(function (t) { App.processarReuniao(opId, t); })
+                global.IADDocumentos.ler(arquivo)
+                  .then(function (t) {
+                    if (!t || t.length < 60) { alert('Não consegui tirar texto legível deste arquivo.'); return; }
+                    App.processarReuniao(opId, t);
+                  })
                   .catch(function (e) { alert(e.message); });
               }
             }
