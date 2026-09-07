@@ -852,7 +852,7 @@
          completo, e mesmo assim a evidência nasce com um canal atrás dela. */
       const abre = clicavel
         ? ' onclick="App.novaTarefa(\'' + op.id + '\',\'' + d.id +
-          '\',{situacao:\'feita\',comoContar:\'evidencia\',titulo:\'' + esc(d.nome) + '\'})"'
+          '\',{situacao:\'feita\',evidenciaDireta:\'sim\',titulo:\'' + esc(d.nome) + '\'})"'
         : '';
       return '<button class="celula tem-ajuda ' + classe + '"' + abre + '>' +
         '<span class="marca">' + marca + '</span>' +

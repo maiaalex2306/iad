@@ -1259,7 +1259,7 @@
       });
     },
 
-    processarReuniao: function (opId, texto, relerNotas, docs) {
+    processarReuniao: function (opId, texto, relerNotas, docs, depois) {
       const op = Store.oportunidade(opId);
       if (!op) return;
       /* A ata que a IA acabou de ler fica anexada ao negócio, como no RD
@@ -1276,12 +1276,18 @@
       IA.analisarReuniao(texto, IA.contextoDaOportunidade(op)).then(function (r) {
         aviso.close();
         aviso.remove();
-        if (!r) { alert('Não consegui falar com o assistente agora. Tente de novo em instantes.'); return; }
-        if (!r.evidencias.length) {
-          alert('Li o texto e não encontrei nada que o CLIENTE tenha feito. Atividade nossa não conta como evidência.');
+        if (!r) {
+          alert('Não consegui falar com o assistente agora. Tente de novo em instantes.');
+          if (depois) depois();
           return;
         }
-        App.aplicarLeituraDaIA(opId, r, relerNotas ? texto : null);
+        if (!r.evidencias.length) {
+          alert('Li o texto e não encontrei nada que o CLIENTE tenha feito. Atividade nossa não conta como evidência.');
+          render();
+          if (depois) depois();
+          return;
+        }
+        App.aplicarLeituraDaIA(opId, r, relerNotas ? texto : null, depois);
       });
     },
 
@@ -1304,7 +1310,7 @@
 
        O que a pessoa recebe é o relatório do que mudou, com uma porta para
        ajustar. Ler não é trabalho; preencher é. */
-    aplicarLeituraDaIA: function (opId, resultado, textoParaNotas) {
+    aplicarLeituraDaIA: function (opId, resultado, textoParaNotas, depois) {
       const op = Store.oportunidade(opId);
       if (!op) return;
 
@@ -1334,7 +1340,7 @@
       });
 
       render();
-      relerAsOito(opId, textoParaNotas, { evidencias: evidencias, pessoas: pessoas });
+      relerAsOito(opId, textoParaNotas, { evidencias: evidencias, pessoas: pessoas }, depois);
     },
 
     removerEvento: function (opId, evId) {
@@ -1379,9 +1385,10 @@
       const r = E.resumo(op);
       const o = opcoes || {};
       const PERGUNTAS = P.FECHAMENTO_REUNIAO.map(function (q) { return 'q_' + q.id; });
-      const DA_ATA = ['relato', 'arquivo'];
-      const DO_RELATO = ['secaoRelato', 'feitaEm', 'comoContar',
-        'compromissoTexto', 'compromissoData', 'compromissoDono'];
+      /* Tudo o que só faz sentido depois de a tarefa ter acontecido. Os
+         documentos NÃO estão nesta lista: ficam visíveis sempre. */
+      const DO_RELATO = ['secaoRelato', 'feitaEm', 'relato', 'evidenciaDireta',
+        'compromissoTexto', 'compromissoData', 'compromissoDono'].concat(PERGUNTAS);
 
       const campos = [
         { id: 'titulo', rotulo: 'O que fazer', padrao: o.titulo || '' },
@@ -1390,6 +1397,13 @@
         { id: 'situacao', rotulo: 'Situação', tipo: 'select', largura: 'metade',
           padrao: o.situacao || 'afazer',
           opcoes: [{ valor: 'afazer', rotulo: 'A fazer' }, { valor: 'feita', rotulo: 'Já foi feita' }] },
+        /* O anexo fica aqui em cima e nunca some. É o material que carrega a
+           informação — proposta, ata, planilha de consumo, dossiê — e escondê-lo
+           atrás de uma escolha era escondê-lo de quem mais precisa dele. Se a
+           tarefa já foi feita, a IA lê o conteúdo junto com o que foi digitado;
+           em qualquer caso os arquivos ficam anexados ao negócio. */
+        { id: 'arquivo', tipo: 'file',
+          rotulo: 'Documentos (Word, PDF, Excel, PowerPoint, texto) — pode escolher vários' },
         {
           id: 'decisaoAlvo', rotulo: 'Decisão que pretende provocar', tipo: 'select',
           padrao: decisaoAlvo || (r.nbd.dimensao ? r.nbd.dimensao.id : 'problema'),
@@ -1399,68 +1413,15 @@
         { id: 'vencimento', rotulo: 'Para quando', tipo: 'date', padrao: Store.hoje() },
 
         { id: 'secaoRelato', tipo: 'secao', rotulo: 'O que aconteceu',
-          ajuda: 'É aqui que a decisão anda. O assistente lê o material, separa o que o CLIENTE fez e relê as oito decisões — atividade nossa não conta como evidência.' },
+          ajuda: 'O assistente lê tudo junto — o que você escreveu e o conteúdo dos documentos anexados acima — separa o que o CLIENTE fez e relê as oito decisões. Preencha o que tiver; nada aqui é obrigatório.' },
         { id: 'feitaEm', rotulo: 'Quando foi feita', tipo: 'date', padrao: Store.hoje(), largura: 'metade' },
-        { id: 'comoContar', rotulo: 'Como quer contar', tipo: 'select', largura: 'metade',
-          padrao: o.comoContar || 'ata', opcoes: [
-            { valor: 'ata', rotulo: 'Colar a ata ou anexar documentos' },
-            { valor: 'perguntas', rotulo: 'Responder quatro perguntas' },
-            { valor: 'evidencia', rotulo: 'Registrar uma evidência direta' },
-            { valor: 'nada', rotulo: 'Nada a registrar — só concluir' }
-          ] },
-        { id: 'relato', rotulo: 'Cole a ata, a transcrição ou o que aconteceu', tipo: 'textarea', voz: true,
-          placeholder: 'Cole aqui o resumo automático da call, a transcrição ou suas anotações.' },
-        { id: 'arquivo', rotulo: 'Ou carregue documentos (Word, PDF, Excel, PowerPoint, texto) — pode escolher vários', tipo: 'file' }
+        { id: 'relato', rotulo: 'Cole a ata, a transcrição ou conte o que aconteceu', tipo: 'textarea', voz: true,
+          placeholder: 'Cole aqui o resumo automático da call, a transcrição ou suas anotações. Some ao conteúdo dos documentos anexados acima.' }
       ];
 
-      /* O método na hora de fazer a tarefa, e não numa tela que ninguém abre.
-
-     A pergunta da decisão, o que conta como evidência dela e o que fazer no
-     canal escolhido — os três mudam junto com os dois selects logo acima.
-     Escrever a teoria só no Playbook é escrever para quem já sabe: quem
-     precisa dela está aqui, criando a tarefa, decidindo o que vai falar. */
-  function ligarPainelDeMetodo(dlg) {
-    const caixa = dlg.querySelector('[data-metodo]');
-    const alvo = dlg.querySelector('[name="decisaoAlvo"]');
-    const canal = dlg.querySelector('[name="tipo"]');
-    if (!caixa || !alvo) return;
-
-    /* Os canais do playbook são quatro; os tipos de tarefa são nove e o
-       usuário cria os dele. O de-para leva cada tipo ao conselho mais
-       próximo, e o que não tem correspondência cai no de e-mail, que é o
-       mais genérico dos quatro. */
-    const PARA_CANAL = {
-      'WhatsApp': 'whatsapp', 'Telefonema': 'whatsapp', 'Reunião': 'whatsapp', 'Visita': 'whatsapp',
-      'E-mail': 'email', 'Proposta': 'email', 'Apresentação': 'email',
-      'LinkedIn': 'linkedin', 'Preparação': 'linkedin', 'Cobrar retorno': 'whatsapp'
-    };
-
-    const pintar = function () {
-      const d = P.DIMENSOES.filter(function (x) { return x.id === alvo.value; })[0];
-      if (!d) { caixa.innerHTML = ''; return; }
-      const tipo = canal ? canal.value : '';
-      const chave = PARA_CANAL[tipo] || 'email';
-      const nomeCanal = (P.CANAIS.filter(function (c) { return c.id === chave; })[0] || {}).nome || '';
-      caixa.innerHTML = '<div class="metodo-tarefa">' +
-        '<span class="rotulo">Como esta tarefa faz ' + U.esc(d.nome) + ' andar</span>' +
-        '<p class="pergunta">' + U.esc(d.pergunta) + '</p>' +
-        (tipo ? '<p class="conselho"><strong>' + U.esc(tipo) + '</strong> — ' +
-          U.esc(d.canais[chave]) + ' <em>(cadência de ' + U.esc(nomeCanal) + ')</em></p>' : '') +
-        '<p class="conta"><strong>Conta como evidência:</strong> ' +
-        U.esc(d.evidencias.slice(0, 3).join(' · ')) + '</p>' +
-        '<p class="tiny muted">Para a nota 2 a evidência precisa ser confirmada ou documentada. ' +
-        'O que nós fizemos — apresentar, propor, cobrar — não conta.</p>' +
-        '</div>';
-    };
-
-    alvo.addEventListener('change', pintar);
-    if (canal) canal.addEventListener('change', pintar);
-    pintar();
-  }
-
-  /* As quatro perguntas fechadas do fim de reunião. Cada "sim" vira
+      /* As quatro perguntas fechadas do fim de reunião. Cada "sim" vira
          evidência sem digitação — é o caminho de quem está no carro depois da
-         visita e não vai colar transcrição nenhuma. */
+         visita. Somam ao que veio da ata, não substituem. */
       P.FECHAMENTO_REUNIAO.forEach(function (q) {
         campos.push({ id: 'q_' + q.id, rotulo: q.pergunta, tipo: 'select', opcoes: OPCOES_SIM_NAO });
       });
@@ -1469,76 +1430,56 @@
         { id: 'compromissoTexto', rotulo: 'Próximo passo combinado' },
         { id: 'compromissoData', rotulo: 'Para quando', tipo: 'date', largura: 'metade' },
         { id: 'compromissoDono', rotulo: 'A vez é de quem', tipo: 'select', largura: 'metade',
-          opcoes: [{ valor: 'cliente', rotulo: 'Do cliente' }, { valor: 'nos', rotulo: 'Nossa' }] }
+          opcoes: [{ valor: 'cliente', rotulo: 'Do cliente' }, { valor: 'nos', rotulo: 'Nossa' }] },
+        { id: 'evidenciaDireta', rotulo: 'Quer registrar também uma evidência específica?',
+          tipo: 'select', padrao: o.evidenciaDireta || 'nao', opcoes: OPCOES_SIM_NAO }
       );
 
       U.formulario('Nova tarefa', campos, {}, function (d, docs) {
         if (!d.titulo) return;
         const feita = d.situacao === 'feita';
         const quando = feita ? (d.feitaEm || Store.hoje()) : (d.vencimento || Store.hoje());
-        const temRelato = feita && d.comoContar === 'ata' && d.relato && d.relato.length >= 60;
 
         const tarefa = Store.criarTarefa({
           oportunidadeId: opId, titulo: d.titulo, tipo: d.tipo,
           decisaoAlvo: d.decisaoAlvo, vencimento: quando,
           origem: feita ? 'registrada' : 'planejada'
         });
-        if (!feita) { render(); return; }
-
-        Store.concluirTarefa(tarefa.id, quando, temRelato);
-        const respondidas = feita && d.comoContar === 'perguntas'
-          ? gravarPerguntasDoFim(op, d, quando) : 0;
-        registrarFechamento(op, d, temRelato ? null : docs);
-
-        if (temRelato) { App.processarReuniao(opId, d.relato, true, docs); return; }
-        if (d.comoContar === 'ata' && d.relato) {
-          alert('Texto curto demais para eu separar evidências. A tarefa e o resto foram gravados.');
+        /* Tarefa a fazer também guarda o material: a proposta que vou enviar
+           fica anexada ao negócio desde já. */
+        if (!feita) {
+          anexarAoRegistro(docs, { oportunidadeId: opId, contaId: op.contaId, categoria: 'Outro' });
+          render();
+          return;
         }
-        render();
-        if (respondidas) relerAsOito(opId, '', { evidencias: respondidas });
-        /* A evidência direta abre depois de a tarefa existir: assim ela nasce
-           com o canal e a data da tarefa, e não solta no ar. */
-        if (d.comoContar === 'evidencia') {
-          App.novaEvidencia(opId, null, d.decisaoAlvo, { canal: d.tipo, data: quando });
-        }
+        concluirComOQueAconteceu(op, tarefa.id, d, docs, d.decisaoAlvo);
       }, function (dlg) {
         U.ligarDocumentos(dlg, 'arquivo', 'relato');
         ligarPainelDeMetodo(dlg);
         const situacao = dlg.querySelector('[name="situacao"]');
-        const comoContar = dlg.querySelector('[name="comoContar"]');
         const ajustar = function () {
           const feita = situacao.value === 'feita';
           U.mostrarCampos(dlg, DO_RELATO, feita);
           U.mostrarCampos(dlg, ['vencimento'], !feita);
-          U.mostrarCampos(dlg, DA_ATA, feita && comoContar.value === 'ata');
-          U.mostrarCampos(dlg, PERGUNTAS, feita && comoContar.value === 'perguntas');
         };
         situacao.addEventListener('change', ajustar);
-        comoContar.addEventListener('change', ajustar);
         ajustar();
       });
     },
 
-    /* Concluir uma tarefa que já estava aberta: as mesmas quatro portas do
-       "já foi feita", sem repetir o que a tarefa já sabe (título, canal,
-       decisão-alvo). */
+    /* Concluir uma tarefa que já estava aberta. Mesmos campos do "já foi
+       feita", sem repetir o que a tarefa já sabe (título, canal, decisão). */
     concluirComRelato: function (opId, tarefaId) {
       const op = Store.oportunidade(opId);
       const tarefa = Store.dados().tarefas.filter(function (t) { return t.id === tarefaId; })[0];
       if (!op || !tarefa) return;
-      const PERGUNTAS = P.FECHAMENTO_REUNIAO.map(function (q) { return 'q_' + q.id; });
 
       const campos = [
         { id: 'feitaEm', rotulo: 'Quando foi feita', tipo: 'date', padrao: Store.hoje(), largura: 'metade' },
-        { id: 'comoContar', rotulo: 'Como quer contar', tipo: 'select', largura: 'metade', opcoes: [
-          { valor: 'ata', rotulo: 'Colar a ata ou anexar documentos' },
-          { valor: 'perguntas', rotulo: 'Responder quatro perguntas' },
-          { valor: 'evidencia', rotulo: 'Registrar uma evidência direta' },
-          { valor: 'nada', rotulo: 'Nada a registrar — só concluir' }
-        ] },
-        { id: 'relato', rotulo: 'Cole a ata, a transcrição ou o que aconteceu', tipo: 'textarea', voz: true,
-          placeholder: 'Cole aqui o resumo automático da call, a transcrição ou suas anotações.' },
-        { id: 'arquivo', rotulo: 'Ou carregue documentos (Word, PDF, Excel, PowerPoint, texto) — pode escolher vários', tipo: 'file' }
+        { id: 'arquivo', tipo: 'file',
+          rotulo: 'Documentos (Word, PDF, Excel, PowerPoint, texto) — pode escolher vários' },
+        { id: 'relato', rotulo: 'Cole a ata, a transcrição ou conte o que aconteceu', tipo: 'textarea', voz: true,
+          placeholder: 'Cole aqui o resumo automático da call, a transcrição ou suas anotações. Some ao conteúdo dos documentos anexados acima.' }
       ];
       P.FECHAMENTO_REUNIAO.forEach(function (q) {
         campos.push({ id: 'q_' + q.id, rotulo: q.pergunta, tipo: 'select', opcoes: OPCOES_SIM_NAO });
@@ -1547,36 +1488,16 @@
         { id: 'compromissoTexto', rotulo: 'Próximo passo combinado' },
         { id: 'compromissoData', rotulo: 'Para quando', tipo: 'date', largura: 'metade' },
         { id: 'compromissoDono', rotulo: 'A vez é de quem', tipo: 'select', largura: 'metade',
-          opcoes: [{ valor: 'cliente', rotulo: 'Do cliente' }, { valor: 'nos', rotulo: 'Nossa' }] }
+          opcoes: [{ valor: 'cliente', rotulo: 'Do cliente' }, { valor: 'nos', rotulo: 'Nossa' }] },
+        { id: 'evidenciaDireta', rotulo: 'Quer registrar também uma evidência específica?',
+          tipo: 'select', opcoes: OPCOES_SIM_NAO }
       );
 
       U.formulario('Concluir: ' + tarefa.titulo, campos, {}, function (d, docs) {
-        const quando = d.feitaEm || Store.hoje();
-        const temRelato = d.comoContar === 'ata' && d.relato && d.relato.length >= 60;
         d.tipo = tarefa.tipo;
-
-        Store.concluirTarefa(tarefaId, quando, temRelato);
-        const respondidas = d.comoContar === 'perguntas' ? gravarPerguntasDoFim(op, d, quando) : 0;
-        registrarFechamento(op, d, temRelato ? null : docs);
-
-        if (temRelato) { App.processarReuniao(opId, d.relato, true, docs); return; }
-        if (d.comoContar === 'ata' && d.relato) {
-          alert('Texto curto demais para eu separar evidências. A tarefa e o resto foram gravados.');
-        }
-        render();
-        if (respondidas) relerAsOito(opId, '', { evidencias: respondidas });
-        if (d.comoContar === 'evidencia') {
-          App.novaEvidencia(opId, null, tarefa.decisaoAlvo, { canal: tarefa.tipo, data: quando });
-        }
+        concluirComOQueAconteceu(op, tarefaId, d, docs, tarefa.decisaoAlvo);
       }, function (dlg) {
         U.ligarDocumentos(dlg, 'arquivo', 'relato');
-        const comoContar = dlg.querySelector('[name="comoContar"]');
-        const ajustar = function () {
-          U.mostrarCampos(dlg, ['relato', 'arquivo'], comoContar.value === 'ata');
-          U.mostrarCampos(dlg, PERGUNTAS, comoContar.value === 'perguntas');
-        };
-        comoContar.addEventListener('change', ajustar);
-        ajustar();
       });
     },
 
@@ -2679,6 +2600,95 @@
     return partes.join('\n');
   }
 
+  /* O método na hora de fazer a tarefa, e não numa tela que ninguém abre.
+
+     A pergunta da decisão, o que conta como evidência dela e o que fazer no
+     canal escolhido — os três mudam junto com os dois selects logo acima.
+     Escrever a teoria só no Playbook é escrever para quem já sabe: quem
+     precisa dela está aqui, criando a tarefa, decidindo o que vai falar. */
+  function ligarPainelDeMetodo(dlg) {
+    const caixa = dlg.querySelector('[data-metodo]');
+    const alvo = dlg.querySelector('[name="decisaoAlvo"]');
+    const canal = dlg.querySelector('[name="tipo"]');
+    if (!caixa || !alvo) return;
+
+    /* Os canais do playbook são quatro; os tipos de tarefa são nove e o
+       usuário cria os dele. O de-para leva cada tipo ao conselho mais
+       próximo, e o que não tem correspondência cai no de e-mail, que é o
+       mais genérico dos quatro. */
+    const PARA_CANAL = {
+      'WhatsApp': 'whatsapp', 'Telefonema': 'whatsapp', 'Reunião': 'whatsapp', 'Visita': 'whatsapp',
+      'E-mail': 'email', 'Proposta': 'email', 'Apresentação': 'email',
+      'LinkedIn': 'linkedin', 'Preparação': 'linkedin', 'Cobrar retorno': 'whatsapp'
+    };
+
+    const pintar = function () {
+      const d = P.DIMENSOES.filter(function (x) { return x.id === alvo.value; })[0];
+      if (!d) { caixa.innerHTML = ''; return; }
+      const tipo = canal ? canal.value : '';
+      const chave = PARA_CANAL[tipo] || 'email';
+      const nomeCanal = (P.CANAIS.filter(function (c) { return c.id === chave; })[0] || {}).nome || '';
+      caixa.innerHTML = '<div class="metodo-tarefa">' +
+        '<span class="rotulo">Como esta tarefa faz ' + U.esc(d.nome) + ' andar</span>' +
+        '<p class="pergunta">' + U.esc(d.pergunta) + '</p>' +
+        (tipo ? '<p class="conselho"><strong>' + U.esc(tipo) + '</strong> — ' +
+          U.esc(d.canais[chave]) + ' <em>(cadência de ' + U.esc(nomeCanal) + ')</em></p>' : '') +
+        '<p class="conta"><strong>Conta como evidência:</strong> ' +
+        U.esc(d.evidencias.slice(0, 3).join(' · ')) + '</p>' +
+        '<p class="tiny muted">Para a nota 2 a evidência precisa ser confirmada ou documentada. ' +
+        'O que nós fizemos — apresentar, propor, cobrar — não conta.</p>' +
+        '</div>';
+    };
+
+    alvo.addEventListener('change', pintar);
+    if (canal) canal.addEventListener('change', pintar);
+    pintar();
+  }
+
+  /* O fecho de uma tarefa, venha ele do formulário de criar ou do de concluir.
+
+     Tudo aqui é aditivo, e é essa a diferença: antes o vendedor tinha de
+     escolher UM modo de contar — ata, ou perguntas, ou evidência — e quem
+     tinha a ata E queria responder as perguntas não podia. Agora ele preenche
+     o que tem, e o que estiver preenchido conta.
+
+     O texto que vai para a IA é o que ele digitou MAIS o conteúdo dos
+     documentos que anexou: a caixa de documentos escreve o texto de cada
+     arquivo dentro do campo de relato, anunciado pelo nome do arquivo, e é
+     esse conjunto que o assistente lê. São os documentos que trazem a
+     informação — proposta, dossiê, planilha de consumo —, e ler só o que foi
+     digitado seria jogar fora justamente a parte mais rica. */
+  function concluirComOQueAconteceu(op, tarefaId, d, docs, dimensaoAlvo) {
+    const quando = d.feitaEm || Store.hoje();
+    const temRelato = !!(d.relato && d.relato.length >= 60);
+
+    Store.concluirTarefa(tarefaId, quando, temRelato);
+
+    /* As perguntas entram antes da leitura da ata: assim a releitura das oito
+       — que acontece no fim — já enxerga as evidências que elas produziram. */
+    const respondidas = gravarPerguntasDoFim(op, d, quando);
+    registrarFechamento(op, d, temRelato ? null : docs);
+
+    const depois = function () {
+      if (d.evidenciaDireta === 'sim') {
+        App.novaEvidencia(op.id, null, dimensaoAlvo, { canal: d.tipo, data: quando });
+      }
+    };
+
+    if (temRelato) {
+      /* processarReuniao anexa os documentos, aplica as evidências e relê as
+         oito. A evidência direta espera o fim disso para não abrir por cima. */
+      App.processarReuniao(op.id, d.relato, true, docs, depois);
+      return;
+    }
+    if (d.relato) {
+      alert('Texto curto demais para eu separar evidências. A tarefa, os documentos e o resto foram gravados.');
+    }
+    render();
+    if (respondidas) { relerAsOito(op.id, '', { evidencias: respondidas }, depois); return; }
+    depois();
+  }
+
   /* As quatro perguntas fechadas do fim de reunião. Cada "sim" vira evidência
      do cliente na dimensão da pergunta — sem digitação, que é o ponto: quem
      acabou a visita responde quatro selects, não escreve uma ata.
@@ -2703,15 +2713,18 @@
      caminho sem digitação gravava a evidência e deixava o índice parado —
      e quem respondeu "sim, entrou alguém novo" vai olhar o mapa esperando
      ver Stakeholders andar. */
-  function relerAsOito(opId, textoExtra, jaFeito) {
+  function relerAsOito(opId, textoExtra, jaFeito, depois) {
     const base = jaFeito || {};
-    if (!IA.disponivel()) { if (base.evidencias || base.pessoas) mostrarResumo(opId, base, [], []); return; }
     const atual = Store.oportunidade(opId);
-    if (!atual) return;
+    if (!IA.disponivel() || !atual) {
+      if (base.evidencias || base.pessoas) mostrarResumo(opId, base, [], [], depois);
+      else if (depois) depois();
+      return;
+    }
     IA.sugerirNotas(atual, E.resumo(atual), textoExtra || '').then(function (decisoes) {
       const mudancas = aplicarNotasDaIA(opId, decisoes || []);
       render();
-      mostrarResumo(opId, base, mudancas, decisoes || []);
+      mostrarResumo(opId, base, mudancas, decisoes || [], depois);
     });
   }
 
@@ -2743,10 +2756,9 @@
 
   /* O relatório do que entrou. Não é uma tela de conferência: não há nada
      para marcar. Fica a porta de ajuste, para quem discordar. */
-  function mostrarResumo(opId, base, mudancas, decisoes) {
+  function mostrarResumo(opId, base, mudancas, decisoes, depois) {
     const op = Store.oportunidade(opId);
-    if (!op) return;
-    if (!base.evidencias && !base.pessoas && !mudancas.length) return;
+    if (!op || (!base.evidencias && !base.pessoas && !mudancas.length)) { if (depois) depois(); return; }
     const dlg = document.createElement('dialog');
     dlg.className = 'revisao-ia';
     dlg.innerHTML = V.resumoDaLeitura(op, base, mudancas);
@@ -2756,7 +2768,8 @@
       dlg.remove();
       /* Discordar é a única coisa que ainda pede um clique — e é a tela que
          já existia, com as oito e o motivo de cada uma. */
-      if (ajustar) App.revisarNotas(opId, decisoes || []);
+      if (ajustar) { App.revisarNotas(opId, decisoes || []); return; }
+      if (depois) depois();
     });
     dlg.showModal();
   }
