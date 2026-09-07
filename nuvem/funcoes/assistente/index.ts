@@ -274,6 +274,14 @@ Tarefa: o vendedor descreveu uma oportunidade nova. Extraia o que dá para cadas
 
 Campos: titulo, empresaNova, segmento, tipo, concorrentes, contatoNome, contatoCargo, contatoPapel, contatoPerfil.
 
+Devolva também, quando o material permitir:
+- "empresa": objeto com a ficha da empresa cliente — nome, razaoSocial, cnpj,
+  segmento, descricao, necessidades, telefone, porte, cidade, uf, pais, site,
+  linkedin. Mesmas regras da ficha de empresa: nada inventado, segmento só da
+  lista fechada.
+- "contatos": lista das pessoas DA EMPRESA CLIENTE citadas, com nome, cargo,
+  email, telefone e area. Quem assina o documento do nosso lado não entra.
+
 - titulo: nome curto da oportunidade, combinando a empresa e o que está sendo vendido.
 - empresaNova: nome da empresa cliente.
 - segmento: ${segmentos ? `um destes, exatamente: ${segmentos}` : 'omita — não há segmentos cadastrados'}. Nunca invente.
@@ -635,7 +643,19 @@ function validar(tipo: string, bruto: Record<string, unknown>, ctx: Record<strin
   }
 
   const saidaFinal: Record<string, unknown> = { campos: saida, frases: frases };
-  if (tipo === 'conta') saidaFinal.contatos = validarContatos(bruto.contatos, ctx);
+  if (tipo === 'conta' || tipo === 'oportunidade') {
+    saidaFinal.contatos = validarContatos(bruto.contatos, ctx);
+  }
+  /* A oportunidade traz junto a ficha da empresa. Quem descreve um negócio
+     descreve o cliente no mesmo fôlego — e obrigar a cadastrar a empresa numa
+     tela, os contatos noutra e o negócio numa terceira é transformar um gesto
+     em três. Validada com as regras da conta: mesmos limites, mesma lista
+     fechada de segmento, mesma recusa de invenção. */
+  if (tipo === 'oportunidade' && bruto.empresa && typeof bruto.empresa === 'object') {
+    const daEmpresa = validar('conta', bruto.empresa as Record<string, unknown>, ctx);
+    const campos = (daEmpresa as { campos: Record<string, string> }).campos;
+    if (campos && campos.nome) saidaFinal.empresa = campos;
+  }
   return saidaFinal;
 }
 

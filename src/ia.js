@@ -176,7 +176,9 @@
           'Voltou: ' + amostraDaResposta(r) };
       }
       return { campos: r.campos, frases: r.frases || {},
-        contatos: Array.isArray(r.contatos) ? r.contatos : [], cortado: cortado };
+        contatos: Array.isArray(r.contatos) ? r.contatos : [],
+        empresa: (r.empresa && typeof r.empresa === 'object') ? r.empresa : null,
+        cortado: cortado };
     });
   }
 

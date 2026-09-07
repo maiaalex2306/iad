@@ -972,16 +972,32 @@
          negócio abre sempre, e a empresa se cadastra de dentro dele — pelo
          próprio campo Empresa, que é onde ela olha ao perceber que falta. */
       const campos = camposOportunidade(contas, contaId);
-      U.formulario('Nova oportunidade', campos, valores || {}, function (d) {
+      U.formulario('Nova oportunidade', campos, valores || {}, function (d, docs, pessoas, empresaNova) {
         if (!d.titulo) return;
-        if (!d.contaId || d.contaId === NOVA_CONTA) {
+
+        /* A empresa que a IA achou e não existia entra aqui, se ficou marcada.
+           Antes do negócio, porque o negócio precisa do id dela. */
+        let alvo = d.contaId;
+        if ((!alvo || alvo === NOVA_CONTA) && empresaNova) {
+          alvo = Store.criarConta(empresaNova).id;
+        }
+        if (!alvo || alvo === NOVA_CONTA) {
           alert('Escolha a empresa deste negócio.\n\n' +
             'Se ela ainda não existe, use "+ Cadastrar nova empresa" no próprio campo.');
           return App.novaOportunidade(contaId, d);
         }
-        const op = Store.criarOportunidade(d);
+
+        const op = Store.criarOportunidade(Object.assign({}, d, { contaId: alvo }));
+        anexarAoRegistro(docs, { oportunidadeId: op.id, contaId: alvo });
+        const quantos = criarContatosPropostos(alvo, pessoas);
         location.hash = '#/op/' + op.id;
         render();
+        if (empresaNova || quantos) {
+          alert('Pronto:' +
+            (empresaNova ? '\n· empresa ' + empresaNova.nome + ' cadastrada' : '') +
+            (quantos ? '\n· ' + (quantos === 1 ? '1 contato' : quantos + ' contatos') + ' adicionados' : '') +
+            '\n· negócio criado.\n\nConfira o papel de cada pessoa na compra — é ele que alimenta a cobertura do grupo comprador.');
+        }
       }, function (dlg) {
         /* A opção "+ Nova empresa" no próprio select: é onde a pessoa está
            olhando quando descobre que a empresa não existe. */
@@ -2656,6 +2672,51 @@
 
   const NOVA_CONTA = '__nova_empresa__';
 
+  /* Depois de a IA ler o material, a empresa que ela achou já existe ou não.
+     Existindo, escolhemos — o vendedor não precisa procurar num select o nome
+     que ele acabou de ver na tela. Não existindo, oferecemos cadastrar junto,
+     com a ficha que ela montou. É o gesto único que o vendedor pediu: um
+     documento vira negócio, empresa e pessoas de uma vez.
+
+     Oferecemos, não fazemos: a empresa só nasce se a caixa ficar marcada. */
+  function resolverEmpresaDaIA(dlg, r, contas) {
+    const caixa = dlg.querySelector('[data-empresa-ia]');
+    if (!caixa) return;
+    const ficha = r.empresa || {};
+    const nome = String(ficha.nome || (r.campos && r.campos.empresaNova) || '').trim();
+    dlg.empresaNovaIA = null;
+    if (!nome) { caixa.innerHTML = ''; return; }
+
+    const chave = function (t) {
+      return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase().replace(/[^a-z0-9]/g, '');
+    };
+    const alvo = chave(nome);
+    const achada = contas.find(function (c) {
+      const k = chave(c.nome);
+      return k === alvo || (k.length >= 4 && alvo.length >= 4 && (k.indexOf(alvo) === 0 || alvo.indexOf(k) === 0));
+    });
+
+    const sel = dlg.querySelector('[name="contaId"]');
+    if (achada) {
+      if (sel) sel.value = achada.id;
+      caixa.innerHTML = '<p class="achou-empresa">Empresa reconhecida: <strong>' +
+        U.esc(achada.nome) + '</strong> — já cadastrada, e já escolhida acima.</p>';
+      return;
+    }
+
+    dlg.empresaNovaIA = Object.assign({}, ficha, { nome: nome });
+    const detalhe = [ficha.cidade, ficha.uf, ficha.cnpj, ficha.segmento].filter(Boolean).join(' · ');
+    caixa.innerHTML = '<label class="empresa-nova-ia">' +
+      '<input type="checkbox" checked data-cria-empresa>' +
+      '<span><strong>' + U.esc(nome) + '</strong> ainda não está cadastrada — cadastrar junto com o negócio.' +
+      (detalhe ? '<em>' + U.esc(detalhe) + '</em>' : '') + '</span></label>';
+    const marca = caixa.querySelector('[data-cria-empresa]');
+    marca.addEventListener('change', function () {
+      dlg.empresaNovaIA = marca.checked ? Object.assign({}, ficha, { nome: nome }) : null;
+    });
+  }
+
   /* O que já está digitado, para reabrir o formulário sem perder nada. Lê o
      que está na tela, não o que foi passado ao abrir: a pessoa pode ter
      mudado tudo antes de perceber que faltava a empresa. */
@@ -2794,13 +2855,15 @@
   function camposOportunidade(contas, contaPadrao) {
     return [
       { id: 'atalhoOp', tipo: 'ia', extrair: 'oportunidade',
-        rotulo: 'Descreva a oportunidade em uma frase',
-        placeholder: 'Ex.: Renovação do contrato de tratamento na Agro Verde; estão avaliando a Solmax também.',
+        rotulo: 'Cole, dite ou carregue o que você tem sobre este negócio',
+        placeholder: 'Ata da reunião, proposta, e-mail, planilha de consumo — a IA lê tudo e monta o negócio, a empresa e as pessoas de uma vez.',
         /* Valor, etapa e fechamento previsto são o pipeline e o diagnóstico.
            Se a IA mexer na etapa, ela apaga o alerta de "falso avançado". */
         nunca: ['valor', 'etapa', 'fechamentoPrevisto'],
-        contexto: function () { return IA.contextoDaConta(contaPadrao); } },
+        contexto: function () { return IA.contextoDaConta(contaPadrao); },
+        aoAplicar: function (dlg, r) { resolverEmpresaDaIA(dlg, r, contas); } },
       { id: 'titulo', rotulo: 'Título' },
+      { tipo: 'slot', slot: 'empresa-ia' },
       /* A opção de cadastrar vem sempre, e primeiro quando não há nenhuma:
          é a única coisa útil a fazer ali naquele momento. */
       { id: 'contaId', rotulo: 'Empresa', tipo: 'select',

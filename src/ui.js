@@ -116,6 +116,12 @@
       if (c.tipo === 'aviso') {
         return '<p class="nota-form">' + esc(c.rotulo) + '</p>';
       }
+      /* Espaço reservado que o formulário preenche depois — hoje, o que a IA
+         descobriu sobre a empresa. Fica no meio dos campos, e não no fim,
+         porque é ali que a pergunta "esta empresa existe?" aparece. */
+      if (c.tipo === 'slot') {
+        return '<div data-' + c.slot + '></div>';
+      }
       if (c.tipo === 'select') {
         return '<label class="campo' + (c.largura === 'metade' ? ' meia' : '') + '"><span>' + esc(c.rotulo) + '</span><select name="' + c.id + '">' +
           c.opcoes.map(function (o) {
@@ -174,7 +180,7 @@
             ? numeroDigitado(el.value)
             : el.value.trim();
         });
-        aoConfirmar(dados, dlg.documentosIA || [], dlg.contatosIA || []);
+        aoConfirmar(dados, dlg.documentosIA || [], dlg.contatosIA || [], dlg.empresaNovaIA || null);
       } else if (aoCancelar) {
         aoCancelar();
       }
