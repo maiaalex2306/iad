@@ -489,6 +489,27 @@ async function explicarRecusa(r: Response, modelo: string): Promise<string> {
   return 'A IA respondeu ' + r.status + (curto ? ': ' + curto : '.');
 }
 
+/* A fronteira que o app escreve entre o retrato da oportunidade e o material
+   novo. Serve para cortar o lado certo quando o modelo recusa por tamanho: o
+   retrato é pequeno e é o que dá contexto às oito notas; o material é o que
+   cresce sem limite quando alguém anexa cinco documentos. */
+const MARCA_MATERIAL = '=== MATERIAL NOVO QUE O VENDEDOR ACABOU DE MANDAR ===';
+
+function encurtar(usuario: string, fator: number): string {
+  const i = usuario.indexOf(MARCA_MATERIAL);
+  if (i < 0) return usuario.slice(0, Math.max(2000, Math.floor(usuario.length * fator)));
+  const cabeca = usuario.slice(0, i + MARCA_MATERIAL.length);
+  const material = usuario.slice(i + MARCA_MATERIAL.length);
+  const cabe = Math.max(2000, Math.floor(material.length * fator));
+  if (material.length <= cabe) return usuario;
+  return cabeca + material.slice(0, cabe) + '\n[…material cortado para caber no modelo…]';
+}
+
+function recusouPorTamanho(status: number, corpo: string): boolean {
+  return status === 413 ||
+    /context|too large|maximum context|reduce the length|tokens per minute|rate_limit_exceeded/i.test(corpo);
+}
+
 async function chamarIA(sistema: string, usuario: string): Promise<string> {
   if (PROVEDOR === 'anthropic') {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
@@ -540,10 +561,28 @@ async function chamarIA(sistema: string, usuario: string): Promise<string> {
      que são a saída de quem estoura o limite. Sem o parâmetro o modelo ainda
      responde JSON, porque a instrução pede — e o que vem torto já era
      descartado antes deste commit. */
+  let comJson = true;
   if (r.status === 400) {
     const aviso = await r.clone().text().catch(() => '');
-    if (/response_format|json_object|json mode/i.test(aviso)) r = await pedir(false);
+    if (/response_format|json_object|json mode/i.test(aviso)) { comJson = false; r = await pedir(false); }
   }
+
+  /* Material grande demais deixou de ser problema do vendedor. Ele anexou o
+     que tinha da reunião; pedir que "analise menos documentos de uma vez" é
+     transferir para ele uma conta de tokens que ele não tem como fazer. O
+     material é cortado pela metade e o pedido refeito, duas vezes — e o corte
+     cai no material, nunca no retrato, que é pequeno e é o que sustenta as
+     oito notas. */
+  for (const fator of [0.5, 0.25]) {
+    if (r.ok) break;
+    const aviso = await r.clone().text().catch(() => '');
+    if (!recusouPorTamanho(r.status, aviso)) break;
+    const menor = encurtar(usuario, fator);
+    if (menor === usuario) break;
+    usuario = menor;
+    r = await pedir(comJson);
+  }
+
   if (!r.ok) throw new Error(await explicarRecusa(r, modelo));
   const j = await r.json();
   return j?.choices?.[0]?.message?.content || '';

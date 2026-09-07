@@ -324,6 +324,12 @@
      registro. */
   const ACEITA_DOCUMENTOS = '.pdf,.docx,.xlsx,.pptx,.txt,.md,.csv,.tsv,.json,.rtf,.vtt,.srt';
 
+  /* Quanto de documento cabe na caixa, somando todos. 15 000 e não mais:
+     acima disso o modelo recusa por tamanho em contas de plano gratuito, e
+     quem decide o que sobra passa a ser uma tesoura cega no fim do texto em
+     vez desta cota, que reparte entre os arquivos. */
+  const COTA_DOCUMENTOS = 15000;
+
   /* Mostra ou esconde um pedaço do formulário. Existe porque há formulários
      que fazem duas perguntas diferentes conforme a resposta da primeira — a
      tarefa que vou fazer não pede ata, a que já fiz pede — e mostrar as duas
@@ -366,10 +372,23 @@
         dlg.documentosIA = docs;
         entrada.value = '';                       /* deixa reescolher o mesmo arquivo */
 
-        const blocos = lidos.filter(function (d) { return d.texto; })
-          .map(function (d) { return '=== ' + d.nome + ' ===\n' + d.texto; });
-        if (blocos.length) {
-          caixa.value = [caixa.value.trim(), blocos.join('\n\n')].filter(Boolean).join('\n\n');
+        /* Cota por documento, e não um corte no fim do texto todo. Cinco
+           dossiês de 40 mil caracteres cada davam 200 mil na caixa; o que ia
+           para a IA era cortado no fim, e os últimos arquivos sumiam
+           inteiros — quem anexou cinco esperava que os cinco contassem.
+           Repartindo, cada um entra com o começo, que é onde ficam
+           cabeçalho, cliente, escopo e números. É a mesma regra que a caixa
+           ✨ dos cadastros já usava; esta aqui tinha ficado sem. */
+        const comTexto = lidos.filter(function (d) { return d.texto; });
+        if (comTexto.length) {
+          const jaEscrito = caixa.value.trim();
+          const sobra = Math.max(2000, COTA_DOCUMENTOS - jaEscrito.length);
+          const cota = Math.floor(sobra / comTexto.length);
+          const blocos = comTexto.map(function (d) {
+            const t = d.texto.length > cota ? d.texto.slice(0, cota) + '\n[…]' : d.texto;
+            return '=== ' + d.nome + ' ===\n' + t;
+          });
+          caixa.value = [jaEscrito, blocos.join('\n\n')].filter(Boolean).join('\n\n');
           caixa.dispatchEvent(new Event('input'));
         }
 
