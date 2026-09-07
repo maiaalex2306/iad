@@ -94,7 +94,12 @@
         let corpo = null;
         try { corpo = texto ? JSON.parse(texto) : null; } catch (e) { corpo = { mensagem: texto }; }
         if (!resposta.ok) {
-          const msg = (corpo && (corpo.error_description || corpo.msg || corpo.message || corpo.hint)) ||
+          /* `erro` vem primeiro porque é o campo das nossas Edge Functions —
+             e era o único que faltava nesta lista. Sem ele, toda recusa
+             explicada em português virava "O servidor respondeu 401", e a
+             explicação que a função tinha escrito morria no caminho. Os
+             outros quatro são do GoTrue e do PostgREST. */
+          const msg = (corpo && (corpo.erro || corpo.error_description || corpo.msg || corpo.message || corpo.hint)) ||
             ('O servidor respondeu ' + resposta.status + '.');
           const vencido = resposta.status === 401 && o.autenticado !== false &&
             sessao() && sessao().refresh_token && /jwt|token/i.test(msg);

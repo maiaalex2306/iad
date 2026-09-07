@@ -60,9 +60,21 @@
       return { situacao: 'ok', titulo: 'No ar',
         texto: 'A função respondeu. As caixas ✨ e os botões de análise aparecem.' };
     }
+    /* 401 vinha rotulado como "ainda não sei" e mandava sair e entrar de novo.
+       Errado nos dois: a função respondeu — logo está publicada e alcançável —
+       e o problema quase nunca é a sessão de quem está usando, e sim a função
+       não conseguir conferir o token. Ela própria explica o motivo agora, e o
+       melhor que esta tela faz é repetir o que ela disse. */
     if (situacao === 'desconhecido') {
+      const f401 = ultimaFalha || {};
+      if (f401.status === 401) {
+        return { situacao: 'ausente', titulo: 'A função recusou a chamada',
+          texto: f401.mensagem ||
+            'O servidor respondeu 401 sem explicar. Confira o segredo ' +
+            'IAD_CHAVE_PUBLICA em Edge Functions → assistente → Secrets.' };
+      }
       return { situacao: 'desconhecido', titulo: 'Ainda não sei',
-        texto: 'O servidor recusou por autenticação. Saia e entre de novo.' };
+        texto: 'Entre com a sua conta do servidor para o assistente valer.' };
     }
     const f = ultimaFalha || {};
     if (f.status === 503) {

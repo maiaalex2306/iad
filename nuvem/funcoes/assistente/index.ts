@@ -654,6 +654,16 @@ async function textoDoSite(dominio: string): Promise<string> {
 
 /* ---------- quem pode chamar ---------- */
 
+/* O formato da chave, nunca a chave. É o que transforma um 401 mudo numa
+   instrução do que fazer no painel. */
+function formatoDaChave(k: string): string {
+  if (!k) return 'ausente';
+  if (/^sb_publishable_/.test(k)) return 'nova (publicável)';
+  if (/^sb_secret_/.test(k)) return 'nova (secreta) — esta é a errada aqui';
+  if (/^ey[A-Za-z0-9_-]*\./.test(k)) return 'antiga (JWT)';
+  return 'formato desconhecido';
+}
+
 async function autenticado(req: Request): Promise<boolean> {
   const auth = req.headers.get('authorization') || '';
   if (!/^Bearer\s+\S+/i.test(auth)) return false;
@@ -684,7 +694,22 @@ Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') return responder({ erro: 'metodo' }, 405);
 
   if (!CHAVE) return responder({ erro: 'A função está no ar, mas sem chave de IA configurada.' }, 503);
-  if (!(await autenticado(req))) return responder({ erro: 'Entre no sistema para usar o assistente.' }, 401);
+  /* 401 aqui quase nunca é sessão vencida — quem chega até esta linha já
+     mandou um Bearer válido, senão o app nem teria deixado. O caso comum é a
+     função não conseguir CONFERIR esse token: ela pergunta ao GoTrue usando a
+     chave pública, e o Supabase trocou o formato das chaves. A antiga (JWT) é
+     recusada, e a função fica sem como saber quem está falando.
+
+     Então a recusa diz qual formato ela tem na mão. Formato, nunca a chave. */
+  if (!(await autenticado(req))) {
+    return responder({
+      erro: 'Não consegui confirmar quem está chamando. A chave pública desta ' +
+        'função é do formato ' + formatoDaChave(ANON) + '.\n\n' +
+        'Se não for "nova (publicável)": Settings → API Keys → copie a chave ' +
+        'publishable. Depois Edge Functions → assistente → Secrets → crie ' +
+        'IAD_CHAVE_PUBLICA com esse valor e publique a função de novo.'
+    }, 401);
+  }
 
   let pedido: Record<string, unknown>;
   try {
