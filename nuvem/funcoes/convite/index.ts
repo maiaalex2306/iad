@@ -18,9 +18,35 @@
    Sem essa checagem, qualquer usuário logado criaria contas no sistema.
 */
 
+/* O Supabase trocou o formato das chaves. As antigas eram JWT (anon e
+   service_role); as novas são `sb_publishable_...` e `sb_secret_...`. Nem tudo
+   no projeto virou de uma vez: o PostgREST ainda aceita a chave antiga, mas o
+   GoTrue — que é quem convida — passou a exigir a nova, e recusa a antiga com
+   "The apikey header matched no key configured for auth mode(s): publishable,
+   secret". A frase engana, porque parece falta de chave, e é troca de formato.
+
+   Então procuramos as três possibilidades, da mais nova para a mais velha. O
+   nome IAD_* vem primeiro porque é o único que o administrador consegue
+   definir à mão: o painel do Supabase recusa segredos que comecem com
+   SUPABASE_, justamente para não deixar ninguém sobrescrever os automáticos.
+   Sem essa saída, um projeto que injeta a chave antiga ficaria travado. */
 const URL_SUPABASE = Deno.env.get('SUPABASE_URL') || '';
-const ANON = Deno.env.get('SUPABASE_ANON_KEY') || '';
-const SERVICE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+const PUBLICA = Deno.env.get('IAD_CHAVE_PUBLICA') ||
+  Deno.env.get('SUPABASE_PUBLISHABLE_KEY') ||
+  Deno.env.get('SUPABASE_ANON_KEY') || '';
+const SERVICE = Deno.env.get('IAD_CHAVE_SECRETA') ||
+  Deno.env.get('SUPABASE_SECRET_KEY') ||
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+
+/* O formato da chave, nunca a chave. Serve para o diagnóstico dizer "a que
+   está aí é a antiga" sem publicar um segredo numa caixa de alerta. */
+function formato(k: string): string {
+  if (!k) return 'ausente';
+  if (/^sb_secret_/.test(k)) return 'nova (secreta)';
+  if (/^sb_publishable_/.test(k)) return 'nova (publicável)';
+  if (/^ey[A-Za-z0-9_-]*\./.test(k)) return 'antiga (JWT)';
+  return 'formato desconhecido';
+}
 
 const CORS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -42,7 +68,7 @@ async function quemChama(req: Request): Promise<string> {
   if (!/^Bearer\s+\S+/i.test(auth)) return '';
   try {
     const r = await fetch(URL_SUPABASE + '/auth/v1/user', {
-      headers: { apikey: ANON, authorization: auth }
+      headers: { apikey: PUBLICA, authorization: auth }
     });
     if (!r.ok) return '';
     const u = await r.json();
@@ -139,6 +165,19 @@ Deno.serve(async (req: Request) => {
     if (/smtp|mailer|email provider/i.test(msg)) {
       return responder({
         erro: 'O Supabase não conseguiu enviar. Confira o SMTP em Authentication → Emails. Detalhe: ' + msg
+      }, 502);
+    }
+    /* A recusa por formato de chave chega em inglês e parece falar de cabeçalho
+       HTTP. Quem lê vai conferir o cabeçalho, que está certo. O que está errado
+       é a chave, e a função sabe qual formato ela tem na mão — então ela diz. */
+    if (/matched no key|auth mode/i.test(msg)) {
+      return responder({
+        erro: 'O Supabase recusou a chave da função: ela é do formato ' +
+          formato(SERVICE) + ', e este projeto exige a chave secreta nova.\n\n' +
+          'Correção: painel do Supabase → Settings → API Keys → copie a chave ' +
+          '"secret" (começa com sb_secret_). Depois Edge Functions → convite → ' +
+          'Secrets → crie IAD_CHAVE_SECRETA com esse valor. O nome precisa ser ' +
+          'esse: o painel recusa segredos que comecem com SUPABASE_.'
       }, 502);
     }
     return responder({ erro: msg || ('O servidor respondeu ' + r.status + '.') }, 502);

@@ -20,7 +20,12 @@ const PROVEDOR = (Deno.env.get('IA_PROVEDOR') || 'groq').toLowerCase();
 const CHAVE = Deno.env.get('IA_CHAVE') || '';
 const MODELO = Deno.env.get('IA_MODELO') || '';
 const URL_SUPABASE = Deno.env.get('SUPABASE_URL') || '';
-const ANON = Deno.env.get('SUPABASE_ANON_KEY') || '';
+/* Formatos de chave novo e antigo, na mesma ordem do convite: o projeto pode
+   estar em qualquer um dos dois, e IAD_CHAVE_PUBLICA é a única saída manual —
+   o painel do Supabase recusa segredos com nome começando em SUPABASE_. */
+const ANON = Deno.env.get('IAD_CHAVE_PUBLICA') ||
+  Deno.env.get('SUPABASE_PUBLISHABLE_KEY') ||
+  Deno.env.get('SUPABASE_ANON_KEY') || '';
 
 const LIMITE_TEXTO = 8000;
 const LIMITE_REUNIAO = 40000;   /* transcrição de call cabe; base de dados não */

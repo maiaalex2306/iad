@@ -93,6 +93,37 @@ válido no projeto: qualquer pessoa logada passa. A função verifica quem é a
 pessoa e o que ela pode fazer, lendo o papel dela no banco. A tranca que fica é
 a mais forte das duas.
 
+### Se aparecer "matched no key configured for auth mode(s)"
+
+Mensagem inteira, em inglês:
+
+    [@supabase/server] The apikey header matched no key configured
+    for auth mode(s): "publishable", "secret".
+
+Ela fala de cabeçalho, mas o cabeçalho está certo. O que está errado é o
+**formato da chave**. O Supabase trocou as chaves de projeto: as antigas eram
+JWT (`anon` e `service_role`, aquelas que começam com `eyJ`), as novas são
+`sb_publishable_...` e `sb_secret_...`. A troca não chegou em tudo ao mesmo
+tempo — o banco ainda aceita a antiga, mas o serviço de autenticação, que é
+quem convida, já exige a nova.
+
+Como o Supabase injeta a chave antiga sozinho na função, a função não tem como
+saber disso até tentar. Então você dá a nova para ela:
+
+1. **Settings → API Keys**, copie a chave **secret** (`sb_secret_...`).
+2. **Edge Functions → convite → Secrets**, crie:
+
+       IAD_CHAVE_SECRETA = sb_secret_...
+
+O nome tem de ser esse. O painel recusa segredo cujo nome comece com
+`SUPABASE_`, justamente para ninguém sobrescrever os automáticos — por isso a
+função procura primeiro por `IAD_CHAVE_SECRETA`, depois por
+`SUPABASE_SECRET_KEY`, e só então pela antiga `SUPABASE_SERVICE_ROLE_KEY`.
+
+Essa chave é secreta de verdade: ela ignora todas as políticas RLS. Ela vive
+aqui, nos segredos da função, e em lugar nenhum além — nunca em `src/config.js`,
+nunca num arquivo do repositório, nunca numa mensagem.
+
 ## Conferir
 
 Primeiro, que a função subiu. Cole na barra de endereço:
