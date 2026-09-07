@@ -20,6 +20,7 @@
      ausência quando a pessoa clicava: um botão morto, que é pior do que botão
      nenhum. Enquanto não houver resposta do servidor, o assistente não existe. */
   let situacao = 'desconhecido';   /* desconhecido | ok | ausente */
+  let ultimaFalha = null;          /* {status, mensagem} da última recusa */
 
   function disponivel() {
     return !!(Nuvem && Nuvem.conectado()) && situacao === 'ok';
@@ -36,12 +37,47 @@
     }
     const antes = situacao;
     return Nuvem.chamarFuncao('assistente', { tipo: 'classificar', texto: '' })
-      .then(function () { situacao = 'ok'; })
+      .then(function () { situacao = 'ok'; ultimaFalha = null; })
       .catch(function (e) {
         /* 503 é "publicada, sem chave" — para o vendedor dá no mesmo. */
         situacao = (e && e.status === 401) ? 'desconhecido' : 'ausente';
+        ultimaFalha = { status: (e && e.status) || 0, mensagem: (e && e.message) || '' };
       })
       .then(function () { return situacao !== antes; });
+  }
+
+  /* Para o vendedor, assistente ausente é ausente e pronto: nada aparece, e
+     nada quebra. Mas quem publicou a função precisa saber por que ela não
+     respondeu — sem isto a única saída é o console do navegador, e "não
+     aparece nada" é o pior diagnóstico que se pode dar a alguém que acabou de
+     seguir dez passos. Traduzimos os casos que de fato acontecem. */
+  function diagnostico() {
+    if (!Nuvem || !Nuvem.conectado()) {
+      return { situacao: 'desconhecido', titulo: 'Sem servidor',
+        texto: 'Entre com a sua conta do servidor para o assistente valer.' };
+    }
+    if (situacao === 'ok') {
+      return { situacao: 'ok', titulo: 'No ar',
+        texto: 'A função respondeu. As caixas ✨ e os botões de análise aparecem.' };
+    }
+    if (situacao === 'desconhecido') {
+      return { situacao: 'desconhecido', titulo: 'Ainda não sei',
+        texto: 'O servidor recusou por autenticação. Saia e entre de novo.' };
+    }
+    const f = ultimaFalha || {};
+    if (f.status === 503) {
+      return { situacao: 'ausente', titulo: 'Publicada, sem a chave da IA',
+        texto: 'A função está no ar, mas falta o segredo IA_CHAVE. ' +
+          'Edge Functions → assistente → Secrets. Ver nuvem/IA.md.' };
+    }
+    if (!f.status) {
+      return { situacao: 'ausente', titulo: 'O navegador não chegou na função',
+        texto: 'Ou ela não foi publicada com o nome "assistente", ou o ' +
+          '"Verify JWT" dela está ligado — e aí o pedido nem sai. ' +
+          'Edge Functions → assistente → Settings. Ver nuvem/IA.md.' };
+    }
+    return { situacao: 'ausente', titulo: 'O servidor respondeu ' + f.status,
+      texto: f.mensagem || 'Sem detalhe. Veja os logs da função no painel do Supabase.' };
   }
 
   /* Uma extração. Resolve com {campos, frases} ou null — nunca rejeita. */
@@ -350,6 +386,7 @@
   global.IADIA = {
     disponivel: disponivel,
     verificar: verificar,
+    diagnostico: diagnostico,
     extrair: extrair,
     analisarReuniao: analisarReuniao,
     classificarSegmentos: classificarSegmentos,

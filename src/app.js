@@ -271,6 +271,14 @@
       V.definirTelaAcesso('login', null, '');
       location.hash = '#/hoje';
       render();
+
+      /* Perguntar ao servidor se o assistente existe só acontecia no boot, e
+         no boot ainda não havia sessão para perguntar. Quem entrava agora
+         ficava sem IA até recarregar a página — e nada dizia isso, porque o
+         desenho é justamente não mostrar botão morto. Ausência silenciosa por
+         defeito é indistinguível de ausência silenciosa por escolha. */
+      IA.verificar().then(function (mudou) { if (mudou) render(); });
+
       /* Trazer o que já existe no servidor é o que faz a troca de aparelho
          funcionar; falhar aqui não impede de usar o app com a cópia local. */
       return N.puxar().then(render, function () {});
@@ -2146,6 +2154,12 @@
       global.IADNuvem.definirBloqueioDaEmpresa(id, estaBloqueada)
         .then(function () { empresasNuvem = null; perfisNuvem = null; pintarUsuariosNuvem(true); })
         .catch(function (e) { alert('Não foi possível: ' + e.message); });
+    },
+
+    /* Repergunta ao servidor sem recarregar a página: quem acabou de mexer nos
+       segredos da função quer saber agora se resolveu. */
+    reverAssistente: function () {
+      IA.verificar().then(function () { render(); });
     },
 
     recarregarUsuariosNuvem: function () { perfisNuvem = null; pintarUsuariosNuvem(true); },

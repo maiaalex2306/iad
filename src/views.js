@@ -1873,6 +1873,27 @@
   }
 
   /* ---------------- Dados ---------------- */
+  /* Onde se descobre por que o assistente não apareceu. Ele é invisível de
+     propósito quando está fora do ar — botão morto é pior que botão nenhum —,
+     mas invisível sem explicação deixa quem publicou a função sem saída além
+     do console do navegador. Aqui a resposta está escrita. */
+  function blocoAssistente() {
+    if (!global.IADIA || !global.IADIA.diagnostico) return '';
+    const d = global.IADIA.diagnostico();
+    const cor = d.situacao === 'ok' ? 'ok' : (d.situacao === 'desconhecido' ? '' : 'warn');
+    return '<div class="card"><div class="row"><h2 style="margin:0">Assistente de IA</h2>' +
+      '<span class="espaco"></span><span class="pill ' + cor + '">' + esc(d.titulo) + '</span></div>' +
+      '<p class="small" style="margin:8px 0 0">' + esc(d.texto) + '</p>' +
+      (d.situacao === 'ok'
+        ? '<p class="tiny muted" style="margin:8px 0 0">Onde ele aparece: o cartão ' +
+          '<strong>Próximos passos</strong> no cockpit, o botão <strong>Registrar reunião</strong> ' +
+          'nas tarefas, e a caixa ✨ no alto dos formulários de conta, contato, oportunidade e evidência.</p>'
+        : '<div class="row" style="margin-top:10px">' +
+          '<button class="btn ghost mini" onclick="App.reverAssistente()"' +
+          ' data-ajuda="Pergunta ao servidor de novo, sem recarregar a página.">Verificar de novo</button></div>') +
+      '</div>';
+  }
+
   function dados() {
     const est = Store.dados();
     return '<h1>Dados e instalação</h1>' +
@@ -1893,6 +1914,7 @@
       '<button class="btn ghost mini" onclick="App.baixarModelo(\'contatos\')" data-ajuda="Baixa um CSV de exemplo com as colunas certas para contatos.">contatos.csv</button>' +
       '<button class="btn ghost mini" onclick="App.baixarModelo(\'oportunidades\')" data-ajuda="Baixa um CSV de exemplo com as colunas certas para oportunidades.">oportunidades.csv</button></div></div>' +
 
+      blocoAssistente() +
       blocoNuvem() +
       blocoMinhaConta() +
       blocoLinkedHelper() +
