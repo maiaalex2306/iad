@@ -233,7 +233,15 @@
      este app fazia. O botão diz "Análise da IA" e não "Preencher os campos"
      porque ele lê as três coisas juntas, não só a caixa de texto. */
   function caixaIA(c) {
-    if (!assistenteAtivo()) return '';
+    /* Esconder a caixa quando o assistente não responde evita botão morto, e
+       está certo para quem nunca teve IA. Errado para quem tinha: some sem
+       explicação, e o app parece ter mudado sozinho — foi o que aconteceu na
+       primeira vez que a função caiu depois de funcionar. Some o que não
+       funciona, fica a linha que diz onde olhar. */
+    if (!assistenteAtivo()) {
+      return '<p class="ia-fora">✨ Assistente fora do ar. ' +
+        '<a href="#/dados" onclick="IADUI.fecharDialogos()">⚙︎ Dados diz por quê.</a></p>';
+    }
     return '<div class="caixa-ia">' +
       '<span class="rotulo">✨ ' + esc(c.rotulo || 'Cole a ata ou conte o que aconteceu') + '</span>' +
       '<textarea name="' + c.id + '" placeholder="' + esc(c.placeholder || '') + '">' + esc(c.padrao || '') + '</textarea>' +
@@ -439,6 +447,11 @@
   }
 
   global.IADUI = {
+    /* O link do aviso leva para outra tela, e o diálogo modal ficaria por
+       cima dela. Fechar antes de navegar é o mínimo. */
+    fecharDialogos: function () {
+      document.querySelectorAll('dialog[open]').forEach(function (d) { d.close('cancelar'); });
+    },
     esc: esc, moeda: moeda, compacto: compacto, data: data, numero: numero,
     numeroDigitado: numeroDigitado, paraCampoMoeda: paraCampoMoeda,
     formulario: formulario, confirmar: confirmar, barra: barra, vozDisponivel: vozDisponivel,
