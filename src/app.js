@@ -1049,9 +1049,12 @@
     },
 
     /* Evidência = o cliente se moveu. É o único registro que altera Evidence Age. */
-    novaEvidencia: function (opId, listaAbertas, dimensaoSugerida) {
+    novaEvidencia: function (opId, listaAbertas, dimensaoSugerida, padroes) {
       const op = opId ? Store.oportunidade(opId) : null;
       if (opId && !op) return;
+      /* Quando a evidência vem de uma tarefa recém-concluída, o canal e a data
+         já são conhecidos: repetir a pergunta é pedir que a pessoa erre. */
+      const vindos = padroes || {};
 
       const sugestoes = [];
       P.DIMENSOES.forEach(function (d) {
@@ -1128,8 +1131,9 @@
         });
       }
       campos.push(
-        { id: 'canal', rotulo: 'Canal', tipo: 'select', opcoes: ['Reunião', 'E-mail', 'WhatsApp', 'LinkedIn', 'Telefone', 'Documento'] },
-        { id: 'data', rotulo: 'Data', tipo: 'date', padrao: Store.hoje() },
+        { id: 'canal', rotulo: 'Canal', tipo: 'select', padrao: vindos.canal || '',
+          opcoes: ['Reunião', 'Visita', 'Telefonema', 'WhatsApp', 'E-mail', 'LinkedIn', 'Documento'] },
+        { id: 'data', rotulo: 'Data', tipo: 'date', padrao: vindos.data || Store.hoje() },
         { id: 'compromissoTexto', rotulo: 'O que ficou combinado (opcional)' },
         { id: 'compromissoData', rotulo: 'Para quando', tipo: 'date' },
         { id: 'compromissoDono', rotulo: 'A vez é de quem', tipo: 'select', opcoes: [{ valor: 'cliente', rotulo: 'Do cliente' }, { valor: 'nos', rotulo: 'Nossa' }] }
@@ -1239,38 +1243,6 @@
       });
     },
 
-    /* ---------- Reunião inteira de uma vez ----------
-       Uma transcrição de call ou uma página de anotações costuma conter cinco
-       ou seis movimentos do cliente espalhados por dimensões diferentes: um
-       receio (risco), uma exigência de comparação (critérios), alguém novo na
-       mesa (stakeholders). Digitar isso um a um é o motivo pelo qual ninguém
-       digita. Aqui o documento entra uma vez e sai como uma lista para conferir. */
-    analisarReuniao: function (opId) {
-      if (!IA.disponivel()) {
-        alert('O assistente precisa da nuvem configurada e de você conectado.');
-        return;
-      }
-      const op = Store.oportunidade(opId);
-      if (!op) return;
-
-      U.formulario('Analisar reunião ou documento', [
-        { id: 'texto', rotulo: 'Cole a transcrição, a ata ou suas anotações', tipo: 'textarea', voz: true,
-          placeholder: 'Cole aqui a transcrição do Meet, o resumo automático da call ou o que você anotou durante a reunião.' },
-        { id: 'arquivo', rotulo: 'Ou carregue documentos (Word, PDF, Excel, PowerPoint, texto) — pode escolher vários', tipo: 'file' }
-      ], {}, function (d, docs) {
-        if (!d.texto || d.texto.length < 60) {
-          alert('Preciso de mais texto para separar as evidências.');
-          return;
-        }
-        App.processarReuniao(opId, d.texto, null, docs);
-      }, function (dlg) {
-        /* Os documentos são lidos para dentro da caixa, onde a pessoa vê
-           exatamente o que vai ser enviado ao assistente — e ficam guardados
-           para serem anexados à oportunidade depois. */
-        U.ligarDocumentos(dlg, 'arquivo', 'texto');
-      });
-    },
-
     processarReuniao: function (opId, texto, relerNotas, docs) {
       const op = Store.oportunidade(opId);
       if (!op) return;
@@ -1376,54 +1348,6 @@
       dlg.showModal();
     },
 
-    /* Quatro perguntas fechadas: cada "sim" vira evidência, sem digitação livre. */
-    fecharReuniao: function (opId) {
-      const op = Store.oportunidade(opId);
-      if (!op) return;
-      const campos = P.FECHAMENTO_REUNIAO.map(function (q) {
-        return { id: q.id, rotulo: q.pergunta, tipo: 'select', opcoes: OPCOES_SIM_NAO };
-      });
-      campos.push(
-        { id: 'data', rotulo: 'Data da reunião', tipo: 'date', padrao: Store.hoje() },
-        { id: 'compromissoTexto', rotulo: 'Próximo passo combinado' },
-        { id: 'compromissoData', rotulo: 'Para quando', tipo: 'date' },
-        { id: 'compromissoDono', rotulo: 'A vez é de quem', tipo: 'select', opcoes: [{ valor: 'cliente', rotulo: 'Do cliente' }, { valor: 'nos', rotulo: 'Nossa' }] }
-      );
-
-      U.formulario('Fechamento de reunião', campos, {}, function (d) {
-        let registradas = 0;
-        P.FECHAMENTO_REUNIAO.forEach(function (q) {
-          if (d[q.id] !== 'sim') return;
-          Store.registrarEvento(opId, {
-            tipo: 'decision', titulo: q.evidencia, dimensao: q.id,
-            forca: q.forca, canal: 'Reunião', data: d.data || Store.hoje()
-          });
-          registradas++;
-        });
-        if (d.compromissoData) {
-          Store.definirCompromisso(opId, {
-            texto: d.compromissoTexto || 'Próximo passo combinado',
-            data: d.compromissoData, dono: d.compromissoDono
-          });
-        }
-        if (!registradas && !d.compromissoData) {
-          alert('Nenhuma evidência e nenhum compromisso: para o cliente, essa reunião não mudou nada.');
-        }
-        render();
-      });
-    },
-
-    novaAtividade: function (opId) {
-      U.formulario('Atividade do vendedor', [
-        { id: 'titulo', rotulo: 'O que nós fizemos', tipo: 'select', opcoes: P.ATIVIDADES_QUE_NAO_CONTAM },
-        { id: 'canal', rotulo: 'Canal', tipo: 'select', opcoes: ['Reunião', 'E-mail', 'WhatsApp', 'LinkedIn', 'Telefone'] },
-        { id: 'data', rotulo: 'Data', tipo: 'date', padrao: Store.hoje() }
-      ], {}, function (d) {
-        Store.registrarEvento(opId, { tipo: 'activity', titulo: d.titulo, canal: d.canal, data: d.data || Store.hoje() });
-        render();
-      });
-    },
-
     removerEvento: function (opId, evId) {
       if (!U.confirmar('Excluir este evento?')) return;
       Store.removerEvento(opId, evId);
@@ -1460,18 +1384,22 @@
        depois mostra o vendedor correndo atrás do próprio histórico. As duas
        contam no funil, e não contam igual na metodologia — é por isso que a
        origem fica gravada, e não apenas o "concluída". */
-    novaTarefa: function (opId, decisaoAlvo) {
+    novaTarefa: function (opId, decisaoAlvo, opcoes) {
       const op = Store.oportunidade(opId);
       if (!op) return;
       const r = E.resumo(op);
-      const DO_RELATO = ['relato', 'arquivo', 'feitaEm', 'compromissoTexto',
-        'compromissoData', 'compromissoDono', 'secaoRelato'];
+      const o = opcoes || {};
+      const PERGUNTAS = P.FECHAMENTO_REUNIAO.map(function (q) { return 'q_' + q.id; });
+      const DA_ATA = ['relato', 'arquivo'];
+      const DO_RELATO = ['secaoRelato', 'feitaEm', 'comoContar',
+        'compromissoTexto', 'compromissoData', 'compromissoDono'];
 
-      U.formulario('Nova tarefa', [
-        { id: 'titulo', rotulo: 'O que fazer' },
+      const campos = [
+        { id: 'titulo', rotulo: 'O que fazer', padrao: o.titulo || '' },
         { id: 'tipo', rotulo: 'Como (canal)', tipo: 'select', largura: 'metade',
-          opcoes: Store.nomesDoCatalogo('tiposTarefa') },
+          padrao: o.tipo || '', opcoes: Store.nomesDoCatalogo('tiposTarefa') },
         { id: 'situacao', rotulo: 'Situação', tipo: 'select', largura: 'metade',
+          padrao: o.situacao || 'afazer',
           opcoes: [{ valor: 'afazer', rotulo: 'A fazer' }, { valor: 'feita', rotulo: 'Já foi feita' }] },
         {
           id: 'decisaoAlvo', rotulo: 'Decisão que pretende provocar', tipo: 'select',
@@ -1481,20 +1409,39 @@
         { id: 'vencimento', rotulo: 'Para quando', tipo: 'date', padrao: Store.hoje() },
 
         { id: 'secaoRelato', tipo: 'secao', rotulo: 'O que aconteceu',
-          ajuda: 'O assistente lê, separa o que o CLIENTE fez e relê as oito decisões. Atividade nossa não conta como evidência.' },
-        { id: 'feitaEm', rotulo: 'Quando foi feita', tipo: 'date', padrao: Store.hoje() },
+          ajuda: 'É aqui que a decisão anda. O assistente lê o material, separa o que o CLIENTE fez e relê as oito decisões — atividade nossa não conta como evidência.' },
+        { id: 'feitaEm', rotulo: 'Quando foi feita', tipo: 'date', padrao: Store.hoje(), largura: 'metade' },
+        { id: 'comoContar', rotulo: 'Como quer contar', tipo: 'select', largura: 'metade',
+          padrao: o.comoContar || 'ata', opcoes: [
+            { valor: 'ata', rotulo: 'Colar a ata ou anexar documentos' },
+            { valor: 'perguntas', rotulo: 'Responder quatro perguntas' },
+            { valor: 'evidencia', rotulo: 'Registrar uma evidência direta' },
+            { valor: 'nada', rotulo: 'Nada a registrar — só concluir' }
+          ] },
         { id: 'relato', rotulo: 'Cole a ata, a transcrição ou o que aconteceu', tipo: 'textarea', voz: true,
           placeholder: 'Cole aqui o resumo automático da call, a transcrição ou suas anotações.' },
-        { id: 'arquivo', rotulo: 'Ou carregue documentos (Word, PDF, Excel, PowerPoint, texto) — pode escolher vários', tipo: 'file' },
+        { id: 'arquivo', rotulo: 'Ou carregue documentos (Word, PDF, Excel, PowerPoint, texto) — pode escolher vários', tipo: 'file' }
+      ];
+
+      /* As quatro perguntas fechadas do fim de reunião. Cada "sim" vira
+         evidência sem digitação — é o caminho de quem está no carro depois da
+         visita e não vai colar transcrição nenhuma. */
+      P.FECHAMENTO_REUNIAO.forEach(function (q) {
+        campos.push({ id: 'q_' + q.id, rotulo: q.pergunta, tipo: 'select', opcoes: OPCOES_SIM_NAO });
+      });
+
+      campos.push(
         { id: 'compromissoTexto', rotulo: 'Próximo passo combinado' },
         { id: 'compromissoData', rotulo: 'Para quando', tipo: 'date', largura: 'metade' },
         { id: 'compromissoDono', rotulo: 'A vez é de quem', tipo: 'select', largura: 'metade',
           opcoes: [{ valor: 'cliente', rotulo: 'Do cliente' }, { valor: 'nos', rotulo: 'Nossa' }] }
-      ], {}, function (d, docs) {
+      );
+
+      U.formulario('Nova tarefa', campos, {}, function (d, docs) {
         if (!d.titulo) return;
         const feita = d.situacao === 'feita';
         const quando = feita ? (d.feitaEm || Store.hoje()) : (d.vencimento || Store.hoje());
-        const temRelato = feita && d.relato && d.relato.length >= 60;
+        const temRelato = feita && d.comoContar === 'ata' && d.relato && d.relato.length >= 60;
 
         const tarefa = Store.criarTarefa({
           oportunidadeId: opId, titulo: d.titulo, tipo: d.tipo,
@@ -1504,54 +1451,96 @@
         if (!feita) { render(); return; }
 
         Store.concluirTarefa(tarefa.id, quando, temRelato);
+        const respondidas = feita && d.comoContar === 'perguntas'
+          ? gravarPerguntasDoFim(op, d, quando) : 0;
         registrarFechamento(op, d, temRelato ? null : docs);
-        if (!temRelato) {
-          if (d.relato) alert('Texto curto demais para eu separar evidências. A tarefa e o resto foram gravados.');
-          render();
-          return;
+
+        if (temRelato) { App.processarReuniao(opId, d.relato, true, docs); return; }
+        if (d.comoContar === 'ata' && d.relato) {
+          alert('Texto curto demais para eu separar evidências. A tarefa e o resto foram gravados.');
         }
-        App.processarReuniao(opId, d.relato, true, docs);
+        render();
+        if (respondidas) relerAsOito(opId);
+        /* A evidência direta abre depois de a tarefa existir: assim ela nasce
+           com o canal e a data da tarefa, e não solta no ar. */
+        if (d.comoContar === 'evidencia') {
+          App.novaEvidencia(opId, null, d.decisaoAlvo, { canal: d.tipo, data: quando });
+        }
       }, function (dlg) {
         U.ligarDocumentos(dlg, 'arquivo', 'relato');
         const situacao = dlg.querySelector('[name="situacao"]');
+        const comoContar = dlg.querySelector('[name="comoContar"]');
         const ajustar = function () {
           const feita = situacao.value === 'feita';
           U.mostrarCampos(dlg, DO_RELATO, feita);
           U.mostrarCampos(dlg, ['vencimento'], !feita);
+          U.mostrarCampos(dlg, DA_ATA, feita && comoContar.value === 'ata');
+          U.mostrarCampos(dlg, PERGUNTAS, feita && comoContar.value === 'perguntas');
         };
         situacao.addEventListener('change', ajustar);
+        comoContar.addEventListener('change', ajustar);
         ajustar();
       });
     },
 
-    /* Concluir uma tarefa que já estava aberta: a mesma pergunta do "já foi
-       feita", sem repetir o que a tarefa já sabe (título, canal, decisão). */
+    /* Concluir uma tarefa que já estava aberta: as mesmas quatro portas do
+       "já foi feita", sem repetir o que a tarefa já sabe (título, canal,
+       decisão-alvo). */
     concluirComRelato: function (opId, tarefaId) {
       const op = Store.oportunidade(opId);
       const tarefa = Store.dados().tarefas.filter(function (t) { return t.id === tarefaId; })[0];
       if (!op || !tarefa) return;
+      const PERGUNTAS = P.FECHAMENTO_REUNIAO.map(function (q) { return 'q_' + q.id; });
 
-      U.formulario('Concluir: ' + tarefa.titulo, [
-        { id: 'feitaEm', rotulo: 'Quando foi feita', tipo: 'date', padrao: Store.hoje() },
+      const campos = [
+        { id: 'feitaEm', rotulo: 'Quando foi feita', tipo: 'date', padrao: Store.hoje(), largura: 'metade' },
+        { id: 'comoContar', rotulo: 'Como quer contar', tipo: 'select', largura: 'metade', opcoes: [
+          { valor: 'ata', rotulo: 'Colar a ata ou anexar documentos' },
+          { valor: 'perguntas', rotulo: 'Responder quatro perguntas' },
+          { valor: 'evidencia', rotulo: 'Registrar uma evidência direta' },
+          { valor: 'nada', rotulo: 'Nada a registrar — só concluir' }
+        ] },
         { id: 'relato', rotulo: 'Cole a ata, a transcrição ou o que aconteceu', tipo: 'textarea', voz: true,
           placeholder: 'Cole aqui o resumo automático da call, a transcrição ou suas anotações.' },
-        { id: 'arquivo', rotulo: 'Ou carregue documentos (Word, PDF, Excel, PowerPoint, texto) — pode escolher vários', tipo: 'file' },
+        { id: 'arquivo', rotulo: 'Ou carregue documentos (Word, PDF, Excel, PowerPoint, texto) — pode escolher vários', tipo: 'file' }
+      ];
+      P.FECHAMENTO_REUNIAO.forEach(function (q) {
+        campos.push({ id: 'q_' + q.id, rotulo: q.pergunta, tipo: 'select', opcoes: OPCOES_SIM_NAO });
+      });
+      campos.push(
         { id: 'compromissoTexto', rotulo: 'Próximo passo combinado' },
         { id: 'compromissoData', rotulo: 'Para quando', tipo: 'date', largura: 'metade' },
         { id: 'compromissoDono', rotulo: 'A vez é de quem', tipo: 'select', largura: 'metade',
           opcoes: [{ valor: 'cliente', rotulo: 'Do cliente' }, { valor: 'nos', rotulo: 'Nossa' }] }
-      ], {}, function (d, docs) {
-        const temRelato = d.relato && d.relato.length >= 60;
-        Store.concluirTarefa(tarefaId, d.feitaEm || Store.hoje(), temRelato);
+      );
+
+      U.formulario('Concluir: ' + tarefa.titulo, campos, {}, function (d, docs) {
+        const quando = d.feitaEm || Store.hoje();
+        const temRelato = d.comoContar === 'ata' && d.relato && d.relato.length >= 60;
+        d.tipo = tarefa.tipo;
+
+        Store.concluirTarefa(tarefaId, quando, temRelato);
+        const respondidas = d.comoContar === 'perguntas' ? gravarPerguntasDoFim(op, d, quando) : 0;
         registrarFechamento(op, d, temRelato ? null : docs);
-        if (!temRelato) {
-          if (d.relato) alert('Texto curto demais para eu separar evidências. A tarefa e o resto foram gravados.');
-          render();
-          return;
+
+        if (temRelato) { App.processarReuniao(opId, d.relato, true, docs); return; }
+        if (d.comoContar === 'ata' && d.relato) {
+          alert('Texto curto demais para eu separar evidências. A tarefa e o resto foram gravados.');
         }
-        App.processarReuniao(op.id, d.relato, true, docs);
+        render();
+        if (respondidas) relerAsOito(opId);
+        if (d.comoContar === 'evidencia') {
+          App.novaEvidencia(opId, null, tarefa.decisaoAlvo, { canal: tarefa.tipo, data: quando });
+        }
       }, function (dlg) {
         U.ligarDocumentos(dlg, 'arquivo', 'relato');
+        const comoContar = dlg.querySelector('[name="comoContar"]');
+        const ajustar = function () {
+          U.mostrarCampos(dlg, ['relato', 'arquivo'], comoContar.value === 'ata');
+          U.mostrarCampos(dlg, PERGUNTAS, comoContar.value === 'perguntas');
+        };
+        comoContar.addEventListener('change', ajustar);
+        ajustar();
       });
     },
 
@@ -2652,6 +2641,39 @@
       });
     });
     return partes.join('\n');
+  }
+
+  /* As quatro perguntas fechadas do fim de reunião. Cada "sim" vira evidência
+     do cliente na dimensão da pergunta — sem digitação, que é o ponto: quem
+     acabou a visita responde quatro selects, não escreve uma ata.
+
+     A nota não sobe aqui de propósito. Evidência é o que aconteceu; nota é
+     quanto a decisão amadureceu, e continua sendo escolha de quem esteve lá. */
+  function gravarPerguntasDoFim(op, d, quando) {
+    let n = 0;
+    P.FECHAMENTO_REUNIAO.forEach(function (q) {
+      if (d['q_' + q.id] !== 'sim') return;
+      Store.registrarEvento(op.id, {
+        tipo: 'decision', titulo: q.evidencia, dimensao: q.id,
+        forca: q.forca, canal: d.tipo || 'Reunião', data: quando || Store.hoje()
+      });
+      n++;
+    });
+    return n;
+  }
+
+  /* Com evidência nova gravada, as oito são relidas sobre o retrato
+     atualizado. Vale para a ata e vale para as quatro perguntas: sem isto, o
+     caminho sem digitação gravava a evidência e deixava o índice parado —
+     e quem respondeu "sim, entrou alguém novo" vai olhar o mapa esperando
+     ver Stakeholders andar. */
+  function relerAsOito(opId, textoExtra) {
+    if (!IA.disponivel()) return;
+    const atual = Store.oportunidade(opId);
+    if (!atual) return;
+    IA.sugerirNotas(atual, E.resumo(atual), textoExtra || '').then(function (decisoes) {
+      if (decisoes && decisoes.length) App.revisarNotas(opId, decisoes);
+    });
   }
 
   /* O que a pessoa acabou de informar ao fechar uma tarefa — o compromisso e

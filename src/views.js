@@ -845,7 +845,13 @@
       const provado = n === 2 && E.podeComprovar(op, d.id);
       const classe = n === 2 ? (provado ? 'q2' : 'q2 sem-prova') : 'q' + n;
       const marca = n === 2 ? (provado ? '✓' : '!') : (n === 1 ? '◐' : '');
-      const abre = clicavel ? ' onclick="App.novaEvidencia(\'' + op.id + '\',null,\'' + d.id + '\')"' : '';
+      /* Tocar na decisão abre a tarefa já marcada como feita e já apontada
+         para a evidência direta: dois cliques a menos que o formulário
+         completo, e mesmo assim a evidência nasce com um canal atrás dela. */
+      const abre = clicavel
+        ? ' onclick="App.novaTarefa(\'' + op.id + '\',\'' + d.id +
+          '\',{situacao:\'feita\',comoContar:\'evidencia\',titulo:\'' + esc(d.nome) + '\'})"'
+        : '';
       return '<button class="celula tem-ajuda ' + classe + '"' + abre + '>' +
         '<span class="marca">' + marca + '</span>' +
         '<span class="rot">' + esc(d.nome) + '</span>' +
@@ -910,7 +916,7 @@
       '</div>' +
 
       mapaDecisao(op, !op.desfecho) +
-      '<p class="tiny muted" style="margin:8px 0 0">Toque em uma decisão para registrar a evidência que a comprova.</p>' +
+      '<p class="tiny muted" style="margin:8px 0 0">Toque em uma decisão para registrar, por uma tarefa, a evidência que a comprova.</p>' +
       '<div class="faixa-delta ' + (d.mudancas.length || d.evidencias ? '' : 'parado') + '">' + esc(resumoDelta) + '</div>' +
       '</div>';
   }
@@ -934,15 +940,17 @@
       /* O mesmo texto para as oito decisões não ajuda: o que muda é o que conta
          como evidência em cada uma. Os balões saem do próprio playbook. */
       const d = l.dimensao;
+      /* Um botão por decisão, e não dois. "Registrar evidência" e "Criar
+         tarefa" eram o mesmo gesto em dois tempos — o que vou fazer e o que
+         já fiz — e separá-los fazia a evidência entrar sem interação nenhuma
+         atrás dela: ninguém sabia depois se aquilo veio de uma visita ou de
+         um WhatsApp. A escolha "a fazer / já foi feita" está dentro. */
       const acoes = d
-        ? '<button class="btn alt mini" onclick="App.novaEvidencia(\'' + op.id + '\',null,\'' + d.id + '\')"' +
-            ' data-ajuda-titulo="Evidência de ' + esc(d.nome) + '"' +
-            ' data-ajuda="' + esc('O que o CLIENTE fez nesta decisão. Conta, por exemplo: ' +
-                d.evidencias.slice(0, 2).join('; ').toLowerCase() + '. O que você apresentou não conta.') + '">Registrar evidência</button>' +
-          '<button class="btn ghost mini" onclick="App.novaTarefa(\'' + op.id + '\',\'' + d.id + '\')"' +
+        ? '<button class="btn alt mini" onclick="App.novaTarefa(\'' + op.id + '\',\'' + d.id + '\')"' +
             ' data-ajuda-titulo="Tarefa para ' + esc(d.nome) + '"' +
-            ' data-ajuda="' + esc('O que VOCÊ vai fazer para provocar esta decisão. Por exemplo: ' +
-                d.canais.whatsapp + ' Tarefa é atividade sua: aparece em Hoje, mas não move o índice.') + '">Criar tarefa</button>'
+            ' data-ajuda="' + esc('O que move esta decisão. Se ainda vai acontecer, por exemplo: ' +
+                d.canais.whatsapp + ' Se já aconteceu, marque “já foi feita” e conte o que o CLIENTE fez — conta, por exemplo: ' +
+                d.evidencias.slice(0, 2).join('; ').toLowerCase() + '. O que você apresentou não conta.') + '">+ Tarefa</button>'
         : (l.tipo === 'compromisso'
             ? '<button class="btn alt mini" onclick="App.definirCompromisso(\'' + op.id + '\')" data-ajuda-titulo="Combinar data" data-ajuda="Registra o próximo passo e a data. Negócio sem próximo passo combinado é negócio no ar.">Combinar data</button>'
             : (l.tipo === 'insight'
@@ -1053,13 +1061,15 @@
       '<p class="small"><span class="muted">Decisão a provocar:</span> <strong>' + esc(r.nbd.decisao) + '</strong></p>' +
       '<p class="small muted">' + esc(r.nbd.acao) + '</p>' +
       (canais ? detalhe('Como fazer em cada canal', r.nbd.conteudo || '', '<div class="tabela-rolagem"><table><tbody>' + canais + '</tbody></table></div>') : '') +
-      '<div class="row" style="margin-top:12px"><button class="btn alt" onclick="App.novaEvidencia(\'' + op.id + '\')">Registrar evidência</button>' +
-      (U.assistenteAtivo()
-        ? '<button class="btn ghost" onclick="App.analisarReuniao(\'' + op.id + '\')"' +
-          ' data-ajuda-titulo="Analisar reunião" data-ajuda="Cole a transcrição da call ou suas anotações. O assistente separa cada movimento do cliente na decisão certa — receio vira Risco, exigência vira Critérios — e você confirma linha a linha.">Analisar reunião</button>'
-        : '') +
-      '<button class="btn ghost" onclick="App.fecharReuniao(\'' + op.id + '\')">Fechamento de reunião</button>' +
-      '<button class="btn ghost" onclick="App.novaAtividade(\'' + op.id + '\')">Atividade</button></div></div>';
+      /* Um botão. Registrar evidência, analisar reunião, fechamento de reunião
+         e atividade eram quatro portas para o mesmo lugar — e nenhuma delas
+         guardava por qual canal a decisão andou. Agora tudo entra por uma
+         tarefa, e é dentro dela que se escolhe como contar o que aconteceu. */
+      '<div class="row" style="margin-top:12px">' +
+      '<button class="btn alt" onclick="App.novaTarefa(\'' + op.id + '\',\'' +
+        (r.nbd.dimensao ? r.nbd.dimensao.id : '') + '\')"' +
+      ' data-ajuda-titulo="Nova tarefa" data-ajuda="Uma porta só. Reunião, visita, telefonema, WhatsApp ou e-mail — a fazer ou já feita. Se já aconteceu, escolha como contar: colar a ata (o assistente lê e relê as oito decisões), responder quatro perguntas, ou registrar uma evidência direta.">+ Tarefa</button>' +
+      '</div></div>';
   }
 
   let filtroHistorico = 'tudo';
