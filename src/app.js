@@ -981,8 +981,10 @@
         /* A empresa que a IA achou e não existia entra aqui, se ficou marcada.
            Antes do negócio, porque o negócio precisa do id dela. */
         let alvo = d.contaId;
+        let criada = null;
         if ((!alvo || alvo === NOVA_CONTA) && empresaNova) {
-          alvo = Store.criarConta(empresaNova).id;
+          criada = Store.criarConta(empresaNova);
+          alvo = criada.id;
         }
         if (!alvo || alvo === NOVA_CONTA) {
           alert('Escolha a empresa deste negócio.\n\n' +
@@ -995,9 +997,13 @@
         const quantos = criarContatosPropostos(alvo, pessoas);
         location.hash = '#/op/' + op.id;
         render();
-        if (empresaNova || quantos) {
+        /* "criada" e não "empresaNova": a pessoa pode ter escolhido outra
+           empresa no select depois de a IA propor uma nova, e aí a ficha
+           proposta não vira cadastro nenhum. Anunciar que virou seria mentir
+           sobre o que ficou no banco. */
+        if (criada || quantos) {
           alert('Pronto:' +
-            (empresaNova ? '\n· empresa ' + empresaNova.nome + ' cadastrada' : '') +
+            (criada ? '\n· empresa ' + criada.nome + ' cadastrada' : '') +
             (quantos ? '\n· ' + (quantos === 1 ? '1 contato' : quantos + ' contatos') + ' adicionados' : '') +
             '\n· negócio criado.\n\nConfira o papel de cada pessoa na compra — é ele que alimenta a cobertura do grupo comprador.');
         }
@@ -1007,7 +1013,14 @@
         const sel = dlg.querySelector('[name="contaId"]');
         if (!sel) return;
         sel.addEventListener('change', function () {
-          if (sel.value !== NOVA_CONTA) return;
+          if (sel.value !== NOVA_CONTA) {
+            /* Escolheu uma empresa de verdade: a ficha que a IA propôs deixa
+               de valer, e o convite some da tela junto. */
+            dlg.empresaNovaIA = null;
+            const caixa = dlg.querySelector('[data-empresa-ia]');
+            if (caixa && caixa.querySelector('[data-cria-empresa]')) caixa.innerHTML = '';
+            return;
+          }
           const guardado = valoresDoFormulario(dlg, campos);
           dlg.close('cancelar');
           App.novaConta(function (nova) {
@@ -2967,6 +2980,14 @@
     }
 
     dlg.empresaNovaIA = Object.assign({}, ficha, { nome: nome });
+
+    /* O select TEM de sair de cima da empresa que estava escolhida. Ele nasce
+       na primeira da lista, e sem esta linha a tela dizia "Supermercados Mambo
+       ainda não está cadastrada" logo acima de um campo Empresa mostrando
+       "Marilan – Marília" — e o negócio nascia na Marilan. Duas afirmações
+       contraditórias na mesma tela, e a errada era a que valia. */
+    if (sel) sel.value = NOVA_CONTA;
+
     const detalhe = [ficha.cidade, ficha.uf, ficha.cnpj, ficha.segmento].filter(Boolean).join(' · ');
     caixa.innerHTML = '<label class="empresa-nova-ia">' +
       '<input type="checkbox" checked data-cria-empresa>' +
