@@ -328,7 +328,11 @@
            esperava que os quatro contassem. Assim cada um entra com o começo,
            que é onde ficam cabeçalho, cliente e escopo. */
         const comTexto = docs.filter(function (d) { return d.texto; });
-        const sobra = Math.max(2000, 22000 - digitado.length);
+        /* 15000 e não 22000: a função corta em 16000, e mandar mais fazia o
+           corte cair no meio do último documento, às cegas. Assim quem decide
+           o que sobra é a cota por documento, que reparte, e não uma tesoura
+           no fim do texto. */
+        const sobra = Math.max(2000, 15000 - digitado.length);
         const cota = comTexto.length ? Math.floor(sobra / comTexto.length) : 0;
         const doArquivo = comTexto.map(function (d) {
           const t = d.texto.length > cota ? d.texto.slice(0, cota) + '\n[…]' : d.texto;

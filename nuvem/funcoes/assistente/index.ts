@@ -790,15 +790,111 @@ function acharCnpj(texto: string): string {
    que garante que não estamos lendo o site de outra empresa de nome parecido.
    Fora os que não são da empresa: rede social, buscador, encurtador, e o nosso
    próprio, que aparece em toda proposta que nós mesmos escrevemos. */
-const DOMINIO_ALHEIO = /(linkedin|facebook|instagram|twitter|x\.com|youtube|google|gmail|hotmail|outlook|bit\.ly|whatsapp|wa\.me|sharepoint|onedrive|zoom|teams|biowatercare)/i;
+const DOMINIO_ALHEIO = /(linkedin|facebook|instagram|twitter|x\.com|youtube|google|gmail|hotmail|outlook|yahoo|uol|terra|bol|bit\.ly|whatsapp|wa\.me|sharepoint|onedrive|zoom|teams|biowatercare|biopartners)/i;
 
-function dominiosNoTexto(texto: string): string[] {
-  const achados = String(texto || '')
-    .match(/\b(?:https?:\/\/)?(?:www\.)?([a-z0-9][a-z0-9-]{1,60}\.(?:com\.br|ind\.br|net\.br|agr\.br|com|net|org|io|co)(?:\.[a-z]{2})?)\b/gi) || [];
-  const limpos = achados
-    .map((d) => d.replace(/^https?:\/\//i, '').replace(/^www\./i, '').toLowerCase())
-    .filter((d) => !DOMINIO_ALHEIO.test(d));
-  return Array.from(new Set(limpos)).slice(0, 2);
+function semAcento(t: string): string {
+  return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+/* Onde o domínio de fato aparece num dossiê comercial: na assinatura de e-mail.
+   Ninguém escreve "o site deles é tal" num documento interno, mas todo mundo
+   copia o endereço de quem respondeu — e o e-mail corporativo carrega o
+   domínio da empresa. Procurar só por URL escrita era procurar no lugar errado,
+   e foi por isso que a busca não saía do lugar com material real.
+
+   Ordenar importa tanto quanto achar: um dossiê cita também o e-mail do
+   fornecedor e o do parceiro. Ganha o domínio que se parece com o nome da
+   empresa — de todos os e-mails de um documento da Marilan, marilan.com é o
+   único que é dela. */
+function dominiosNoTexto(texto: string, nomeEmpresa = ''): string[] {
+  const bruto = String(texto || '');
+  const deEmail = (bruto.match(/[\w.+-]+@([a-z0-9][a-z0-9.-]*\.[a-z]{2,})/gi) || [])
+    .map((e) => e.split('@')[1]);
+  const deUrl = (bruto
+    .match(/\b(?:https?:\/\/)?(?:www\.)?([a-z0-9][a-z0-9-]{1,60}\.(?:com\.br|ind\.br|net\.br|agr\.br|com|net|org|io|co)(?:\.[a-z]{2})?)\b/gi) || [])
+    .map((d) => d.replace(/^https?:\/\//i, '').replace(/^www\./i, ''));
+
+  const limpos = Array.from(new Set(
+    deEmail.concat(deUrl).map((d) => d.toLowerCase()).filter((d) => !DOMINIO_ALHEIO.test(d))
+  ));
+
+  /* Nome da empresa reduzido à primeira palavra com letra: "Marilan Alimentos
+     S.A." vira "marilan", que é o que se procura dentro do domínio. */
+  const chave = semAcento(nomeEmpresa).replace(/[^a-z0-9 ]/g, ' ').trim().split(/\s+/)[0] || '';
+
+  const pontuado = limpos.map((d) => {
+    const rotulo = d.split('.')[0];
+    let nota = 0;
+    if (chave.length >= 4 && (rotulo.indexOf(chave) !== -1 || chave.indexOf(rotulo) !== -1)) nota += 10;
+    if (/\.com\.br$|\.ind\.br$/.test(d)) nota += 2;   /* empresa brasileira publica CNPJ no .br */
+    return { d, nota };
+  }).sort((a, b) => b.nota - a.nota);
+
+  const escolhidos = pontuado.map((x) => x.d).slice(0, 2);
+
+  /* Muita empresa brasileira tem os dois, e o .com.br costuma ser o site
+     institucional com o rodapé completo. Custa uma tentativa. */
+  const primeiro = escolhidos[0];
+  if (primeiro && /\.com$/.test(primeiro)) {
+    const irmao = primeiro.replace(/\.com$/, '.com.br');
+    if (escolhidos.indexOf(irmao) === -1) escolhidos.push(irmao);
+  }
+
+  /* E quando o material não traz e-mail nem site — acontece com ata de
+     reunião — o nome sozinho já dá para tentar. Empresa brasileira quase
+     sempre está em <nome>.com.br. Isto é chute, e por isso não vale nada
+     sozinho: o que o torna seguro é a conferência lá na frente, que só aceita
+     a página se ela falar o nome da empresa. Chutar e conferir é diferente de
+     inventar. */
+  if (chave.length >= 4) {
+    for (const palpite of [chave + '.com.br', chave + '.com', chave + '.ind.br']) {
+      if (escolhidos.indexOf(palpite) === -1) escolhidos.push(palpite);
+    }
+  }
+  return escolhidos.slice(0, 5);
+}
+
+/* Busca de verdade, quando o palpite não achou. Sem chave de API: o DuckDuckGo
+   tem uma página HTML que responde a qualquer um. É frágil por natureza — pode
+   mudar de formato, pode bloquear — e por isso vem por último e falha calada.
+   O que sai daqui é candidato, não resposta: passa pela mesma conferência que
+   tudo o mais, e só entra se a página falar o nome da empresa. */
+async function dominiosPelaBusca(nome: string): Promise<string[]> {
+  const termo = String(nome || '').trim();
+  if (termo.length < 3) return [];
+  const controle = new AbortController();
+  const corta = setTimeout(() => controle.abort(), 5000);
+  try {
+    const r = await fetch('https://html.duckduckgo.com/html/?q=' +
+      encodeURIComponent(termo + ' empresa site oficial'), {
+      signal: controle.signal,
+      headers: {
+        'user-agent': 'Mozilla/5.0 (compatible; IAD-CRM/1.0)',
+        'accept-language': 'pt-BR,pt;q=0.9'
+      }
+    });
+    if (!r.ok) return [];
+    const html = await r.text();
+
+    /* Os resultados vêm embrulhados: /l/?uddg=<url codificada>. Também
+       aceitamos href direto, porque o formato já mudou antes. */
+    const brutos: string[] = [];
+    for (const m of html.matchAll(/uddg=([^&"']+)/g)) {
+      try { brutos.push(decodeURIComponent(m[1])); } catch { /* ignora */ }
+    }
+    for (const m of html.matchAll(/href="(https?:\/\/[^"]+)"/g)) brutos.push(m[1]);
+
+    const dominios = brutos
+      .map((u) => u.replace(/^https?:\/\//i, '').replace(/^www\./i, '').split('/')[0].toLowerCase())
+      .filter((d) => /^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/.test(d))
+      .filter((d) => !DOMINIO_ALHEIO.test(d) && !/duckduckgo|wikipedia|reclameaqui|glassdoor|indeed|jusbrasil|econodata|cnpj|empresas|gov\.br/i.test(d));
+
+    return Array.from(new Set(dominios)).slice(0, 4);
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(corta);
+  }
 }
 
 /* Consulta pública da Receita. Devolve texto pronto para o modelo ler, com a
@@ -834,19 +930,52 @@ async function dadosDaReceita(cnpj: string): Promise<string> {
 
 /* Junta ao material o que dá para buscar. Nunca substitui o documento: soma,
    com a origem escrita em cada bloco. */
-async function enriquecerConta(texto: string, siteConhecido: string): Promise<string> {
-  const dominios = dominiosNoTexto(siteConhecido + ' ' + texto);
+async function enriquecerConta(texto: string, siteConhecido: string, nome: string): Promise<string> {
+  const dominios = dominiosNoTexto(siteConhecido + ' ' + texto, nome);
   const paginas: string[] = [];
+  const chave = semAcento(nome).replace(/[^a-z0-9 ]/g, ' ').trim().split(/\s+/)[0] || '';
 
   for (const d of dominios) {
+    if (paginas.length >= 2) break;
     /* Rodapé é onde mora o CNPJ, e ele está no fim do HTML: por isso o limite
-       aqui é grande, e a página de contato entra junto. */
-    const [inicio, contato] = await Promise.all([
+       aqui é grande, e as páginas institucionais entram junto. */
+    const [inicio, contato, sobre] = await Promise.all([
       textoDoSite(d, '/', 6000),
-      textoDoSite(d, '/contato', 6000)
+      textoDoSite(d, '/contato', 6000),
+      textoDoSite(d, '/institucional', 4000)
     ]);
-    const junto = (inicio + ' ' + contato).trim();
-    if (junto) paginas.push('[site ' + d + ']\n' + junto.slice(0, 5000));
+    const junto = (inicio + ' ' + contato + ' ' + sobre).trim();
+    if (!junto) continue;
+
+    /* A prova de que é o site certo: a página fala o nome da empresa. É ela
+       que sustenta o palpite — sem esta linha, tentar <nome>.com.br viraria
+       ler o site de quem por acaso tem aquele domínio, e o CNPJ de outra
+       empresa é pior do que CNPJ nenhum. Sem nome para conferir, só entram
+       domínios que vieram escritos no material. */
+    if (chave.length >= 4) {
+      if (semAcento(junto).indexOf(chave) === -1) continue;
+    } else if (!(siteConhecido + ' ' + texto).toLowerCase().includes(d)) {
+      continue;
+    }
+
+    paginas.push('[site ' + d + ']\n' + junto.slice(0, 5000));
+  }
+
+  /* Nada aceito até aqui quer dizer que o material não trouxe o domínio e o
+     palpite não colou. Aí sim vale sair para a internet. Deixar isso por
+     último não é timidez: buscar custa segundos e traz ruído, e na maioria
+     dos casos o e-mail no rodapé do documento já resolveu. */
+  if (!paginas.length && chave.length >= 3) {
+    for (const d of await dominiosPelaBusca(nome)) {
+      if (paginas.length >= 2) break;
+      const [inicio, contato] = await Promise.all([
+        textoDoSite(d, '/', 6000),
+        textoDoSite(d, '/contato', 6000)
+      ]);
+      const junto = (inicio + ' ' + contato).trim();
+      if (!junto || semAcento(junto).indexOf(chave) === -1) continue;
+      paginas.push('[site ' + d + ', encontrado por busca]\n' + junto.slice(0, 5000));
+    }
   }
 
   const cnpj = acharCnpj(texto + ' ' + paginas.join(' '));
@@ -965,7 +1094,7 @@ Deno.serve(async (req: Request) => {
       const nome = String((json as Record<string, unknown>).nome || '');
       const site = String((json as Record<string, unknown>).site || '');
       if (nome) {
-        const comBusca = await enriquecerConta(entrada, site);
+        const comBusca = await enriquecerConta(entrada, site, nome);
         if (comBusca !== entrada) {
           const brutoDois = await chamarIA(promptDe(tipo, ctx), comBusca);
           const jsonDois = lerJSON(brutoDois);
