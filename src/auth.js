@@ -66,6 +66,15 @@
     return s ? usuario(s.usuarioId) : null;
   }
 
+  /* Gestor e administrador mandam no catálogo da empresa. Produto não é
+     trabalho do dia — é decisão comercial: mexer no preço de referência muda o
+     valor de toda oportunidade que usar aquele item. Conta, contato e
+     oportunidade continuam sendo de todos, porque são o trabalho. */
+  function ehGestor() {
+    const u = atual();
+    return !!u && (u.papel === 'gestor' || u.papel === 'admin');
+  }
+
   function ehAdmin() {
     const u = atual();
     return !!u && u.papel === 'admin';
@@ -304,7 +313,7 @@
   }
 
   global.IADAuth = {
-    entrar, encerrarSessao, atual, ehAdmin, sessao, filtros, definirFiltros,
+    entrar, encerrarSessao, atual, ehAdmin, ehGestor, sessao, filtros, definirFiltros,
     usuarios, tenants, tenant, usuario, porLogin, criarUsuario, criarTenant,
     gerarCodigo, confirmarCodigo, completarPerfil, salvarUsuario, excluirUsuario,
     definirSenha, conferirSenha, garantirAdministrador, abrirSessao,

@@ -528,12 +528,16 @@
     },
 
     excluirItemCatalogo: function (nome, id) {
+      if (nome === 'produtos' && !podeMexerEmProduto()) return;
       if (!U.confirmar('Excluir este item do cadastro? Os registros que já o usam continuam como estão.')) return;
       Store.removerDoCatalogo(nome, id);
       render();
     },
 
+    /* A tela esconde os botões; isto recusa a ação. Esconder não impede: a
+       função continua no window. Mesma dupla dos usuários. */
     novoProduto: function () {
+      if (!podeMexerEmProduto()) return;
       U.formulario('Novo produto', camposProduto(), {}, function (d) {
         if (!d.nome) return;
         Store.criarNoCatalogo('produtos', Object.assign({}, d, { precoReferencia: U.numeroDigitado(d.precoReferencia) }));
@@ -542,6 +546,7 @@
     },
 
     editarProduto: function (id) {
+      if (!podeMexerEmProduto()) return;
       const p = Store.produto(id);
       if (!p) return;
       U.formulario('Editar produto', camposProduto().concat([
@@ -801,20 +806,24 @@
     filtrarSegmento: function (segmento) { V.definirSegmento(segmento); render(); },
 
     /* ---------- Contas e contatos ---------- */
-    novaConta: function () {
+    /* `depois` existe para quem chegou aqui no meio de outra coisa — cadastrar
+       a empresa dentro da oportunidade. Sem ele, salvar a conta jogava a pessoa
+       na lista de contas e o negócio que ela estava criando se perdia. */
+    novaConta: function (depois) {
       U.formulario('Nova conta', camposConta(), {}, function (d, docs, pessoas) {
-        if (!d.nome) return;
+        if (!d.nome) { if (depois) depois(null); return; }
         const nova = Store.criarConta(d);
         anexarAoRegistro(docs, { contaId: nova.id });
         const n = criarContatosPropostos(nova.id, pessoas);
-        location.hash = '#/contas';
+        if (!depois) location.hash = '#/contas';
         render();
         if (n) {
           alert(nova.nome + ' cadastrada com ' +
             (n === 1 ? '1 contato' : n + ' contatos') + '.\n\n' +
             'Confira o papel de cada um na compra — é ele que alimenta a cobertura do grupo comprador.');
         }
-      });
+        if (depois) depois(nova);
+      }, null, function () { if (depois) depois(null); });
     },
 
     editarConta: function (id) {
@@ -896,9 +905,15 @@
       dlg.showModal();
     },
 
+    /* Mesma história da oportunidade: sem empresa, cadastra a empresa e volta
+       para o contato, em vez de largar a pessoa na tela de contas. */
     novoContato: function (contaId) {
       const contas = Store.dados().contas;
-      if (!contas.length) { alert('Cadastre uma empresa primeiro.'); return App.novaConta(); }
+      if (!contas.length) {
+        return App.novaConta(function (nova) {
+          if (nova) App.novoContato(nova.id);
+        });
+      }
       const campos = contaId ? camposContato(contaId) : [{
         id: 'contaId', rotulo: 'Empresa', tipo: 'select',
         opcoes: contas.map(function (c) { return { valor: c.id, rotulo: c.nome }; })
@@ -923,14 +938,42 @@
     },
 
     /* ---------- Oportunidades ---------- */
-    novaOportunidade: function (contaId) {
+    /* Sem conta cadastrada, isto dizia "cadastre uma conta primeiro" e abria o
+       formulário de conta — e ali acabava. Quem clicou em "+ Oportunidade"
+       tinha de clicar de novo depois, se lembrasse. Beco sem saída com aviso
+       educado continua sendo beco sem saída.
+
+       Agora o caminho não se interrompe: cadastra a empresa e volta para a
+       oportunidade, com ela já escolhida. O que a pessoa tinha digitado antes
+       volta junto — perder o título porque faltava a empresa seria trocar um
+       aborrecimento por outro. */
+    novaOportunidade: function (contaId, valores) {
       const contas = Store.dados().contas;
-      if (!contas.length) { alert('Cadastre uma conta primeiro.'); return App.novaConta(); }
-      U.formulario('Nova oportunidade', camposOportunidade(contas, contaId), {}, function (d) {
+      if (!contas.length) {
+        return App.novaConta(function (nova) {
+          if (nova) App.novaOportunidade(nova.id, valores);
+        });
+      }
+
+      const campos = camposOportunidade(contas, contaId);
+      U.formulario('Nova oportunidade', campos, valores || {}, function (d) {
         if (!d.titulo) return;
         const op = Store.criarOportunidade(d);
         location.hash = '#/op/' + op.id;
         render();
+      }, function (dlg) {
+        /* A opção "+ Nova empresa" no próprio select: é onde a pessoa está
+           olhando quando descobre que a empresa não existe. */
+        const sel = dlg.querySelector('[name="contaId"]');
+        if (!sel) return;
+        sel.addEventListener('change', function () {
+          if (sel.value !== NOVA_CONTA) return;
+          const guardado = valoresDoFormulario(dlg, campos);
+          dlg.close('cancelar');
+          App.novaConta(function (nova) {
+            App.novaOportunidade(nova ? nova.id : contaId, guardado);
+          });
+        });
       });
     },
 
@@ -2590,6 +2633,28 @@
     return n;
   }
 
+  const NOVA_CONTA = '__nova_empresa__';
+
+  /* O que já está digitado, para reabrir o formulário sem perder nada. Lê o
+     que está na tela, não o que foi passado ao abrir: a pessoa pode ter
+     mudado tudo antes de perceber que faltava a empresa. */
+  function valoresDoFormulario(dlg, campos) {
+    const v = {};
+    campos.forEach(function (c) {
+      if (!c.id || c.tipo === 'ia') return;
+      const el = dlg.querySelector('[name="' + c.id + '"]');
+      if (el && el.value && el.value !== NOVA_CONTA) v[c.id] = el.value;
+    });
+    return v;
+  }
+
+  function podeMexerEmProduto() {
+    if (A.ehGestor()) return true;
+    alert('Produtos são do catálogo da empresa — só o gestor cadastra e edita.\n\n' +
+      'Contas, contatos e oportunidades você cria normalmente.');
+    return false;
+  }
+
   /* ---------- campos reutilizados ---------- */
   function camposProduto() {
     return [
@@ -2715,7 +2780,10 @@
         nunca: ['valor', 'etapa', 'fechamentoPrevisto'],
         contexto: function () { return IA.contextoDaConta(contaPadrao); } },
       { id: 'titulo', rotulo: 'Título' },
-      { id: 'contaId', rotulo: 'Conta', tipo: 'select', padrao: contaPadrao || (contas[0] && contas[0].id), opcoes: contas.map(function (c) { return { valor: c.id, rotulo: c.nome }; }) },
+      { id: 'contaId', rotulo: 'Empresa', tipo: 'select',
+        padrao: contaPadrao || (contas[0] && contas[0].id),
+        opcoes: contas.map(function (c) { return { valor: c.id, rotulo: c.nome }; })
+          .concat([{ valor: NOVA_CONTA, rotulo: '+ Cadastrar nova empresa…' }]) },
       { id: 'valor', rotulo: 'Valor (R$)', tipo: 'moeda' },
       { id: 'etapa', rotulo: 'Etapa CRM', tipo: 'select', opcoes: P.ETAPAS },
       { id: 'tipo', rotulo: 'Tipo', tipo: 'select', opcoes: P.TIPOS_OPORTUNIDADE },

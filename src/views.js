@@ -611,7 +611,7 @@
       : '';
 
     return '<div class="row"><h1>Pipeline</h1><span class="espaco"></span>' + alternar + importar +
-      '<button class="btn alt mini" onclick="App.novaOportunidade()" data-ajuda-titulo="Nova oportunidade" data-ajuda="Cria o negócio. A empresa e os contatos podem ser cadastrados na mesma janela.">+ Oportunidade</button></div>' +
+      '<button class="btn alt mini" onclick="App.novaOportunidade()" data-ajuda-titulo="Nova oportunidade" data-ajuda="Cria o negócio. Se a empresa ainda não existir, escolha &quot;+ Cadastrar nova empresa&quot; no próprio campo: você cadastra e volta para cá, sem perder o que digitou.">+ Oportunidade</button></div>' +
       '<div class="row filtros-pipeline" style="margin:8px 0 14px">' + filtros + '</div>';
   }
 
@@ -1461,9 +1461,13 @@
       produtos: listaProdutos, usuarios: listaUsuarios
     }[abaCadastro](est);
 
-    /* Criar pessoa é atribuição de quem administra. Nas outras abas o botão
-       vale para todos: conta, contato e oportunidade são o trabalho do dia. */
-    const podeCriar = abaCadastro !== 'usuarios' || global.IADAuth.ehAdmin();
+    /* Duas portas diferentes. Pessoa é do administrador. Produto é do gestor:
+       mexer no preço de referência muda o valor de toda oportunidade que usar
+       o item — não é trabalho do dia, é decisão comercial. Conta, contato e
+       oportunidade continuam de todos, porque são o trabalho. */
+    const podeCriar =
+      abaCadastro === 'usuarios' ? global.IADAuth.ehAdmin() :
+      abaCadastro === 'produtos' ? global.IADAuth.ehGestor() : true;
 
     return '<div class="row"><h1>Cadastros</h1><span class="espaco"></span>' +
       (podeCriar
@@ -1626,8 +1630,12 @@
         '<td class="right">' + (p.precoReferencia ? U.moeda(p.precoReferencia) : '—') + '</td>' +
         '<td class="right">' + usos + '</td>' +
         '<td class="right" style="white-space:nowrap">' +
-          '<button class="btn ghost mini" onclick="App.editarProduto(\'' + p.id + '\')">Editar</button> ' +
-          '<button class="btn ghost mini" onclick="App.excluirItemCatalogo(\'produtos\',\'' + p.id + '\')">Excluir</button></td></tr>';
+          (global.IADAuth.ehGestor()
+            ? '<button class="btn ghost mini" onclick="App.editarProduto(\'' + p.id + '\')">Editar</button> '
+            : '<span class="tiny muted" data-ajuda="Produtos são do catálogo da empresa: só o gestor cadastra e edita.">só o gestor edita</span>') +
+          (global.IADAuth.ehGestor()
+            ? '<button class="btn ghost mini" onclick="App.excluirItemCatalogo(\'produtos\',\'' + p.id + '\')">Excluir</button>'
+            : '') + '</td></tr>';
     }).join('');
     return tabela(['Produto', 'SKU', 'Categoria', 'Unidade', 'Preço de referência', 'Em uso', ''], linhas, 'Nenhum produto cadastrado.');
   }
