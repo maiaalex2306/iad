@@ -62,11 +62,13 @@ Cole isto na barra de endereço do navegador, trocando `SEU_REF`:
 
     https://SEU_REF.supabase.co/functions/v1/assistente
 
-Abrir no navegador é uma leitura (GET), e a função só aceita POST. Então:
+O navegador não manda credencial nenhuma, então quem responde é o porteiro do
+Supabase, antes da função:
 
-- **405** → certo. A função está no ar. Era esse o teste.
+- **`UNAUTHORIZED_NO_AUTH_HEADER`** ou **401** → certo. A rota existe e está
+  protegida. É o que se espera: o app manda o token, a barra de endereço não.
 - **404** → o deploy não foi, ou o nome ficou diferente de `assistente`.
-- **401** → também está no ar, recusando quem não está logado.
+- **405** → também está no ar; o pedido chegou à função, que só aceita POST.
 - **503** → está no ar, mas falta o segredo `IA_CHAVE`.
 
 ## 5. Pronto

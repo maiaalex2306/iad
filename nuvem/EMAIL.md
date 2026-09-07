@@ -76,7 +76,16 @@ Estar logado não basta.
 
 ## Conferir
 
-Em Cadastros → Usuários, registre uma pessoa e clique em **Enviar**.
+Primeiro, que a função subiu. Cole na barra de endereço:
+
+    https://drhonmdffhnwamwzynrs.supabase.co/functions/v1/convite
+
+A resposta esperada é **`UNAUTHORIZED_NO_AUTH_HEADER`** — a rota existe e
+está protegida, e o navegador não manda credencial. **404** seria a função
+ausente. Não espere 405: o porteiro do Supabase recusa antes de a função
+rodar.
+
+Depois, o teste de verdade. Em Cadastros → Usuários, registre uma pessoa e clique em **Enviar**.
 
 - **"Convite enviado para ..."** → funcionou. Confira a caixa de entrada dela,
   e o spam na primeira vez.
