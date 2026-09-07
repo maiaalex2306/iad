@@ -103,8 +103,21 @@
     const dlg = document.createElement('dialog');
     const html = campos.map(function (c) {
       const v = (valores && valores[c.id] != null) ? valores[c.id] : (c.padrao != null ? c.padrao : '');
+
+      /* Uma coluna de vinte campos iguais não diz o que anda junto: nome,
+         razão social e CNPJ são a identidade da empresa; cidade e UF são um
+         lugar só. Seção separa assunto, meia largura junta o que se lê de uma
+         vez. Sem as duas, o formulário fica com cara de banco de dados
+         exposto — que era o caso. */
+      if (c.tipo === 'secao') {
+        return '<div class="secao-form"><span>' + esc(c.rotulo) + '</span>' +
+          (c.ajuda ? '<em>' + esc(c.ajuda) + '</em>' : '') + '</div>';
+      }
+      if (c.tipo === 'aviso') {
+        return '<p class="nota-form">' + esc(c.rotulo) + '</p>';
+      }
       if (c.tipo === 'select') {
-        return '<label class="campo"><span>' + esc(c.rotulo) + '</span><select name="' + c.id + '">' +
+        return '<label class="campo' + (c.largura === 'metade' ? ' meia' : '') + '"><span>' + esc(c.rotulo) + '</span><select name="' + c.id + '">' +
           c.opcoes.map(function (o) {
             const val = typeof o === 'string' ? o : o.valor;
             const rot = typeof o === 'string' ? o : o.rotulo;
@@ -112,11 +125,11 @@
           }).join('') + '</select></label>';
       }
       if (c.tipo === 'textarea') {
-        return '<label class="campo"><span>' + esc(c.rotulo) + '</span><textarea name="' + c.id + '">' + esc(v) + '</textarea>' +
+        return '<label class="campo' + (c.largura === 'metade' ? ' meia' : '') + '"><span>' + esc(c.rotulo) + '</span><textarea name="' + c.id + '">' + esc(v) + '</textarea>' +
           (c.voz ? botaoVoz(c.id) : '') + '</label>';
       }
       if (c.tipo === 'moeda') {
-        return '<label class="campo"><span>' + esc(c.rotulo) + '</span>' +
+        return '<label class="campo' + (c.largura === 'metade' ? ' meia' : '') + '"><span>' + esc(c.rotulo) + '</span>' +
           '<input type="text" inputmode="decimal" name="' + c.id + '" value="' + esc(paraCampoMoeda(v)) +
           '" placeholder="0,00" autocomplete="off"></label>';
       }
@@ -124,7 +137,7 @@
       /* O olho existe nas telas de acesso desde sempre; faltava aqui dentro,
          que é justamente onde se troca a senha. */
       if (c.tipo === 'password') {
-        return '<label class="campo"><span>' + esc(c.rotulo) + '</span>' +
+        return '<label class="campo' + (c.largura === 'metade' ? ' meia' : '') + '"><span>' + esc(c.rotulo) + '</span>' +
           '<span class="campo-senha">' +
           '<input type="password" name="' + c.id + '" value="' + esc(v) + '"' +
           (c.placeholder ? ' placeholder="' + esc(c.placeholder) + '"' : '') + '>' +
@@ -132,7 +145,7 @@
           ' aria-label="Mostrar a senha" data-ajuda="Mostra ou esconde a senha digitada.">👁</button>' +
           '</span></label>';
       }
-      return '<label class="campo"><span>' + esc(c.rotulo) + '</span><input type="' + (c.tipo || 'text') + '" name="' + c.id + '" value="' + esc(v) + '"' + (c.placeholder ? ' placeholder="' + esc(c.placeholder) + '"' : '') + '></label>';
+      return '<label class="campo' + (c.largura === 'metade' ? ' meia' : '') + '"><span>' + esc(c.rotulo) + '</span><input type="' + (c.tipo || 'text') + '" name="' + c.id + '" value="' + esc(v) + '"' + (c.placeholder ? ' placeholder="' + esc(c.placeholder) + '"' : '') + '></label>';
     }).join('');
 
     dlg.innerHTML =
@@ -156,7 +169,7 @@
             ? numeroDigitado(el.value)
             : el.value.trim();
         });
-        aoConfirmar(dados);
+        aoConfirmar(dados, dlg.documentosIA || []);
       } else if (aoCancelar) {
         aoCancelar();
       }
@@ -214,18 +227,34 @@
     return !!(global.IADIA && global.IADIA.disponivel());
   }
 
+  /* Três entradas para a mesma análise: o que a pessoa escreve, o que ela
+     dita, e os documentos que ela carrega. Pedir para copiar e colar o
+     conteúdo de uma proposta em Word é pedir que ninguém use — e era isso que
+     este app fazia. O botão diz "Análise da IA" e não "Preencher os campos"
+     porque ele lê as três coisas juntas, não só a caixa de texto. */
   function caixaIA(c) {
     if (!assistenteAtivo()) return '';
     return '<div class="caixa-ia">' +
       '<span class="rotulo">✨ ' + esc(c.rotulo || 'Cole a ata ou conte o que aconteceu') + '</span>' +
       '<textarea name="' + c.id + '" placeholder="' + esc(c.placeholder || '') + '">' + esc(c.padrao || '') + '</textarea>' +
+      '<input type="file" multiple hidden data-ia-arquivos="' + c.id + '"' +
+      ' accept=".pdf,.docx,.xlsx,.pptx,.txt,.md,.csv,.tsv,.json,.rtf,.vtt,.srt">' +
       '<div class="linha">' +
-        '<button type="button" class="btn mini" data-ia="' + c.id + '">Preencher os campos</button>' +
+        '<button type="button" class="btn mini" data-ia="' + c.id + '">Análise da IA</button>' +
+        '<button type="button" class="btn ghost mini" data-ia-carregar="' + c.id + '"' +
+        ' data-ajuda-titulo="Carregar documentos" data-ajuda="Word, Excel, PowerPoint, PDF, texto e planilhas. Pode escolher vários de uma vez. A IA lê todos junto com o que você escreveu.">📎 Carregar documentos</button>' +
         botaoVoz(c.id) +
         '<span class="estado" data-ia-estado="' + c.id + '"></span>' +
       '</div>' +
+      '<div class="anexos-ia" data-ia-lista="' + c.id + '"></div>' +
       '<p class="rodape-ia">O assistente sugere. Quem confirma é você — e a nota da decisão continua sendo sua.</p>' +
     '</div>';
+  }
+
+  function tamanhoLegivel(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return Math.round(bytes / 1024) + ' kB';
+    return (bytes / 1048576).toFixed(1) + ' MB';
   }
 
   function ligarIA(dlg, campos) {
@@ -235,12 +264,68 @@
       if (!botao) return;
       const caixa = dlg.querySelector('[name="' + c.id + '"]');
       const estado = dlg.querySelector('[data-ia-estado="' + c.id + '"]');
+      const entrada = dlg.querySelector('[data-ia-arquivos="' + c.id + '"]');
+      const lista = dlg.querySelector('[data-ia-lista="' + c.id + '"]');
+      const carregar = dlg.querySelector('[data-ia-carregar="' + c.id + '"]');
+
+      /* Os documentos ficam aqui, já lidos, e não no input: escolher outros
+         arquivos numa segunda vez substituiria os primeiros, e a pessoa que
+         carrega a proposta e depois a planilha espera ficar com as duas. */
+      const docs = [];
+      dlg.documentosIA = docs;   /* quem salva o formulário anexa estes ao registro */
+
+      function pintarLista() {
+        if (!lista) return;
+        lista.innerHTML = docs.map(function (d, i) {
+          return '<span class="anexo' + (d.erro ? ' com-erro' : '') + '"' +
+            (d.erro ? ' title="' + esc(d.erro) + '"' : '') + '>' +
+            esc(d.nome) + '<em>' + (d.erro ? 'não deu' : tamanhoLegivel(d.tamanho)) + '</em>' +
+            '<button type="button" class="sai" data-tira="' + i + '" aria-label="Tirar este documento">×</button></span>';
+        }).join('');
+        lista.querySelectorAll('[data-tira]').forEach(function (b) {
+          b.addEventListener('click', function () {
+            docs.splice(parseInt(b.getAttribute('data-tira'), 10), 1);
+            pintarLista();
+          });
+        });
+      }
+
+      if (carregar && entrada) {
+        carregar.addEventListener('click', function () { entrada.click(); });
+        entrada.addEventListener('change', function () {
+          const escolhidos = Array.prototype.slice.call(entrada.files || []);
+          if (!escolhidos.length) return;
+          estado.textContent = 'Lendo ' + escolhidos.length + ' arquivo' + (escolhidos.length > 1 ? 's' : '') + '…';
+          global.IADDocumentos.lerVarios(escolhidos).then(function (lidos) {
+            lidos.forEach(function (d, i) { d.arquivo = escolhidos[i]; docs.push(d); });
+            dlg.documentosIA = docs;
+            entrada.value = '';                       /* deixa reescolher o mesmo arquivo */
+            pintarLista();
+            const ruins = docs.filter(function (d) { return d.erro; }).length;
+            estado.textContent = ruins
+              ? ruins + ' arquivo' + (ruins > 1 ? 's' : '') + ' não deu para ler — passe o mouse para ver o motivo.'
+              : docs.length + ' documento' + (docs.length > 1 ? 's' : '') + ' carregado' + (docs.length > 1 ? 's' : '') + '.';
+          });
+        });
+      }
 
       botao.addEventListener('click', function () {
-        const texto = caixa.value.trim();
-        if (texto.length < 12) { estado.textContent = 'Escreva um pouco mais para eu ter o que ler.'; return; }
+        const digitado = caixa.value.trim();
+        /* Documento e texto vão juntos, cada um anunciado: sem o nome do
+           arquivo antes do conteúdo, a IA não tem como dizer de onde tirou o
+           que preencheu — e é isso que a pessoa vai querer conferir. */
+        const doArquivo = docs.filter(function (d) { return d.texto; })
+          .map(function (d) { return '=== ' + d.nome + ' ===\n' + d.texto; }).join('\n\n');
+        const texto = [digitado, doArquivo].filter(Boolean).join('\n\n');
+
+        if (texto.length < 12) {
+          estado.textContent = docs.length
+            ? 'Os documentos carregados não tinham texto legível. Escreva ou carregue outro.'
+            : 'Escreva algo, dite, ou carregue um documento para eu ler.';
+          return;
+        }
         botao.disabled = true;
-        estado.textContent = 'Lendo…';
+        estado.textContent = 'Analisando…';
         const ctx = c.contexto ? c.contexto() : {};
         global.IADIA.extrair(c.extrair, texto, ctx).then(function (r) {
           botao.disabled = false;
@@ -248,7 +333,7 @@
           const n = aplicarSugestoes(dlg, campos, r, c.nunca);
           estado.textContent = n
             ? (n === 1 ? '1 campo preenchido — confira.' : n + ' campos preenchidos — confira.')
-            : 'Não achei nada para preencher neste texto.';
+            : 'Não achei nada para preencher neste material.';
           if (c.aoAplicar) c.aoAplicar(dlg, r, n);
         });
       });

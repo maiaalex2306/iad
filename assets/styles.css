@@ -232,11 +232,55 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--navy-2); ou
 .notas button.bloqueado { opacity: .45; border-style: dashed; }
 
 dialog {
-  border: 0; border-radius: 16px; padding: 0; width: min(560px, 94vw);
+  border: 0; border-radius: 16px; padding: 0; width: min(680px, 94vw);
   background: var(--surface); color: var(--text); box-shadow: 0 20px 60px rgba(0,0,0,.35);
 }
 dialog::backdrop { background: rgba(6, 14, 24, .55); }
 dialog .corpo { padding: 18px; max-height: 82dvh; overflow: auto; }
+
+/* Duas colunas para o que anda junto — cidade e UF, telefone e site. O grid
+   fica no corpo do diálogo e cada campo escolhe se ocupa uma coluna ou as
+   duas; abaixo de 560px vira coluna única, porque no celular meia largura é
+   um campo estreito demais para caber um CNPJ. */
+dialog .corpo { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; align-content: start; }
+dialog .corpo > * { grid-column: 1 / -1; }
+dialog .corpo > label.campo.meia { grid-column: span 1; }
+@media (max-width: 560px) { dialog .corpo > label.campo.meia { grid-column: 1 / -1; } }
+
+.secao-form {
+  grid-column: 1 / -1; margin: 16px 0 8px; padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+.secao-form:first-child { margin-top: 0; }
+.secao-form span {
+  display: block; font-size: .72rem; text-transform: uppercase; letter-spacing: .09em;
+  font-weight: 700; color: var(--navy-2);
+}
+.secao-form em { display: block; font-style: normal; font-size: .75rem; color: var(--muted); margin-top: 2px; }
+.nota-form {
+  grid-column: 1 / -1; margin: 0 0 12px; padding: 8px 11px; border-radius: 9px;
+  background: var(--bg); border: 1px solid var(--line);
+  font-size: .78rem; color: var(--muted);
+}
+
+/* Documentos carregados. Cada um mostra nome e tamanho, e sai com um clique —
+   quem anexou o arquivo errado precisa poder tirá-lo sem fechar o formulário. */
+.anexos-ia { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.anexos-ia:empty { margin-top: 0; }
+.anexos-ia .anexo {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 4px 3px 9px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--surface);
+  font-size: .74rem; max-width: 100%;
+}
+.anexos-ia .anexo em { font-style: normal; color: var(--muted); font-size: .7rem; }
+.anexos-ia .anexo.com-erro { border-color: rgba(179,45,45,.45); }
+.anexos-ia .anexo.com-erro em { color: var(--dead); }
+.anexos-ia .anexo .sai {
+  border: 0; background: transparent; color: var(--muted); cursor: pointer;
+  font-size: .95rem; line-height: 1; padding: 2px 5px; border-radius: 999px;
+}
+.anexos-ia .anexo .sai:hover { background: var(--bg); color: var(--text); }
 dialog .rodape { display: flex; gap: 8px; justify-content: flex-end; padding: 12px 18px; border-top: 1px solid var(--line); }
 
 table { width: 100%; border-collapse: collapse; font-size: .88rem; }

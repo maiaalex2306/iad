@@ -802,9 +802,10 @@
 
     /* ---------- Contas e contatos ---------- */
     novaConta: function () {
-      U.formulario('Nova conta', camposConta(), {}, function (d) {
+      U.formulario('Nova conta', camposConta(), {}, function (d, docs) {
         if (!d.nome) return;
-        Store.criarConta(d);
+        const nova = Store.criarConta(d);
+        anexarAoRegistro(docs, { contaId: nova.id });
         location.hash = '#/contas';
         render();
       });
@@ -813,11 +814,79 @@
     editarConta: function (id) {
       const c = Store.conta(id);
       if (!c) return;
-      U.formulario('Editar conta', camposConta(), c, function (d) {
+      U.formulario('Editar conta', camposConta(), c, function (d, docs) {
         Object.assign(c, d);
         Store.salvar();
+        anexarAoRegistro(docs, { contaId: id });
         render();
       });
+    },
+
+    /* Documentos da empresa, como no RD Station: o que se carregou uma vez
+       continua ali para quem abrir depois. Não confundir com o que a IA leu —
+       ler é momento, anexar é memória, e são gestos diferentes ainda que o
+       arquivo seja o mesmo. */
+    arquivosDaConta: function (contaId) {
+      const c = Store.conta(contaId);
+      if (!c) return;
+      if (!Arq.disponivel()) { alert('Este navegador não guarda anexos.'); return; }
+
+      const dlg = document.createElement('dialog');
+      dlg.innerHTML = '<div class="corpo"><h2>Documentos · ' + U.esc(c.nome) + '</h2>' +
+        '<p class="nota-form">Ficam neste aparelho, ligados a esta empresa. ' +
+        'Word, Excel, PowerPoint, PDF, imagem — o que for.</p>' +
+        '<input type="file" multiple hidden id="anexos-conta-arquivo">' +
+        '<div class="row"><button class="btn alt mini" type="button" id="anexos-conta-add">📎 Carregar documentos</button></div>' +
+        '<div id="anexos-conta-lista"><p class="tiny muted">Carregando…</p></div></div>' +
+        '<div class="rodape"><button class="btn" value="ok" type="submit">Fechar</button></div>';
+      dlg.innerHTML = '<form method="dialog">' + dlg.innerHTML + '</form>';
+      document.body.appendChild(dlg);
+      dlg.addEventListener('close', function () { dlg.remove(); render(); });
+
+      const lista = dlg.querySelector('#anexos-conta-lista');
+      const entrada = dlg.querySelector('#anexos-conta-arquivo');
+
+      function pintar() {
+        Arq.listar({ contaId: contaId }).then(function (itens) {
+          if (!itens.length) {
+            lista.innerHTML = '<div class="vazio small">Nenhum documento ainda.</div>';
+            return;
+          }
+          lista.innerHTML = '<table><tbody>' + itens.map(function (a) {
+            return '<tr><td><strong>' + U.esc(a.nome) + '</strong>' +
+              '<span class="tiny muted">' + U.esc(a.data) + '</span></td>' +
+              '<td class="right tiny muted">' + Math.max(1, Math.round(a.tamanho / 1024)) + ' kB</td>' +
+              '<td class="right" style="white-space:nowrap">' +
+              '<button type="button" class="btn ghost mini" data-abre="' + a.id + '">Abrir</button> ' +
+              '<button type="button" class="btn ghost mini" data-tira="' + a.id + '">Excluir</button></td></tr>';
+          }).join('') + '</tbody></table>';
+
+          lista.querySelectorAll('[data-abre]').forEach(function (b) {
+            b.addEventListener('click', function () { Arq.abrir(b.getAttribute('data-abre')); });
+          });
+          lista.querySelectorAll('[data-tira]').forEach(function (b) {
+            b.addEventListener('click', function () {
+              if (!U.confirmar('Excluir este documento? Não tem volta.')) return;
+              Arq.excluir(b.getAttribute('data-tira')).then(pintar);
+            });
+          });
+        });
+      }
+
+      dlg.querySelector('#anexos-conta-add').addEventListener('click', function () { entrada.click(); });
+      entrada.addEventListener('change', function () {
+        const escolhidos = Array.prototype.slice.call(entrada.files || []);
+        entrada.value = '';
+        if (!escolhidos.length) return;
+        Promise.all(escolhidos.map(function (a) {
+          return Arq.salvar(a, { contaId: contaId }).catch(function (e) {
+            alert('Não consegui guardar ' + a.name + ': ' + e.message);
+          });
+        })).then(pintar);
+      });
+
+      pintar();
+      dlg.showModal();
     },
 
     novoContato: function (contaId) {
@@ -2472,6 +2541,18 @@
     return partes.join('\n');
   }
 
+  /* O que foi carregado para a IA ler fica anexado ao registro. É o que o
+     vendedor espera: ele carregou a proposta uma vez, ela tem de continuar
+     ali. Falhar aqui não desfaz o cadastro — o registro já está salvo, e
+     perder o anexo é menos grave do que perder a empresa. */
+  function anexarAoRegistro(docs, alvo) {
+    if (!docs || !docs.length || !Arq.disponivel()) return;
+    docs.forEach(function (d) {
+      if (!d.arquivo) return;
+      Arq.salvar(d.arquivo, alvo).catch(function () {});
+    });
+  }
+
   /* ---------- campos reutilizados ---------- */
   function camposProduto() {
     return [
@@ -2484,28 +2565,71 @@
     ];
   }
 
+  /* A conta nasce carimbada com a empresa de quem está trabalhando e com o
+     dono — isso o Store já fazia. O que faltava era estar escrito na tela:
+     num sistema multiempresa, cadastrar sem saber em qual empresa a coisa vai
+     cair é como assinar sem ler. */
+  function ondeVaiCair() {
+    const N = global.IADNuvem;
+    const perfil = N.estado().perfil || {};
+    const eu = A.atual() || {};
+    const empresa = (perfil.tenants && perfil.tenants.nome) ||
+      (Store.tenant && Store.tenant(eu.tenantId) && Store.tenant(eu.tenantId).nome) || '';
+    const quem = perfil.nome || eu.nome || '';
+    if (!empresa && !quem) return null;
+    return { tipo: 'aviso',
+      rotulo: 'Vai para ' + (empresa || 'a sua empresa') +
+        (quem ? ', no nome de ' + quem : '') + '.' };
+  }
+
   function camposConta() {
     const segmentos = Store.nomesDoCatalogo('segmentos');
-    return [
+    const campos = [
       { id: 'atalhoConta', tipo: 'ia', extrair: 'conta',
-        rotulo: 'Cole o que você já sabe da empresa',
-        placeholder: 'Ex.: Agro Verde Ltda, fica em Sorocaba, cerca de 300 funcionários, site agroverde.com.br, telefone (15) 3232-1010.',
+        rotulo: 'Cole, dite ou carregue o que você já sabe da empresa',
+        placeholder: 'Cole aqui um e-mail, um trecho do site, o perfil do LinkedIn — ou carregue a proposta, a planilha de consumo, o edital. A IA lê tudo junto.',
         /* Prospect, cliente ou ex-cliente é fato comercial nosso — não sai de texto. */
         nunca: ['relacaoAtual'],
-        contexto: function () { return IA.contextoDaConta(null); } },
+        contexto: function () { return IA.contextoDaConta(null); } }
+    ];
+
+    const onde = ondeVaiCair();
+    if (onde) campos.push(onde);
+
+    return campos.concat([
+      { tipo: 'secao', rotulo: 'Identificação' },
       { id: 'nome', rotulo: 'Empresa (nome fantasia)' },
-      { id: 'razaoSocial', rotulo: 'Razão social' },
-      { id: 'cnpj', rotulo: 'CNPJ' },
-      { id: 'segmento', rotulo: 'Segmento', tipo: 'select',
+      { id: 'razaoSocial', rotulo: 'Razão social', largura: 'metade' },
+      { id: 'cnpj', rotulo: 'CNPJ', largura: 'metade' },
+
+      { tipo: 'secao', rotulo: 'Classificação',
+        ajuda: 'O segmento é da sua empresa — cada uma tem a sua lista, em Cadastros → Segmentos.' },
+      { id: 'segmento', rotulo: 'Segmento', tipo: 'select', largura: 'metade',
         opcoes: [{ valor: '', rotulo: '— sem segmento —' }]
           .concat(segmentos.map(function (n) { return { valor: n, rotulo: n }; })) },
-      { id: 'telefone', rotulo: 'Telefone' },
-      { id: 'porte', rotulo: 'Porte (faturamento ou funcionários)' },
-      { id: 'cidade', rotulo: 'Cidade' },
-      { id: 'uf', rotulo: 'UF' },
-      { id: 'site', rotulo: 'Site' },
-      { id: 'relacaoAtual', rotulo: 'Relação atual', tipo: 'select', opcoes: P.RELACOES_CONTA }
-    ];
+      { id: 'relacaoAtual', rotulo: 'Relação atual', tipo: 'select', largura: 'metade',
+        opcoes: P.RELACOES_CONTA },
+      /* Setor é o que o LinkedIn diz que a empresa faz; segmento é a nossa
+         gaveta comercial. Guardar os dois deixa a IA acertar a gaveta e a
+         pessoa conferir de onde veio o palpite. */
+      { id: 'setor', rotulo: 'Setor (como o mercado a chama)', largura: 'metade',
+        placeholder: 'Ex.: Farmacêutica, Saneamento, Alimentos' },
+      { id: 'porte', rotulo: 'Porte (faturamento ou funcionários)', largura: 'metade' },
+
+      { tipo: 'secao', rotulo: 'Onde fica e como falar' },
+      { id: 'cidade', rotulo: 'Cidade', largura: 'metade' },
+      { id: 'uf', rotulo: 'UF', largura: 'metade' },
+      { id: 'pais', rotulo: 'País', largura: 'metade', placeholder: 'Brasil' },
+      { id: 'telefone', rotulo: 'Telefone', largura: 'metade' },
+      { id: 'site', rotulo: 'Site', largura: 'metade' },
+      { id: 'linkedin', rotulo: 'LinkedIn da empresa', largura: 'metade',
+        placeholder: 'linkedin.com/company/...' },
+
+      { tipo: 'secao', rotulo: 'O que ela faz',
+        ajuda: 'É daqui que a IA tira o segmento quando o nome da empresa não diz nada.' },
+      { id: 'descricao', rotulo: 'Descrição', tipo: 'textarea',
+        placeholder: 'O que a empresa produz, para quem vende, onde opera.' }
+    ]);
   }
 
   function camposContato(contaId, exceto) {

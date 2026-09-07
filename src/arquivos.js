@@ -62,13 +62,21 @@
     });
   }
 
-  function listar(oportunidadeId) {
+  /* Aceita o id de uma oportunidade (como sempre aceitou) ou um filtro
+     {contaId} / {oportunidadeId}. O registro sempre teve contaId; só o filtro
+     não sabia usá-lo, e por isso documento de empresa não tinha onde morar. */
+  function listar(filtro) {
+    const por = (typeof filtro === 'string' || filtro == null)
+      ? { oportunidadeId: filtro || null }
+      : filtro;
     return abrir().then(function (db) {
       const loja = transacao(db, [META], 'readonly').objectStore(META);
       return promessa(loja.getAll()).then(function (todos) {
-        const lista = oportunidadeId
-          ? todos.filter(function (a) { return a.oportunidadeId === oportunidadeId; })
-          : todos;
+        const lista = todos.filter(function (a) {
+          if (por.oportunidadeId && a.oportunidadeId !== por.oportunidadeId) return false;
+          if (por.contaId && a.contaId !== por.contaId) return false;
+          return true;
+        });
         return lista.sort(function (a, b) { return b.data.localeCompare(a.data); });
       });
     });

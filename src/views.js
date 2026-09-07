@@ -1504,7 +1504,8 @@
         '<td class="right" style="white-space:nowrap">' +
           '<button class="btn ghost mini" onclick="App.editarConta(\'' + c.id + '\')" data-ajuda="Muda os dados da empresa. O segmento aqui é o que agrupa o painel.">Editar</button> ' +
           '<button class="btn ghost mini" onclick="App.novoContato(\'' + c.id + '\')" data-ajuda-titulo="Novo contato" data-ajuda="Adiciona uma pessoa a esta empresa. O papel na compra e a posição alimentam a cobertura e os alertas.">+ Contato</button> ' +
-          '<button class="btn ghost mini" onclick="App.novaOportunidade(\'' + c.id + '\')" data-ajuda-titulo="Nova oportunidade" data-ajuda="Cria um negócio para esta empresa. Os contatos já cadastrados entram no grupo comprador.">+ Op.</button>' +
+          '<button class="btn ghost mini" onclick="App.novaOportunidade(\'' + c.id + '\')" data-ajuda-titulo="Nova oportunidade" data-ajuda="Cria um negócio para esta empresa. Os contatos já cadastrados entram no grupo comprador.">+ Op.</button> ' +
+          '<button class="btn ghost mini" onclick="App.arquivosDaConta(\'' + c.id + '\')" data-ajuda-titulo="Documentos" data-ajuda="Contrato, proposta, laudo, planilha — o que ficar aqui continua ligado a esta empresa e pode ser aberto depois.">📎 Documentos</button>' +
         '</td></tr>';
     }).join('');
     return tabela(['Empresa', 'Segmento', 'Cidade', 'Relação', 'Contatos', 'Oportunidades', ''], linhas, 'Nenhuma empresa encontrada.');
