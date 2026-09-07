@@ -1880,11 +1880,34 @@
       });
     },
 
-    /* O sistema não manda e-mail — o do Supabase é limitado a poucos por hora e
-       foi ele que travou o time. Então o app monta a mensagem e entrega pronta:
-       quem envia é o administrador, do próprio endereço, que é mais confiável
-       do que qualquer serviço gratuito. */
+    /* Envia de verdade, pelo servidor, quando a função de convite estiver
+       publicada. Se ela não estiver, cai no caminho antigo — abrir o programa
+       de e-mail com a mensagem pronta — em vez de deixar o botão sem efeito.
+
+       Quem manda é o Supabase, e o remetente é o endereço configurado no SMTP
+       dele. Ver nuvem/EMAIL.md. */
     enviarConvite: function (email) {
+      const N = global.IADNuvem;
+      if (!N.conectado()) return App.enviarPeloProgramaDeEmail(email);
+
+      N.chamarFuncao('convite', {
+        email: email,
+        destino: location.origin + location.pathname
+      }).then(function () {
+        alert('Convite enviado para ' + email + '.\n\nA pessoa recebe um link para definir a senha dela.');
+        render();
+      }).catch(function (e) {
+        /* 404 é a função ainda não publicada: não é falha do administrador, e
+           não custa nada continuar pelo caminho manual. */
+        if (e.status === 404) {
+          alert('O envio automático ainda não está publicado no servidor. Abrindo seu programa de e-mail com a mensagem pronta.');
+          return App.enviarPeloProgramaDeEmail(email);
+        }
+        alert('Não consegui enviar: ' + e.message);
+      });
+    },
+
+    enviarPeloProgramaDeEmail: function (email) {
       const t = textoDoConvite(email);
       const url = 'mailto:' + encodeURIComponent(email) +
         '?subject=' + encodeURIComponent('Seu acesso ao IAD CRM') +

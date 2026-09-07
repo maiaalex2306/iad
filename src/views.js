@@ -1690,6 +1690,15 @@
 
   /* Pessoas registradas que ainda não criaram o acesso. Ficar de olho nelas é o
      que evita a pergunta "cadastrei e não entrou" virar mistério. */
+  /* Três papéis desde a correção 5. A lista mostrava só dois, e quem fosse
+     convidado como Gestor aparecia como Usuário — o convite estava certo no
+     banco e errado na tela, que é o tipo de divergência que ninguém confere. */
+  function rotuloDoPapel(papel) {
+    if (papel === 'admin') return 'Administrador';
+    if (papel === 'gestor') return 'Gestor';
+    return 'Usuário';
+  }
+
   function listaConvites(convites, empresas) {
     if (!convites || !convites.length) return '';
     const nomeDa = function (id) {
@@ -1699,10 +1708,10 @@
     const linhas = convites.map(function (c) {
       return '<tr><td><strong>' + esc(c.email) + '</strong></td>' +
         '<td>' + esc(nomeDa(c.tenant_id)) + '</td>' +
-        '<td>' + esc(c.papel === 'admin' ? 'Administrador' : 'Usuário') + '</td>' +
+        '<td>' + esc(rotuloDoPapel(c.papel)) + '</td>' +
         '<td class="right" style="white-space:nowrap">' +
         '<button class="btn alt mini" onclick="App.enviarConvite(\'' + esc(c.email) + '\')"' +
-        ' data-ajuda-titulo="Enviar convite" data-ajuda="Abre seu programa de e-mail com a mensagem pronta. O sistema não envia sozinho: quem envia é você, do seu endereço.">Enviar</button> ' +
+        ' data-ajuda-titulo="Enviar convite" data-ajuda="Manda o e-mail pelo servidor, com o link para a pessoa definir a senha. Se o envio automático ainda não estiver publicado, abre seu programa de e-mail com a mensagem pronta.">Enviar</button> ' +
         '<button class="btn ghost mini" onclick="App.copiarConvite(\'' + esc(c.email) + '\')"' +
         ' data-ajuda="Copia o texto do convite para colar no WhatsApp ou em outro lugar.">Copiar</button> ' +
         '<button class="btn ghost mini" onclick="App.cancelarConvite(\'' + esc(c.email) + '\')"' +
@@ -1710,7 +1719,8 @@
     }).join('');
     return '<h4 style="margin:18px 0 6px">Aguardando primeiro acesso</h4>' +
       '<p class="tiny muted" style="margin:0 0 8px">Já registradas. Quando criarem o acesso com este e-mail, entram direto na empresa indicada. ' +
-      '<strong>O sistema não envia e-mail:</strong> use Enviar ou Copiar e mande você mesmo.</p>' +
+      '<strong>Enviar</strong> manda o e-mail pelo servidor, com o link para a pessoa criar a senha dela. ' +
+      'Enquanto o envio automático não estiver publicado, o botão abre seu programa de e-mail com a mensagem pronta.</p>' +
       tabela(['E-mail', 'Empresa', 'Papel', ''], linhas, '');
   }
 
