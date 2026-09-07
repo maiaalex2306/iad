@@ -184,12 +184,28 @@
 
   /* Uma reunião inteira. Devolve {evidencias:[], contatos:[]} ou null.
      Prazo maior porque aqui o modelo lê uma transcrição, não uma frase. */
-  function analisarReuniao(texto, contexto) {
+  function analisarReuniao(texto, contexto, op, resumoOp) {
     if (!disponivel()) {
       return Promise.resolve({ erro: 'O assistente não está no ar. Veja ⚙︎ Dados → Assistente de IA.' });
     }
-    const t = String(texto || '').trim();
+    let t = String(texto || '').trim();
     if (t.length < 60) return Promise.resolve({ erro: 'Texto curto demais para eu separar evidências.' });
+
+    /* O retrato vai junto do material novo, numa chamada só.
+
+       Antes eram duas: uma para separar as evidências e outra, depois, para
+       reler as oito. Duas chamadas por tarefa é o dobro do consumo no
+       provedor, e foi assim que o limite de uso estourou no meio do gesto —
+       a leitura passava e a releitura falhava, deixando o vendedor com
+       evidência gravada e índice parado. Com o retrato aqui, o modelo tem o
+       que precisa para as duas coisas de uma vez, e sem perder o histórico:
+       ele lê as evidências antigas e o material novo lado a lado. */
+    if (op && resumoOp) {
+      t = 'RETRATO ATUAL DA OPORTUNIDADE (o que já estava registrado):\n' +
+        retratoDaOportunidade(op, resumoOp) +
+        '\n\n=== MATERIAL NOVO QUE O VENDEDOR ACABOU DE MANDAR ===\n' + t;
+    }
+    if (t.length > LIMITE_PEDIDO) t = t.slice(0, LIMITE_PEDIDO);
 
     const pedido = Nuvem.chamarFuncao('assistente', {
       tipo: 'reuniao', texto: t, contexto: contexto || {}
@@ -214,10 +230,14 @@
         return { erro: 'O assistente respondeu, mas não no formato esperado. ' +
           'Voltou: ' + amostraDaResposta(r) };
       }
+      const dimensoes = global.IADPlaybook.DIMENSOES.map(function (d) { return d.id; });
       return {
         evidencias: apenasConhecidas(r.evidencias),
         contatos: r.contatos || [],
-        negocio: (r.negocio && typeof r.negocio === 'object') ? r.negocio : {}
+        negocio: (r.negocio && typeof r.negocio === 'object') ? r.negocio : {},
+        decisoes: (Array.isArray(r.decisoes) ? r.decisoes : []).filter(function (d) {
+          return d && dimensoes.indexOf(d.dimensao) !== -1 && d.nota >= 0 && d.nota <= 2;
+        })
       };
     }).catch(function (e) {
       return { erro: (e && e.message) || 'O servidor recusou a análise.' };

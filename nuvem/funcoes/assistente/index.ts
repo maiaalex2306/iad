@@ -298,7 +298,7 @@ Não devolva valor, etapa nem data de fechamento.`;
 
 Tarefa: o vendedor enviou a transcrição de uma reunião, a ata ou as anotações dele. Separe TUDO que o cliente fez ou disse em evidências, uma para cada dimensão afetada. Um documento costuma render de duas a seis.
 
-Devolva {"evidencias": [ ... ], "contatos": [ ... ], "negocio": { ... }}.
+Devolva {"evidencias": [ ... ], "contatos": [ ... ], "negocio": { ... }, "decisoes": [ ... ]}.
 
 Cada item de "evidencias" tem:
 - dimensao: uma das oito. Um receio, uma objeção ou um impedimento vai para "risco". Uma exigência de comparação ou de especificação vai para "criterios". Alguém novo entrando na conversa vai para "stakeholders". O caminho formal até a assinatura vai para "processo".
@@ -321,11 +321,25 @@ Cada item de "contatos" é uma pessoa do lado do cliente que apareceu no documen
 - previsao: data prevista de fechamento, AAAA-MM-DD, só se o material declarar prazo.
 - concorrentes: nomes de concorrentes citados, separados por vírgula.
 
+"decisoes" são as OITO decisões relidas: [{"dimensao":"problema","nota":0,"porque":"...","trecho":"..."}, ...], as oito, sempre. Leia-as considerando TUDO — o retrato da oportunidade que veio no início do texto (as evidências já registradas antes) MAIS o material novo que o vendedor acabou de mandar.
+
+Os três níveis, iguais para todas:
+  0 — não sabemos: nada do lado do cliente sustenta esta decisão.
+  1 — parcial: há sinal, mas vago, indireto ou dito por uma pessoa só.
+  2 — comprovado pelo cliente: ele descreveu, mostrou, mandou ou fez.
+
+Regras das notas, e são o ponto todo:
+- A nota vem SÓ do que o CLIENTE disse ou fez. O que nós mandamos, apresentamos ou propusemos não conta e nunca sobe nota. Uma proposta enviada não é impacto aceito; um material apresentado não é problema reconhecido.
+- "trecho" tem de ser um pedaço LITERAL do que você recebeu. Sem trecho literal, a nota é 0. Não parafraseie para justificar.
+- Na dúvida entre dois níveis, use o menor. Nota inflada vira pipeline falso no painel do dono da empresa.
+- "porque" em uma linha, dizendo o que sustenta — ou, quando for 0, o que faltaria para subir.
+
 Regras desta tarefa:
 - Uma evidência por fato. Não junte dois assuntos na mesma linha.
 - O que NÓS fizemos (mandamos proposta, fizemos follow-up) não é evidência. Descarte.
 - No máximo ${ITENS_MAXIMOS} evidências. Se houver mais, fique com as mais relevantes para a decisão.
-- Nunca devolva nota ou pontuação. O vendedor escolhe item por item.`;
+- Nunca invente pessoa, número, prazo ou fala que não esteja no material.
+- Português do Brasil.`;
   }
 
   if (tipo === 'notas') {
@@ -710,7 +724,7 @@ function validarContatos(bruto: unknown, ctx: Record<string, unknown>): Record<s
 /* Uma reunião vira uma lista. Cada item passa pelas mesmas regras da
    evidência avulsa: dimensão fora das oito, força fora das três ou data
    inventada são descartadas, não repassadas ao vendedor. */
-function validarReuniao(bruto: Record<string, unknown>, ctx: Record<string, unknown>) {
+function validarReuniao(bruto: Record<string, unknown>, ctx: Record<string, unknown>, entrada: string) {
   const hoje = String(ctx.hoje || new Date().toISOString().slice(0, 10));
   const dimensoes = DIMENSOES.map((d) => d[0]);
   const forcas = FORCAS.map((f) => f[0]);
@@ -756,7 +770,18 @@ function validarReuniao(bruto: Record<string, unknown>, ctx: Record<string, unkn
     contatos.push(registro);
   }
 
-  return { evidencias: evidencias, contatos: contatos, negocio: validarNegocio(bruto.negocio, ctx, hoje) };
+  /* As oito vêm na mesma resposta desde que o limite de uso do provedor
+     mostrou que duas chamadas por tarefa é uma a mais do que cabe. Passam
+     pela mesma validação de sempre, inclusive a exigência do trecho literal:
+     a economia é de chamada, não de rigor. */
+  const notas = validarNotas(bruto, entrada || '');
+
+  return {
+    evidencias: evidencias,
+    contatos: contatos,
+    negocio: validarNegocio(bruto.negocio, ctx, hoje),
+    decisoes: notas.decisoes || []
+  };
 }
 
 /* O que o material diz sobre o negócio: valor, etapa, previsão, concorrentes.
@@ -1276,13 +1301,13 @@ Deno.serve(async (req: Request) => {
     }
     /* JSON torto devolve vazio. Nunca dado inventado no formulário do vendedor. */
     if (!json) {
-      if (tipo === 'reuniao') return responder({ evidencias: [], contatos: [], negocio: {} });
+      if (tipo === 'reuniao') return responder({ evidencias: [], contatos: [], negocio: {}, decisoes: [] });
       if (tipo === 'segmentos') return responder({ itens: [] });
       if (tipo === 'plano') return responder({ passos: [], atencao: [] });
       if (tipo === 'notas') return responder({ decisoes: [] });
       return responder({ campos: {}, frases: {} });
     }
-    if (tipo === 'reuniao') return responder(validarReuniao(json, ctx));
+    if (tipo === 'reuniao') return responder(validarReuniao(json, ctx, entrada));
     if (tipo === 'segmentos') return responder(validarSegmentos(json, ctx));
     if (tipo === 'plano') return responder(validarPlano(json));
     if (tipo === 'notas') return responder(validarNotas(json, entrada));

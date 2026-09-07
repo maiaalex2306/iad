@@ -2325,7 +2325,9 @@
       '<p class="tiny muted">Nota só sobe sozinha, e nota 2 continua exigindo evidência confirmada ou documentada. ' +
       'Se discordar de alguma, ajuste — as oito ficam abertas para edição.</p>' +
       '</div><div class="rodape">' +
-      '<button class="btn ghost" value="ajustar" type="submit">Ajustar as oito</button>' +
+      (erroDaReleitura
+        ? '<button class="btn ghost" value="tentar" type="submit">Tentar de novo</button>'
+        : '<button class="btn ghost" value="ajustar" type="submit">Ajustar as oito</button>') +
       '<button class="btn" value="ok" type="submit">Fechar</button>' +
       '</div></form>';
   }

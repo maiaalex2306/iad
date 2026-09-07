@@ -1273,7 +1273,7 @@
       document.body.appendChild(aviso);
       aviso.showModal();
 
-      IA.analisarReuniao(texto, IA.contextoDaOportunidade(op)).then(function (r) {
+      IA.analisarReuniao(texto, IA.contextoDaOportunidade(op), op, E.resumo(op)).then(function (r) {
         aviso.close();
         aviso.remove();
         /* O motivo vem do servidor e aparece como veio. A frase única de antes
@@ -1347,9 +1347,21 @@
       });
 
       const negocio = aplicarNegocioDaIA(opId, resultado.negocio);
+      const base = { evidencias: evidencias, pessoas: pessoas, negocio: negocio };
       render();
-      relerAsOito(opId, textoParaNotas,
-        { evidencias: evidencias, pessoas: pessoas, negocio: negocio }, depois);
+
+      /* As oito vieram na mesma resposta: não há segunda chamada a fazer.
+         A trava do 2 é aplicada aqui, depois de as evidências novas já terem
+         entrado — é ela que enxerga se a prova existe. */
+      if (resultado.decisoes && resultado.decisoes.length) {
+        const mudancas = aplicarNotasDaIA(opId, resultado.decisoes);
+        render();
+        mostrarResumo(opId, base, mudancas, resultado.decisoes, depois, '');
+        return;
+      }
+      /* Só quando não vieram — função antiga publicada, ou resposta sem elas —
+         é que gastamos a segunda chamada. */
+      relerAsOito(opId, textoParaNotas, base, depois);
     },
 
     removerEvento: function (opId, evId) {
@@ -2844,11 +2856,16 @@
     dlg.innerHTML = V.resumoDaLeitura(op, base, mudancas, erroDaReleitura);
     document.body.appendChild(dlg);
     dlg.addEventListener('close', function () {
-      const ajustar = dlg.returnValue === 'ajustar';
+      const escolha = dlg.returnValue;
       dlg.remove();
+      /* Quando a releitura falhou não há proposta nenhuma para ajustar: abrir
+         a tela das oito ali mostrava "0 → 0" nas oito e "Gravar as notas" não
+         gravava nada — um beco sem saída que parecia defeito. O botão passa a
+         ser "Tentar de novo", que é o que a pessoa quer. */
+      if (escolha === 'tentar') { relerAsOito(opId, '', {}, depois); return; }
       /* Discordar é a única coisa que ainda pede um clique — e é a tela que
          já existia, com as oito e o motivo de cada uma. */
-      if (ajustar) { App.revisarNotas(opId, decisoes || []); return; }
+      if (escolha === 'ajustar') { App.revisarNotas(opId, decisoes || []); return; }
       if (depois) depois();
     });
     dlg.showModal();
