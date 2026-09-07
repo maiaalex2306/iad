@@ -75,6 +75,22 @@ válido no projeto: qualquer pessoa logada passa. A função verifica quem é a
 pessoa e o que ela pode fazer, lendo o papel dela no banco. A tranca que fica é
 a mais forte das duas.
 
+### Se aparecer "IA respondeu 404" ou "o modelo não existe mais"
+
+O provedor aposentou o nome do modelo. Isso acontece sem aviso, e o nome fica
+escrito no código de quem publicou meses atrás — não é erro de configuração
+sua, e não adianta mexer em chave nem republicar sem trocar o nome.
+
+A própria função resolve: ao levar 404 ela pergunta ao provedor quais modelos
+existem agora e devolve a lista na mensagem. Escolha um e crie o segredo:
+
+    IA_MODELO = <o nome que apareceu na mensagem>
+
+Depois publique a função de novo — segredo novo só vale na próxima publicação.
+
+Se preferir ver a lista antes, ela está no painel do provedor (em Groq,
+console.groq.com → Models).
+
 ## 4. Conferir
 
 Cole isto na barra de endereço do navegador, trocando `SEU_REF`:

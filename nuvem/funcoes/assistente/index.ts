@@ -380,6 +380,51 @@ function listaCurta(v: unknown): string {
    Trocar Groq por Claude é mudar as variáveis de ambiente. Nada mais no
    sistema sabe qual IA está atrás daqui. */
 
+/* "IA respondeu 404" é verdade e não serve para nada: manda procurar rede,
+   chave e publicação, quando 404 no endpoint de chat quer dizer uma coisa só —
+   o modelo pedido não existe. Provedores aposentam nomes de modelo sem aviso,
+   e o nome fica escrito no código de quem publicou meses atrás.
+
+   Como não dá para adivinhar quais nomes valem hoje, a função pergunta: ela
+   tem a chave, e o provedor tem uma lista. Melhor do que eu chutar um nome que
+   talvez também já tenha morrido. */
+async function modelosDoGroq(): Promise<string[]> {
+  try {
+    const r = await fetch('https://api.groq.com/openai/v1/models', {
+      headers: { authorization: 'Bearer ' + CHAVE }
+    });
+    if (!r.ok) return [];
+    const j = await r.json();
+    return (j?.data || []).map((m: { id?: string }) => String(m.id || '')).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+async function explicarRecusa(r: Response, modelo: string): Promise<string> {
+  const corpo = await r.text().catch(() => '');
+  const curto = corpo.replace(/\s+/g, ' ').slice(0, 200);
+
+  if (r.status === 404) {
+    const nomes = PROVEDOR === 'anthropic' ? [] : await modelosDoGroq();
+    return 'O modelo "' + modelo + '" não existe mais no provedor. ' +
+      (nomes.length
+        ? 'Os que existem agora: ' + nomes.slice(0, 10).join(', ') + '. ' +
+          'Ponha um deles no segredo IA_MODELO e publique a função de novo.'
+        : 'Veja a lista no painel do provedor e ponha um nome válido no segredo IA_MODELO.');
+  }
+  if (r.status === 401 || r.status === 403) {
+    return 'O provedor recusou a chave da IA (' + r.status + '). Confira o segredo IA_CHAVE.';
+  }
+  if (r.status === 429) {
+    return 'Limite de uso do provedor atingido. Espere um pouco, ou troque de plano.';
+  }
+  if (r.status === 413 || /context|too large|maximum/i.test(curto)) {
+    return 'Material grande demais para o modelo. Analise menos documentos de uma vez.';
+  }
+  return 'A IA respondeu ' + r.status + (curto ? ': ' + curto : '.');
+}
+
 async function chamarIA(sistema: string, usuario: string): Promise<string> {
   if (PROVEDOR === 'anthropic') {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
@@ -398,17 +443,18 @@ async function chamarIA(sistema: string, usuario: string): Promise<string> {
         messages: [{ role: 'user', content: usuario }]
       })
     });
-    if (!r.ok) throw new Error('IA respondeu ' + r.status);
+    if (!r.ok) throw new Error(await explicarRecusa(r, MODELO || 'claude-haiku-4-5'));
     const j = await r.json();
     return (j?.content || []).map((b: { text?: string }) => b.text || '').join('');
   }
 
   /* Groq — API compatível com o formato OpenAI. */
+  const modelo = MODELO || 'llama-3.3-70b-versatile';
   const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: { authorization: 'Bearer ' + CHAVE, 'content-type': 'application/json' },
     body: JSON.stringify({
-      model: MODELO || 'llama-3.3-70b-versatile',
+      model: modelo,
       temperature: 0.1,
       max_tokens: 2500,
       response_format: { type: 'json_object' },
@@ -418,7 +464,7 @@ async function chamarIA(sistema: string, usuario: string): Promise<string> {
       ]
     })
   });
-  if (!r.ok) throw new Error('IA respondeu ' + r.status);
+  if (!r.ok) throw new Error(await explicarRecusa(r, modelo));
   const j = await r.json();
   return j?.choices?.[0]?.message?.content || '';
 }
