@@ -198,7 +198,11 @@
 
     return Promise.race([pedido, prazo]).then(function (r) {
       if (!r || r.erro || !Array.isArray(r.evidencias)) return null;
-      return { evidencias: apenasConhecidas(r.evidencias), contatos: r.contatos || [] };
+      return {
+        evidencias: apenasConhecidas(r.evidencias),
+        contatos: r.contatos || [],
+        negocio: (r.negocio && typeof r.negocio === 'object') ? r.negocio : {}
+      };
     }).catch(function () { return null; });
   }
 
@@ -495,7 +499,15 @@
   }
 
   function contextoDaOportunidade(op) {
-    return contextoDaConta(op ? op.contaId : null);
+    const ctx = contextoDaConta(op ? op.contaId : null);
+    /* As etapas do funil vão junto para o servidor poder dizer qual delas o
+       material comprova — e para nunca inventar uma coluna que não existe. */
+    ctx.etapas = global.IADPlaybook.ETAPAS;
+    if (op) {
+      ctx.etapaAtual = op.etapa;
+      ctx.valorAtual = op.valor || 0;
+    }
+    return ctx;
   }
 
   global.IADIA = {

@@ -2291,8 +2291,22 @@
         '</li>';
     }).join('');
 
+    /* As mudanças no próprio negócio vêm primeiro no relatório: valor e etapa
+       são o que o dono da empresa vê no painel, e é ali que o vendedor mais
+       precisa conferir se o assistente entendeu certo. */
+    const doNegocio = (base.negocio || []).map(function (m) {
+      return '<li class="achado">' +
+        '<div class="row"><span class="pill orange">' + esc(m.campo) + '</span>' +
+        '<strong>' + esc(m.de) + ' \u2192 ' + esc(m.para) + '</strong><span class="espaco"></span></div>' +
+        (m.trecho ? '<p class="origem">\u201c' + esc(m.trecho) + '\u201d</p>' : '') +
+      '</li>';
+    }).join('');
+
     return '<form method="dialog"><div class="corpo">' +
       '<h2>Pronto — o assistente já registrou</h2>' +
+      (doNegocio
+        ? '<p class="small"><strong>O negócio mudou.</strong></p><ul class="achados">' + doNegocio + '</ul>'
+        : '') +
       (entrou.length
         ? '<p class="small">Entrou nesta oportunidade: <strong>' + esc(entrou.join(' e ')) + '</strong>.</p>'
         : '') +

@@ -1339,8 +1339,10 @@
         pessoas++;
       });
 
+      const negocio = aplicarNegocioDaIA(opId, resultado.negocio);
       render();
-      relerAsOito(opId, textoParaNotas, { evidencias: evidencias, pessoas: pessoas }, depois);
+      relerAsOito(opId, textoParaNotas,
+        { evidencias: evidencias, pessoas: pessoas, negocio: negocio }, depois);
     },
 
     removerEvento: function (opId, evId) {
@@ -2728,6 +2730,68 @@
     });
   }
 
+  /* O que o material disse sobre o NEGÓCIO: valor, etapa, previsão,
+     concorrentes. Uma proposta anexada tem o preço lá dentro — deixar o
+     vendedor redigitar isso é pedir que o pipeline do dono da empresa fique
+     desatualizado, que era exatamente o caso.
+
+     Duas travas, o mesmo espírito das notas:
+
+     · a etapa só AVANÇA. Uma ata que menciona a proposta enviada não pode
+       jogar de volta para Prospecção um negócio que já está em Validação;
+     · nada entra sem o trecho literal que sustenta — o servidor já descarta
+       valor e etapa sem citação.
+
+     E avançar para Proposta NÃO é passar por cima do Proposal Gate: o gate
+     continua gritando "0% de prontidão" no cockpit, que é o sinal útil. Ele
+     existe para dizer que a proposta foi precoce, não para impedir o app de
+     registrar que ela existe. */
+  function aplicarNegocioDaIA(opId, negocio) {
+    const n = negocio || {};
+    const op = Store.oportunidade(opId);
+    if (!op) return [];
+    const mudancas = [];
+    const alteracoes = {};
+
+    if (n.valor > 0 && n.valor !== op.valor) {
+      alteracoes.valor = n.valor;
+      mudancas.push({ campo: 'Valor', de: U.moeda(op.valor || 0), para: U.moeda(n.valor),
+        trecho: n.valorFrase || '' });
+    }
+
+    if (n.etapa && n.etapa !== op.etapa) {
+      const ordem = P.ETAPAS.indexOf(n.etapa);
+      const atual = P.ETAPAS.indexOf(op.etapa);
+      if (ordem > atual) {
+        alteracoes.etapa = n.etapa;
+        mudancas.push({ campo: 'Etapa no CRM', de: op.etapa, para: n.etapa,
+          trecho: n.etapaFrase || '' });
+      }
+    }
+
+    if (n.previsao && n.previsao !== op.fechamentoPrevisto) {
+      alteracoes.fechamentoPrevisto = n.previsao;
+      mudancas.push({ campo: 'Fechamento previsto',
+        de: op.fechamentoPrevisto ? U.data(op.fechamentoPrevisto) : 'sem data',
+        para: U.data(n.previsao), trecho: '' });
+    }
+
+    /* Concorrente novo soma ao que já estava: quem apareceu antes não some. */
+    if (n.concorrentes) {
+      const tem = String(op.concorrentes || '').toLowerCase();
+      const novos = String(n.concorrentes).split(/[,;]/).map(function (x) { return x.trim(); })
+        .filter(function (x) { return x && tem.indexOf(x.toLowerCase()) === -1; });
+      if (novos.length) {
+        alteracoes.concorrentes = [op.concorrentes, novos.join(', ')].filter(Boolean).join(', ');
+        mudancas.push({ campo: 'Concorrentes', de: op.concorrentes || 'nenhum',
+          para: alteracoes.concorrentes, trecho: '' });
+      }
+    }
+
+    if (Object.keys(alteracoes).length) Store.atualizarOportunidade(opId, alteracoes);
+    return mudancas;
+  }
+
   /* Aplica as notas propostas. Duas travas, e as duas são do motor, não da
      tela: nota 2 sem evidência confirmada ou documentada cai para 1; e nota
      nunca desce sozinha — a IA relê o mesmo retrato a cada tarefa e propor 0
@@ -2758,7 +2822,11 @@
      para marcar. Fica a porta de ajuste, para quem discordar. */
   function mostrarResumo(opId, base, mudancas, decisoes, depois) {
     const op = Store.oportunidade(opId);
-    if (!op || (!base.evidencias && !base.pessoas && !mudancas.length)) { if (depois) depois(); return; }
+    const mexeuNoNegocio = (base.negocio || []).length;
+    if (!op || (!base.evidencias && !base.pessoas && !mudancas.length && !mexeuNoNegocio)) {
+      if (depois) depois();
+      return;
+    }
     const dlg = document.createElement('dialog');
     dlg.className = 'revisao-ia';
     dlg.innerHTML = V.resumoDaLeitura(op, base, mudancas);

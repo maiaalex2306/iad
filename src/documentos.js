@@ -160,49 +160,180 @@
   }
 
   /* ---------- PDF ----------
-     Aqui a honestidade importa mais que a esperteza. PDF não guarda texto:
-     guarda instruções de desenho, com as letras dentro de fluxos comprimidos
-     e mapeadas por fontes que podem reordenar o alfabeto. Ler tudo direito
-     exige um interpretador de verdade — é por isso que existem bibliotecas
-     grandes só para isso.
+     PDF não guarda texto: guarda instruções de desenho, com as letras dentro
+     de fluxos comprimidos. E há dois mundos aí dentro.
 
-     O que fazemos é o caso comum e honesto: descomprimir os fluxos e recolher
-     o que os operadores de texto mostram. Funciona na maioria dos PDFs gerados
-     por Word, Google Docs e sistemas de proposta. Não funciona em PDF que é
-     foto de papel — ali não existe texto nenhum, só imagem, e nenhum truque
-     resolve sem reconhecimento óptico. Quando não sai nada, dizemos isso em
-     vez de devolver um vazio silencioso. */
+     No mundo fácil, a letra aparece literal — `(Proposta) Tj` — e basta
+     recolher. No mundo comum de hoje (Google Docs, Figma, Canva, qualquer
+     gerador que embute a fonte só com os glifos usados), o que aparece é
+     `<0012> Tj`: um índice de glifo dentro da fonte, que não é a letra nem o
+     código dela. Ler isso sem tradução devolve nada, e o app dizia "este PDF
+     é digitalizado" — uma resposta errada, e cara: o documento com a proposta
+     e o preço passava batido, e o vendedor não tinha como saber por quê.
+
+     A tradução existe dentro do próprio arquivo: cada fonte carrega um
+     `/ToUnicode`, um CMap que diz qual letra cada glifo representa. Aqui ele é
+     lido, e o texto sai. Continua não funcionando em PDF que é foto de papel —
+     ali não existe texto nenhum, e nenhum truque resolve sem OCR. */
   function lerPdf(buffer) {
     const bytes = new Uint8Array(buffer);
-    const fluxos = localizarFluxos(bytes);
-    return Promise.all(fluxos.map(function (f) {
-      if (!f.comprimido) return Promise.resolve(decodificarLatin(f.dado));
-      /* Alguns geradores escrevem o fluxo cru mesmo dizendo FlateDecode.
-         Tentamos zlib e, se recusar, deflate cru — custa uma tentativa e
-         evita perder o documento inteiro por causa do cabeçalho. */
-      return inflar(f.dado, 'deflate')
-        .catch(function () { return inflar(f.dado, 'deflate-raw'); })
-        .catch(function () { return ''; });
-    })).then(function (partes) {
-      const texto = partes.map(textoDoFluxo).filter(Boolean).join('\n').replace(/\n{3,}/g, '\n\n').trim();
-      if (!texto) {
-        throw new Error('Este PDF não tem texto que eu consiga ler — provavelmente é digitalizado (foto do papel). ' +
-          'Salve como Word, ou copie o conteúdo e cole na caixa.');
-      }
-      return texto;
+    const bruto = decodificarLatin(bytes);
+    return mapasDeFonte(bytes, bruto).then(function (mapas) {
+      const fluxos = localizarFluxos(bytes, bruto);
+      return Promise.all(fluxos.map(function (f) {
+        if (!f.comprimido) return Promise.resolve(decodificarLatin(f.dado));
+        /* Alguns geradores escrevem o fluxo cru mesmo dizendo FlateDecode.
+           Tentamos zlib e, se recusar, deflate cru — custa uma tentativa e
+           evita perder o documento inteiro por causa do cabeçalho. */
+        return inflar(f.dado, 'deflate')
+          .catch(function () { return inflar(f.dado, 'deflate-raw'); })
+          .catch(function () { return ''; });
+      })).then(function (partes) {
+        const texto = partes.map(function (t) { return textoDoFluxo(t, mapas); })
+          .filter(Boolean).join('\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+        if (!texto) {
+          throw new Error('Este PDF não tem texto que eu consiga ler — provavelmente é digitalizado (foto do papel). ' +
+            'Salve como Word, ou copie o conteúdo e cole na caixa.');
+        }
+        return texto;
+      });
     });
   }
 
   function decodificarLatin(u8) {
     let s = '';
-    for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]);
+    /* Em pedaços: String.fromCharCode.apply com um arquivo inteiro estoura a
+       pilha de argumentos do navegador em PDFs grandes. */
+    for (let i = 0; i < u8.length; i += 8192) {
+      s += String.fromCharCode.apply(null, u8.subarray(i, i + 8192));
+    }
     return s;
   }
 
-  function localizarFluxos(bytes) {
-    const bruto = decodificarLatin(bytes);
+  /* Os CMaps /ToUnicode do arquivo, por nome de recurso (/F5, /F6…).
+
+     Não montamos um interpretador de PDF: varremos os objetos `N 0 obj`,
+     achamos quais são fontes com /ToUnicode, inflamos esses CMaps e ligamos
+     cada nome de recurso ao mapa pelo /Font << /F5 12 0 R >> das páginas.
+     É pouco código e cobre o arquivo gerado por editor, que é o caso real. */
+  function mapasDeFonte(bytes, bruto) {
+    const objetos = {};
+    const reObj = /(\d+)\s+0\s+obj\b/g;
+    let m;
+    while ((m = reObj.exec(bruto)) !== null) {
+      const fim = bruto.indexOf('endobj', m.index);
+      objetos[m[1]] = { ini: m.index + m[0].length, fim: fim < 0 ? bruto.length : fim };
+    }
+
+    /* recurso (/F5) → número do objeto do /ToUnicode */
+    const doRecurso = {};
+    const reFonte = /\/Font\s*<<([^>]*)>>/g;
+    while ((m = reFonte.exec(bruto)) !== null) {
+      const dentro = m[1];
+      const reRef = /\/(\w+)\s+(\d+)\s+0\s+R/g;
+      let r;
+      while ((r = reRef.exec(dentro)) !== null) {
+        const obj = objetos[r[2]];
+        if (!obj) continue;
+        const corpo = bruto.slice(obj.ini, obj.fim);
+        const uni = /\/ToUnicode\s+(\d+)\s+0\s+R/.exec(corpo);
+        /* Fonte tipo 0 aponta para a descendente; o /ToUnicode fica na pai,
+           então basta procurar aqui e, se faltar, seguir o /DescendantFonts. */
+        if (uni) { doRecurso[r[1]] = uni[1]; continue; }
+        const desc = /\/DescendantFonts\s*\[\s*(\d+)\s+0\s+R/.exec(corpo);
+        if (!desc) continue;
+        const filho = objetos[desc[1]];
+        if (!filho) continue;
+        const u2 = /\/ToUnicode\s+(\d+)\s+0\s+R/.exec(bruto.slice(filho.ini, filho.fim));
+        if (u2) doRecurso[r[1]] = u2[1];
+      }
+    }
+
+    const numeros = {};
+    Object.keys(doRecurso).forEach(function (nome) { numeros[doRecurso[nome]] = true; });
+
+    const leituras = Object.keys(numeros).map(function (num) {
+      const obj = objetos[num];
+      if (!obj) return Promise.resolve(null);
+      const corpo = bruto.slice(obj.ini, obj.fim);
+      const marca = /stream\r?\n?/.exec(corpo);
+      if (!marca) return Promise.resolve(null);
+      const ini = obj.ini + marca.index + marca[0].length;
+      let ate = bruto.indexOf('endstream', ini);
+      if (ate < 0) return Promise.resolve(null);
+      while (ate > ini && (bytes[ate - 1] === 10 || bytes[ate - 1] === 13)) ate--;
+      return inflar(bytes.subarray(ini, ate), 'deflate')
+        .catch(function () { return inflar(bytes.subarray(ini, ate), 'deflate-raw'); })
+        .then(function (t) { return { num: num, mapa: lerCMap(t) }; })
+        .catch(function () { return null; });
+    });
+
+    return Promise.all(leituras).then(function (lidos) {
+      const porNumero = {};
+      lidos.forEach(function (x) { if (x) porNumero[x.num] = x.mapa; });
+      const saida = {};
+      Object.keys(doRecurso).forEach(function (nome) {
+        const mapa = porNumero[doRecurso[nome]];
+        if (mapa) saida[nome] = mapa;
+      });
+      return saida;
+    });
+  }
+
+  /* bfchar lista pares avulsos; bfrange lista faixas — e a faixa pode vir com
+     um destino inicial (<0041> = A, A+1, A+2…) ou com uma lista explícita. */
+  function lerCMap(texto) {
+    const mapa = {};
+    const hexParaTexto = function (h) {
+      let s = '';
+      for (let i = 0; i + 3 < h.length + 1; i += 4) {
+        const c = parseInt(h.substr(i, 4), 16);
+        if (!isNaN(c)) s += String.fromCharCode(c);
+      }
+      return s;
+    };
+
+    let bloco = /beginbfchar([\s\S]*?)endbfchar/g, m;
+    while ((m = bloco.exec(texto)) !== null) {
+      const re = /<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g;
+      let p;
+      while ((p = re.exec(m[1])) !== null) mapa[p[1].toUpperCase()] = hexParaTexto(p[2]);
+    }
+
+    bloco = /beginbfrange([\s\S]*?)endbfrange/g;
+    while ((m = bloco.exec(texto)) !== null) {
+      const corpo = m[1];
+      const reLista = /<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*\[([\s\S]*?)\]/g;
+      let p;
+      while ((p = reLista.exec(corpo)) !== null) {
+        const de = parseInt(p[1], 16);
+        const itens = p[3].match(/<([0-9A-Fa-f]+)>/g) || [];
+        itens.forEach(function (item, i) {
+          mapa[(de + i).toString(16).toUpperCase().padStart(p[1].length, '0')] =
+            hexParaTexto(item.slice(1, -1));
+        });
+      }
+      const reFaixa = /<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g;
+      while ((p = reFaixa.exec(corpo)) !== null) {
+        const de = parseInt(p[1], 16), ate = parseInt(p[2], 16), alvo = parseInt(p[3], 16);
+        if (ate - de > 65535) continue;
+        for (let c = de; c <= ate; c++) {
+          mapa[c.toString(16).toUpperCase().padStart(p[1].length, '0')] =
+            String.fromCharCode(alvo + (c - de));
+        }
+      }
+    }
+    return mapa;
+  }
+
+  function localizarFluxos(bytes, bruto) {
     const achados = [];
-    const re = /stream\r?\n?/g;
+    /* \b antes de "stream" é o que impede casar dentro de "endstream" — sem
+       isso cada fluxo era encontrado duas vezes, a segunda com o início no
+       lugar errado, e o descompressor recusava tudo. O PDF voltava vazio e o
+       app dizia "provavelmente é digitalizado", que é a resposta errada mais
+       cara que este leitor podia dar. */
+    const re = /\bstream\r?\n?/g;
     let m;
     while ((m = re.exec(bruto)) !== null) {
       const inicio = m.index + m[0].length;
@@ -224,25 +355,65 @@
   }
 
   /* Tj mostra um texto; TJ mostra uma lista com ajustes de espaçamento no
-     meio, que são números e não fazem parte do conteúdo. */
-  function textoDoFluxo(fluxo) {
+     meio, que são números e não fazem parte do conteúdo.
+
+     A quebra de linha sai de Tm, T* e ET, e NÃO de Td: o gerador que escreve
+     glifo a glifo emite um Td entre cada letra, e quebrar ali põe cada letra
+     numa linha — foi o que aconteceu no primeiro teste com um PDF de verdade. */
+  function textoDoFluxo(fluxo, mapas) {
     if (!/\b(Tj|TJ)\b/.test(fluxo)) return '';
     const saida = [];
-    const re = /\((?:\\.|[^\\()])*\)|\bTJ\b|\bTj\b|\bTD\b|\bTd\b|\bT\*\b|\bET\b/g;
-    let m, linha = [];
+    const re = /\/([A-Za-z0-9]+)\s+[\d.]+\s+Tf|<([0-9A-Fa-f\s]*)>|\((?:\\.|[^\\()])*\)|\bTJ\b|\bTj\b|\bTD\b|\bTm\b|\bT\*\b|\bET\b/g;
+    let m, linha = [], fonte = null;
+
+    const quebrar = function () {
+      if (!linha.length) return;
+      const t = linha.join('').replace(/[ \t]+$/, '');
+      if (t.trim()) saida.push(t);
+      linha = [];
+    };
+
     while ((m = re.exec(fluxo)) !== null) {
       const t = m[0];
+      if (m[1]) { fonte = m[1]; continue; }                 /* /F5 9 Tf */
+      if (m[2] != null) {                                   /* <hex> */
+        const mapa = (mapas && fonte) ? mapas[fonte] : null;
+        linha.push(decodificarHex(m[2], mapa));
+        continue;
+      }
       if (t.charAt(0) === '(') {
         linha.push(t.slice(1, -1)
           .replace(/\\([nrt])/g, function (_, c) { return c === 'n' ? '\n' : c === 'r' ? '' : '\t'; })
           .replace(/\\([()\\])/g, '$1')
           .replace(/\\([0-7]{1,3})/g, function (_, o) { return String.fromCharCode(parseInt(o, 8)); }));
-      } else if (t === 'TD' || t === 'Td' || t === 'T*' || t === 'ET') {
-        if (linha.length) { saida.push(linha.join('')); linha = []; }
+        continue;
       }
+      if (t === 'TD' || t === 'Tm' || t === 'T*' || t === 'ET') quebrar();
     }
-    if (linha.length) saida.push(linha.join(''));
+    quebrar();
     return saida.join('\n');
+  }
+
+  /* Sem mapa, o hexadecimal é lido como bytes: serve para o PDF simples que
+     escreve <48656C6C6F>. Com mapa, cada código de dois bytes vira a letra
+     que a fonte diz que ele é. */
+  function decodificarHex(hex, mapa) {
+    const h = hex.replace(/\s+/g, '').toUpperCase();
+    if (!h) return '';
+    if (mapa) {
+      let s = '';
+      for (let i = 0; i + 4 <= h.length; i += 4) {
+        const codigo = h.substr(i, 4);
+        s += (mapa[codigo] != null) ? mapa[codigo] : '';
+      }
+      if (s) return s;
+    }
+    let s = '';
+    for (let i = 0; i + 2 <= h.length; i += 2) {
+      const c = parseInt(h.substr(i, 2), 16);
+      if (c >= 32 && c < 127) s += String.fromCharCode(c);
+    }
+    return s;
   }
 
   /* ---------- entrada ---------- */

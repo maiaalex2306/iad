@@ -293,11 +293,12 @@ Não devolva valor, etapa nem data de fechamento.`;
   }
 
   if (tipo === 'reuniao') {
+    const etapas = Array.isArray(ctx.etapas) ? ctx.etapas.map(String).join(' | ') : '';
     return `${BASE}
 
 Tarefa: o vendedor enviou a transcrição de uma reunião, a ata ou as anotações dele. Separe TUDO que o cliente fez ou disse em evidências, uma para cada dimensão afetada. Um documento costuma render de duas a seis.
 
-Devolva {"evidencias": [ ... ], "contatos": [ ... ]}.
+Devolva {"evidencias": [ ... ], "contatos": [ ... ], "negocio": { ... }}.
 
 Cada item de "evidencias" tem:
 - dimensao: uma das oito. Um receio, uma objeção ou um impedimento vai para "risco". Uma exigência de comparação ou de especificação vai para "criterios". Alguém novo entrando na conversa vai para "stakeholders". O caminho formal até a assinatura vai para "processo".
@@ -311,6 +312,14 @@ ${listaForcas()}
 - frase: o trecho literal do documento que sustenta esta evidência.
 
 Cada item de "contatos" é uma pessoa do lado do cliente que apareceu no documento: {nome, cargo, papel, frase}. papel é um de ${PAPEIS.join(' | ')}.
+
+"negocio" é o que o material diz sobre o NEGÓCIO em si. Devolva apenas os campos que o material realmente informa; omita o resto. Nunca invente número, data nem etapa.
+- valor: o valor deste negócio para nós, em reais, só o número (ex.: 91379.04). É o que o cliente pagaria. Quando o material é uma proposta com implantação e mensalidade, valor é a implantação mais 12 mensalidades. Economia estimada, benefício, ROI e payback NÃO são o valor do negócio — são argumento de venda; não os devolva aqui.
+- valorFrase: o trecho literal de onde tirou o valor.
+- etapa: a etapa do funil que o material comprova ter sido atingida${etapas ? `, uma de ${etapas}` : ''}. Só devolva se o material for prova disso — uma proposta formal com preço comprova "Proposta"; um contrato assinado comprova "Fechamento". Conversa sobre preço não comprova nada. Se o material for só ata de reunião, omita.
+- etapaFrase: o trecho literal que comprova a etapa.
+- previsao: data prevista de fechamento, AAAA-MM-DD, só se o material declarar prazo.
+- concorrentes: nomes de concorrentes citados, separados por vírgula.
 
 Regras desta tarefa:
 - Uma evidência por fato. Não junte dois assuntos na mesma linha.
@@ -747,7 +756,45 @@ function validarReuniao(bruto: Record<string, unknown>, ctx: Record<string, unkn
     contatos.push(registro);
   }
 
-  return { evidencias: evidencias, contatos: contatos };
+  return { evidencias: evidencias, contatos: contatos, negocio: validarNegocio(bruto.negocio, ctx, hoje) };
+}
+
+/* O que o material diz sobre o negócio: valor, etapa, previsão, concorrentes.
+
+   Tudo aqui muda o que o dono da empresa vê no painel — o valor entra no
+   pipeline, a etapa muda a coluna do funil. Então nada passa sem conferência:
+   valor tem de ser número positivo e plausível, etapa tem de existir na lista
+   do app (o modelo não inventa coluna nova), previsão tem de ser data futura.
+   E cada um só é aceito com o trecho literal que o sustenta: sem citação, o
+   modelo está deduzindo, e dedução não move pipeline. */
+function validarNegocio(bruto: unknown, ctx: Record<string, unknown>, hoje: string) {
+  if (!bruto || typeof bruto !== 'object') return {};
+  const n = bruto as Record<string, unknown>;
+  const saida: Record<string, unknown> = {};
+
+  const valor = Number(String(n.valor ?? '').replace(/[^\d.,-]/g, '').replace(/\.(?=\d{3}\b)/g, '').replace(',', '.'));
+  const valorFrase = limparTexto(n.valorFrase, 200);
+  if (isFinite(valor) && valor > 0 && valor < 1e12 && valorFrase) {
+    saida.valor = valor;
+    saida.valorFrase = valorFrase;
+  }
+
+  const etapas = Array.isArray(ctx.etapas) ? ctx.etapas.map(String) : [];
+  const etapa = etapas.find((e) => e.toLowerCase() === limparTexto(n.etapa, 40).toLowerCase());
+  const etapaFrase = limparTexto(n.etapaFrase, 200);
+  if (etapa && etapaFrase) {
+    saida.etapa = etapa;
+    saida.etapaFrase = etapaFrase;
+  }
+
+  /* Previsão é a única data que pode — e deve — estar no futuro. */
+  const previsao = limparTexto(n.previsao, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(previsao) && previsao >= hoje) saida.previsao = previsao;
+
+  const concorrentes = limparTexto(n.concorrentes, 200);
+  if (concorrentes) saida.concorrentes = concorrentes;
+
+  return saida;
 }
 
 /* Um lote de empresas classificadas. Segmento fora da lista do tenant vira
@@ -1229,7 +1276,7 @@ Deno.serve(async (req: Request) => {
     }
     /* JSON torto devolve vazio. Nunca dado inventado no formulário do vendedor. */
     if (!json) {
-      if (tipo === 'reuniao') return responder({ evidencias: [], contatos: [] });
+      if (tipo === 'reuniao') return responder({ evidencias: [], contatos: [], negocio: {} });
       if (tipo === 'segmentos') return responder({ itens: [] });
       if (tipo === 'plano') return responder({ passos: [], atencao: [] });
       if (tipo === 'notas') return responder({ decisoes: [] });
