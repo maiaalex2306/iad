@@ -313,9 +313,19 @@
         const digitado = caixa.value.trim();
         /* Documento e texto vão juntos, cada um anunciado: sem o nome do
            arquivo antes do conteúdo, a IA não tem como dizer de onde tirou o
-           que preencheu — e é isso que a pessoa vai querer conferir. */
-        const doArquivo = docs.filter(function (d) { return d.texto; })
-          .map(function (d) { return '=== ' + d.nome + ' ===\n' + d.texto; }).join('\n\n');
+           que preencheu — e é isso que a pessoa vai querer conferir.
+
+           A cota é por documento, e não um corte no fim do texto todo: cortar
+           no fim descarta os últimos arquivos inteiros, e quem carregou quatro
+           esperava que os quatro contassem. Assim cada um entra com o começo,
+           que é onde ficam cabeçalho, cliente e escopo. */
+        const comTexto = docs.filter(function (d) { return d.texto; });
+        const sobra = Math.max(2000, 22000 - digitado.length);
+        const cota = comTexto.length ? Math.floor(sobra / comTexto.length) : 0;
+        const doArquivo = comTexto.map(function (d) {
+          const t = d.texto.length > cota ? d.texto.slice(0, cota) + '\n[…]' : d.texto;
+          return '=== ' + d.nome + ' ===\n' + t;
+        }).join('\n\n');
         const texto = [digitado, doArquivo].filter(Boolean).join('\n\n');
 
         if (texto.length < 12) {
@@ -329,11 +339,16 @@
         const ctx = c.contexto ? c.contexto() : {};
         global.IADIA.extrair(c.extrair, texto, ctx).then(function (r) {
           botao.disabled = false;
-          if (!r) { estado.textContent = 'Não consegui falar com o assistente agora. Preencha à mão.'; return; }
+          /* O motivo vem do assistente e é mostrado como veio. A frase única
+             de antes — "não consegui falar com o assistente" — servia para
+             tempo esgotado, recusa do servidor e material grande demais, e
+             mandava procurar rede e chave quando o problema era volume. */
+          if (r.erro) { estado.textContent = r.erro; return; }
           const n = aplicarSugestoes(dlg, campos, r, c.nunca);
-          estado.textContent = n
+          const corte = r.cortado ? ' Li só o começo do material — era muito.' : '';
+          estado.textContent = (n
             ? (n === 1 ? '1 campo preenchido — confira.' : n + ' campos preenchidos — confira.')
-            : 'Não achei nada para preencher neste material.';
+            : 'Não achei nada para preencher neste material.') + corte;
           if (c.aoAplicar) c.aoAplicar(dlg, r, n);
         });
       });

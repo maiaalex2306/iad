@@ -107,23 +107,56 @@
   }
 
   /* Uma extração. Resolve com {campos, frases} ou null — nunca rejeita. */
+  /* O que cabe num pedido. Quatro propostas em Word passam de duzentos mil
+     caracteres, e nenhum modelo aceita isso num pedido só — o servidor recusa
+     e o app dizia "não consegui falar com o assistente", que manda procurar
+     rede e chave quando o problema é volume. Cortamos antes de mandar, e
+     dizemos que cortamos: material demais some, e some justamente a parte que
+     a pessoa carregou por último. */
+  const LIMITE_PEDIDO = 24000;
+
+  /* Devolve {campos, frases} quando deu certo, {erro} quando não. Antes
+     devolvia null para tudo — tempo esgotado, recusa do servidor, texto curto
+     — e a tela tinha uma frase só para três causas diferentes. Frase única
+     para causas diferentes é o que faz alguém mexer no lugar errado. */
   function extrair(tipo, texto, contexto) {
-    if (!disponivel()) return Promise.resolve(null);
-    const t = String(texto || '').trim();
-    if (t.length < 12) return Promise.resolve(null);
+    if (!disponivel()) return Promise.resolve({ erro: 'O assistente não está no ar. Veja ⚙︎ Dados → Assistente de IA.' });
+    let t = String(texto || '').trim();
+    if (t.length < 12) return Promise.resolve({ erro: 'Texto curto demais para eu ler.' });
+
+    let cortado = false;
+    if (t.length > LIMITE_PEDIDO) { t = t.slice(0, LIMITE_PEDIDO); cortado = true; }
+
+    /* Documento leva mais tempo que uma frase digitada, e o prazo curto existe
+       para a sugestão que aparece enquanto se escreve. Um prazo só servia mal
+       aos dois casos. */
+    const prazoDaVez = t.length > 2000 ? PRAZO_REUNIAO : PRAZO;
 
     const pedido = Nuvem.chamarFuncao('assistente', {
       tipo: tipo, texto: t, contexto: contexto || {}
-    });
+    }).then(
+      function (r) { return { resposta: r }; },
+      function (e) { return { falha: e }; }
+    );
 
     const prazo = new Promise(function (resolve) {
-      setTimeout(function () { resolve(null); }, PRAZO);
+      setTimeout(function () { resolve({ estourou: true }); }, prazoDaVez);
     });
 
-    return Promise.race([pedido, prazo]).then(function (r) {
-      if (!r || r.erro || !r.campos) return null;
-      return { campos: r.campos, frases: r.frases || {} };
-    }).catch(function () { return null; });
+    return Promise.race([pedido, prazo]).then(function (x) {
+      if (x.estourou) {
+        return { erro: 'O assistente demorou mais de ' + Math.round(prazoDaVez / 1000) +
+          ' segundos. Tente com menos documentos de uma vez.' };
+      }
+      if (x.falha) {
+        return { erro: x.falha.message || 'O servidor recusou a análise.' };
+      }
+      const r = x.resposta;
+      if (!r) return { erro: 'O servidor respondeu vazio.' };
+      if (r.erro) return { erro: r.erro };
+      if (!r.campos) return { erro: 'O assistente não devolveu campos.' };
+      return { campos: r.campos, frases: r.frases || {}, cortado: cortado };
+    });
   }
 
   /* Uma reunião inteira. Devolve {evidencias:[], contatos:[]} ou null.
@@ -379,7 +412,10 @@
       pedir: function (tipo, texto, contexto) {
         const meu = ++sequencia;
         return extrair(tipo, texto, contexto).then(function (r) {
-          return meu === sequencia ? r : null;
+          /* Aqui erro é silêncio de propósito: isto roda enquanto a pessoa
+             digita, e um aviso a cada pausa seria pior que não sugerir nada. */
+          if (!r || r.erro || meu !== sequencia) return null;
+          return r;
         });
       }
     };
