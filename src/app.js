@@ -2225,7 +2225,16 @@
     filtrarUsuarioAdmin: function (valor) { A.definirFiltros({ usuario: valor }); render(); },
 
     /* ---------- usuários ---------- */
+    /* As três guardas abaixo repetem o que a tela já decide ao desenhar os
+       botões. Não é redundância: esconder um botão não impede nada — a função
+       continua no window, e o console do navegador chega nela. A tela evita o
+       engano; estas linhas evitam a burla. A regra que vale de verdade é a do
+       servidor, nas políticas do banco; aqui é o cadastro deste aparelho. */
     novoUsuario: function () {
+      if (!A.ehAdmin()) {
+        alert('Só quem administra cria acessos. Peça a quem administra o sistema.');
+        return;
+      }
       U.formulario('Novo usuário', camposUsuario(), {}, function (d) {
         if (!d.nome || !d.email) { alert('Nome e e-mail são obrigatórios.'); return; }
         if (!d.senha || d.senha.length < 6) { alert('Defina uma senha de ao menos 6 caracteres.'); return; }
@@ -2240,6 +2249,11 @@
     editarUsuario: function (id) {
       const u = A.usuario(id);
       if (!u) return;
+      const eu = A.atual();
+      if (!A.ehAdmin() && !(eu && eu.id === id)) {
+        alert('Você só edita os seus próprios dados.');
+        return;
+      }
       U.formulario('Editar usuário', camposUsuario(u).concat([
         { id: 'ativo', rotulo: 'Situação', tipo: 'select', opcoes: [{ valor: 'sim', rotulo: 'Ativo' }, { valor: 'nao', rotulo: 'Inativo' }] }
       ]), Object.assign({}, u, { senha: '', ativo: u.ativo === false ? 'nao' : 'sim' }), function (d) {
@@ -2251,7 +2265,18 @@
     },
 
     excluirUsuario: function (id) {
-      if (!U.confirmar('Excluir este acesso? Os registros criados por ele continuam no sistema.')) return;
+      const eu = A.atual();
+      if (!A.ehAdmin()) {
+        alert('Só quem administra remove acessos. Peça a quem administra o sistema.');
+        return;
+      }
+      if (eu && eu.id === id) {
+        alert('Você não pode remover o seu próprio acesso.');
+        return;
+      }
+      if (!U.confirmar('Excluir este acesso deste aparelho?\n\n' +
+          'A conta no servidor continua existindo — lá o caminho é bloquear. ' +
+          'Os registros criados por ela continuam no sistema.')) return;
       try { A.excluirUsuario(id); render(); }
       catch (e) { alert(e.message); }
     },

@@ -1461,8 +1461,14 @@
       produtos: listaProdutos, usuarios: listaUsuarios
     }[abaCadastro](est);
 
+    /* Criar pessoa é atribuição de quem administra. Nas outras abas o botão
+       vale para todos: conta, contato e oportunidade são o trabalho do dia. */
+    const podeCriar = abaCadastro !== 'usuarios' || global.IADAuth.ehAdmin();
+
     return '<div class="row"><h1>Cadastros</h1><span class="espaco"></span>' +
-      '<button class="btn alt mini" onclick="' + criar + '" data-ajuda="' + esc(AJUDA_NOVO[abaCadastro] || 'Cria um item nesta aba.') + '">+ Novo</button></div>' +
+      (podeCriar
+        ? '<button class="btn alt mini" onclick="' + criar + '" data-ajuda="' + esc(AJUDA_NOVO[abaCadastro] || 'Cria um item nesta aba.') + '">+ Novo</button>'
+        : '') + '</div>' +
       '<div class="row" style="margin:8px 0 10px">' + abas + '</div>' +
       '<input id="busca-cadastro" class="busca" type="search" placeholder="Buscar…" value="' + esc(buscaCadastro) +
       '" oninput="App.buscarCadastro(this.value)">' +
@@ -1592,6 +1598,8 @@
       return combina(u.nome) || combina(u.email) || combina(u.login) || combina(t && t.nome);
     });
 
+    const podeAdministrar = A.ehAdmin();
+
     const linhas = todos.map(function (u) {
       const t = A.tenant(u.tenantId);
       const souEu = eu && eu.id === u.id;
@@ -1600,12 +1608,27 @@
         '<td>' + esc(u.papel === 'admin' ? 'Todas as empresas' : ((t && t.nome) || '—')) + '</td>' +
         '<td>' + esc(u.email || '—') + '</td>' +
         '<td>' + esc(u.whatsapp || '—') + '</td>' +
-        '<td>' + (u.papel === 'admin' ? '<span class="pill navy">Administrador</span>' : '<span class="pill">Usuário</span>') + '</td>' +
+        /* Só existiam dois papéis aqui, e Gestor aparecia como Usuário — o
+           servidor certo e a tela errada, que é a divergência que ninguém
+           confere porque as duas telas nunca ficam lado a lado. */
+        '<td><span class="pill' + (u.papel === 'admin' ? ' navy' : '') + '">' +
+          esc(rotuloDoPapel(u.papel)) + '</span></td>' +
         '<td>' + (u.ativo === false ? '<span class="pill dead">inativo</span>'
           : (u.emailConfirmado ? '<span class="pill ok">ativo</span>' : '<span class="pill warn">e-mail pendente</span>')) + '</td>' +
+        /* Quem não administra editava e excluía qualquer linha que enxergasse
+           — inclusive a própria conta, que é como alguém se apaga do sistema
+           sem querer. Agora: editar, só a sua; excluir e criar, só quem
+           administra. Isto é o espelho da regra do servidor, não a regra: lá
+           quem decide são as políticas do banco. */
         '<td class="right" style="white-space:nowrap">' +
-          '<button class="btn ghost mini" onclick="App.editarUsuario(\'' + u.id + '\')">Editar</button>' +
-          (u.papel === 'admin' ? '' : ' <button class="btn ghost mini" onclick="App.excluirUsuario(\'' + u.id + '\')">Excluir</button>') +
+          ((podeAdministrar || souEu)
+            ? '<button class="btn ghost mini" onclick="App.editarUsuario(\'' + u.id + '\')"' +
+              ' data-ajuda="' + (souEu ? 'Corrige os seus dados neste aparelho.' : 'Corrige os dados desta pessoa neste aparelho.') + '">Editar</button>'
+            : '') +
+          ((podeAdministrar && !souEu && u.papel !== 'admin')
+            ? ' <button class="btn ghost mini" onclick="App.excluirUsuario(\'' + u.id + '\')"' +
+              ' data-ajuda="Remove esta pessoa deste aparelho. A conta no servidor continua existindo — lá o caminho é bloquear.">Excluir</button>'
+            : '') +
         '</td></tr>';
     }).join('');
 
@@ -1617,9 +1640,9 @@
       ? (N.souAdminNaNuvem()
           ? '<div id="usuarios-nuvem"><p class="tiny muted">Carregando os usuários do servidor…</p></div>' +
             '<p class="tiny muted" style="margin:14px 0 6px">Abaixo, os usuários deste aparelho — não são contas do servidor.</p>'
-          : '<div class="aviso" style="margin-bottom:12px">As contas ficam no servidor. ' +
-            'Para incluir alguém: peça que a pessoa abra o app, use <strong>Criar meu acesso</strong> e confirme o e-mail. ' +
-            'Quem administra liga a pessoa à empresa. Cadastrar por aqui só afeta este aparelho.</div>')
+          : '<div class="aviso" style="margin-bottom:12px">As contas ficam no servidor, e ' +
+            'quem cria, bloqueia e muda papéis é quem administra o sistema. ' +
+            'Para incluir alguém na sua equipe, peça a ele.</div>')
       : '';
 
     return aviso + tabela(['Usuário', 'Empresa', 'E-mail', 'WhatsApp', 'Papel', 'Situação', ''], linhas, 'Nenhum usuário encontrado.');

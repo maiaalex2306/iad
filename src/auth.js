@@ -225,7 +225,9 @@
     /* O papel vem do servidor: usuario, gestor ou admin. */
     u.papel = (perfil && ['admin', 'gestor'].indexOf(perfil.papel) !== -1) ? perfil.papel : 'usuario';
     u.tenantId = (perfil && perfil.tenant_id) || null;
-    u.ativo = true;
+    /* Espelho é espelho: se o servidor diz que a pessoa está bloqueada, a
+       lista deste aparelho não pode continuar dizendo "ativo". */
+    u.ativo = !(perfil && perfil.ativo === false);
     u.emailConfirmado = true;
     u.ultimoAcesso = new Date().toISOString();
 
