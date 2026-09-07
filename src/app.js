@@ -905,25 +905,41 @@
       dlg.showModal();
     },
 
-    /* Mesma história da oportunidade: sem empresa, cadastra a empresa e volta
-       para o contato, em vez de largar a pessoa na tela de contas. */
-    novoContato: function (contaId) {
+    /* Mesma regra da oportunidade: o formulário que a pessoa pediu abre
+       sempre, e a empresa que falta se cadastra de dentro dele. */
+    novoContato: function (contaId, valores) {
       const contas = Store.dados().contas;
-      if (!contas.length) {
-        return App.novaConta(function (nova) {
-          if (nova) App.novoContato(nova.id);
-        });
-      }
       const campos = contaId ? camposContato(contaId) : [{
         id: 'contaId', rotulo: 'Empresa', tipo: 'select',
-        opcoes: contas.map(function (c) { return { valor: c.id, rotulo: c.nome }; })
+        padrao: (contas[0] && contas[0].id) || '',
+        opcoes: (contas.length ? [] : [{ valor: '', rotulo: '— nenhuma empresa cadastrada ainda —' }])
+          .concat(contas.map(function (c) { return { valor: c.id, rotulo: c.nome }; }))
+          .concat([{ valor: NOVA_CONTA, rotulo: '+ Cadastrar nova empresa…' }])
       }].concat(camposContato(null));
-      U.formulario('Novo contato', campos, {}, function (d) {
+
+      U.formulario('Novo contato', campos, valores || {}, function (d) {
         if (!d.nome) return;
+        const alvo = contaId || d.contaId;
+        if (!alvo || alvo === NOVA_CONTA) {
+          alert('Escolha a empresa desta pessoa.\n\n' +
+            'Se ela ainda não existe, use "+ Cadastrar nova empresa" no próprio campo.');
+          return App.novoContato(contaId, d);
+        }
         Store.criarContato(Object.assign({}, d, {
-          contaId: contaId || d.contaId, reportaA: d.reportaA || null
+          contaId: alvo, reportaA: d.reportaA || null
         }));
         render();
+      }, function (dlg) {
+        const sel = dlg.querySelector('[name="contaId"]');
+        if (!sel) return;
+        sel.addEventListener('change', function () {
+          if (sel.value !== NOVA_CONTA) return;
+          const guardado = valoresDoFormulario(dlg, campos);
+          dlg.close('cancelar');
+          App.novaConta(function (nova) {
+            App.novoContato(contaId, Object.assign(guardado, nova ? { contaId: nova.id } : {}));
+          });
+        });
       });
     },
 
@@ -949,15 +965,20 @@
        aborrecimento por outro. */
     novaOportunidade: function (contaId, valores) {
       const contas = Store.dados().contas;
-      if (!contas.length) {
-        return App.novaConta(function (nova) {
-          if (nova) App.novaOportunidade(nova.id, valores);
-        });
-      }
 
+      /* Sem empresa nenhuma, isto abria o cadastro de empresa antes da
+         oportunidade. Funcionava, mas inverte o que a pessoa pediu: ela
+         clicou em oportunidade, quer ver a oportunidade. Agora o formulário do
+         negócio abre sempre, e a empresa se cadastra de dentro dele — pelo
+         próprio campo Empresa, que é onde ela olha ao perceber que falta. */
       const campos = camposOportunidade(contas, contaId);
       U.formulario('Nova oportunidade', campos, valores || {}, function (d) {
         if (!d.titulo) return;
+        if (!d.contaId || d.contaId === NOVA_CONTA) {
+          alert('Escolha a empresa deste negócio.\n\n' +
+            'Se ela ainda não existe, use "+ Cadastrar nova empresa" no próprio campo.');
+          return App.novaOportunidade(contaId, d);
+        }
         const op = Store.criarOportunidade(d);
         location.hash = '#/op/' + op.id;
         render();
@@ -2780,9 +2801,12 @@
         nunca: ['valor', 'etapa', 'fechamentoPrevisto'],
         contexto: function () { return IA.contextoDaConta(contaPadrao); } },
       { id: 'titulo', rotulo: 'Título' },
+      /* A opção de cadastrar vem sempre, e primeiro quando não há nenhuma:
+         é a única coisa útil a fazer ali naquele momento. */
       { id: 'contaId', rotulo: 'Empresa', tipo: 'select',
-        padrao: contaPadrao || (contas[0] && contas[0].id),
-        opcoes: contas.map(function (c) { return { valor: c.id, rotulo: c.nome }; })
+        padrao: contaPadrao || (contas[0] && contas[0].id) || '',
+        opcoes: (contas.length ? [] : [{ valor: '', rotulo: '— nenhuma empresa cadastrada ainda —' }])
+          .concat(contas.map(function (c) { return { valor: c.id, rotulo: c.nome }; }))
           .concat([{ valor: NOVA_CONTA, rotulo: '+ Cadastrar nova empresa…' }]) },
       { id: 'valor', rotulo: 'Valor (R$)', tipo: 'moeda' },
       { id: 'etapa', rotulo: 'Etapa CRM', tipo: 'select', opcoes: P.ETAPAS },
