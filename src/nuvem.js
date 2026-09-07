@@ -22,12 +22,28 @@
     return { url: String(c.url || '').replace(/\/+$/, ''), chave: String(c.chave || '') };
   }
 
+  /* O que está salvo no navegador vence o que veio no código — é o que permite
+     apontar este app a outro projeto Supabase sem publicar nada.
+
+     Com uma exceção: chave antiga (JWT) salva para o MESMO projeto que o código
+     aponta perde para a do código. O Supabase trocou o formato, e quem tinha
+     colado a antiga à mão ficaria preso a ela para sempre, com o app inteiro
+     funcionando menos as Edge Functions — sem nada na tela ligando uma coisa à
+     outra. A exceção é estreita de propósito: url diferente é outro projeto, e
+     aí a escolha de quem configurou continua valendo. */
   function config() {
     const base = padrao();
     let salvo = null;
     try { salvo = JSON.parse(localStorage.getItem(CHAVE_CONFIG)); } catch (e) { salvo = null; }
     if (!salvo) return base;
-    return { url: salvo.url || base.url, chave: salvo.chave || base.chave };
+
+    const url = salvo.url || base.url;
+    let chave = salvo.chave || base.chave;
+    const antiga = /^ey[A-Za-z0-9_-]*\./.test(chave);
+    const codigoTemNova = /^sb_publishable_/.test(base.chave);
+    if (antiga && codigoTemNova && url === base.url) chave = base.chave;
+
+    return { url: url, chave: chave };
   }
 
   function salvarConfig(nova) {
