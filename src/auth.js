@@ -278,7 +278,27 @@
       codigo: null, codigoExpiraEm: null, criadoEm: Store.hoje(), ultimoAcesso: null
     };
     estado.usuarios.push(adm);
-    return definirSenha(adm, '@Bento2306').then(function () { return adm; });
+
+    /* A senha é sorteada, e não escrita aqui. Uma senha fixa no código de um
+       repositório público não é senha: é uma porta com a chave pendurada na
+       fechadura. Esta aparece uma vez na tela de quem abriu o app pela
+       primeira vez, e só nesse aparelho — não há para onde ela vazar. */
+    const senha = senhaSorteada();
+    return definirSenha(adm, senha).then(function () {
+      adm.senhaInicial = senha;
+      return adm;
+    });
+  }
+
+  /* 16 caracteres de um alfabeto sem os que se confundem à leitura (O/0, l/1),
+     porque esta é feita para ser lida da tela e digitada uma vez. */
+  function senhaSorteada() {
+    const letras = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+    const bytes = new Uint32Array(16);
+    (global.crypto || global.msCrypto).getRandomValues(bytes);
+    let fora = '';
+    for (let i = 0; i < bytes.length; i++) fora += letras[bytes[i] % letras.length];
+    return fora;
   }
 
   global.IADAuth = {

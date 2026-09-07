@@ -2218,7 +2218,16 @@
     global.IADAjuda.ligar();
     montarNav();
     atualizarPerfilDaNuvem();
-    A.garantirAdministrador().then(render).catch(function (e) {
+    A.garantirAdministrador().then(function (adm) {
+      render();
+      /* A senha sorteada aparece uma vez, aqui, porque não existe em lugar
+         nenhum além deste aparelho: se ninguém anotar, ninguém entra. */
+      if (adm && adm.senhaInicial) {
+        alert('Este aparelho ainda não tinha administrador, então criei um.\n\n' +
+          'Login: Adm\nSenha: ' + adm.senhaInicial + '\n\n' +
+          'Anote agora — esta senha não aparece de novo. Troque-a no primeiro acesso.');
+      }
+    }).catch(function (e) {
       console.warn('Falha ao preparar o administrador:', e);
       render();
     });
