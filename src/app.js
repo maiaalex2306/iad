@@ -164,6 +164,29 @@
     proxima();
   }
 
+  /* Para o administrador, "onde foram parar os registros" tem resposta dentro
+     do app: o RLS devolve as linhas das outras empresas só para ele. */
+  function mostrarOndeEstao() {
+    const alvo = document.getElementById('onde-estao');
+    if (!alvo) return;
+    alvo.innerHTML = '<p class="small muted">Procurando em todas as empresas…</p>';
+    global.IADNuvem.ondeEstaoOsRegistros().then(function (r) {
+      const bloco = r.map(function (t) {
+        if (t.erro) return '<li>' + U.esc(t.tabela) + ': ' + U.esc(t.erro) + '</li>';
+        const ids = Object.keys(t.por);
+        if (!ids.length) return '<li><strong>' + U.esc(t.tabela) + '</strong>: nenhuma linha em empresa alguma.</li>';
+        return '<li><strong>' + U.esc(t.tabela) + '</strong>: ' + ids.map(function (id) {
+          const e = A.tenant(id);
+          return U.esc((e && e.nome) || id) + ' — ' + t.por[id];
+        }).join(' · ') + '</li>';
+      }).join('');
+      alvo.innerHTML = '<p class="small" style="margin:10px 0 4px"><strong>Onde estão, olhando todas as empresas:</strong></p>' +
+        '<ul class="small">' + bloco + '</ul>';
+    }, function (e) {
+      alvo.innerHTML = '<p class="small muted">Não consegui procurar: ' + U.esc(e.message) + '</p>';
+    });
+  }
+
   /* Duas faixas, e a diferença entre elas importa.
 
      A falha de sincronização é um acontecimento: guardo numa variável e ela
@@ -2331,8 +2354,29 @@
       });
     },
 
-    /* O botão do aviso de sincronização. Repete só a descida — quem acabou de
-       entrar quer ver a carteira, não empurrar a cópia local por cima dela. */
+    /* A consulta que responde "onde foram parar", para colar no SQL Editor.
+       Curta de propósito: um arquivo de noventa linhas é um convite a deixar
+       para depois. */
+    copiarConsultaDeOnde: function () {
+      const texto = [
+        '-- Onde estão as contas e as oportunidades, por empresa.',
+        '-- Rode no Supabase → SQL Editor (ele passa por cima do RLS).',
+        'select t.nome as empresa, c.tenant_id, count(*) as contas',
+        '  from public.contas c left join public.tenants t on t.id = c.tenant_id',
+        ' group by 1,2 order by contas desc;',
+        '',
+        'select t.nome as empresa, o.tenant_id, count(*) as oportunidades',
+        '  from public.oportunidades o left join public.tenants t on t.id = o.tenant_id',
+        ' group by 1,2 order by oportunidades desc;'
+      ].join('\n');
+      const pronto = function () { alert('Consulta copiada. Cole no SQL Editor do Supabase e rode.'); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(texto).then(pronto, function () { prompt('Copie:', texto); });
+      } else {
+        prompt('Copie:', texto);
+      }
+    },
+
     /* Pergunta ao servidor o que ele acha de quem está chamando e escreve o
        veredito na própria tela. É o que fecha o caso sem ninguém abrir o SQL
        Editor: as três causas de pipeline vazio se distinguem pelas respostas
@@ -2389,13 +2433,21 @@
               '<strong>Aí o problema é do app</strong> — me mande este quadro.';
           } else {
             veredito = 'Você é gestor, na empresa certa, e o servidor não tem nenhuma conta nesta empresa. ' +
-              'Os seus registros estão carimbados com <strong>outra empresa</strong> — uma das outras que ' +
-              'já entraram neste navegador. É preciso movê-los no banco, ou apontar o seu perfil para a ' +
-              'empresa deles. O arquivo nuvem/diagnostico.sql mostra em qual delas estão.';
+              'Os seus registros estão em <strong>outra empresa</strong> — ou nunca chegaram ao servidor. ' +
+              (v.souAdmin.valor === true
+                ? 'Como você é administrador, o próprio servidor me deixa olhar as outras empresas: a lista ' +
+                  'abaixo diz qual dos dois é o caso.'
+                : 'Quem sabe qual dos dois é o administrador, ou esta consulta no SQL Editor do Supabase.' +
+                  '<button class="btn ghost mini" onclick="App.copiarConsultaDeOnde()">Copiar a consulta</button>');
           }
 
           alvo.innerHTML = '<ul class="small" style="margin:10px 0">' + linhas.join('') + '</ul>' +
-            '<div class="aviso">' + veredito + '</div>';
+            '<div class="aviso faixa-aviso">' + veredito + '</div>' +
+            '<div id="onde-estao"></div>';
+
+          /* O administrador consegue a resposta sem sair do app: o RLS devolve
+             as linhas das outras empresas só para ele. */
+          if (v.souAdmin.valor === true) mostrarOndeEstao();
         }, function (e) {
           alvo.innerHTML = '<div class="aviso">Não consegui perguntar: ' + U.esc(e.message) + '</div>';
         });
@@ -2427,6 +2479,8 @@
       }
     },
 
+    /* O botão do aviso de sincronização. Repete só a descida — quem acabou de
+       entrar quer ver a carteira, não empurrar a cópia local por cima dela. */
     tentarBaixarDeNovo: function () {
       avisoSincronizacao = 'Baixando de novo…';
       render();

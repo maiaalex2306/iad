@@ -352,6 +352,24 @@
       }, function (e) { return { erro: e.message, status: e.status || 0 }; });
   }
 
+  /* Onde estão os registros, por empresa. Só o administrador consegue — o RLS
+     devolve as linhas das outras empresas apenas para ele. Para quem é gestor,
+     esta pergunta não tem resposta de dentro do app: é o SQL Editor. */
+  function ondeEstaoOsRegistros() {
+    const buscar = function (tabela) {
+      return chamar('/rest/v1/' + tabela + '?select=tenant_id&limit=2000')
+        .then(function (linhas) {
+          const por = {};
+          (linhas || []).forEach(function (l) {
+            const k = l.tenant_id || '(sem empresa)';
+            por[k] = (por[k] || 0) + 1;
+          });
+          return { tabela: tabela, por: por, total: (linhas || []).length };
+        }, function (e) { return { tabela: tabela, erro: e.message }; });
+    };
+    return Promise.all([buscar('contas'), buscar('oportunidades')]);
+  }
+
   function definirPapelDoPerfil(id, papel) {
     return chamar('/rest/v1/rpc/definir_papel_do_perfil', {
       metodo: 'POST', corpo: { p_id: id, p_papel: papel }
@@ -570,7 +588,7 @@
     perfisDaNuvem, empresasDaNuvem, souAdminNaNuvem, existeEmpresa,
     definirEmpresaDoPerfil, definirPapelDoPerfil, salvarMeuNome,
     definirBloqueioDoPerfil, definirBloqueioDaEmpresa,
-    definirDadosDaEmpresa, definirDadosDoPerfil, minhaSituacao, comoOServidorMeVe, primeirasLinhas,
+    definirDadosDaEmpresa, definirDadosDoPerfil, minhaSituacao, comoOServidorMeVe, primeirasLinhas, ondeEstaoOsRegistros,
     convitesDaNuvem, convidar, removerConvite, recuperarSenha, criarEmpresa, chamarFuncao,
     adotarTokens,
     trocarMinhaSenha,
