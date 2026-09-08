@@ -1,0 +1,218 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   PALETA AC PARTNERS — tokens para o IAD CRM
+   ═══════════════════════════════════════════════════════════════════════════
+
+   AINDA NÃO ESTÁ LIGADA. Este arquivo não é importado por index.html: é a
+   paleta pronta, conferida, esperando a decisão de aplicar. Para experimentar,
+   basta incluí-lo DEPOIS de styles.css — os apelidos no fim do bloco fazem o
+   app inteiro mudar de cor sem que nenhuma outra linha de CSS mude.
+
+   Todos os pares foram medidos, não estimados. As regras usadas:
+     · texto  →  4,5:1 (WCAG AA para texto normal)
+     · componente com significado  →  3:1
+     · divisor decorativo  →  sem exigência (uma linha de 3:1 seria uma tarja)
+
+   ─────────────────────────────────────────────────────────────────────────
+   AS DUAS DESCOBERTAS QUE MOLDARAM ESTA PALETA
+   ─────────────────────────────────────────────────────────────────────────
+
+   1. TEXTO BRANCO NÃO PODE IR SOBRE O LARANJA DA ACP.
+
+      #FF682C com branco dá 2,89:1. Reprova no AA por larga margem — é o pior
+      par de qualquer proposta que envolva esta marca, e é justamente o botão
+      principal. Há duas saídas, e elas não são equivalentes:
+
+        (a) escurecer o laranja até o branco caber  →  #BF4F18
+        (b) manter o laranja da marca e usar texto escuro  →  #FF682C + #2E1508
+
+      (a) parece a saída óbvia e é a errada. O laranja escurecido cai em cima
+      do laranja de "em risco" da escala de severidade: 0,008 de distância de
+      luminância, ou seja, o botão de ação e a barra de alerta viram a mesma
+      cor. Num CRM de decisão isso não é detalhe estético — é o usuário
+      confundindo "clique aqui" com "este negócio está em risco".
+
+      (b) dá 5,92:1 E mantém 0,154 de distância do laranja de severidade.
+      Passa, e continua sendo a cor da marca. É a escolha desta paleta, e é
+      por isso que existe o token --accent-ink: sobre o laranja de ação, a
+      tinta é sempre escura, nos dois temas. Uma regra só, sem exceção.
+
+   2. A MARCA E O SIGNIFICADO SÃO DUAS CAMADAS, E NÃO SE MISTURAM.
+
+      Roxo, laranja e o gradiente são IDENTIDADE: navegação, botões, seleção,
+      foco, login, cabeçalho. Verde, amarelo, âmbar e vermelho são
+      SIGNIFICADO: saúde da decisão, evidência velha, risco, zumbi. Um número
+      pintado de roxo diz "somos a ACP"; o mesmo número em vermelho diz "este
+      negócio está morrendo". Trocar isso apaga a leitura do painel.
+
+      Por isso a escala de severidade foi recalculada para conviver com roxo,
+      não com marinho — e o "warn" foi puxado para o ouro (42°), longe do
+      laranja de ação (20°), que é onde a colisão nasceria.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ---------- MARCA ---------- */
+  --acp-brand:        #6816A8;   /* roxo institucional: navegação, links, seleção, foco */
+  --acp-brand-dark:   #4A1078;   /* roxo profundo: títulos, KPI institucional */
+  --acp-brand-soft:   #F3ECFA;   /* fundo de item selecionado e hover */
+
+  /* O laranja é o da ACP, sem retoque. A tinta que vai em cima dele é que
+     muda — e é escura, sempre. */
+  --acp-accent:       #FF682C;
+  --acp-accent-ink:   #2E1508;
+  --acp-accent-soft:  #FFF0E8;   /* fundo do campo preenchido pela IA */
+  --acp-soft-ink:     #2E1508;   /* tinta sobre os fundos suaves */
+
+  /* O gradiente da marca. Só em superfície grande — login, faixa do topo,
+     ícone. Nunca atrás de texto pequeno nem dentro de cartão: gradiente sob
+     texto tem contraste que varia ao longo da própria frase. */
+  --acp-gradient: linear-gradient(110deg, #4A1078 0%, #6816A8 30%, #A72A7E 62%, #FF682C 100%);
+
+  /* ---------- NEUTROS ---------- */
+  /* O cinza tem viés de roxo, de propósito: cinza azulado ao lado de roxo
+     parece sujo. */
+  --acp-bg:           #F8F6FA;
+  --acp-surface:      #FFFFFF;
+  --acp-line:         #E6DFEA;
+  --acp-text:         #241C29;
+  --acp-muted:        #665A6B;
+  --acp-inverso:      #FFFFFF;   /* tinta sobre preenchimento escuro */
+
+  /* ---------- SIGNIFICADO ---------- */
+  /* Recalculados para o fundo claro-arroxeado. A rampa é 148° → 42° → 25° → 1°:
+     verde, ouro, âmbar queimado, vermelho. */
+  --acp-ok:           #14713F;
+  --acp-warn:         #8A6206;
+  --acp-risk:         #B4530C;
+  --acp-dead:         #A8221F;
+
+  --acp-radius:       14px;
+  --acp-shadow:       0 1px 2px rgba(45, 20, 60, .05), 0 6px 20px rgba(45, 20, 60, .06);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   TEMA ESCURO — projetado, não invertido.
+
+   A inversão automática é o que o app faz hoje, e ela tem um defeito real
+   que ninguém viu: o bloco escuro atual redefine navy, laranja, fundo e
+   texto, e NÃO redefine verde, amarelo, âmbar e vermelho. As quatro cores
+   de significado ficam com o valor claro sobre superfície escura. Aqui elas
+   são redefinidas junto, que é a única forma de o escuro continuar dizendo
+   a mesma coisa.
+
+   E o escuro fica: quem usa o app no carro depois da visita, à noite, tem
+   uma razão para isso. Desligar o tema escuro para proteger a identidade é
+   trocar o usuário pela marca.
+   ───────────────────────────────────────────────────────────────────────── */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema="claro"]) {
+    --acp-brand:       #C9A0F0;
+    --acp-brand-dark:  #E0C6FA;
+    --acp-brand-soft:  #2A1B3D;
+
+    --acp-accent:      #FF7A3D;
+    --acp-accent-ink:  #2E1508;   /* continua escura: a regra não muda de tema */
+    --acp-accent-soft: #33200F;
+    --acp-soft-ink:    #FF9057;   /* aqui sim inverte: o fundo suave ficou escuro */
+
+    --acp-gradient: linear-gradient(110deg, #3A0C60 0%, #571291 30%, #8C2269 62%, #C4501F 100%);
+
+    --acp-bg:          #14101A;
+    --acp-surface:     #1D1725;
+    --acp-line:        #332B3D;
+    --acp-text:        #EFE9F3;
+    --acp-muted:       #A99DB0;
+    --acp-inverso:     #1A1420;
+
+    --acp-ok:          #4FBF87;
+    --acp-warn:        #D6A83C;
+    --acp-risk:        #C4703C;
+    --acp-dead:        #EE7A75;
+
+    --acp-shadow:      0 1px 2px rgba(0,0,0,.45), 0 8px 24px rgba(0,0,0,.4);
+  }
+}
+
+/* A escolha explícita vence o sistema operacional, nos dois sentidos. */
+:root[data-tema="escuro"] {
+  --acp-brand:       #C9A0F0;
+  --acp-brand-dark:  #E0C6FA;
+  --acp-brand-soft:  #2A1B3D;
+  --acp-accent:      #FF7A3D;
+  --acp-accent-ink:  #2E1508;
+  --acp-accent-soft: #33200F;
+  --acp-soft-ink:    #FF9057;
+  --acp-gradient: linear-gradient(110deg, #3A0C60 0%, #571291 30%, #8C2269 62%, #C4501F 100%);
+  --acp-bg:          #14101A;
+  --acp-surface:     #1D1725;
+  --acp-line:        #332B3D;
+  --acp-text:        #EFE9F3;
+  --acp-muted:       #A99DB0;
+  --acp-inverso:     #1A1420;
+  --acp-ok:          #4FBF87;
+  --acp-warn:        #D6A83C;
+  --acp-risk:        #C4703C;
+  --acp-dead:        #EE7A75;
+  --acp-shadow:      0 1px 2px rgba(0,0,0,.45), 0 8px 24px rgba(0,0,0,.4);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   OS APELIDOS — é isto que liga a paleta ao app sem tocar em mais nada.
+
+   Renomear --navy para --brand-primary em todo o CSS de uma vez é uma troca
+   mecânica de centenas de ocorrências no mesmo commit em que a aparência
+   muda: se uma escapar, o elemento fica com uma variável indefinida e some
+   da tela — e ninguém vai achar isso no meio de um diff de mil linhas.
+
+   Com os apelidos, a mudança de marca é este arquivo, e a renomeação vira
+   uma limpeza separada, sem risco e sem pressa. O nome antigo continua certo
+   enquanto durar; o novo já está disponível para o código novo.
+   ═══════════════════════════════════════════════════════════════════════════ */
+:root,
+:root[data-tema="escuro"] {
+  --navy:        var(--acp-brand-dark);
+  --navy-2:      var(--acp-brand);
+  --orange:      var(--acp-accent);
+  --orange-soft: var(--acp-accent-soft);
+  --bg:          var(--acp-bg);
+  --surface:     var(--acp-surface);
+  --line:        var(--acp-line);
+  --text:        var(--acp-text);
+  --muted:       var(--acp-muted);
+  --ok:          var(--acp-ok);
+  --warn:        var(--acp-warn);
+  --risk:        var(--acp-risk);
+  --dead:        var(--acp-dead);
+  --radius:      var(--acp-radius);
+  --shadow:      var(--acp-shadow);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   O QUE AINDA PRECISA DE UMA REGRA, E NÃO SÓ DE UM TOKEN
+
+   Trocar os tokens acima muda a cor do app inteiro. Três lugares precisam de
+   uma linha a mais, porque hoje eles assumem texto branco sobre laranja —
+   o par que reprova.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* O botão de ação. A tinta escura é o que torna o laranja da marca usável. */
+.btn.alt {
+  background: var(--acp-accent);
+  color: var(--acp-accent-ink);
+  font-weight: 600;
+}
+.btn.alt:hover { background: #F05A1E; }
+
+/* A faixa da marca. Fica embaixo do topo, com três pixels: é a assinatura da
+   ACP sem transformar o cabeçalho inteiro num banner. */
+.topbar { position: relative; }
+.topbar::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0;
+  height: 3px; background: var(--acp-gradient);
+}
+
+/* Foco visível, em roxo, com anel. Vale para teclado — e teclado é como se
+   preenche formulário rápido. */
+:where(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--acp-brand);
+  outline-offset: 2px;
+}
