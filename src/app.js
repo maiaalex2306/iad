@@ -1030,8 +1030,19 @@
           return App.novaOportunidade(contaId, d);
         }
 
+        /* Contato e produtos não são campos da oportunidade: são registros
+           próprios e itens. Fora do Object.assign, senão entrariam no negócio
+           como propriedades soltas que ninguém lê. */
+        const doForm = { produtoIds: d.produtoIds, contatoId: d.contatoId,
+          contatoNome: d.contatoNome, contatoCargo: d.contatoCargo, contatoPapel: d.contatoPapel,
+          contatoEmail: d.contatoEmail, contatoTelefone: d.contatoTelefone };
+        ['produtoIds', 'contatoId', 'contatoNome', 'contatoCargo', 'contatoPapel',
+          'contatoEmail', 'contatoTelefone'].forEach(function (k) { delete d[k]; });
+
         const op = Store.criarOportunidade(Object.assign({}, d, { contaId: alvo }));
         anexarAoRegistro(docs, { oportunidadeId: op.id, contaId: alvo });
+        const novoContato = criarContatoDoFormulario(alvo, op, doForm);
+        const itens = aplicarItens(op, doForm.produtoIds);
         const quantos = criarContatosPropostos(alvo, pessoas);
         location.hash = '#/op/' + op.id;
         render();
@@ -1039,13 +1050,20 @@
            empresa no select depois de a IA propor uma nova, e aí a ficha
            proposta não vira cadastro nenhum. Anunciar que virou seria mentir
            sobre o que ficou no banco. */
-        if (criada || quantos) {
+        if (criada || quantos || novoContato || itens) {
           alert('Pronto:' +
             (criada ? '\n· empresa ' + criada.nome + ' cadastrada' : '') +
+            (novoContato ? '\n· contato ' + novoContato.nome + ' cadastrado e vinculado ao grupo comprador' : '') +
             (quantos ? '\n· ' + (quantos === 1 ? '1 contato' : quantos + ' contatos') + ' adicionados' : '') +
+            (itens ? '\n· ' + (itens === 1 ? '1 item' : itens + ' itens') + ' do catálogo' : '') +
             '\n· negócio criado.\n\nConfira o papel de cada pessoa na compra — é ele que alimenta a cobertura do grupo comprador.');
         }
       }, function (dlg) {
+        /* O contato acompanha a empresa: trocar de empresa tem de trocar a
+           lista de pessoas, senão a oportunidade nasce com o contato de outra
+           conta — que é o erro mais difícil de perceber depois. */
+        ligarContatoDaEmpresa(dlg);
+
         /* A opção "+ Nova empresa" no próprio select: é onde a pessoa está
            olhando quando descobre que a empresa não existe. */
         const sel = dlg.querySelector('[name="contaId"]');
@@ -1072,10 +1090,19 @@
       const op = Store.oportunidade(id);
       if (!op) return;
       const contas = Store.dados().contas;
-      U.formulario('Editar oportunidade', camposOportunidade(contas).concat([
+      const jaTem = (op.itens || []).map(function (i) { return i.produtoId; });
+      U.formulario('Editar oportunidade', camposOportunidade(contas, op.contaId, {
+        edicao: true, produtoIds: jaTem
+      }).concat([
         { id: 'notas', rotulo: 'Notas', tipo: 'textarea' }
       ]), op, function (d) {
+        const ids = d.produtoIds;
+        delete d.produtoIds;
         Store.atualizarOportunidade(id, d);
+        /* Desmarcar tudo é uma escolha, não um esquecimento: limpa os itens. */
+        const atual = Store.oportunidade(id);
+        if (ids && ids.length) aplicarItens(atual, ids);
+        else if (atual) { atual.itens = []; Store.salvar(); }
         render();
       });
     },
@@ -3485,6 +3512,16 @@
     const v = {};
     campos.forEach(function (c) {
       if (!c.id || c.tipo === 'ia') return;
+      /* Escolha múltipla não tem [name]: sem esta linha, ir cadastrar a
+         empresa no meio do formulário apagava os produtos já marcados. */
+      if (c.tipo === 'multi') {
+        const caixa = dlg.querySelector('[data-multi="' + c.id + '"]');
+        if (!caixa) return;
+        const marcados = Array.prototype.filter.call(caixa.querySelectorAll('input[type="checkbox"]'),
+          function (x) { return x.checked; }).map(function (x) { return x.value; });
+        if (marcados.length) v[c.id] = marcados;
+        return;
+      }
       const el = dlg.querySelector('[name="' + c.id + '"]');
       if (el && el.value && el.value !== NOVA_CONTA) v[c.id] = el.value;
     });
@@ -3613,8 +3650,114 @@
     ];
   }
 
-  function camposOportunidade(contas, contaPadrao) {
-    return [
+  const NOVO_CONTATO = '__novo_contato__';
+
+  /* Os contatos de UMA empresa, mais a saída de cadastrar um na hora. Quem
+     está abrindo a oportunidade acabou de falar com alguém; mandar cadastrar
+     a pessoa em outra tela antes é o desvio em que o contato não é
+     cadastrado — e negócio sem contato nasce com o grupo comprador vazio,
+     que é o alarme mais barulhento e mais inútil do app. */
+  function opcoesDeContato(contaId) {
+    const pessoas = contaId ? Store.contatosDaConta(contaId) : [];
+    return [{ valor: '', rotulo: pessoas.length ? '— escolher depois —' : '— nenhum contato nesta empresa —' }]
+      .concat(pessoas.map(function (c) {
+        return { valor: c.id, rotulo: c.nome + (c.cargo ? ' — ' + c.cargo : '') };
+      }))
+      .concat([{ valor: NOVO_CONTATO, rotulo: '+ Cadastrar novo contato…' }]);
+  }
+
+  const CAMPOS_CONTATO_NOVO = ['contatoNome', 'contatoCargo', 'contatoEmail', 'contatoTelefone', 'contatoPapel'];
+
+  function ligarContatoDaEmpresa(dlg) {
+    const conta = dlg.querySelector('[name="contaId"]');
+    const contato = dlg.querySelector('[name="contatoId"]');
+    if (!conta || !contato) return;
+
+    const ajustarNovo = function () {
+      U.mostrarCampos(dlg, CAMPOS_CONTATO_NOVO, contato.value === NOVO_CONTATO);
+    };
+    const pintar = function () {
+      /* Empresa nova ainda não tem id, e portanto não tem contatos: o campo
+         vira só a porta de cadastrar. */
+      const alvo = (conta.value && conta.value !== NOVA_CONTA) ? conta.value : '';
+      contato.innerHTML = opcoesDeContato(alvo).map(function (x) {
+        return '<option value="' + U.esc(x.valor) + '">' + U.esc(x.rotulo) + '</option>';
+      }).join('');
+      ajustarNovo();
+    };
+    conta.addEventListener('change', pintar);
+    contato.addEventListener('change', ajustarNovo);
+    pintar();
+  }
+
+  /* O que o vendedor escolheu vira item da oportunidade. Quantidade 1 e preço
+     de referência: a negociação do preço acontece depois, e chutar quantidade
+     aqui seria inventar. O valor do negócio só é preenchido quando estava
+     zerado — se a pessoa digitou um valor, ele vence a soma do catálogo. */
+  function aplicarItens(op, ids) {
+    const escolhidos = (ids || []).filter(Boolean);
+    if (!escolhidos.length) return 0;
+    op.itens = escolhidos.map(function (id) {
+      const p = Store.produto(id);
+      return { produtoId: id, quantidade: 1, precoUnitario: p ? (p.precoReferencia || 0) : 0 };
+    });
+    if (!op.valor) {
+      op.valor = op.itens.reduce(function (soma, i) { return soma + (i.precoUnitario || 0); }, 0);
+    }
+    Store.salvar();
+    return op.itens.length;
+  }
+
+  /* Cria o contato que o vendedor digitou no próprio formulário e o vincula
+     ao grupo comprador. Devolve o contato, ou null quando não havia nada
+     para criar. */
+  function criarContatoDoFormulario(contaId, op, d) {
+    if (d.contatoId && d.contatoId !== NOVO_CONTATO) {
+      if (op) Store.vincularStakeholder(op, d.contatoId);
+      return null;
+    }
+    if (d.contatoId !== NOVO_CONTATO || !String(d.contatoNome || '').trim()) return null;
+    const novo = Store.criarContato({
+      contaId: contaId, nome: d.contatoNome.trim(), cargo: d.contatoCargo || '',
+      email: d.contatoEmail || '', telefone: d.contatoTelefone || '',
+      papel: d.contatoPapel || 'Usuário'
+    });
+    if (op) Store.vincularStakeholder(op, novo.id);
+    return novo;
+  }
+
+  /* Produtos e serviços são catálogo da empresa, não do dia: mexer no preço
+     de referência muda o valor de toda oportunidade que usar o item. Por isso
+     o vendedor ESCOLHE aqui e só o gestor cadastra, em Cadastros → Produtos.
+     A regra já vale na tela de cadastro e nas ações; aqui a mensagem apenas
+     diz onde ela está, para quem não achar o que precisa. */
+  function campoDeProdutos(padrao) {
+    const produtos = Store.catalogoAtivos('produtos');
+    const gestor = A.ehGestor();
+    return {
+      id: 'produtoIds', tipo: 'multi', rotulo: 'Produtos e serviços desta oportunidade',
+      padrao: padrao || [],
+      ajuda: produtos.length
+        ? 'Escolha quantos quiser. O valor do negócio é somado dos preços de referência quando você deixa o campo Valor em branco.'
+        : '',
+      vazio: gestor
+        ? 'Nenhum produto cadastrado. Cadastre em Cadastros → Produtos.'
+        : 'Nenhum produto cadastrado. Só o gestor da sua empresa cadastra produtos e serviços — peça a ele.',
+      opcoes: produtos.map(function (p) {
+        return {
+          valor: p.id,
+          rotulo: p.nome,
+          nota: [p.categoria, p.unidade, p.precoReferencia ? U.moeda(p.precoReferencia) : '']
+            .filter(Boolean).join(' · ')
+        };
+      })
+    };
+  }
+
+  function camposOportunidade(contas, contaPadrao, opcoes) {
+    const o = opcoes || {};
+    const contaInicial = contaPadrao || (contas[0] && contas[0].id) || '';
+    const base = [
       { id: 'atalhoOp', tipo: 'ia', extrair: 'oportunidade',
         rotulo: 'Cole, dite ou carregue o que você tem sobre este negócio',
         placeholder: 'Ata da reunião, proposta, e-mail, planilha de consumo — a IA lê tudo e monta o negócio, a empresa e as pessoas de uma vez.',
@@ -3628,16 +3771,33 @@
       /* A opção de cadastrar vem sempre, e primeiro quando não há nenhuma:
          é a única coisa útil a fazer ali naquele momento. */
       { id: 'contaId', rotulo: 'Empresa', tipo: 'select',
-        padrao: contaPadrao || (contas[0] && contas[0].id) || '',
+        padrao: contaInicial,
         opcoes: (contas.length ? [] : [{ valor: '', rotulo: '— nenhuma empresa cadastrada ainda —' }])
           .concat(contas.map(function (c) { return { valor: c.id, rotulo: c.nome }; }))
-          .concat([{ valor: NOVA_CONTA, rotulo: '+ Cadastrar nova empresa…' }]) },
+          .concat([{ valor: NOVA_CONTA, rotulo: '+ Cadastrar nova empresa…' }]) }
+    ];
+
+    /* Na edição o contato não aparece: quem já tem negócio tem grupo
+       comprador, e ele se mexe no cockpit, onde cada pessoa tem papel,
+       influência e perfil. Repetir aqui daria duas verdades sobre a mesma
+       coisa. */
+    const doContato = o.edicao ? [] : [
+      { id: 'contatoId', rotulo: 'Contato', tipo: 'select', opcoes: opcoesDeContato(contaInicial) },
+      { id: 'contatoNome', rotulo: 'Nome do novo contato' },
+      { id: 'contatoCargo', rotulo: 'Cargo', largura: 'metade' },
+      { id: 'contatoPapel', rotulo: 'Papel na compra', tipo: 'select', largura: 'metade', opcoes: P.PAPEIS },
+      { id: 'contatoEmail', rotulo: 'E-mail', largura: 'metade' },
+      { id: 'contatoTelefone', rotulo: 'Telefone / WhatsApp', largura: 'metade' }
+    ];
+
+    return base.concat(doContato).concat([
+      campoDeProdutos(o.produtoIds),
       { id: 'valor', rotulo: 'Valor (R$)', tipo: 'moeda' },
       { id: 'etapa', rotulo: 'Etapa CRM', tipo: 'select', opcoes: P.ETAPAS },
       { id: 'tipo', rotulo: 'Tipo', tipo: 'select', opcoes: P.TIPOS_OPORTUNIDADE },
       { id: 'fechamentoPrevisto', rotulo: 'Fechamento previsto', tipo: 'date' },
       { id: 'concorrentes', rotulo: 'Concorrentes (inclusive “não fazer nada”)' }
-    ];
+    ]);
   }
 
   function baixar(conteudo, nome, mime) {

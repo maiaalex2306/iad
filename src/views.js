@@ -788,6 +788,10 @@
       (op.concorrentes
         ? '<p class="tiny muted" style="margin:-6px 0 0">Contra: ' + esc(op.concorrentes) + '</p>'
         : '') +
+      /* O que está sendo vendido. Ficava só guardado em op.itens e não
+         aparecia em lugar nenhum: escolher produto no cadastro e não ver o
+         que se escolheu é a mesma coisa que não ter escolhido. */
+      itensDaOportunidade(op) +
       /* De onde veio e de quem: com várias SDRs prospectando, é isso que
          permite ler o resultado por pessoa e por campanha depois. */
       (op.origem
@@ -1201,6 +1205,16 @@
     const adiante = new Date();
     adiante.setDate(adiante.getDate() + dias);
     return data >= limite.toISOString().slice(0, 10) && data <= adiante.toISOString().slice(0, 10);
+  }
+
+  function itensDaOportunidade(op) {
+    const itens = (op.itens || []).map(function (i) {
+      const p = Store.produto(i.produtoId);
+      return p ? p.nome : null;
+    }).filter(Boolean);
+    if (!itens.length) return '';
+    return '<p class="tiny muted" style="margin:2px 0 0">Compõe: ' +
+      itens.map(esc).join(' \u00b7 ') + '</p>';
   }
 
   function painelTarefas(op) {

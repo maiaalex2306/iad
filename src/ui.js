@@ -140,6 +140,23 @@
           '<input type="text" inputmode="decimal" name="' + c.id + '" value="' + esc(paraCampoMoeda(v)) +
           '" placeholder="0,00" autocomplete="off"></label>';
       }
+      /* Escolha múltipla numa lista fechada — os produtos e serviços que
+         compõem a oportunidade. Não é select multiple: em celular, select
+         múltiplo é uma caixinha onde ninguém acerta o segundo item. */
+      if (c.tipo === 'multi') {
+        const marcados = Array.isArray(v) ? v.map(String) : String(v || '').split(',').filter(Boolean);
+        const itens = (c.opcoes || []).map(function (o) {
+          const val = typeof o === 'string' ? o : o.valor;
+          const rot = typeof o === 'string' ? o : o.rotulo;
+          const nota = (typeof o === 'object' && o.nota) ? '<em>' + esc(o.nota) + '</em>' : '';
+          return '<label class="item-multi"><input type="checkbox" value="' + esc(val) + '"' +
+            (marcados.indexOf(String(val)) !== -1 ? ' checked' : '') + '> <span>' + esc(rot) + nota + '</span></label>';
+        }).join('');
+        return '<div class="campo campo-multi" data-multi="' + esc(c.id) + '"><span>' + esc(c.rotulo) + '</span>' +
+          (c.ajuda ? '<p class="nota-multi">' + esc(c.ajuda) + '</p>' : '') +
+          (itens ? '<div class="lista-multi">' + itens + '</div>'
+                 : '<p class="nota-multi">' + esc(c.vazio || 'Nada cadastrado.') + '</p>') + '</div>';
+      }
       if (c.tipo === 'ia') return caixaIA(c);
       /* O olho existe nas telas de acesso desde sempre; faltava aqui dentro,
          que é justamente onde se troca a senha. */
@@ -190,6 +207,16 @@
         const dados = {};
         campos.forEach(function (c) {
           if (c.tipo === 'ia') return;          /* caixa de assistente não é dado */
+          /* Escolha múltipla devolve uma lista de verdade, não um texto com
+             vírgulas: quem recebe faz forEach, e não split. */
+          if (c.tipo === 'multi') {
+            const caixa = dlg.querySelector('[data-multi="' + c.id + '"]');
+            dados[c.id] = caixa
+              ? Array.prototype.filter.call(caixa.querySelectorAll('input[type="checkbox"]'),
+                  function (x) { return x.checked; }).map(function (x) { return x.value; })
+              : [];
+            return;
+          }
           const el = c.id ? dlg.querySelector('[name="' + c.id + '"]') : null;
           /* Seção e aviso são texto na tela, não campo: não têm elemento com
              name, e ler o valor deles derrubava o salvar inteiro. O formulário
@@ -356,7 +383,9 @@
   function mostrarCampos(dlg, ids, mostrar) {
     ids.forEach(function (id) {
       const campo = dlg.querySelector('[name="' + id + '"]');
-      const alvo = campo ? campo.closest('label.campo') : dlg.querySelector('[data-secao="' + id + '"]');
+      const alvo = campo
+        ? campo.closest('label.campo')
+        : (dlg.querySelector('[data-secao="' + id + '"]') || dlg.querySelector('[data-multi="' + id + '"]'));
       if (!alvo) return;
       /* `hidden` sozinho não basta: label.campo é display:flex, e a regra de
          display da folha de estilo vence o hidden do navegador. O campo ficava
