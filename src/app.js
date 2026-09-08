@@ -1927,6 +1927,17 @@
         '\n\nElas estão em Tarefas, com a conversa do LinkedIn dentro.');
     },
 
+    /* O índice do manual. Rola até a seção em vez de trocar de rota: o manual
+       é uma tela só, e mandar para outra rota faria o botão Voltar do navegador
+       sair do manual em vez de subir nele. */
+    irNoManual: function (id) {
+      if (location.hash !== '#/playbook') { location.hash = '#/playbook'; }
+      setTimeout(function () {
+        const alvo = document.getElementById(id);
+        if (alvo) alvo.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 60);
+    },
+
     semanasDoAprendizado: function (n) { V.definirSemanasDoAprendizado(Number(n) || 8); render(); },
 
     /* O plano da semana. Escreve na própria tela em vez de abrir diálogo: é

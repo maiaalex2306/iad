@@ -1123,3 +1123,35 @@ td.subiu { color: var(--ok); font-weight: 600; }
 .passos-plano { margin: 0; padding-left: 1.3em; }
 .passos-plano li { margin-bottom: 10px; }
 .passos-plano li .tiny.muted { display: block; margin-top: 2px; }
+
+
+/* ---------- O manual ----------
+   Duas colunas onde a primeira é o nome e a segunda é a explicação. A
+   explicação quebra; o nome não. Sem isto a coluna do nome vira uma tira
+   estreita com uma palavra por linha, que foi exatamente o que aconteceu na
+   tabela de tarefas antes de ganhar largura mínima. */
+.tabela-manual td { vertical-align: top; padding-top: 12px; padding-bottom: 12px; }
+.tabela-manual td.rotulo-manual { min-width: 150px; width: 200px; }
+.tabela-manual td.onde-manual { min-width: 140px; width: 190px; }
+.tabela-manual td .tiny.muted { display: block; margin-top: 4px; }
+.tabela-manual code {
+  background: var(--surface-2, rgba(31,74,140,.07)); border-radius: 3px;
+  padding: 1px 5px; font-size: .85em; color: var(--orange, #d95f18);
+}
+.indice-manual ol { margin: 6px 0 0; padding-left: 1.3em; columns: 2; column-gap: 28px; }
+@media (max-width: 640px) { .indice-manual ol { columns: 1; } }
+.indice-manual li { margin-bottom: 4px; break-inside: avoid; }
+.indice-manual a { color: var(--navy); text-decoration: none; font-weight: 500; }
+.indice-manual a:hover { text-decoration: underline; }
+
+.escada-manual { display: flex; flex-direction: column; gap: 0; margin-top: 12px; }
+.escada-manual > div {
+  display: grid; grid-template-columns: 2em 1fr; gap: 14px; align-items: start;
+  padding: 10px 0; border-top: 1px solid var(--line);
+}
+.escada-manual > div:last-child { border-bottom: 1px solid var(--line); }
+.nota-manual { font-size: 1.3rem; font-weight: 700; line-height: 1.15; }
+.nota-manual.n0 { color: var(--muted); }
+.nota-manual.n1 { color: var(--warn); }
+.nota-manual.n2 { color: var(--ok); }
+.escada-manual .tiny.muted { display: block; }

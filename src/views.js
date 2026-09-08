@@ -2921,6 +2921,240 @@
   }
 
   /* ---------------- Playbook ---------------- */
+  /* ---------------- O manual, dentro do app ----------------
+
+     Existia um manual bom fora daqui, numa página na web. Fora daqui é o
+     problema: este app funciona offline, é usado no carro depois da visita e
+     no celular sem sinal, e o manual que só abre com internet é o manual que
+     não está lá na hora da dúvida. Então ele mora aqui.
+
+     A tela do Método já explicava o MÉTODO. O que faltava era o SISTEMA: o que
+     cada tela faz, de onde sai cada número, e onde a IA entra e onde ela não
+     entra. As duas coisas agora dividem a mesma tela, com um índice no alto —
+     porque manual sem índice é manual que ninguém volta a abrir. */
+
+  const SECOES_DO_MANUAL = [
+    ['m-regra', 'A regra'],
+    ['m-oito', 'As oito decisões'],
+    ['m-tarefa', 'Tudo entra por tarefa'],
+    ['m-contar', 'Como contar o que aconteceu'],
+    ['m-telas', 'As telas, uma a uma'],
+    ['m-pipeline', 'Os grupos do pipeline'],
+    ['m-tarefas', 'A tela de Tarefas'],
+    ['m-aprendizado', 'Aprendizado e plano'],
+    ['m-config', 'Configuração'],
+    ['m-ia', 'As tarefas da IA'],
+    ['m-limites', 'O que a IA não faz'],
+    ['m-perfis', 'Quem move por dentro'],
+    ['m-cadencia', 'As 8 decisões, canal a canal']
+  ];
+
+  function indiceDoManual() {
+    return '<div class="card indice-manual"><h2 style="margin-top:0">Neste manual</h2>' +
+      '<ol>' + SECOES_DO_MANUAL.map(function (s) {
+        return '<li><a href="#/playbook" onclick="App.irNoManual(\'' + s[0] + '\');return false;">' +
+          esc(s[1]) + '</a></li>';
+      }).join('') + '</ol></div>';
+  }
+
+  /* Uma linha por tela, na ordem do menu. O que ela responde vem antes do que
+     ela mostra: quem abre o manual está com uma pergunta, não com vontade de
+     ler a lista de campos. */
+  const TELAS = [
+    ['⚡', 'Hoje', 'O que fazer agora.',
+     'As tarefas do dia e o que está atrasado, com o negócio de cada uma ao lado. É a tela de abrir de manhã.'],
+    ['📊', 'Painel', 'Como está a carteira, e o que ela está me ensinando.',
+     'Pipeline por saúde da decisão, o que está travando a receita, tempo sem evidência, riscos críticos — e, no fim, o Aprendizado da carteira com a evolução semana a semana e o plano de desenvolvimento.'],
+    ['🗂️', 'Pipeline', 'Quais negócios são reais.',
+     'A carteira lida pela decisão do comprador, não pela etapa. Sete grupos, filtros no topo e a gaveta de filtros finos. Em lista ou em kanban.'],
+    ['✅', 'Tarefas', 'O que foi executado, e o que aquilo rendeu.',
+     'Toda tarefa presa a uma empresa e a uma negociação. Filtros como os do pipeline, resumo da semana, e a coluna que diz qual decisão cada tarefa destrava.'],
+    ['🔄', 'Revisão', 'O que precisa da minha decisão, não do meu esforço.',
+     'A fila do que está fora do lugar: negócio sem próximo passo, papel crítico ausente, evidência velha, etapa adiantada demais.'],
+    ['📇', 'Cadastros', 'Onde ficam as empresas, as pessoas e as listas.',
+     'Empresas, contatos, oportunidades, e os catálogos: segmentos, tipos de tarefa e produtos. Produtos só o gestor cadastra.'],
+    ['⚙️', 'Configuração', 'Instalação, dados, nuvem, IA e diagnóstico.',
+     'Nove blocos, detalhados adiante neste manual.'],
+    ['❓', 'Método', 'Por que o sistema funciona assim.',
+     'Esta tela.']
+  ];
+
+  function manualDasTelas() {
+    const linhas = TELAS.map(function (t) {
+      return '<tr><td class="rotulo-manual"><span class="icone-tipo">' + t[0] + '</span> <strong>' + esc(t[1]) + '</strong></td>' +
+        '<td><strong>' + esc(t[2]) + '</strong><span class="tiny muted">' + esc(t[3]) + '</span></td></tr>';
+    }).join('');
+    return '<div class="card" id="m-telas"><h2>As telas, uma a uma</h2>' +
+      '<p class="small">Cada tela responde uma pergunta. Se você não souber em qual entrar, escolha pela pergunta.</p>' +
+      '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' + linhas + '</tbody></table></div></div>';
+  }
+
+  function manualDoPipeline() {
+    const linhas = FILTROS.map(function (f) {
+      const d = f[2];
+      return '<tr><td class="rotulo-manual"><strong>' + esc(f[1]) + '</strong></td>' +
+        '<td>' + esc(d.oQue) +
+        '<span class="tiny muted"><strong>Entra:</strong> ' + esc(d.entra) + '</span>' +
+        '<span class="tiny muted"><strong>Sai:</strong> ' + esc(d.sai) + '</span>' +
+        '<span class="tiny muted"><strong>O que fazer:</strong> ' + esc(d.faca) + '</span></td></tr>';
+    }).join('');
+    return '<div class="card" id="m-pipeline"><h2>Os grupos do pipeline</h2>' +
+      '<p class="small">A classificação é <strong>regra fixa</strong>, não é a IA. Mesmo dado, mesmo grupo, sempre — ' +
+      'se um modelo decidisse isso, o cartão poderia mudar de cor entre duas visitas sem nada ter acontecido.</p>' +
+      '<p class="small"><strong>A ordem importa.</strong> O app testa de cima para baixo e o negócio fica no primeiro ' +
+      'grupo que servir. Por isso Zumbi vence todos: um negócio com IAD alto e quarenta dias de silêncio é zumbi, ' +
+      'não é real.</p>' +
+      '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' + linhas + '</tbody></table></div></div>';
+  }
+
+  function manualDasTarefas() {
+    return '<div class="card" id="m-tarefas"><h2>A tela de Tarefas</h2>' +
+      '<p class="small">Toda tarefa está presa a uma <strong>empresa</strong> e a uma <strong>negociação</strong> — ' +
+      'uma empresa tem várias negociações, e "as tarefas da Marilan" e "as tarefas da proposta de reúso da Marilan" ' +
+      'são perguntas diferentes.</p>' +
+      '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' +
+      '<tr><td class="rotulo-manual"><strong>Status: A fazer</strong></td><td>Como a tela abre: atrasado e por vencer juntos, ' +
+      'com o atrasado no topo, porque a ordem é a data. Abrir só em "Atrasadas" fazia quem tinha tudo em dia ver ' +
+      '"nenhuma tarefa neste filtro", que se lê como dado perdido.</td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>Pontos de decisão que andaram</strong></td><td>O número que fecha o ciclo, no resumo ' +
+      'da semana. Tarefa fechada é esforço; ponto de IAD é resultado. É ele que diz se a semana valeu.</td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>Fechadas sem relato</strong></td><td>Dívida visível. Fechar em lote move o funil e ' +
+      'não move nenhuma das oito decisões — sem contar o que o cliente fez, não há o que reler.</td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>O que ela destrava</strong></td><td>Se a tarefa tem decisão-alvo, mostra a dimensão e a ' +
+      'nota atual. Se não tem, mostra a primeira lacuna do negócio. É o que impede a lista de virar lista de afazeres solta.</td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>Adiar</strong></td><td>Adiar é um fato, não correção de data: fica contado na tarefa ' +
+      '("adiada 4x") e escrito no histórico. Mudar a data pela edição é correção e não conta.</td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>Vinda do Linked Helper</strong></td><td>Toda empresa importada do LH abre uma tarefa de ' +
+      'Apresentação vencendo no dia da importação, com campanha, SDR e a conversa inteira do LinkedIn na descrição.</td></tr>' +
+      '</tbody></table></div></div>';
+  }
+
+  function manualDoAprendizado() {
+    return '<div class="card" id="m-aprendizado"><h2>Aprendizado da carteira e plano de desenvolvimento</h2>' +
+      '<p class="small">No fim do Painel. Oito indicadores em série <strong>semanal</strong>, sempre contra a semana ' +
+      'anterior — porque um número sozinho não ensina: "ticket médio de R$ 42 mil" só quer dizer alguma coisa ao lado ' +
+      'dos R$ 51 mil da semana passada.</p>' +
+      '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' +
+      '<tr><td class="rotulo-manual"><strong>Por que só estes indicadores</strong></td><td>Só entra o que aconteceu <em>dentro</em> ' +
+      'da semana e ficou datado. Por isso a série é exata também para trás. O valor de um negócio é sobrescrito quando ' +
+      'muda — devolver o valor de hoje com data de julho seria pior do que não responder, então ele fica de fora.</td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>A seta</strong></td><td>O glifo diz para onde o número foi; a cor diz se isso é bom. ' +
+      'Ciclo de vendas caindo é seta para baixo <strong>em verde</strong>.</td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>A semana em curso</strong></td><td>Fica marcada e fora da comparação. Comparar ' +
+      'quarta-feira com uma semana inteira é o erro clássico deste tipo de tela: meia semana sempre parece queda.</td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>O que cada tipo de tarefa rendeu</strong></td><td>A tabela que fecha o ciclo do sistema. ' +
+      'Dez e-mails com zero ponto ao lado de três visitas com sete pontos é a informação que muda a semana seguinte. ' +
+      'A atribuição é exata para o que foi pontuado a partir desta versão; o que veio antes casa pela data e vai ' +
+      'marcado como estimativa.</td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>Plano de desenvolvimento</strong></td><td>A IA lê exatamente os números da tabela — ' +
+      'nada além deles — e devolve o que melhorou, o que piorou, e no máximo três mudanças, cada uma com o número ' +
+      'que a justifica e o indicador que vai dizer se deu certo.</td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>Ganhos contra perdas</strong></td><td>O aprendizado lento, logo abaixo: compara a foto ' +
+      'das oito decisões no dia do fechamento entre ganhos e perdas. Precisa de uns cinco de cada lado para significar ' +
+      'algo, e o app avisa enquanto não tem.</td></tr>' +
+      '</tbody></table></div></div>';
+  }
+
+  function manualDaConfiguracao() {
+    const blocos = [
+      ['Instalar', 'O IAD é um PWA: instala como aplicativo e funciona offline com a última cópia baixada.'],
+      ['Importar planilha', 'CSV, e a ordem importa: empresas, depois contatos, depois oportunidades. Leitura literal de colunas — nada é adivinhado.'],
+      ['Assistente de IA', 'O interruptor de tudo. Fora do ar, as caixas ✨ somem e o sistema inteiro continua funcionando: você digita à mão. A chave do modelo fica no servidor, nunca no navegador.'],
+      ['Nuvem (Supabase)', 'Sincronizar sobe e desce. Só baixar traz do servidor por cima do que está aqui — é o botão de "esta máquina está com dados de outra conta". A frase "Sincronizando para [empresa]" é literal: o que subir passa a pertencer a ela.'],
+      ['Minha conta', 'Troca de senha, válida em todos os aparelhos. Senha que circulou por e-mail ou mensagem deixou de ser secreta no momento em que circulou.'],
+      ['Linked Helper', 'A ponte recebe o webhook do LH e o app busca de lá. Cada lead vira empresa, contato, oportunidade e tarefa. Aqui também aparece o aviso de importações antigas que ficaram sem tarefa.'],
+      ['Diagnóstico dos dados', 'A resposta para "a tela está vazia". Guardados é o que existe neste aparelho; visíveis é o que as permissões deixam ver — a diferença entre as duas colunas é o diagnóstico inteiro. "Perguntar ao servidor por quê" vai além e escreve o veredito.'],
+      ['Backup', 'Exporta em JSON. Anexos não entram — a contagem aparece embaixo para você não achar que levou tudo.'],
+      ['Demonstração', 'Carteira fictícia com os cinco grupos, para treinar a leitura sem tocar em dado real. "Apagar tudo" limpa este aparelho, não o servidor.']
+    ];
+    const linhas = blocos.map(function (b) {
+      return '<tr><td class="rotulo-manual"><strong>' + esc(b[0]) + '</strong></td><td>' + esc(b[1]) + '</td></tr>';
+    }).join('');
+    return '<div class="card" id="m-config"><h2>Configuração, bloco a bloco</h2>' +
+      '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' + linhas + '</tbody></table></div></div>';
+  }
+
+  /* Os dez pedidos que o app faz ao assistente. A coluna do meio é o nome
+     técnico de verdade — o mesmo que viaja na chamada — porque quando alguma
+     coisa der errado é esse nome que vai aparecer no diagnóstico. */
+  const TAREFAS_DA_IA = [
+    ['conta', '✨ no formulário de empresa',
+     'Extrai a ficha de um texto colado. O segmento sai da sua lista fechada, escolhido por julgamento do que a empresa faz — não por achar a palavra no texto.'],
+    ['contato', '✨ no formulário de contato',
+     'Deduz o papel na compra a partir do cargo (Suprimentos → Compras; CFO → Decisor econômico). Perfil Challenger só se o texto mostrar como a pessoa age.'],
+    ['oportunidade', '✨ no formulário de negócio',
+     'Título, empresa, segmento, tipo e concorrentes — incluindo "não fazer nada". Não devolve valor, etapa nem data de fechamento: isso é seu.'],
+    ['evidencia', '✨ no registro de evidência',
+     'Extrai UMA evidência do que o cliente fez, começando pelo lado dele. Dimensão, força, pessoa, canal, data e o próximo passo combinado. Não devolve a nota.'],
+    ['classificar', 'enquanto você digita a evidência',
+     'Só dimensão e força do que você acabou de escrever. Nada mais.'],
+    ['reuniao', 'ata ou transcrição colada',
+     'Separa TUDO em várias evidências, uma por dimensão — um documento rende de duas a seis. Num documento nosso, o que o cliente forneceu é evidência dele; nossa recomendação e nosso preço não são.'],
+    ['notas', 'ao concluir uma tarefa com relato',
+     'Propõe a nota das oito. Três travas: só o que o cliente fez conta; cada nota precisa de trecho literal, e sem trecho é 0; na dúvida entre dois níveis, usa o menor.'],
+    ['plano', 'cartão Próximos passos',
+     'Até 4 passos na ordem de execução, cada um com dimensão-alvo, ação, uma pergunta pronta e o porquê citando o cliente. Proibida de sugerir nota e de passo genérico.'],
+    ['segmentos', 'importação do Linked Helper',
+     'Todos os leads de uma vez: segmento da lista da equipe, papel provável na compra e o insight comercial.'],
+    ['desenvolvimento', 'Plano de desenvolvimento, no Painel',
+     'Lê a série semanal e o rendimento por tipo de tarefa e escreve o que melhorou, o que piorou e até três mudanças. Proibida de estimar, projetar ou comparar com "mercado".'],
+    ['insight', 'campo de insight do negócio',
+     'Rascunho do reenquadramento Challenger em duas ou três frases, para você editar.']
+  ];
+
+  function manualDaIA() {
+    const linhas = TAREFAS_DA_IA.map(function (t) {
+      return '<tr><td class="rotulo-manual"><code>' + esc(t[0]) + '</code></td>' +
+        '<td class="onde-manual tiny muted">' + esc(t[1]) + '</td>' +
+        '<td>' + esc(t[2]) + '</td></tr>';
+    }).join('');
+    return '<div class="card" id="m-ia"><h2>As tarefas da IA</h2>' +
+      '<p class="small">Não existe "a IA do sistema" em geral. Existem pedidos de escopo fechado, cada um com regras ' +
+      'próprias e um lugar onde aparece. Esta é a lista inteira.</p>' +
+      '<div class="tabela-rolagem"><table class="tabela-manual"><thead><tr><th>Pedido</th><th>Onde aparece</th>' +
+      '<th>O que faz — e o que é proibida de fazer</th></tr></thead><tbody>' + linhas + '</tbody></table></div></div>';
+  }
+
+  function manualDosLimites() {
+    const itens = [
+      ['Não classifica o pipeline', 'Zumbi, Falso avançado, Oculto promissor e os outros saem de regra fixa com os números do negócio. Mesmo dado, mesmo grupo, sempre.'],
+      ['Não pontua sozinha', 'Ela propõe; quem confirma é você. Toda mudança de nota grava um retrato com data e dimensão — o histórico responde por que o negócio valia 8 e vale 12.'],
+      ['Não inventa pessoa, número ou prazo', 'Está escrito em cada pedido, e a resposta é validada antes de chegar na tela: segmento fora da lista é recusado, pessoa que não existe na conta é descartada.'],
+      ['Não é obrigatória', 'Com o assistente fora do ar, o sistema inteiro continua de pé — só some o atalho. O que sustenta o IAD é a evidência do cliente, não o modelo.'],
+      ['Não sai do navegador com a sua chave', 'A chave do modelo fica no servidor. O app manda o texto, recebe os campos, e nada mais.']
+    ];
+    const linhas = itens.map(function (i) {
+      return '<tr><td class="rotulo-manual"><strong>' + esc(i[0]) + '</strong></td><td>' + esc(i[1]) + '</td></tr>';
+    }).join('');
+    return '<div class="card" id="m-limites"><h2>O que a IA não faz</h2>' +
+      '<p class="small">Tão importante quanto a lista anterior: é o que garante que duas pessoas vejam o mesmo ' +
+      'número, e que o painel do dono da empresa signifique alguma coisa.</p>' +
+      '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' + linhas + '</tbody></table></div>' +
+      '<div class="aviso" style="margin-top:12px">Se for para lembrar de uma frase: a IA <strong>lê e propõe</strong>, ' +
+      'o motor <strong>calcula</strong>, você <strong>decide</strong> — e só o que o <strong>cliente</strong> fez ' +
+      'move a nota.</div></div>';
+  }
+
+  function manualDasOito() {
+    const linhas = P.DIMENSOES.map(function (d, i) {
+      return '<tr><td class="rotulo-manual"><span class="tiny muted">' + (i + 1) + '</span> <strong>' + esc(d.nome) + '</strong></td>' +
+        '<td>' + esc(d.pergunta) + '</td></tr>';
+    }).join('');
+    return '<div class="card" id="m-oito"><h2>As oito decisões, e a régua</h2>' +
+      '<p class="small">Uma venda B2B não avança porque você mandou proposta. Avança quando oito decisões acontecem ' +
+      '<strong>dentro do cliente</strong>. Cada uma vale de 0 a 2, e a soma é o <strong>IAD</strong>, de 0 a 16. ' +
+      'Acima de 11, decisão madura.</p>' +
+      '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' + linhas + '</tbody></table></div>' +
+      '<div class="escada-manual">' +
+      '<div><span class="nota-manual n0">0</span><div><strong>Não sabemos</strong><span class="tiny muted">Nada do lado do cliente sustenta esta decisão.</span></div></div>' +
+      '<div><span class="nota-manual n1">1</span><div><strong>Parcial</strong><span class="tiny muted">Há sinal, mas vago, indireto, ou dito por uma pessoa só.</span></div></div>' +
+      '<div><span class="nota-manual n2">2</span><div><strong>Comprovado pelo cliente</strong><span class="tiny muted">Ele descreveu, mostrou, mandou ou fez. Exige evidência confirmada ou documentada.</span></div></div>' +
+      '</div>' +
+      '<p class="small" style="margin-top:10px">Dois números derivam daí. <strong>Evidence Age</strong> é há quantos ' +
+      'dias o cliente não produz evidência — o relógio não para por atividade sua. <strong>Cobertura</strong> é quanto ' +
+      'dos papéis críticos da compra você tem mapeado.</p></div>';
+  }
+
   function playbook() {
     const dims = P.DIMENSOES.map(function (d) {
       const canais = P.CANAIS.map(function (c) {
@@ -2946,14 +3180,18 @@
       return '<span class="pill">' + esc(t) + '</span>';
     }).join(' ');
 
-    return '<h1>O método</h1>' +
-      '<div class="card"><h2>A regra</h2>' +
+    return '<h1>Manual do IAD CRM</h1>' +
+      '<p class="small muted" style="margin:-6px 0 14px">O método e o sistema, na mesma tela. ' +
+      'Funciona offline: está tudo guardado no aparelho.</p>' +
+      indiceDoManual() +
+      '<div class="card" id="m-regra"><h2>A regra</h2>' +
       '<p>O estágio mostra onde a oportunidade está. As decisões mostram se ela realmente avançou.</p>' +
       '<p class="small">Só o cliente move o índice. O que <strong>nós</strong> fazemos — apresentar, ' +
       'propor, cobrar, dar follow-up — é trabalho, e trabalho não é avanço.</p>' +
       '<p class="small muted">Não conta como avanço:</p><div class="row">' + naoContam + '</div></div>' +
 
-      '<div class="card"><h2>Tudo entra por tarefa</h2>' +
+      manualDasOito() +
+      '<div class="card" id="m-tarefa"><h2>Tudo entra por tarefa</h2>' +
       '<p class="small">Uma evidência nunca aparece do nada: ela vem de uma conversa, uma visita, ' +
       'um e-mail. Por isso há um botão só — <strong>+ Tarefa</strong> — e a tarefa é o lugar onde ' +
       'a decisão anda. Sem isso, o sistema registra o efeito e perde a causa: ninguém sabe depois ' +
@@ -2965,7 +3203,7 @@
       '<p class="small muted" style="margin-top:10px">Canais disponíveis (você edita a lista em Cadastros):</p>' +
       '<div class="row">' + tiposDeTarefa + '</div></div>' +
 
-      '<div class="card"><h2>Quando a tarefa já aconteceu, há quatro modos de contar</h2>' +
+      '<div class="card" id="m-contar"><h2>Quando a tarefa já aconteceu, há quatro modos de contar</h2>' +
       '<div class="tabela-rolagem"><table><tbody>' +
       '<tr><td style="white-space:nowrap"><strong>Colar a ata</strong></td>' +
       '<td>Cole a transcrição ou anexe os documentos (Word, PDF, Excel, vários de uma vez). ' +
@@ -2998,7 +3236,14 @@
       '<div class="card"><h2>Força da evidência</h2>' +
       '<p class="small">Uma decisão só chega a 2 com evidência confirmada ou documentada.</p>' +
       '<div class="tabela-rolagem"><table><tbody>' + forcas + '</tbody></table></div></div>' +
-      '<div class="card"><h2>Quem move a decisão por dentro</h2>' +
+      manualDasTelas() +
+      manualDoPipeline() +
+      manualDasTarefas() +
+      manualDoAprendizado() +
+      manualDaConfiguracao() +
+      manualDaIA() +
+      manualDosLimites() +
+      '<div class="card" id="m-perfis"><h2>Quem move a decisão por dentro</h2>' +
       '<p class="small">Do <em>Challenger Customer</em>: nem todo contato acessível move a compra. Três perfis mobilizam, três apenas conversam, um bloqueia.</p>' +
       '<div class="tabela-rolagem"><table><thead><tr><th>Perfil</th><th>Grupo</th><th>Como trabalhar</th></tr></thead><tbody>' +
       P.PERFIS.filter(function (x) { return x.grupo !== 'indefinido'; }).map(function (x) {
@@ -3008,7 +3253,7 @@
           '<td>' + esc(x.dica) + '</td></tr>';
       }).join('') + '</tbody></table></div>' +
       '<p class="tiny muted" style="margin-top:8px">A pesquisa por trás desses perfis vem da CEB/Gartner e é defendida sobretudo por quem a produziu. Use como hipótese de trabalho, não como lei.</p></div>' +
-      '<div class="sec-titulo"><h2>As 8 decisões e a cadência multicanal</h2></div>' + dims;
+      '<div class="sec-titulo" id="m-cadencia"><h2>As 8 decisões e a cadência multicanal</h2></div>' + dims;
   }
 
   /* ---------------- Dados ---------------- */
