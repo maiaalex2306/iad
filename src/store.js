@@ -103,6 +103,7 @@
       if (!t.origem) t.origem = 'planejada';
       if (t.comRelato == null) t.comRelato = false;
       if (t.hora == null) t.hora = '';
+      if (t.descricao == null) t.descricao = '';
       if (t.semRegistro == null) t.semRegistro = false;
       if (t.adiamentos == null) t.adiamentos = 0;
     });
@@ -540,7 +541,7 @@
   /* ---------- Tarefas ---------- */
   function criarTarefa(dados) {
     const nova = Object.assign({
-      id: uid('tsk'), titulo: '', tipo: 'Reunião', oportunidadeId: null,
+      id: uid('tsk'), titulo: '', descricao: '', tipo: 'Reunião', oportunidadeId: null,
       contatoId: null, decisaoAlvo: '', vencimento: hoje(),
       /* A hora é opcional e existe porque agenda sem hora não é agenda: numa
          lista com trinta tarefas do mesmo dia, a ordem é a hora. */

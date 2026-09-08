@@ -1384,6 +1384,11 @@
 
   let tarefasFiltro = {
     responsavel: 'meu',      /* meu | todos | <id de usuário> */
+    /* Empresa e negociação são dois filtros, e não um: a mesma empresa tem
+       várias negociações abertas, e "as tarefas da Marilan" e "as tarefas da
+       proposta de reúso da Marilan" são perguntas diferentes. */
+    empresa: '',
+    negocio: '',
     status: 'atrasadas',     /* atrasadas | pendentes | concluidas | sem-registro | todos */
     tipos: [],               /* vazio = todos */
     de: '', ate: '',
@@ -1455,6 +1460,9 @@
     if (f.status === 'concluidas' && t.status === 'aberta') return false;
     if (f.status === 'sem-registro' && situacao !== 'sem-registro') return false;
 
+    if (f.empresa && (!linha.conta || linha.conta.id !== f.empresa)) return false;
+    if (f.negocio && (!linha.op || linha.op.id !== f.negocio)) return false;
+
     if (f.tipos.length && f.tipos.indexOf(t.tipo) === -1) return false;
 
     /* Feita se situa pela data em que foi feita; aberta, pelo vencimento.
@@ -1506,6 +1514,14 @@
     }
     if (f.de || f.ate) {
       chips.push(chip('Agendamento: ' + (f.de ? U.data(f.de) : '…') + ' – ' + (f.ate ? U.data(f.ate) : '…'), 'periodo'));
+    }
+    if (f.empresa) {
+      const c = Store.conta(f.empresa);
+      chips.push(chip(c ? c.nome : 'Empresa', 'empresa'));
+    }
+    if (f.negocio) {
+      const o = Store.oportunidade(f.negocio);
+      chips.push(chip(o ? o.titulo : 'Negociação', 'negocio'));
     }
     f.tipos.forEach(function (t) { chips.push(chip(t, 'tipo:' + t)); });
     if (f.status !== 'todos') {
@@ -1608,6 +1624,8 @@
         : '<strong>' + esc(t.titulo) + '</strong>') +
       (t.adiamentos ? '<span class="tiny atrasado"> · adiada ' + t.adiamentos + 'x</span>' : '') +
       (t.status !== 'aberta' && t.comRelato ? '<span class="tiny muted"> · com relato</span>' : '') +
+      (t.descricao ? '<span class="tiny muted">' + esc(t.descricao.slice(0, 120)) +
+        (t.descricao.length > 120 ? '…' : '') + '</span>' : '') +
       '</td>' +
 
       '<td><span class="pill ' + rot[1] + '">' + rot[0] + '</span></td>' +
@@ -1667,6 +1685,32 @@
           esc(o.rotulo) + '</option>';
       }).join('');
 
+    /* Só as empresas que têm tarefa: filtro que oferece cem empresas onde
+       noventa não têm nada é ruído com cara de opção. */
+    const comTarefa = {};
+    tarefasComContexto().forEach(function (l) { if (l.conta) comTarefa[l.conta.id] = l.conta; });
+    const empresas = Object.keys(comTarefa).map(function (k) { return comTarefa[k]; })
+      .sort(function (a, b) { return String(a.nome).localeCompare(String(b.nome)); });
+
+    const opcaoEmpresa = [{ valor: '', rotulo: 'Todas as empresas' }]
+      .concat(empresas.map(function (c) { return { valor: c.id, rotulo: c.nome }; }))
+      .map(function (o) {
+        return '<option value="' + esc(o.valor) + '"' + (f.empresa === o.valor ? ' selected' : '') + '>' +
+          esc(o.rotulo) + '</option>';
+      }).join('');
+
+    /* A negociação segue a empresa: uma empresa tem várias, e listar as da
+       carteira inteira aqui devolveria o problema que a cascata resolve. */
+    const negocios = f.empresa
+      ? Store.dados().oportunidades.filter(function (o) { return o.contaId === f.empresa; })
+      : [];
+    const opcaoNegocio = [{ valor: '', rotulo: f.empresa ? 'Todas as negociações' : 'Escolha a empresa' }]
+      .concat(negocios.map(function (o) { return { valor: o.id, rotulo: o.titulo + ' · ' + o.etapa }; }))
+      .map(function (o) {
+        return '<option value="' + esc(o.valor) + '"' + (f.negocio === o.valor ? ' selected' : '') + '>' +
+          esc(o.rotulo) + '</option>';
+      }).join('');
+
     const opcaoStatus = STATUS_TAREFA.map(function (sx) {
       return '<option value="' + sx[0] + '"' + (f.status === sx[0] ? ' selected' : '') + '>' +
         sx[2] + ' ' + esc(sx[1]) + '</option>';
@@ -1698,6 +1742,11 @@
       '<div class="filtros-tarefa">' +
       '<label class="campo mini"><span>Responsável</span>' +
       '<select onchange="App.tarefasResponsavel(this.value)">' + opcaoResponsavel + '</select></label>' +
+      '<label class="campo mini"><span>Empresa</span>' +
+      '<select onchange="App.tarefasEmpresa(this.value)">' + opcaoEmpresa + '</select></label>' +
+      '<label class="campo mini"><span>Negociação</span>' +
+      '<select onchange="App.tarefasNegocio(this.value)"' + (f.empresa ? '' : ' disabled') + '>' +
+      opcaoNegocio + '</select></label>' +
       '<label class="campo mini"><span>De</span><input type="date" value="' + esc(f.de) +
       '" onchange="App.tarefasPeriodo(this.value, null)"></label>' +
       '<label class="campo mini"><span>Até</span><input type="date" value="' + esc(f.ate) +
@@ -2837,7 +2886,8 @@
     /* Trocar de filtro com dez linhas marcadas fecharia, no lote seguinte,
        tarefas que já saíram da tela. A seleção morre com o filtro. */
     if (mudancas && ('responsavel' in mudancas || 'status' in mudancas || 'tipos' in mudancas ||
-        'de' in mudancas || 'ate' in mudancas || 'busca' in mudancas)) {
+        'de' in mudancas || 'ate' in mudancas || 'busca' in mudancas ||
+        'empresa' in mudancas || 'negocio' in mudancas)) {
       tarefasMarcadas = {};
     }
   }

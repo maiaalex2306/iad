@@ -1454,9 +1454,12 @@
        origem fica gravada, e não apenas o "concluída". */
     novaTarefa: function (opId, decisaoAlvo, opcoes) {
       const op = Store.oportunidade(opId);
-      if (!op) return;
-      const r = E.resumo(op);
       const o = opcoes || {};
+      /* Sem negócio conhecido a tarefa nasce pela empresa: uma empresa tem
+         várias negociações, e escolher "a negociação" numa lista com todas as
+         da carteira é procurar agulha. Empresa primeiro, negociação depois —
+         e só as daquela empresa. */
+      const r = op ? E.resumo(op) : null;
       const PERGUNTAS = P.FECHAMENTO_REUNIAO.map(function (q) { return 'q_' + q.id; });
       /* Tudo o que só faz sentido depois de a tarefa ter acontecido. Os
          documentos NÃO estão nesta lista: ficam visíveis sempre. */
@@ -1464,8 +1467,10 @@
         'compromissoTexto', 'compromissoData', 'compromissoDono'].concat(PERGUNTAS);
       const DO_PLANEJAMENTO = ['vencimento', 'hora'];
 
-      const campos = [
-        { id: 'titulo', rotulo: 'O que fazer', padrao: o.titulo || '' },
+      const campos = camposDeDestino(op, o).concat([
+        { id: 'titulo', rotulo: 'Assunto da tarefa', padrao: o.titulo || '' },
+        { id: 'descricao', rotulo: 'Descrição (opcional)', tipo: 'textarea',
+          placeholder: 'O que precisa ser dito, levado ou perguntado. Fica com a tarefa.' },
         { id: 'tipo', rotulo: 'Como (canal)', tipo: 'select', largura: 'metade',
           padrao: o.tipo || '', opcoes: Store.nomesDoCatalogo('tiposTarefa') },
         { id: 'situacao', rotulo: 'Situação', tipo: 'select', largura: 'metade',
@@ -1480,19 +1485,23 @@
           rotulo: 'Documentos (Word, PDF, Excel, PowerPoint, texto) — pode escolher vários' },
         {
           id: 'decisaoAlvo', rotulo: 'Decisão que pretende provocar', tipo: 'select',
-          padrao: decisaoAlvo || (r.nbd.dimensao ? r.nbd.dimensao.id : 'problema'),
+          padrao: decisaoAlvo || ((r && r.nbd.dimensao) ? r.nbd.dimensao.id : 'problema'),
           opcoes: P.DIMENSOES.map(function (d) { return { valor: d.id, rotulo: d.nome }; })
         },
         { tipo: 'slot', slot: 'metodo' },
         { id: 'vencimento', rotulo: 'Para quando', tipo: 'date', padrao: Store.hoje(), largura: 'metade' },
         { id: 'hora', rotulo: 'Hora (opcional)', tipo: 'time', largura: 'metade' },
+        { id: 'donoId', rotulo: 'Responsável', tipo: 'select',
+          padrao: (A.atual() || {}).id || '',
+          opcoes: [{ valor: '', rotulo: '— sem responsável —' }]
+            .concat(A.usuarios().map(function (u) { return { valor: u.id, rotulo: u.nome }; })) },
 
         { id: 'secaoRelato', tipo: 'secao', rotulo: 'O que aconteceu',
           ajuda: 'O assistente lê tudo junto — o que você escreveu e o conteúdo dos documentos anexados acima — separa o que o CLIENTE fez e relê as oito decisões. Preencha o que tiver; nada aqui é obrigatório.' },
         { id: 'feitaEm', rotulo: 'Quando foi feita', tipo: 'date', padrao: Store.hoje(), largura: 'metade' },
         { id: 'relato', rotulo: 'Cole a ata, a transcrição ou conte o que aconteceu', tipo: 'textarea', voz: true,
           placeholder: 'Cole aqui o resumo automático da call, a transcrição ou suas anotações. Some ao conteúdo dos documentos anexados acima.' }
-      ];
+      ]);
 
       /* As quatro perguntas fechadas do fim de reunião. Cada "sim" vira
          evidência sem digitação — é o caminho de quem está no carro depois da
@@ -1510,27 +1519,33 @@
           tipo: 'select', padrao: o.evidenciaDireta || 'nao', opcoes: OPCOES_SIM_NAO }
       );
 
-      U.formulario('Nova tarefa', campos, {}, function (d, docs) {
-        if (!d.titulo) return;
+      U.formulario(op ? 'Nova tarefa' : 'Criar tarefa', campos, {}, function (d, docs) {
+        if (!d.titulo) { alert('A tarefa precisa de um assunto.'); return; }
+
+        const alvo = op || resolverNegocioDaTarefa(d);
+        if (!alvo) return;
+
         const feita = d.situacao === 'feita';
         const quando = feita ? (d.feitaEm || Store.hoje()) : (d.vencimento || Store.hoje());
 
         const tarefa = Store.criarTarefa({
-          oportunidadeId: opId, titulo: d.titulo, tipo: d.tipo,
+          oportunidadeId: alvo.id, titulo: d.titulo, descricao: d.descricao || '', tipo: d.tipo,
           decisaoAlvo: d.decisaoAlvo, vencimento: quando, hora: d.hora || '',
           origem: feita ? 'registrada' : 'planejada'
         });
+        if (d.donoId) Store.atualizarTarefa(tarefa.id, { donoId: d.donoId });
         /* Tarefa a fazer também guarda o material: a proposta que vou enviar
            fica anexada ao negócio desde já. */
         if (!feita) {
-          anexarAoRegistro(docs, { oportunidadeId: opId, contaId: op.contaId, categoria: 'Outro' });
+          anexarAoRegistro(docs, { oportunidadeId: alvo.id, contaId: alvo.contaId, categoria: 'Outro' });
           render();
           return;
         }
-        concluirComOQueAconteceu(op, tarefa.id, d, docs, d.decisaoAlvo);
+        concluirComOQueAconteceu(alvo, tarefa.id, d, docs, d.decisaoAlvo);
       }, function (dlg) {
         U.ligarDocumentos(dlg, 'arquivo', 'relato');
         ligarPainelDeMetodo(dlg);
+        if (!op) ligarEmpresaENegocio(dlg);
         const situacao = dlg.querySelector('[name="situacao"]');
         const ajustar = function () {
           const feita = situacao.value === 'feita';
@@ -1597,6 +1612,10 @@
 
     tarefasResponsavel: function (v) { V.tarefasFiltrar({ responsavel: v, pagina: 1 }); render(); },
     tarefasStatus: function (v) { V.tarefasFiltrar({ status: v, pagina: 1 }); render(); },
+    /* Trocar de empresa zera a negociação: a negociação escolhida era de
+       outra empresa, e mantê-la deixaria a lista vazia sem explicar por quê. */
+    tarefasEmpresa: function (v) { V.tarefasFiltrar({ empresa: v, negocio: '', pagina: 1 }); render(); },
+    tarefasNegocio: function (v) { V.tarefasFiltrar({ negocio: v, pagina: 1 }); render(); },
     tarefasBusca: function (v) {
       /* Digitar não pode redesenhar a tela a cada tecla: o campo perderia o
          foco no meio da palavra. O filtro entra, a tabela é repintada, e a
@@ -1631,6 +1650,8 @@
 
     tarefasLimpar: function (alvo) {
       if (alvo === 'responsavel') V.tarefasFiltrar({ responsavel: 'todos' });
+      else if (alvo === 'empresa') V.tarefasFiltrar({ empresa: '', negocio: '' });
+      else if (alvo === 'negocio') V.tarefasFiltrar({ negocio: '' });
       else if (alvo === 'periodo') V.tarefasFiltrar({ de: '', ate: '' });
       else if (alvo === 'status') V.tarefasFiltrar({ status: 'todos' });
       else if (alvo === 'busca') V.tarefasFiltrar({ busca: '' });
@@ -1724,40 +1745,58 @@
     editarTarefa: function (id) {
       const t = Store.tarefa(id);
       if (!t) return;
-      const contas = Store.dados().contas;
-      const ops = Store.dados().oportunidades.filter(function (o) { return !o.desfecho || o.id === t.oportunidadeId; });
-      const nome = function (o) {
-        const c = contas.filter(function (x) { return x.id === o.contaId; })[0];
-        return o.titulo + (c ? ' — ' + c.nome : '');
-      };
+      const atual = t.oportunidadeId ? Store.oportunidade(t.oportunidadeId) : null;
+      const contas = Store.dados().contas.slice().sort(function (a, b) {
+        return String(a.nome).localeCompare(String(b.nome));
+      });
+      const contaAtual = atual ? atual.contaId : (contas[0] ? contas[0].id : '');
+
       U.formulario('Editar tarefa', [
-        { id: 'titulo', rotulo: 'O que fazer', padrao: t.titulo },
+        /* Mudar a tarefa de negociação é mudar de conta: as duas perguntas
+           aparecem juntas, e a de negociação segue a de empresa. Sem isso, a
+           lista traria as negociações de toda a carteira e a tarefa acabaria
+           num negócio parecido de outra empresa. */
+        { tipo: 'secao', rotulo: 'A que negócio esta tarefa pertence' },
+        { id: 'contaId', rotulo: 'Empresa', tipo: 'select', padrao: contaAtual,
+          opcoes: contas.map(function (c) { return { valor: c.id, rotulo: c.nome }; }) },
+        { id: 'oportunidadeId', rotulo: 'Negociação', tipo: 'select', padrao: t.oportunidadeId || '',
+          opcoes: opcoesDeNegocio(contaAtual) },
+        { id: 'negocioNovo', rotulo: 'Nome da nova negociação',
+          placeholder: 'Reúso da ETE, Água de processo, Torre de resfriamento…' },
+
+        { tipo: 'secao', rotulo: 'A tarefa' },
+        { id: 'titulo', rotulo: 'Assunto da tarefa', padrao: t.titulo },
+        { id: 'descricao', rotulo: 'Descrição', tipo: 'textarea', padrao: t.descricao || '' },
         { id: 'tipo', rotulo: 'Como (canal)', tipo: 'select', largura: 'metade',
           padrao: t.tipo, opcoes: Store.nomesDoCatalogo('tiposTarefa') },
-        { id: 'vencimento', rotulo: 'Para quando', tipo: 'date', largura: 'metade', padrao: t.vencimento },
-        { id: 'hora', rotulo: 'Hora (opcional)', tipo: 'time', largura: 'metade', padrao: t.hora || '' },
-        { id: 'donoId', rotulo: 'Responsável', tipo: 'select', largura: 'metade',
-          padrao: t.donoId || '',
-          opcoes: [{ valor: '', rotulo: '— sem responsável —' }]
-            .concat(A.usuarios().map(function (u) { return { valor: u.id, rotulo: u.nome }; })) },
-        { id: 'oportunidadeId', rotulo: 'Negociação', tipo: 'select', padrao: t.oportunidadeId || '',
-          opcoes: [{ valor: '', rotulo: '— sem negócio —' }]
-            .concat(ops.map(function (o) { return { valor: o.id, rotulo: nome(o) }; })) },
-        { id: 'decisaoAlvo', rotulo: 'Decisão que pretende provocar', tipo: 'select', padrao: t.decisaoAlvo || '',
+        { id: 'decisaoAlvo', rotulo: 'Decisão que pretende provocar', tipo: 'select', largura: 'metade',
+          padrao: t.decisaoAlvo || '',
           opcoes: [{ valor: '', rotulo: '— nenhuma —' }]
-            .concat(P.DIMENSOES.map(function (d) { return { valor: d.id, rotulo: d.nome }; })) }
+            .concat(P.DIMENSOES.map(function (d) { return { valor: d.id, rotulo: d.nome }; })) },
+        { id: 'vencimento', rotulo: 'Data', tipo: 'date', largura: 'metade', padrao: t.vencimento },
+        { id: 'hora', rotulo: 'Horário', tipo: 'time', largura: 'metade', padrao: t.hora || '' },
+        { id: 'donoId', rotulo: 'Responsável', tipo: 'select', padrao: t.donoId || '',
+          opcoes: [{ valor: '', rotulo: '— sem responsável —' }]
+            .concat(A.usuarios().map(function (u) { return { valor: u.id, rotulo: u.nome }; })) }
       ], {}, function (d) {
-        if (!d.titulo) return;
+        if (!d.titulo) { alert('A tarefa precisa de um assunto.'); return; }
+        const alvo = resolverNegocioDaTarefa(d);
+        if (!alvo) return;
         /* Mudar a data por aqui é correção, não adiamento: quem adia usa o
            botão de adiar, e é ele que conta. Misturar os dois apagaria o
            sinal de "esta tarefa já foi empurrada quatro vezes". */
         Store.atualizarTarefa(id, {
-          titulo: d.titulo, tipo: d.tipo, vencimento: d.vencimento || t.vencimento,
+          titulo: d.titulo, descricao: d.descricao || '', tipo: d.tipo,
+          vencimento: d.vencimento || t.vencimento,
           hora: d.hora || '', donoId: d.donoId || null,
-          oportunidadeId: d.oportunidadeId || null, decisaoAlvo: d.decisaoAlvo || ''
+          oportunidadeId: alvo.id, decisaoAlvo: d.decisaoAlvo || ''
         });
         render();
-      }, null, null, [
+      }, function (dlg) {
+        ligarEmpresaENegocio(dlg);
+        const negocio = dlg.querySelector('[name="oportunidadeId"]');
+        if (negocio && t.oportunidadeId) negocio.value = t.oportunidadeId;
+      }, null, [
         { rotulo: 'Excluir', classe: 'ghost', acao: function () {
           if (!U.confirmar('Excluir esta tarefa?')) return false;
           Store.excluirTarefa(id);
@@ -1766,26 +1805,15 @@
       ]);
     },
 
-    /* Criar tarefa a partir da tela de Tarefas: aqui o negócio ainda não é
-       conhecido, então ele é o primeiro campo. Depois de escolhido, o resto é
-       o mesmo formulário de sempre — um caminho só para criar tarefa. */
+    /* Criar tarefa a partir da tela de Tarefas: um caminho só. O formulário é
+       o mesmo do cockpit, com dois campos a mais no topo — empresa e
+       negociação — porque aqui nenhum dos dois é conhecido ainda. */
     novaTarefaLivre: function () {
-      const contas = Store.dados().contas;
-      const ops = Store.dados().oportunidades.filter(function (o) { return !o.desfecho; });
-      if (!ops.length) {
-        if (U.confirmar('Nenhum negócio aberto. Cadastrar uma oportunidade agora?')) App.novaOportunidade();
+      if (!Store.dados().contas.length) {
+        if (U.confirmar('Nenhuma empresa cadastrada. Cadastrar uma agora?')) App.novaConta();
         return;
       }
-      const nome = function (o) {
-        const c = contas.filter(function (x) { return x.id === o.contaId; })[0];
-        return o.titulo + (c ? ' — ' + c.nome : '');
-      };
-      U.formulario('Para qual negócio?', [
-        { id: 'oportunidadeId', rotulo: 'Negociação', tipo: 'select',
-          opcoes: ops.map(function (o) { return { valor: o.id, rotulo: nome(o) }; }) }
-      ], {}, function (d) {
-        if (d.oportunidadeId) App.novaTarefa(d.oportunidadeId);
-      });
+      App.novaTarefa(null);
     },
 
     /* ---------- Arquivos ---------- */
@@ -3044,6 +3072,103 @@
      esse conjunto que o assistente lê. São os documentos que trazem a
      informação — proposta, dossiê, planilha de consumo —, e ler só o que foi
      digitado seria jogar fora justamente a parte mais rica. */
+  /* ---------- de quem é a tarefa: empresa e negociação ----------
+
+     Toda tarefa pertence a uma negociação, e toda negociação pertence a uma
+     empresa. A mesma empresa tem várias negociações abertas ao mesmo tempo —
+     é o caso normal, não a exceção —, então uma lista única com todas as
+     negociações da carteira faz o vendedor procurar agulha e escolher a
+     errada. Empresa primeiro; a negociação sai da empresa escolhida.
+
+     Quando a tarefa nasce de dentro de um negócio (cockpit, lacuna, plano),
+     nada disso aparece: os dois já estão decididos e repetir a pergunta é
+     ruído. Nesse caso o destino vira uma linha de contexto, para quem abriu o
+     formulário conferir onde vai gravar. */
+  const NOVO_NEGOCIO = '__novo__';
+
+  function camposDeDestino(op, o) {
+    if (op) {
+      const conta = Store.conta(op.contaId);
+      return [{ tipo: 'secao', rotulo: 'Onde vai gravar',
+        ajuda: (conta ? conta.nome : 'sem empresa') + ' · ' + op.titulo }];
+    }
+
+    const contas = Store.dados().contas.slice().sort(function (a, b) {
+      return String(a.nome).localeCompare(String(b.nome));
+    });
+    const padraoConta = o.contaId || (contas[0] ? contas[0].id : '');
+
+    return [
+      { tipo: 'secao', rotulo: 'A que negócio esta tarefa pertence',
+        ajuda: 'Uma empresa pode ter várias negociações abertas. A tarefa entra em uma delas — é por ela que o avanço da decisão é contado.' },
+      { id: 'contaId', rotulo: 'Empresa', tipo: 'select', padrao: padraoConta,
+        opcoes: contas.length
+          ? contas.map(function (c) { return { valor: c.id, rotulo: c.nome }; })
+          : [{ valor: '', rotulo: '— nenhuma empresa cadastrada —' }] },
+      { id: 'oportunidadeId', rotulo: 'Negociação', tipo: 'select', padrao: o.oportunidadeId || '',
+        opcoes: opcoesDeNegocio(padraoConta) },
+      /* Só aparece quando a escolha é "nova". Sem este campo a negociação
+         nascia com o nome da empresa, e o pipeline de quem tem três negócios
+         na Marilan ficava com "Marilan" no meio de "Reúso da ETE" e "Água de
+         processo" — o nome que menos ajuda a distinguir. */
+      { id: 'negocioNovo', rotulo: 'Nome da nova negociação',
+        placeholder: 'Reúso da ETE, Água de processo, Torre de resfriamento…' }
+    ];
+  }
+
+  /* Só as negociações abertas da empresa escolhida, mais a saída de abrir uma
+     nova: a tarefa que inaugura um negócio é comum — o cliente ligou pedindo
+     outra coisa — e obrigar a sair da tela para cadastrar antes é o tipo de
+     desvio em que a tarefa não é registrada. */
+  function opcoesDeNegocio(contaId) {
+    const abertas = Store.dados().oportunidades.filter(function (x) {
+      return x.contaId === contaId && !x.desfecho;
+    });
+    return abertas.map(function (x) {
+      return { valor: x.id, rotulo: x.titulo + ' · ' + U.moeda(x.valor) + ' · ' + x.etapa };
+    }).concat([{ valor: NOVO_NEGOCIO, rotulo: '+ Nova negociação nesta empresa…' }]);
+  }
+
+  function ligarEmpresaENegocio(dlg) {
+    const conta = dlg.querySelector('[name="contaId"]');
+    const negocio = dlg.querySelector('[name="oportunidadeId"]');
+    if (!conta || !negocio) return;
+
+    const ajustarNome = function () {
+      U.mostrarCampos(dlg, ['negocioNovo'], negocio.value === NOVO_NEGOCIO);
+    };
+    const pintar = function () {
+      negocio.innerHTML = opcoesDeNegocio(conta.value).map(function (x) {
+        return '<option value="' + U.esc(x.valor) + '">' + U.esc(x.rotulo) + '</option>';
+      }).join('');
+      ajustarNome();
+    };
+    conta.addEventListener('change', pintar);
+    negocio.addEventListener('change', ajustarNome);
+    pintar();
+  }
+
+  /* Devolve o negócio onde a tarefa vai entrar — criando-o quando o vendedor
+     escolheu "nova negociação". Devolve null quando não dá para decidir, e aí
+     quem chamou não grava nada: tarefa órfã não aparece em lugar nenhum. */
+  function resolverNegocioDaTarefa(d) {
+    if (d.oportunidadeId && d.oportunidadeId !== NOVO_NEGOCIO) {
+      return Store.oportunidade(d.oportunidadeId);
+    }
+    const conta = Store.conta(d.contaId);
+    if (!conta) {
+      alert('Escolha a empresa da negociação. Se ela ainda não existe, cadastre em Cadastros → Empresas.');
+      return null;
+    }
+    /* Nasce em Prospecção com o nome que o vendedor deu; sem nome, o da
+       empresa, que ao menos não fica em branco. Valor e etapa se corrigem no
+       cockpit em dois cliques e não valem uma pergunta aqui — quem está
+       criando uma tarefa está com pressa. */
+    return Store.criarOportunidade({
+      contaId: conta.id, titulo: (d.negocioNovo || '').trim() || conta.nome, etapa: 'Prospecção'
+    });
+  }
+
   function concluirComOQueAconteceu(op, tarefaId, d, docs, dimensaoAlvo, aoTerminar) {
     const quando = d.feitaEm || Store.hoje();
     const temRelato = !!(d.relato && d.relato.length >= 60);
