@@ -1912,6 +1912,21 @@
     tarefasPorPagina: function (n) { V.tarefasFiltrar({ porPagina: Number(n) || 25, pagina: 1 }); render(); },
     tarefasResumo: function (aberto) { V.tarefasFiltrar({ resumoAberto: !!aberto }); },
 
+    /* O botão do aviso na tela de Configuração. Cria só o que falta, e conta
+       quantas criou — repetir o clique não duplica nada, porque a próxima
+       leitura já não acha negócio sem tarefa. */
+    criarTarefasDoLH: function () {
+      const faltando = V.oportunidadesDoLHSemTarefa();
+      if (!faltando.length) { alert('Nenhuma negociação do Linked Helper está sem tarefa.'); return; }
+      faltando.forEach(criarTarefaAtrasadaDoLH);
+      Store.salvar();
+      render();
+      alert(faltando.length + (faltando.length === 1
+        ? ' tarefa criada, vencendo hoje.'
+        : ' tarefas criadas, vencendo hoje.') +
+        '\n\nElas estão em Tarefas, com a conversa do LinkedIn dentro.');
+    },
+
     tarefasLimpar: function (alvo) {
       if (alvo === 'responsavel') V.tarefasFiltrar({ responsavel: 'todos' });
       else if (alvo === 'empresa') V.tarefasFiltrar({ empresa: '', negocio: '' });
@@ -3312,8 +3327,96 @@
     if (lead.insight) {
       Store.definirInsight(op.id, { texto: lead.insight, estado: 'formulado' });
     }
-    atribuirAoOperador(lead, [conta, contato, op]);
+    const tarefa = tarefaDoLead(op, contato, lead);
+    atribuirAoOperador(lead, [conta, contato, op, tarefa]);
     return op;
+  }
+
+  /* Empresa que veio do LH é empresa com quem ninguém falou ainda. A importação
+     criava conta, contato e negócio e parava aí: o cartão nascia na Conexão sem
+     nada marcado para acontecer, e o que não tem data não acontece — vira a
+     coluna cheia de negócio parado que o método chama de zumbi.
+
+     Então toda importação também abre a tarefa de fazer o contato, vencendo no
+     próprio dia da importação, com a conversa do LinkedIn escrita dentro dela.
+     Escrita dentro: quem for ligar não devia ter que abrir o negócio e caçar o
+     histórico para descobrir o que a SDR prometeu antes de discar. */
+  function tarefaDoLead(op, contato, lead) {
+    Store.criarNoCatalogo('tiposTarefa', { nome: 'Apresentação' });
+    return Store.criarTarefa({
+      titulo: 'Empresa Importada do LH - Fazer Contato',
+      tipo: 'Apresentação',
+      oportunidadeId: op.id,
+      contatoId: contato ? contato.id : null,
+      vencimento: Store.hoje(),
+      origem: 'planejada',
+      descricao: descricaoDaTarefaDoLead(op, contato, lead)
+    });
+  }
+
+  /* As importações que aconteceram antes de a tarefa existir. Aqui o lead já
+     não está mais na mão — mas nada do que a tarefa precisa se perdeu: campanha
+     e SDR estão em campo próprio do negócio, e a conversa ficou escrita no
+     evento de sistema que a importação gravou no histórico. Então a descrição
+     se remonta do que está guardado, em vez de nascer vazia. */
+  function criarTarefaAtrasadaDoLH(op) {
+    const contato = (op.stakeholders || []).map(function (s) {
+      return Store.contato(typeof s === 'string' ? s : s.contatoId);
+    }).filter(Boolean)[0] || null;
+
+    const evento = (op.eventos || []).filter(function (e) {
+      return e.tipo === 'sistema' && /Conversa no LinkedIn/.test(e.titulo || '');
+    })[0];
+
+    Store.criarNoCatalogo('tiposTarefa', { nome: 'Apresentação' });
+    return Store.criarTarefa({
+      titulo: 'Empresa Importada do LH - Fazer Contato',
+      tipo: 'Apresentação',
+      oportunidadeId: op.id,
+      contatoId: contato ? contato.id : null,
+      vencimento: Store.hoje(),
+      origem: 'planejada',
+      donoId: op.donoId || null,
+      descricao: [
+        'Empresa importada do Linked Helper.',
+        [op.campanha ? 'Campanha: ' + op.campanha : 'Campanha: (não informada)',
+         op.sdr ? 'SDR: ' + op.sdr + (op.sdrEmail ? ' (' + op.sdrEmail + ')' : '') : 'SDR: (não informada)',
+         'Contato: ' + (contato ? contato.nome + (contato.cargo ? ' — ' + contato.cargo : '') : '(sem contato vinculado)')
+        ].join('\n'),
+        evento && evento.detalhe
+          ? 'Conversa no LinkedIn:\n' + evento.detalhe
+          : 'Conversa no LinkedIn:\n(não ficou registrada nesta importação.)'
+      ].join('\n\n')
+    });
+  }
+
+  /* A conversa inteira, em ordem e com quem falou o quê. Fica a conversa toda e
+     não só o último par porque "Sim, pode mandar" não se explica sozinho — o
+     que foi prometido está na pergunta, e é isso que a pessoa precisa honrar na
+     ligação. */
+  function descricaoDaTarefaDoLead(op, contato, lead) {
+    const quem = [
+      op.campanha ? 'Campanha: ' + op.campanha : 'Campanha: (não informada)',
+      op.sdr ? 'SDR: ' + op.sdr + (op.sdrEmail ? ' (' + op.sdrEmail + ')' : '') : 'SDR: (não informada)',
+      'Contato: ' + ((contato && contato.nome) || lead.nome || '(sem nome)') +
+        (contato && contato.cargo ? ' — ' + contato.cargo : ''),
+      lead.linkedin ? 'LinkedIn: ' + lead.linkedin : ''
+    ].filter(Boolean).join('\n');
+
+    const conversa = falasDoLead(lead);
+    let troca;
+    if (!conversa.length) {
+      troca = 'Conversa no LinkedIn:\n(nenhuma mensagem veio do Linked Helper — a empresa entrou pela ' +
+        'campanha, sem troca registrada.)';
+    } else {
+      troca = 'Conversa no LinkedIn:\n' + conversa.map(function (m) {
+        const autor = m.nosso ? (op.sdr || lead.operador || 'SDR')
+                              : (m.de || (contato && contato.nome) || lead.nome || 'Prospect');
+        return autor + (m.quando ? ' (' + U.data(m.quando) + ')' : '') + ':\n' + m.texto;
+      }).join('\n\n');
+    }
+
+    return ['Empresa importada do Linked Helper em ' + U.data(Store.hoje()) + '.', quem, troca].join('\n\n');
   }
 
   /* O que não cabe em campo próprio, mas quem abre a conta amanhã precisa ler. */

@@ -1843,7 +1843,11 @@
        proposta de reúso da Marilan" são perguntas diferentes. */
     empresa: '',
     negocio: '',
-    status: 'atrasadas',     /* atrasadas | pendentes | concluidas | sem-registro | todos */
+    /* A tela abre no que ainda está de pé — atrasado e por vencer juntos.
+       Abrir em "atrasadas" fazia quem acabou de importar do LinkedIn, com as
+       tarefas todas vencendo hoje, cair num "nenhuma tarefa neste filtro" que
+       se lê como perda de dado. O atrasado continua no topo: a ordem é a data. */
+    status: 'abertas',       /* abertas | atrasadas | pendentes | concluidas | sem-registro | todos */
     tipos: [],               /* vazio = todos */
     de: '', ate: '',
     busca: '',
@@ -1857,6 +1861,7 @@
   let tarefasMarcadas = {};
 
   const STATUS_TAREFA = [
+    ['abertas', 'A fazer', '◻'],
     ['atrasadas', 'Atrasadas', '⚠'],
     ['pendentes', 'Pendentes', '◴'],
     ['concluidas', 'Concluídas', '✓'],
@@ -1910,6 +1915,7 @@
     if (f.responsavel === 'meu') { if (t.donoId && eu && t.donoId !== eu.id) return false; }
     else if (f.responsavel !== 'todos') { if (t.donoId !== f.responsavel) return false; }
 
+    if (f.status === 'abertas' && t.status !== 'aberta') return false;
     if (f.status === 'atrasadas' && situacao !== 'atrasada') return false;
     if (f.status === 'pendentes' && situacao !== 'pendente') return false;
     if (f.status === 'concluidas' && t.status === 'aberta') return false;
@@ -2087,7 +2093,7 @@
       '<td class="col-marca"><input type="checkbox" data-tarefa="' + t.id + '"' + (marcada ? ' checked' : '') +
       ' onchange="App.tarefasMarcar(\'' + t.id + '\',this.checked)" aria-label="Selecionar"></td>' +
 
-      '<td><span class="icone-tipo" title="' + esc(t.tipo || '') + '">' + iconeDoTipo(t.tipo) + '</span> ' +
+      '<td class="col-tarefa"><span class="icone-tipo" title="' + esc(t.tipo || '') + '">' + iconeDoTipo(t.tipo) + '</span> ' +
       (op
         ? '<a href="#/op/' + op.id + '"><strong>' + esc(t.titulo) + '</strong></a>'
         : '<strong>' + esc(t.titulo) + '</strong>') +
@@ -2102,7 +2108,7 @@
       '<td><span class="avatar" title="' + esc(dono ? dono.nome : 'sem responsável') + '">' +
       esc(dono ? iniciaisDe(dono.nome) : '—') + '</span></td>' +
 
-      '<td>' + (op
+      '<td class="col-negocio">' + (op
         ? '<a href="#/op/' + op.id + '">' + esc(op.titulo) + '</a>' +
           '<span class="tiny muted">' + esc(conta ? conta.nome : '') + '</span>'
         : '<span class="tiny muted">—</span>') + '</td>' +
@@ -2238,7 +2244,7 @@
 
       '<div class="card" style="padding:0"><div class="tabela-rolagem"><table class="tabela-tarefas"><thead><tr>' +
       '<th class="col-marca"><input type="checkbox" onchange="App.tarefasMarcarPagina(this.checked)" aria-label="Selecionar a página"></th>' +
-      '<th>Tarefa</th><th>Status</th>' +
+      '<th class="col-tarefa">Tarefa</th><th>Status</th>' +
       ordenar('data', 'Data e hora', 'nowrap') +
       '<th>Responsável</th>' +
       ordenar('empresa', 'Negociação') +
@@ -3077,7 +3083,29 @@
       (c.url
         ? '<p class="tiny muted" style="margin:8px 0 0">Ponte: ' + esc(c.url) + '</p>'
         : '<p class="small muted" style="margin:8px 0 0">Quando alguém responde no LinkedIn, o Linked Helper dispara um webhook. Como este app roda no navegador, ele não tem endereço para receber: quem recebe é uma ponte, e o app busca de lá. O código da ponte está na pasta <code>ponte/</code> do projeto.</p>') +
+      avisoDeTarefasDoLH() +
       '<div id="caixa-linkedhelper"></div></div>';
+  }
+
+  /* As importações feitas antes de a tarefa existir. Não crio sozinho ao abrir
+     a tela: inventar tarefa no dado de alguém é pior que faltar uma. O app
+     conta quantas são e deixa o botão — quem decide é quem vai ligar. */
+  function oportunidadesDoLHSemTarefa() {
+    return Store.dados().oportunidades.filter(function (op) {
+      if (op.origem !== 'Linked Helper' || op.desfecho) return false;
+      return !Store.tarefasDaOportunidade(op.id).length;
+    });
+  }
+
+  function avisoDeTarefasDoLH() {
+    const faltando = oportunidadesDoLHSemTarefa();
+    if (!faltando.length) return '';
+    return '<div class="aviso" style="margin-top:10px">' +
+      faltando.length + (faltando.length === 1
+        ? ' negociação veio do Linked Helper e não tem nenhuma tarefa marcada'
+        : ' negociações vieram do Linked Helper e não têm nenhuma tarefa marcada') +
+      ' — foram importadas antes de o app passar a abrir a tarefa de contato. ' +
+      '<button class="btn ghost mini" onclick="App.criarTarefasDoLH()">Criar as tarefas que faltam</button></div>';
   }
 
   function listaLeads(leads) {
@@ -3517,6 +3545,7 @@
     pendenteAcesso: function () { return pendente; },
     tarefasFiltrar, tarefasEstado, tarefasVisiveis, tarefasDaPagina, tarefasSelecionadas, tarefasMarcar,
     pipelineEstado, pipelineFiltrar, pipelineLimparTudo, gavetaDeFiltros, conferirSessao, zerarFiltros,
+    oportunidadesDoLHSemTarefa,
     definirFiltro: function (f) { filtroGrupo = f; },
     definirFiltroHistorico: function (f) { filtroHistorico = f; },
     definirFiltroHoje: function (f) { filtroHoje = f; },

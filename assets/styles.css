@@ -950,6 +950,17 @@ dialog.revisao-ia { width: min(680px, 96vw); }
 .tabela-tarefas th { white-space: nowrap; font-size: .72rem; text-transform: uppercase; letter-spacing: .3px; color: var(--muted); }
 .tabela-tarefas td { vertical-align: middle; }
 .tabela-tarefas .col-marca { width: 34px; }
+/* Numa tabela de largura automática, a coluna que sabe quebrar é a que
+   encolhe: título e descrição viravam uma tira de noventa pixels enquanto
+   Data e Valor, que não quebram, ficavam largas. A tarefa é o assunto da
+   tela — ela manda na largura. E a descrição fica em uma linha só, porque
+   ali ela é lembrete, não leitura: o texto inteiro está ao abrir a tarefa. */
+.tabela-tarefas .col-tarefa { min-width: 240px; }
+.tabela-tarefas .col-tarefa .tiny.muted {
+  display: block; max-width: 520px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tabela-tarefas .col-negocio { min-width: 130px; }
 .tabela-tarefas tr.marcada td { background: rgba(31,74,140,.07); }
 .tabela-tarefas a { color: var(--navy); text-decoration: none; font-weight: 600; }
 .tabela-tarefas a:hover { text-decoration: underline; }
