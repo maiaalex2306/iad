@@ -1836,7 +1836,7 @@
      relato, e o fechamento em lote existe mas se identifica como o que é:
      dívida, marcada na linha e filtrável. */
 
-  let tarefasFiltro = {
+  const VAZIO_TAREFAS = {
     responsavel: 'meu',      /* meu | todos | <id de usuário> */
     /* Empresa e negociação são dois filtros, e não um: a mesma empresa tem
        várias negociações abertas, e "as tarefas da Marilan" e "as tarefas da
@@ -1853,6 +1853,7 @@
     porPagina: 25,
     resumoAberto: true
   };
+  let tarefasFiltro = Object.assign({}, VAZIO_TAREFAS);
   let tarefasMarcadas = {};
 
   const STATUS_TAREFA = [
@@ -1933,7 +1934,21 @@
     return true;
   }
 
+  /* Mesma regra do pipeline: id que não resolve é filtro que cai. */
+  function sanearFiltrosDeTarefa() {
+    const f = tarefasFiltro;
+    if (f.empresa && !Store.conta(f.empresa)) { f.empresa = ''; f.negocio = ''; }
+    if (f.negocio && !Store.oportunidade(f.negocio)) f.negocio = '';
+    if (f.responsavel !== 'todos' && f.responsavel !== 'meu' &&
+        !global.IADAuth.usuarios().some(function (u) { return u.id === f.responsavel; })) {
+      f.responsavel = 'todos';
+    }
+    const tipos = Store.nomesDoCatalogo('tiposTarefa');
+    if (f.tipos.length) f.tipos = f.tipos.filter(function (t) { return tipos.indexOf(t) !== -1; });
+  }
+
   function tarefasFiltradas() {
+    sanearFiltrosDeTarefa();
     const f = tarefasFiltro;
     const eu = global.IADAuth.atual();
     const lista = tarefasComContexto().filter(function (l) { return tarefaPassaNoFiltro(l, f, eu); });
@@ -3370,13 +3385,51 @@
     });
   }
 
+  /* ---------------- Filtros pertencem a quem os ligou ----------------
+
+     Todo filtro de tela vive em variável de módulo, para sobreviver ao render
+     — e sobrevivia também ao logout, que é onde estava o defeito. Quem
+     filtrava "as negociações do Alexandre", trocava de conta e entrava como
+     outra pessoa via um pipeline vazio: o filtro continuava valendo, apontando
+     para alguém que não existe na empresa nova. A tela dizia "0 negociações" e
+     não tinha como estar mais certa nem mais inútil.
+
+     A correção não é limpar em cada lugar que troca de sessão — é lembrar de
+     quem são os filtros. Mudou a pessoa, os filtros dela vão junto. Assim
+     qualquer caminho novo de troca de conta já nasce coberto. */
+  let donoDosFiltros = null;
+
+  function zerarFiltros() {
+    filtroHoje = 'todos';
+    filtroPeriodo = 'todos';
+    filtroSegmento = 'todos';
+    filtroGrupo = 'todos';
+    modoPipeline = 'lista';
+    filtroHistorico = 'tudo';
+    filtroTarefas = 'abertas';
+    periodoTarefas = 'tudo';
+    abaCadastro = 'empresas';
+    buscaCadastro = '';
+    planoIA = null;
+    pipelineFiltro = Object.assign({}, VAZIO_PIPELINE);
+    tarefasFiltro = Object.assign({}, VAZIO_TAREFAS);
+    tarefasMarcadas = {};
+  }
+
+  function conferirSessao(usuarioId) {
+    if (usuarioId === donoDosFiltros) return false;
+    donoDosFiltros = usuarioId;
+    zerarFiltros();
+    return true;
+  }
+
   global.IADViews = {
     hoje, painel, pipeline, tarefas, cockpit, revisao, contas, cadastros, playbook, dados, itemArquivo, listaLeads,
     revisaoDaImportacao, resumoDaLeitura, planoDaIA, definirPlano, planoGuardado, revisaoDasNotas,
     acesso, barraAdmin, menuDoUsuario, definirTelaAcesso, definirPrimeiraEmpresa, listaUsuariosNuvem,
     pendenteAcesso: function () { return pendente; },
     tarefasFiltrar, tarefasEstado, tarefasVisiveis, tarefasDaPagina, tarefasSelecionadas, tarefasMarcar,
-    pipelineEstado, pipelineFiltrar, pipelineLimparTudo, gavetaDeFiltros,
+    pipelineEstado, pipelineFiltrar, pipelineLimparTudo, gavetaDeFiltros, conferirSessao, zerarFiltros,
     definirFiltro: function (f) { filtroGrupo = f; },
     definirFiltroHistorico: function (f) { filtroHistorico = f; },
     definirFiltroHoje: function (f) { filtroHoje = f; },

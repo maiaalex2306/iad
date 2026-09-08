@@ -46,6 +46,8 @@
 
   let promptInstalacao = null;
   let leads = null;
+  /* Falha da última sincronização, para a tela poder dizer o que houve. */
+  let avisoSincronizacao = '';
 
   function render() {
     const conteudo = document.getElementById('conteudo');
@@ -57,6 +59,13 @@
       A.encerrarSessao();
       logado = null;
     }
+
+    /* Trocou a pessoa, trocam os filtros. Sem isto, quem filtrava "as
+       negociações do Alexandre", saía e entrava como outra pessoa via um
+       pipeline vazio — o filtro continuava valendo, apontando para alguém que
+       não existe na empresa nova. A tela dizia "0 negociações" e não tinha
+       como estar mais certa nem mais inútil. */
+    V.conferirSessao(logado ? logado.id : null);
 
     /* Registro sem empresa fica invisível. Aqui, com a sessão já conhecida,
        o que tiver nascido assim é adotado antes de a tela ser desenhada. */
@@ -94,6 +103,14 @@
 
     const barra = document.getElementById('barra-admin');
     if (barra) barra.innerHTML = V.barraAdmin();
+
+    const aviso = document.getElementById('aviso-sinc');
+    if (aviso) {
+      aviso.innerHTML = avisoSincronizacao
+        ? '<div class="aviso">' + U.esc(avisoSincronizacao) +
+          ' <button class="btn ghost mini" onclick="App.tentarBaixarDeNovo()">Tentar de novo</button></div>'
+        : '';
+    }
     window.scrollTo(0, 0);
   }
 
@@ -380,8 +397,21 @@
       }
 
       /* Trazer o que já existe no servidor é o que faz a troca de aparelho
-         funcionar; falhar aqui não impede de usar o app com a cópia local. */
-      return N.puxar().then(render, function () {});
+         funcionar; falhar aqui não impede de usar o app com a cópia local.
+
+         O que não pode é falhar calado. Quem acabou de entrar com outra conta
+         fica olhando a cópia da conta anterior — ou nenhuma — sem nada na tela
+         explicando por quê, e conclui que o sistema perdeu a carteira dele. */
+      avisoSincronizacao = '';
+      return N.puxar().then(function () {
+        avisoSincronizacao = '';
+        render();
+      }, function (e) {
+        avisoSincronizacao = 'Não consegui trazer os dados do servidor: ' +
+          (e && e.message ? e.message : 'erro desconhecido') +
+          ' — o que está na tela é a última cópia baixada neste aparelho.';
+        render();
+      });
     });
   }
 
@@ -2258,6 +2288,22 @@
             recadoNuvem('Empresa definida. Agora pode sincronizar.');
           })
           .catch(function (e) { render(); recadoNuvem('Falhou: ' + e.message, true); });
+      });
+    },
+
+    /* O botão do aviso de sincronização. Repete só a descida — quem acabou de
+       entrar quer ver a carteira, não empurrar a cópia local por cima dela. */
+    tentarBaixarDeNovo: function () {
+      avisoSincronizacao = 'Baixando de novo…';
+      render();
+      global.IADNuvem.puxar().then(function () {
+        avisoSincronizacao = '';
+        render();
+      }, function (e) {
+        avisoSincronizacao = 'Ainda não consegui trazer os dados: ' +
+          (e && e.message ? e.message : 'erro desconhecido') +
+          ' — o que está na tela é a última cópia baixada neste aparelho.';
+        render();
       });
     },
 
