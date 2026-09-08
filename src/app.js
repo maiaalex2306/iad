@@ -774,7 +774,8 @@
             .concat(Store.nomesDoCatalogo('segmentos').map(function (n) { return { valor: n, rotulo: n }; })) },
         { id: 'titulo', rotulo: 'Oportunidade' },
         { id: 'valor', rotulo: 'Valor (R$)', tipo: 'moeda' },
-        { id: 'fechamentoPrevisto', rotulo: 'Fechamento previsto', tipo: 'date' },
+        { id: 'fechamentoPrevisto', rotulo: 'Fechamento previsto', tipo: 'date',
+          padrao: Store.daquiADias(Store.PRAZO_PADRAO_DE_FECHAMENTO) },
         { id: 'contatoNome', rotulo: 'Contato (opcional)' },
         { id: 'contatoCargo', rotulo: 'Cargo do contato' },
         { id: 'contatoPapel', rotulo: 'Papel na compra', tipo: 'select', opcoes: P.PAPEIS },
@@ -4512,7 +4513,8 @@
       { id: 'valor', rotulo: 'Valor (R$)', tipo: 'moeda' },
       { id: 'etapa', rotulo: 'Etapa CRM', tipo: 'select', opcoes: P.ETAPAS },
       { id: 'tipo', rotulo: 'Tipo', tipo: 'select', opcoes: P.TIPOS_OPORTUNIDADE },
-      { id: 'fechamentoPrevisto', rotulo: 'Fechamento previsto', tipo: 'date' },
+      { id: 'fechamentoPrevisto', rotulo: 'Fechamento previsto', tipo: 'date',
+        padrao: Store.daquiADias(Store.PRAZO_PADRAO_DE_FECHAMENTO) },
       { id: 'concorrentes', rotulo: 'Concorrentes (inclusive “não fazer nada”)' }
     ]);
   }

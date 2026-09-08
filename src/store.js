@@ -13,6 +13,26 @@
 
   function hoje() { return new Date().toISOString().slice(0, 10); }
 
+  function daquiADias(n) {
+    const d = new Date();
+    d.setDate(d.getDate() + n);
+    return d.toISOString().slice(0, 10);
+  }
+
+  /* Todo negócio nasce com uma data de fechamento: hoje mais 120 dias.
+
+     Não é adivinhação de quando vai fechar — é o relógio começar a andar.
+     Negócio sem data prevista some do "por mês" do painel, não entra em
+     previsão nenhuma e nunca fica atrasado, então nada nunca cobra por ele.
+     Com data, ele aparece, e quando a data passa o app avisa. A data errada se
+     corrige em dois cliques; a data que não existe ninguém corrige, porque
+     ninguém a vê.
+
+     120 e não 90 nem 180 porque é o que o ciclo desta carteira mostrou até
+     aqui — e o campo continua sendo do vendedor: vem preenchido no formulário,
+     à vista, para ser trocado. */
+  const PRAZO_PADRAO_DE_FECHAMENTO = 120;
+
   function estadoVazio() {
     return {
       versao: VERSAO, tenants: [], usuarios: [],
@@ -409,7 +429,7 @@
       sdr: '',
       sdrEmail: '',
       criadoEm: hoje(),
-      fechamentoPrevisto: '',
+      fechamentoPrevisto: daquiADias(PRAZO_PADRAO_DE_FECHAMENTO),
       adiamentos: 0,
       itens: [],
       proximoCompromisso: null,
@@ -422,6 +442,11 @@
       desfecho: null,
       notas: ''
     }, carimbo(true), dados);
+    /* O formulário devolve string vazia quando ninguém digitou, e string vazia
+       venceria o padrão no Object.assign acima. Sem esta linha o campo em
+       branco continuaria produzindo negócio sem data — que é exatamente o que
+       o padrão existe para evitar. */
+    if (!nova.fechamentoPrevisto) nova.fechamentoPrevisto = daquiADias(PRAZO_PADRAO_DE_FECHAMENTO);
     nova.snapshots = [{ data: hoje(), iad: 0, dims: Object.assign({}, nova.dims) }];
 
     /* O buying group começa com quem já está cadastrado na empresa: são as
@@ -733,6 +758,7 @@
   global.IADStore = {
     uid, hoje, carregar, salvar, inscrever, obter, substituir, estadoVazio,
     conta, contato, oportunidade, tarefa, contatosDaConta, tarefasDaOportunidade,
+    daquiADias, PRAZO_PADRAO_DE_FECHAMENTO,
     dados, contexto, tenantDeTrabalho, visivel, diagnostico,
     criarConta, criarContato, criarOportunidade, atualizarOportunidade, vincularStakeholder,
     pontuar, registrarEvento, removerEvento, definirCompromisso, definirInsight,
