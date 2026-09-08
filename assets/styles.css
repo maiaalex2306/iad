@@ -991,3 +991,30 @@ dialog.revisao-ia { width: min(680px, 96vw); }
 .item-multi input { width: auto; margin-top: 2px; flex: 0 0 auto; }
 .item-multi span { font-size: .86rem; line-height: 1.35; }
 .item-multi em { display: block; font-style: normal; font-size: .74rem; color: var(--muted); }
+
+/* ---------- Pipeline: barra de filtros e gaveta ---------- */
+.filtros-negocio { align-items: flex-end; }
+.filtros-negocio .botao-gaveta { flex: 0 0 auto; margin-bottom: 0; }
+.filtros-negocio .botao-gaveta .btn { white-space: nowrap; padding: 7px 12px; }
+.chip.forte { background: var(--navy); color: #fff; border-color: var(--navy); }
+.faixa { gap: 8px; align-items: center; }
+.faixa input { flex: 1 1 0; }
+
+/* A gaveta é um <dialog> encostado na direita: modal de verdade (fecha no Esc,
+   escurece o fundo) sem inventar uma camada de posicionamento própria. */
+dialog.gaveta {
+  margin: 0 0 0 auto; height: 100%; max-height: 100%;
+  width: min(420px, 100%); max-width: 100%; border-radius: 0;
+  display: flex; flex-direction: column;
+}
+dialog.gaveta form { display: flex; flex-direction: column; height: 100%; }
+/* Uma coluna: a gaveta tem 420px, e a grade de duas colunas que os diálogos
+   usam espremeria cada select em 190px. Ela também é o que fazia a lista de
+   caixas sumir — caixa com rolagem própria dentro de uma grade não empurra a
+   linha, e a lista aparecia com 10px de altura, vazia. */
+dialog.gaveta .corpo { display: block; flex: 1; overflow-y: auto; max-height: none; }
+dialog.gaveta .secao-form { margin-top: 18px; }
+dialog.gaveta .lista-multi { max-height: none; overflow: visible; }
+@media (max-width: 640px) {
+  dialog.gaveta { width: 100%; }
+}

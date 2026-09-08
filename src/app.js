@@ -116,6 +116,24 @@
     window.scrollTo(0, rolagem);
   }
 
+  /* Mesmo motivo do repintarTarefas: buscar não pode reconstruir a página
+     inteira a cada tecla. */
+  function repintarPipeline() {
+    if ((location.hash || '') !== '#/pipeline') return;
+    const conteudo = document.getElementById('conteudo');
+    if (!conteudo) return;
+    const rolagem = window.scrollY;
+    const ativo = document.activeElement;
+    const busca = ativo && ativo.tagName === 'INPUT' && ativo.type === 'search';
+    const posicao = busca ? ativo.selectionStart : 0;
+    conteudo.innerHTML = V.pipeline();
+    if (busca) {
+      const campo = conteudo.querySelector('input[type="search"]');
+      if (campo) { campo.focus(); try { campo.setSelectionRange(posicao, posicao); } catch (e) {} }
+    }
+    window.scrollTo(0, rolagem);
+  }
+
   /* Concluir várias contando o que aconteceu em cada uma: abre o relato da
      primeira e, quando ela fecha, chama a próxima. Uma fila, não cinco
      janelas empilhadas. */
@@ -1638,6 +1656,56 @@
       if (!U.confirmar('Excluir esta tarefa?')) return;
       Store.excluirTarefa(id);
       render();
+    },
+
+    /* ---------- Filtros do Pipeline ---------- */
+
+    pipelineCampo: function (campo, valor) {
+      const m = {};
+      m[campo] = valor;
+      V.pipelineFiltrar(m);
+      render();
+    },
+
+    /* Digitar não pode redesenhar a tela a cada tecla: o campo perderia o foco
+       no meio da palavra. Mesma solução da tela de Tarefas. */
+    pipelineBusca: function (v) {
+      V.pipelineFiltrar({ busca: v });
+      clearTimeout(App._buscaPipeline);
+      App._buscaPipeline = setTimeout(function () { repintarPipeline(); }, 220);
+    },
+
+    pipelineLimpar: function (alvo) {
+      if (alvo === 'tudo') {
+        V.pipelineLimparTudo();
+        if (A.ehAdmin()) A.definirFiltros({ tenant: 'todas', usuario: 'todos' });
+      }
+      else if (alvo === 'tenant') A.definirFiltros({ tenant: 'todas' });
+      else if (alvo === 'usuarioAdmin') A.definirFiltros({ usuario: 'todos' });
+      else if (alvo === 'responsavel') V.pipelineFiltrar({ responsavel: 'todos' });
+      else if (alvo === 'status') V.pipelineFiltrar({ status: 'abertas' });
+      else if (alvo === 'iad') V.pipelineFiltrar({ iadMin: '', iadMax: '' });
+      else if (alvo === 'valor') V.pipelineFiltrar({ valorMin: '', valorMax: '' });
+      else if (alvo === 'previsao') V.pipelineFiltrar({ previsaoDe: '', previsaoAte: '' });
+      else {
+        const m = {};
+        m[alvo] = (typeof V.pipelineEstado()[alvo] === 'boolean') ? false : '';
+        V.pipelineFiltrar(m);
+      }
+      U.fecharDialogos();
+      render();
+    },
+
+    /* A gaveta é uma janela modal encostada na direita: abre, responde a
+       pergunta e fecha. Cada mudança já vale na hora — "Ver o resultado" só
+       fecha, e existe porque um painel sem botão de sair não parece fechável. */
+    pipelineFiltros: function () {
+      const dlg = document.createElement('dialog');
+      dlg.className = 'gaveta';
+      dlg.innerHTML = V.gavetaDeFiltros();
+      document.body.appendChild(dlg);
+      dlg.addEventListener('close', function () { dlg.remove(); render(); });
+      dlg.showModal();
     },
 
     /* ---------- Tela de Tarefas ---------- */

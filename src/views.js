@@ -209,6 +209,10 @@
   function barraAdmin() {
     const A = global.IADAuth;
     if (!A.ehAdmin()) return '';
+    /* No Pipeline os dois selects estão dentro da barra de filtros, com o
+       resto. Repeti-los aqui em cima daria dois controles para a mesma
+       pergunta, e mudar um sem mudar o outro é como se inventa contradição. */
+    if ((location.hash || '') === '#/pipeline') return '';
     const f = A.filtros();
     const empresas = A.tenants();
     const pessoas = A.usuarios().filter(function (u) {
@@ -570,6 +574,371 @@
 
   let modoPipeline = 'lista';
 
+  /* ---------------- Pipeline: a barra de filtros ----------------
+
+     Quem vê o quê é regra de negócio, não de tela, e já está no Store: o
+     vendedor só enxerga o que é dele, o gestor enxerga a empresa inteira e o
+     administrador escolhe a empresa. O que faltava era o vendedor GESTOR ter
+     como separar por pessoa aquilo que ele já podia ver — sem isso, "a
+     carteira do time" é uma lista onde ninguém acha a própria.
+
+     Os filtros são de duas naturezas e ficam em dois lugares por isso:
+     · o que se troca o tempo todo — responsável, status, ordem — fica na
+       linha de cima, à mão;
+     · o que se usa para responder uma pergunta específica — quem está sem
+       tarefa, quem esfriou, quanto vale a faixa de IAD — fica na gaveta, que
+       abre, responde e fecha. */
+
+  const ORDENS_PIPELINE = [
+    ['saude', 'Saúde da decisão'],
+    ['iad', 'IAD (maior primeiro)'],
+    ['valor', 'Valor (maior primeiro)'],
+    ['esfriando', 'Sem evidência há mais tempo'],
+    ['previsao', 'Fechamento previsto'],
+    ['recentes', 'Criadas por último']
+  ];
+
+  const STATUS_PIPELINE = [
+    ['abertas', 'Em andamento'],
+    ['ganhas', 'Ganhas'],
+    ['perdidas', 'Perdidas'],
+    ['todas', 'Todas']
+  ];
+
+  const VAZIO_PIPELINE = {
+    responsavel: 'todos',   /* todos | meu | <id> */
+    status: 'abertas',
+    ordem: 'saude',
+    busca: '',
+    conta: '',
+    segmento: '',
+    etapa: '',
+    produto: '',
+    origem: '',
+    sdr: '',
+    semTarefa: false,
+    semCompromisso: false,
+    esfriando: false,
+    gateAberto: false,
+    iadMin: '', iadMax: '',
+    valorMin: '', valorMax: '',
+    semEvidenciaDias: '',
+    previsaoDe: '', previsaoAte: ''
+  };
+  let pipelineFiltro = Object.assign({}, VAZIO_PIPELINE);
+
+  function pipelineEstado() { return pipelineFiltro; }
+  function pipelineFiltrar(mudancas) { Object.assign(pipelineFiltro, mudancas || {}); }
+  function pipelineLimparTudo() { pipelineFiltro = Object.assign({}, VAZIO_PIPELINE); }
+
+  /* Quantos filtros da gaveta estão ligados. É o número no botão — sem ele, a
+     pessoa filtra, esquece, e depois jura que o pipeline sumiu. */
+  const DA_GAVETA = ['busca', 'conta', 'segmento', 'etapa', 'produto', 'origem', 'sdr',
+    'semTarefa', 'semCompromisso', 'esfriando', 'gateAberto',
+    'iadMin', 'iadMax', 'valorMin', 'valorMax', 'semEvidenciaDias', 'previsaoDe', 'previsaoAte'];
+
+  function quantosNaGaveta() {
+    return DA_GAVETA.filter(function (k) {
+      const v = pipelineFiltro[k];
+      return v === true || (v !== false && v !== '' && v != null);
+    }).length;
+  }
+
+  /* As pessoas que este usuário pode separar. Vendedor não tem esta pergunta:
+     tudo o que ele enxerga já é dele. */
+  function pessoasDoFiltro() {
+    const A = global.IADAuth;
+    if (!A.ehGestor()) return [];
+    const eu = A.atual();
+    const escopo = A.ehAdmin() ? A.filtros().tenant : (eu && eu.tenantId);
+    return A.usuarios().filter(function (u) {
+      if (u.papel === 'admin') return false;
+      if (!escopo || escopo === 'todas') return true;
+      return u.tenantId === escopo;
+    }).sort(function (a, b) { return String(a.nome).localeCompare(String(b.nome)); });
+  }
+
+  function nomeDoDono(id) {
+    const u = global.IADAuth.usuarios().filter(function (x) { return x.id === id; })[0];
+    return u ? (u.nome || u.email || u.login) : '';
+  }
+
+  function passaNoFiltroPipeline(r, f) {
+    const op = r.op, conta = r.conta;
+    const A = global.IADAuth;
+    const eu = A.atual();
+
+    if (f.responsavel === 'meu') { if (op.donoId && eu && op.donoId !== eu.id) return false; }
+    else if (f.responsavel !== 'todos') { if (op.donoId !== f.responsavel) return false; }
+
+    if (f.status === 'abertas' && op.desfecho) return false;
+    if (f.status === 'ganhas' && (!op.desfecho || op.desfecho.tipo !== 'ganho')) return false;
+    if (f.status === 'perdidas' && (!op.desfecho || op.desfecho.tipo === 'ganho')) return false;
+
+    if (f.conta && op.contaId !== f.conta) return false;
+    if (f.segmento && E.segmentoDe(op) !== f.segmento) return false;
+    if (f.etapa && op.etapa !== f.etapa) return false;
+    if (f.origem && (op.origem || 'Manual') !== f.origem) return false;
+    if (f.sdr && op.sdr !== f.sdr) return false;
+    if (f.produto && !(op.itens || []).some(function (i) { return i.produtoId === f.produto; })) return false;
+
+    if (f.busca) {
+      const alvo = [op.titulo, conta && conta.nome, op.campanha, op.sdr, op.concorrentes]
+        .filter(Boolean).join(' ').toLowerCase();
+      if (alvo.indexOf(f.busca.toLowerCase()) === -1) return false;
+    }
+
+    /* "Sem tarefa" é a pergunta do RD; "sem próximo passo combinado" é a
+       nossa, e é mais dura: tarefa é o que EU marquei, compromisso é o que o
+       cliente aceitou. As duas existem porque respondem coisas diferentes. */
+    if (f.semTarefa) {
+      const abertas = Store.tarefasDaOportunidade(op.id).filter(function (t) { return t.status === 'aberta'; });
+      if (abertas.length) return false;
+    }
+    if (f.semCompromisso && op.proximoCompromisso && op.proximoCompromisso.data) return false;
+    /* Esfriando: passou de duas semanas sem o cliente fazer nada. As duas
+       faixas de baixo do playbook — "Risco" e "Requalificar". */
+    if (f.esfriando && ['risk', 'dead'].indexOf(r.faixa.classe) === -1) return false;
+    /* Proposta na rua sem qualificação: o gate existe para dizer que ela foi
+       precoce, e este filtro junta todas as que estão nessa situação. */
+    if (f.gateAberto && !(E.depoisDaProposta(op) && !r.gates.liberado && !op.gateLiberadoPor)) return false;
+
+    const num = function (v) { return v === '' || v == null ? null : Number(v); };
+    const iadMin = num(f.iadMin), iadMax = num(f.iadMax);
+    if (iadMin != null && r.iad < iadMin) return false;
+    if (iadMax != null && r.iad > iadMax) return false;
+
+    const vMin = num(f.valorMin), vMax = num(f.valorMax);
+    if (vMin != null && (op.valor || 0) < vMin) return false;
+    if (vMax != null && (op.valor || 0) > vMax) return false;
+
+    const dias = num(f.semEvidenciaDias);
+    if (dias != null && r.evidenceAge < dias) return false;
+
+    if (f.previsaoDe && (!op.fechamentoPrevisto || op.fechamentoPrevisto < f.previsaoDe)) return false;
+    if (f.previsaoAte && (!op.fechamentoPrevisto || op.fechamentoPrevisto > f.previsaoAte)) return false;
+
+    return true;
+  }
+
+  function ordenarPipeline(resumos, ordem) {
+    const chave = {
+      saude: function (r) { return -r.saude; },
+      iad: function (r) { return -r.iad; },
+      valor: function (r) { return -(r.op.valor || 0); },
+      esfriando: function (r) { return -r.evidenceAge; },
+      previsao: function (r) { return r.op.fechamentoPrevisto || '9999-99-99'; },
+      recentes: function (r) { return (r.op.criadoEm || '') === '' ? '' : invertido(r.op.criadoEm); }
+    }[ordem] || function (r) { return -r.saude; };
+
+    return resumos.slice().sort(function (a, b) {
+      const x = chave(a), y = chave(b);
+      return (typeof x === 'number') ? x - y : String(x).localeCompare(String(y));
+    });
+  }
+
+  /* Data invertida para ordenar do mais novo ao mais velho sem duplicar a
+     comparação: 2026-09-08 vira 7973-90-91. */
+  function invertido(data) {
+    return String(data).replace(/\d/g, function (d) { return String(9 - Number(d)); });
+  }
+
+  function resumosDoPipeline(est) {
+    const f = pipelineFiltro;
+    return ordenarPipeline(
+      est.oportunidades.map(E.resumo)
+        .filter(function (r) { return passaNoFiltroPipeline(r, f); })
+        .filter(function (r) { return filtroGrupo === 'todos' || r.classe.id === filtroGrupo; }),
+      f.ordem);
+  }
+
+  function seletor(rotulo, acao, opcoes, valor, largura) {
+    return '<label class="campo mini' + (largura ? ' ' + largura : '') + '"><span>' + esc(rotulo) + '</span>' +
+      '<select onchange="' + acao + '">' + opcoes.map(function (o) {
+        const val = typeof o === 'string' ? o : o.valor;
+        const rot = typeof o === 'string' ? o : o.rotulo;
+        return '<option value="' + esc(val) + '"' + (String(val) === String(valor) ? ' selected' : '') + '>' +
+          esc(rot) + '</option>';
+      }).join('') + '</select></label>';
+  }
+
+  function chipsDoPipeline() {
+    const f = pipelineFiltro;
+    const A = global.IADAuth;
+    const chip = function (rotulo, alvo) {
+      return '<span class="chip">' + esc(rotulo) +
+        '<button type="button" onclick="App.pipelineLimpar(\'' + alvo + '\')" aria-label="Remover filtro">✕</button></span>';
+    };
+    const c = [];
+    /* O recorte do administrador vira chip como qualquer outro: ele é global e
+       silencioso, e filtro que não aparece é filtro que a pessoa esquece que
+       ligou — depois jura que sumiu negócio da carteira. */
+    if (A.ehAdmin()) {
+      const g = A.filtros();
+      if (g.tenant !== 'todas') {
+        const t = A.tenants().filter(function (x) { return x.id === g.tenant; })[0];
+        c.push(chip(t ? t.nome : 'Empresa do sistema', 'tenant'));
+      }
+      if (g.usuario !== 'todos') c.push(chip(nomeDoDono(g.usuario) || 'Responsável', 'usuarioAdmin'));
+    }
+    if (f.responsavel === 'meu') c.push(chip((A.atual() || {}).nome || 'Minhas', 'responsavel'));
+    else if (f.responsavel !== 'todos') c.push(chip(nomeDoDono(f.responsavel) || 'Responsável', 'responsavel'));
+    if (f.status !== 'abertas') {
+      const st = STATUS_PIPELINE.filter(function (x) { return x[0] === f.status; })[0];
+      c.push(chip(st ? st[1] : f.status, 'status'));
+    }
+    if (f.busca) c.push(chip('“' + f.busca + '”', 'busca'));
+    if (f.conta) { const x = Store.conta(f.conta); c.push(chip(x ? x.nome : 'Empresa', 'conta')); }
+    if (f.segmento) c.push(chip(f.segmento, 'segmento'));
+    if (f.etapa) c.push(chip('Etapa ' + f.etapa, 'etapa'));
+    if (f.produto) { const p = Store.produto(f.produto); c.push(chip(p ? p.nome : 'Produto', 'produto')); }
+    if (f.origem) c.push(chip('Origem ' + f.origem, 'origem'));
+    if (f.sdr) c.push(chip('SDR ' + f.sdr, 'sdr'));
+    if (f.semTarefa) c.push(chip('Sem tarefa aberta', 'semTarefa'));
+    if (f.semCompromisso) c.push(chip('Sem próximo passo', 'semCompromisso'));
+    if (f.esfriando) c.push(chip('Esfriando', 'esfriando'));
+    if (f.gateAberto) c.push(chip('Proposta sem gate', 'gateAberto'));
+    if (f.iadMin !== '' || f.iadMax !== '') {
+      c.push(chip('IAD ' + (f.iadMin || 0) + '–' + (f.iadMax || 16), 'iad'));
+    }
+    if (f.valorMin !== '' || f.valorMax !== '') {
+      c.push(chip('Valor ' + (f.valorMin ? U.compacto(f.valorMin) : '0') + '–' +
+        (f.valorMax ? U.compacto(f.valorMax) : '∞'), 'valor'));
+    }
+    if (f.semEvidenciaDias !== '') c.push(chip('Sem evidência há ' + f.semEvidenciaDias + '+ dias', 'semEvidenciaDias'));
+    if (f.previsaoDe || f.previsaoAte) {
+      c.push(chip('Previsão ' + (f.previsaoDe ? U.data(f.previsaoDe) : '…') + ' – ' +
+        (f.previsaoAte ? U.data(f.previsaoAte) : '…'), 'previsao'));
+    }
+    return c.join('');
+  }
+
+  function barraDoPipeline(resumos, total) {
+    const A = global.IADAuth;
+    const f = pipelineFiltro;
+    const pessoas = pessoasDoFiltro();
+    const valor = resumos.reduce(function (s, r) { return s + (r.op.valor || 0); }, 0);
+    const n = quantosNaGaveta();
+
+    /* Vendedor não escolhe responsável: tudo o que ele enxerga já é dele, e o
+       campo daria a impressão de que existe carteira escondida.
+
+       Para o administrador este select É o filtro global — o mesmo que a
+       barra de administrador usa nas outras telas. Se fosse um filtro local
+       à parte, o app teria duas verdades sobre a mesma pergunta: o global
+       recortando o que carrega e o local dizendo "todas as pessoas" sobre um
+       recorte que já exclui gente. */
+    const doResponsavel = !pessoas.length ? ''
+      : A.ehAdmin()
+        ? seletor('Responsável', 'App.filtrarUsuarioAdmin(this.value)',
+            [{ valor: 'todos', rotulo: 'Todos os usuários' }]
+              .concat(pessoas.map(function (u) { return { valor: u.id, rotulo: u.nome || u.email || u.login }; })),
+            A.filtros().usuario)
+        : seletor('Responsável', 'App.pipelineCampo(\'responsavel\', this.value)',
+            [{ valor: 'todos', rotulo: 'Todas as pessoas' }, { valor: 'meu', rotulo: 'Minhas negociações' }]
+              .concat(pessoas.map(function (u) { return { valor: u.id, rotulo: u.nome || u.email || u.login }; })),
+            f.responsavel);
+
+    /* Trocar de empresa não é filtro de tela: muda o que o app inteiro
+       carrega. Fica aqui na barra, e a barra de administrador some nesta
+       tela — um controle por pergunta, sempre. */
+    const doTenant = A.ehAdmin()
+      ? seletor('Empresa (do sistema)', 'App.filtrarTenant(this.value)',
+          [{ valor: 'todas', rotulo: 'Todas as empresas' }]
+            .concat(A.tenants().map(function (t) { return { valor: t.id, rotulo: t.nome }; })),
+          A.filtros().tenant)
+      : '';
+
+    return '<div class="filtros-tarefa filtros-negocio">' +
+      doTenant + doResponsavel +
+      seletor('Status', 'App.pipelineCampo(\'status\', this.value)',
+        STATUS_PIPELINE.map(function (x) { return { valor: x[0], rotulo: x[1] }; }), f.status) +
+      seletor('Ordenar por', 'App.pipelineCampo(\'ordem\', this.value)',
+        ORDENS_PIPELINE.map(function (x) { return { valor: x[0], rotulo: x[1] }; }), f.ordem) +
+      '<label class="campo mini cresce"><span>Buscar</span>' +
+      '<input type="search" value="' + esc(f.busca) + '" placeholder="negócio, empresa, campanha, SDR"' +
+      ' oninput="App.pipelineBusca(this.value)"></label>' +
+      '<div class="campo mini botao-gaveta"><span>&nbsp;</span>' +
+      '<button class="btn ghost" onclick="App.pipelineFiltros()"' +
+      ' data-ajuda-titulo="Mais filtros" data-ajuda="Quem está sem tarefa, quem esfriou, faixa de IAD e de valor, segmento, produto, origem e previsão.">' +
+      '⚙ Filtros' + (n ? ' <span class="pill navy">' + n + '</span>' : ' (0)') + '</button></div>' +
+      '</div>' +
+
+      '<div class="row chips">' +
+      '<span class="chip forte">' + resumos.length +
+      (resumos.length === 1 ? ' negociação' : ' negociações') +
+      (resumos.length !== total ? ' de ' + total : '') + ' · ' + U.moeda(valor) + '</span>' +
+      chipsDoPipeline() + '</div>';
+  }
+
+  /* A gaveta. Abre, responde uma pergunta, fecha. O que está aqui dentro é o
+     que se usa uma vez por semana; o que está na barra é o do dia. */
+  function gavetaDeFiltros() {
+    const f = pipelineFiltro;
+    const est = Store.dados();
+    const contas = est.contas.slice().sort(function (a, b) { return String(a.nome).localeCompare(String(b.nome)); });
+    const segmentos = E.segmentosDisponiveis(est.oportunidades);
+    const produtos = Store.catalogoAtivos('produtos');
+    const sdrs = {};
+    est.oportunidades.forEach(function (o) { if (o.sdr) sdrs[o.sdr] = true; });
+
+    const marca = function (id, rotulo, ajuda) {
+      return '<label class="item-multi"><input type="checkbox"' + (f[id] ? ' checked' : '') +
+        ' onchange="App.pipelineCampo(\'' + id + '\', this.checked)"> <span>' + esc(rotulo) +
+        '<em>' + esc(ajuda) + '</em></span></label>';
+    };
+    const faixa = function (id1, id2, rotulo, tipo, dica) {
+      return '<div class="campo mini"><span>' + esc(rotulo) + '</span><div class="row faixa">' +
+        '<input type="' + tipo + '" value="' + esc(f[id1]) + '" placeholder="' + esc(dica[0]) +
+        '" onchange="App.pipelineCampo(\'' + id1 + '\', this.value)">' +
+        '<span class="tiny muted">até</span>' +
+        '<input type="' + tipo + '" value="' + esc(f[id2]) + '" placeholder="' + esc(dica[1]) +
+        '" onchange="App.pipelineCampo(\'' + id2 + '\', this.value)"></div></div>';
+    };
+
+    return '<form method="dialog"><div class="corpo">' +
+      '<div class="row"><h2 style="margin:0">Filtros</h2><span class="espaco"></span>' +
+      '<button class="btn ghost mini" type="button" onclick="App.pipelineLimpar(\'tudo\')">Limpar tudo</button></div>' +
+
+      '<div class="secao-form"><span>O que está travado</span>' +
+      '<em>As quatro perguntas que a carteira responde sozinha quando alguém pergunta.</em></div>' +
+      '<div class="lista-multi">' +
+      marca('semTarefa', 'Sem tarefa aberta', 'Ninguém combinou o próximo movimento nosso.') +
+      marca('semCompromisso', 'Sem próximo passo combinado', 'Sem data aceita pelo cliente não dá para saber se atrasou.') +
+      marca('esfriando', 'Esfriando', 'Mais de 14 dias sem o cliente fazer nada.') +
+      marca('gateAberto', 'Proposta sem qualificação', 'Já está em Proposta ou depois, e o Proposal Gate não fechou.') +
+      '</div>' +
+
+      '<div class="secao-form"><span>Onde</span></div>' +
+      seletor('Empresa', 'App.pipelineCampo(\'conta\', this.value)',
+        [{ valor: '', rotulo: 'Todas' }].concat(contas.map(function (c) { return { valor: c.id, rotulo: c.nome }; })), f.conta) +
+      seletor('Segmento', 'App.pipelineCampo(\'segmento\', this.value)',
+        [{ valor: '', rotulo: 'Todos' }].concat(segmentos.map(function (x) { return { valor: x, rotulo: x }; })), f.segmento) +
+      seletor('Etapa CRM', 'App.pipelineCampo(\'etapa\', this.value)',
+        [{ valor: '', rotulo: 'Todas' }].concat(P.ETAPAS.map(function (x) { return { valor: x, rotulo: x }; })), f.etapa) +
+      seletor('Produto ou serviço', 'App.pipelineCampo(\'produto\', this.value)',
+        [{ valor: '', rotulo: 'Todos' }].concat(produtos.map(function (p) { return { valor: p.id, rotulo: p.nome }; })), f.produto) +
+
+      '<div class="secao-form"><span>De onde veio</span></div>' +
+      seletor('Origem', 'App.pipelineCampo(\'origem\', this.value)',
+        [{ valor: '', rotulo: 'Todas' }, { valor: 'Linked Helper', rotulo: 'Linked Helper' },
+         { valor: 'Manual', rotulo: 'Cadastro manual' }], f.origem) +
+      seletor('SDR', 'App.pipelineCampo(\'sdr\', this.value)',
+        [{ valor: '', rotulo: 'Todos' }].concat(Object.keys(sdrs).sort().map(function (x) { return { valor: x, rotulo: x }; })), f.sdr) +
+
+      '<div class="secao-form"><span>Faixas</span>' +
+      '<em>Deixe em branco o lado que não importa.</em></div>' +
+      faixa('iadMin', 'iadMax', 'IAD (0 a 16)', 'number', ['0', '16']) +
+      faixa('valorMin', 'valorMax', 'Valor (R$)', 'number', ['0', 'sem teto']) +
+      '<label class="campo mini"><span>Sem evidência do cliente há mais de</span>' +
+      '<input type="number" value="' + esc(f.semEvidenciaDias) + '" placeholder="dias"' +
+      ' onchange="App.pipelineCampo(\'semEvidenciaDias\', this.value)"></label>' +
+      faixa('previsaoDe', 'previsaoAte', 'Fechamento previsto', 'date', ['', '']) +
+
+      '</div><div class="rodape">' +
+      '<button class="btn" value="ok" type="submit">Ver o resultado</button></div></form>';
+  }
+
   function pipeline() {
     const est = Store.dados();
     const filtros = FILTROS.map(function (f) {
@@ -578,20 +947,28 @@
         ajudaDoGrupo(f[1], f[2]) + '</button>';
     }).join(' ');
 
-    if (filtroGrupo === 'fechados') return cabecalhoPipeline(filtros) + listaFechados(est);
-
-    const resumos = est.oportunidades.filter(function (o) { return !o.desfecho; }).map(E.resumo)
-      .filter(function (r) { return filtroGrupo === 'todos' || r.classe.id === filtroGrupo; })
-      .sort(function (a, b) { return b.saude - a.saude; });
-
-    if (!resumos.length) {
-      return cabecalhoPipeline(filtros) + '<div class="vazio">Nenhuma oportunidade neste filtro.</div>';
+    /* O grupo "Encerrados" era um filtro à parte com lista própria. Agora é o
+       Status da barra que decide isso, e a pill continua ali como atalho:
+       clicar nela é o mesmo que escolher "Todas" no status. */
+    if (filtroGrupo === 'fechados') {
+      return cabecalhoPipeline(filtros) + listaFechados(est);
     }
 
-    return cabecalhoPipeline(filtros) +
-      (modoPipeline === 'kanban'
-        ? kanban(resumos)
-        : '<div class="lista">' + resumos.map(cardOportunidade).join('') + '</div>');
+    const resumos = resumosDoPipeline(est);
+    const total = est.oportunidades.filter(function (o) {
+      return pipelineFiltro.status !== 'abertas' || !o.desfecho;
+    }).length;
+
+    const corpo = resumos.length
+      ? (modoPipeline === 'kanban'
+          ? kanban(resumos)
+          : '<div class="lista">' + resumos.map(cardOportunidade).join('') + '</div>')
+      : '<div class="vazio">Nenhuma negociação com estes filtros.' +
+        (quantosNaGaveta() || pipelineFiltro.responsavel !== 'todos' || pipelineFiltro.busca
+          ? ' <button class="link" onclick="App.pipelineLimpar(\'tudo\')">Limpar os filtros</button>'
+          : '') + '</div>';
+
+    return cabecalhoPipeline(filtros) + barraDoPipeline(resumos, total) + corpo;
   }
 
   function cabecalhoPipeline(filtros) {
@@ -2936,6 +3313,7 @@
     acesso, barraAdmin, definirTelaAcesso, definirPrimeiraEmpresa, listaUsuariosNuvem,
     pendenteAcesso: function () { return pendente; },
     tarefasFiltrar, tarefasEstado, tarefasVisiveis, tarefasDaPagina, tarefasSelecionadas, tarefasMarcar,
+    pipelineEstado, pipelineFiltrar, pipelineLimparTudo, gavetaDeFiltros,
     definirFiltro: function (f) { filtroGrupo = f; },
     definirFiltroHistorico: function (f) { filtroHistorico = f; },
     definirFiltroHoje: function (f) { filtroHoje = f; },
