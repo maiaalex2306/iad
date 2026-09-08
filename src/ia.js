@@ -271,7 +271,19 @@
   function classificarSegmentos(empresas) {
     const Store = global.IADStore;
     const P = global.IADPlaybook;
-    const catalogo = Store.nomesDoCatalogo('segmentos');
+    /* O catálogo vai com o mapa que cada segmento carrega — subsegmentos,
+       oportunidades, personas. Mandar só o nome era pedir para o modelo
+       adivinhar o que "Químicos" quer dizer nesta empresa: quem escreveu
+       "defensivos; saneantes; tratamento de água" já respondeu isso, e era
+       essa resposta que estava sendo jogada fora antes da chamada. */
+    const catalogo = Store.catalogoAtivos('segmentos').map(function (s) {
+      return {
+        nome: s.nome,
+        subsegmentos: s.subsegmentos || '',
+        oportunidades: s.oportunidades || '',
+        personas: s.personas || ''
+      };
+    });
 
     /* Devolver um mapa vazio e nada mais foi o que fez toda empresa importada
        sair carimbada como "Outros" sem ninguém saber por quê. Agora sai junto
@@ -298,8 +310,10 @@
       }).join('\n');
       return [
         (i + 1) + '. ' + (e.contato || 'sem nome') + (e.cargo ? ' — ' + e.cargo : ''),
+        (e.headline && e.headline !== e.cargo) ? '   perfil dele: ' + e.headline : '',
         '   empresa: ' + (e.nome || 'sem nome'),
-        e.dominio ? '   domínio: ' + e.dominio : '',
+        (e.dominio || e.site) ? '   site: ' + (e.dominio || e.site) : '',
+        e.cidade ? '   onde fica: ' + e.cidade : '',
         e.setor ? '   setor informado: ' + e.setor : '',
         e.descricao ? '   sobre a empresa: ' + e.descricao : '',
         e.oQueFazLa ? '   o contato faz lá: ' + e.oQueFazLa : '',
@@ -313,7 +327,11 @@
       contexto: {
         segmentos: catalogo,
         papeis: P.PAPEIS,
-        dominios: empresas.map(function (e) { return e.dominio; }).filter(Boolean)
+        /* Alinhado por posição com os leads, e com o site como reserva: o
+           Linked Helper entrega organization_website_1 muito mais vezes do
+           que organization_domain_1, e sem um dos dois o servidor não tinha
+           o que ler para desempatar entre dois segmentos parecidos. */
+        dominios: empresas.map(function (e) { return e.dominio || e.site || ''; })
       }
     });
     const prazo = new Promise(function (resolve) {
@@ -333,12 +351,16 @@
       r.itens.forEach(function (it) {
         const i = Number(it.n) - 1;
         if (!empresas[i]) return;
-        mapa[i] = { segmento: it.segmento || '', papel: it.papel || '', insight: it.insight || '' };
+        mapa[i] = {
+          segmento: it.segmento || '', confianca: it.confianca || '', porque: it.porque || '',
+          maisProximo: it.maisProximo || '', papel: it.papel || '', insight: it.insight || ''
+        };
       });
       const classificadas = Object.keys(mapa).filter(function (k) { return mapa[k].segmento && mapa[k].segmento !== 'Outros'; }).length;
       return { mapa: mapa, motivo: classificadas ? '' :
-        'O assistente respondeu, mas não achou nenhum dos seus ' + catalogo.length +
-        ' segmentos que coubesse nestas empresas. Escolha à mão abaixo.' };
+        'O assistente leu as ' + empresas.length + ' empresas e não achou nenhum dos seus ' +
+        catalogo.length + ' segmentos que coubesse. Abaixo, em cada lead, está o que ele ' +
+        'considerou mais próximo — escolha ou deixe em Outros.' };
     }).catch(function (e) {
       return { mapa: {}, motivo: 'Não consegui falar com o assistente: ' + (e && e.message ? e.message : 'erro desconhecido') };
     });

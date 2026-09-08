@@ -1901,15 +1901,20 @@
         espera.querySelector('h2').textContent = 'Lendo as empresas e as conversas…';
         IA.classificarSegmentos(comEmpresa.map(function (l) {
           return {
-            nome: l.empresa, dominio: l.empresaDominio, setor: l.empresaSetor,
+            nome: l.empresa, dominio: l.empresaDominio, site: l.empresaSite,
+            setor: l.empresaSetor, cidade: l.empresaCidade,
             descricao: l.empresaDescricao, oQueFazLa: l.oQueFazLa,
-            contato: l.nome, cargo: l.cargo, conversa: l.conversa || []
+            contato: l.nome, cargo: l.cargo, headline: l.headline,
+            conversa: l.conversa || []
           };
         })).then(function (r) {
           comEmpresa.forEach(function (l, i) {
             const achado = r.mapa[i];
             if (!achado) return;
             if (achado.segmento) l.segmentoSugerido = achado.segmento;
+            l.confiancaSegmento = achado.confianca || '';
+            l.porqueSegmento = achado.porque || '';
+            l.maisProximoSegmento = achado.maisProximo || '';
             if (achado.papel) l.papelSugerido = achado.papel;
             /* O insight da campanha é o mesmo texto para o lote inteiro; o da
                IA é sobre esta conversa. Quando existem os dois, vale o desta
@@ -1923,6 +1928,20 @@
         espera.close(); espera.remove();
         alert(e.message);
       });
+    },
+
+    /* O botão vive dentro do <dialog> da importação, que não passa pelo render
+       do app: mexer no select ali é mexer no DOM que já está na tela. */
+    usarSegmentoProximo: function (i, botao) {
+      const dlg = botao.closest('dialog');
+      const sel = dlg && dlg.querySelector('[data-segmento="' + i + '"]');
+      if (!sel) return;
+      const alvo = Array.prototype.filter.call(sel.options, function (o) {
+        return o.value === botao.textContent;
+      })[0];
+      if (!alvo) return;
+      sel.value = alvo.value;
+      botao.disabled = true;
     },
 
     revisarImportacao: function (lista, avisoSegmento) {

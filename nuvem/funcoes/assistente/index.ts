@@ -157,6 +157,45 @@ const ITENS_MAXIMOS = 12;
 
 /* ---------- prompts ---------- */
 
+/* O catálogo de segmentos chega de duas formas: só nomes (versões antigas do
+   app) ou com o mapa que a equipe escreveu — subsegmentos, oportunidades,
+   personas. As duas são aceitas; a segunda é a que faz o modelo acertar, e é
+   por isso que ela existe. */
+function segmentosDoTenant(ctx: Record<string, unknown>): Array<Record<string, string>> {
+  const bruto = Array.isArray(ctx.segmentos) ? ctx.segmentos : [];
+  const saida: Array<Record<string, string>> = [];
+  for (const s of bruto.slice(0, LIMITE_LISTA)) {
+    if (typeof s === 'string') {
+      if (s.trim()) saida.push({ nome: s.trim() });
+      continue;
+    }
+    if (!s || typeof s !== 'object') continue;
+    const o = s as Record<string, unknown>;
+    const nome = limparTexto(o.nome, 80);
+    if (!nome) continue;
+    saida.push({
+      nome: nome,
+      subsegmentos: limparTexto(o.subsegmentos, 400),
+      oportunidades: limparTexto(o.oportunidades, 400),
+      personas: limparTexto(o.personas, 300)
+    });
+  }
+  return saida;
+}
+
+function descreverSegmentos(ctx: Record<string, unknown>): string {
+  const lista = segmentosDoTenant(ctx);
+  if (!lista.length) return '- (nenhum segmento cadastrado)';
+  return lista.map((s) => {
+    const detalhe = [
+      s.subsegmentos ? 'inclui: ' + s.subsegmentos : '',
+      s.oportunidades ? 'o que se vende ali: ' + s.oportunidades : '',
+      s.personas ? 'com quem se fala: ' + s.personas : ''
+    ].filter(Boolean).join(' | ');
+    return '- ' + s.nome + (detalhe ? '\n    ' + detalhe : '');
+  }).join('\n');
+}
+
 function listaDimensoes(): string {
   return DIMENSOES.map((d) => `- ${d[0]} (${d[1]}): ${d[2]}`).join('\n');
 }
@@ -390,26 +429,37 @@ Regras desta tarefa:
 
   if (tipo === 'segmentos') {
     const papeis = (Array.isArray(ctx.papeis) ? ctx.papeis.map(String) : []);
-    return `Você prepara, para uma equipe de vendas B2B brasileira, os leads que acabaram de chegar do LinkedIn. Para cada um: classifica a empresa, diz que papel a pessoa tende a ter na compra, e escreve o reenquadramento comercial.
+    const nomes = segmentosDoTenant(ctx);
+    return `Você prepara, para uma equipe de vendas B2B brasileira, os leads que acabaram de chegar do LinkedIn. Para cada um: classifica a empresa no segmento mais próximo, diz que papel a pessoa tende a ter na compra, e escreve o reenquadramento comercial.
 
-Segmentos disponíveis, e SÓ estes:
-${(Array.isArray(ctx.segmentos) ? ctx.segmentos.map(String) : []).map((x) => '- ' + x).join('\n')}
-- Outros
+SEGMENTOS DESTA EQUIPE — o que cada um cobre:
+${descreverSegmentos(ctx)}
+
+Como escolher o segmento — faça nesta ordem, para cada lead:
+1. Leia o que a empresa faz (descrição, site, cargo da pessoa, conversa).
+2. Percorra os segmentos acima UM A UM e pergunte: o que esta empresa faz aparece nos subsegmentos ou nas oportunidades deste segmento?
+3. Se aparecer em mais de um, fique com aquele onde a empresa é CLIENTE do que a lista descreve, não fornecedor dela.
+4. Se nenhum bater exatamente, pegue o MAIS PRÓXIMO por cadeia produtiva, por processo industrial ou pelo tipo de cliente que atende. Uma fábrica de embalagem plástica para alimento está mais perto de "Alimentos" do que de "Outros". Um laticínio pequeno é "Alimentos" mesmo que a lista só cite frigoríficos.
+5. Só use "Outros" quando a empresa não tiver relação nenhuma com nenhum dos segmentos — e mesmo assim diga em "maisProximo" qual chegou mais perto.
+
+"Outros" é o último recurso, não o padrão. Vendedor com a carteira inteira em "Outros" não tem painel por segmento; segmento aproximado e conferido por ele vale mais do que uma pilha de "Outros". Por isso você também devolve "confianca": ela é o que avisa o vendedor onde olhar.
 
 Papéis na compra, e SÓ estes:
 ${papeis.map((x) => '- ' + x).join('\n')}
 
 Regras absolutas:
-- Responda SOMENTE com um objeto JSON: {"itens":[{"n":1,"segmento":"...","papel":"...","insight":"..."},...]}
-- "segmento" e "papel" têm de ser copiados EXATAMENTE de uma das linhas acima, incluindo acentos e maiúsculas.
-- Se nenhum segmento couber com clareza, use "Outros". É melhor "Outros" do que um segmento errado: o gráfico por segmento é lido pelo dono da empresa.
-- "papel" sai do CARGO da pessoa, não do que ela escreveu. Quem não dá para dizer pelo cargo fica em "Usuário", que é o padrão neutro. Não promova ninguém a "Decisor econômico" por gentileza.
+- Responda SOMENTE com um objeto JSON: {"itens":[{"n":1,"segmento":"...","confianca":"alta|media|baixa","porque":"...","maisProximo":"...","papel":"...","insight":"..."},...]}
+- "segmento" tem de ser copiado EXATAMENTE de uma das linhas de SEGMENTOS acima, ou ser "Outros". Nada fora disso — nem um nome parecido, nem um subsegmento.
+- "confianca": "alta" quando o que a empresa faz está escrito na lista; "media" quando você chegou por proximidade; "baixa" quando é palpite.
+- "porque": no máximo 12 palavras, dizendo o que na empresa levou a esse segmento.
+- "maisProximo": preencha SEMPRE que "segmento" for "Outros", com o nome do segmento que chegou mais perto; nos outros casos devolva "".
+- "papel" tem de ser copiado EXATAMENTE de uma das linhas de papéis. Ele sai do CARGO da pessoa, não do que ela escreveu. Quem não dá para dizer pelo cargo fica em "Usuário", que é o padrão neutro. Não promova ninguém a "Decisor econômico" por gentileza.
 - "insight" é o reenquadramento: a verdade sobre o negócio DELE que ele não enxerga sozinho, tirada do que a empresa faz e do que a pessoa respondeu. Uma ou duas frases, na linguagem do setor dele, sem citar a nossa solução e sem elogio. Se a conversa e a descrição não derem base para nada além de genérico, devolva "" — insight genérico é pior que nenhum, porque o vendedor o repete achando que tem um.
 - O insight é hipótese NOSSA, não é o cliente falando. Nunca escreva que o cliente disse, admitiu ou confirmou o que quer que seja.
 - Um item de saída para cada lead da entrada, com o mesmo "n".
 - Nada de texto fora do JSON.
 
-A entrada traz, para cada lead: nome e cargo da pessoa, nome da empresa, domínio, o que a pessoa faz lá, a descrição da empresa quando disponível, o texto do site quando disponível, e a troca de mensagens entre a SDR e a pessoa.`;
+A entrada traz, para cada lead: nome, cargo e perfil da pessoa, nome da empresa, site, cidade, o que a pessoa faz lá, a descrição da empresa quando disponível, o texto do site quando disponível, e a troca de mensagens entre a SDR e a pessoa.${nomes.length ? '' : '\n\nAtenção: a lista de segmentos veio vazia. Devolva "Outros" para todos.'}`;
   }
 
   if (tipo === 'insight') {
@@ -895,10 +945,27 @@ function validarNegocio(bruto: unknown, ctx: Record<string, unknown>, hoje: stri
 /* Um lote de empresas classificadas. Segmento fora da lista do tenant vira
    "Outros" — nunca um nome novo, que quebraria o agrupamento do painel. */
 function validarSegmentos(bruto: Record<string, unknown>, ctx: Record<string, unknown>) {
-  const validos = (Array.isArray(ctx.segmentos) ? ctx.segmentos.map(String) : []).concat(['Outros']);
+  const nomes = segmentosDoTenant(ctx).map((s) => s.nome);
+  const validos = nomes.concat(['Outros']);
   const papeis = (Array.isArray(ctx.papeis) ? ctx.papeis.map(String) : []);
+  const confiancas = ['alta', 'media', 'baixa'];
   const brutos = Array.isArray(bruto.itens) ? bruto.itens : [];
-  const itens: Array<{ n: number; segmento: string; papel: string; insight: string }> = [];
+  const itens: Array<Record<string, string | number>> = [];
+
+  const casar = (valor: unknown, lista: string[]): string => {
+    const t = limparTexto(valor, 80);
+    if (!t) return '';
+    const exato = lista.find((v) => v.toLowerCase() === t.toLowerCase());
+    if (exato) return exato;
+    /* "Alimentos e Bebidas" quando a lista diz "Alimentos": o modelo acertou
+       o segmento e errou a cópia. Descartar isso mandava para "Outros" uma
+       classificação correta — que é exatamente o que não se quer aqui. */
+    const contido = lista.find((v) => {
+      const a = v.toLowerCase(), b = t.toLowerCase();
+      return a.length >= 4 && b.length >= 4 && (b.indexOf(a) !== -1 || a.indexOf(b) !== -1);
+    });
+    return contido || '';
+  };
 
   for (const item of brutos.slice(0, 100)) {
     if (!item || typeof item !== 'object') continue;
@@ -906,18 +973,23 @@ function validarSegmentos(bruto: Record<string, unknown>, ctx: Record<string, un
     const n = Number(o.n);
     if (!isFinite(n) || n < 1) continue;
 
-    const bruta = limparTexto(o.segmento, 80);
-    const achado = validos.find((v) => v.toLowerCase() === bruta.toLowerCase());
+    const segmento = casar(o.segmento, validos) || 'Outros';
+    const maisProximo = casar(o.maisProximo, nomes);
+    const confianca = confiancas.find((c) => c === limparTexto(o.confianca, 10).toLowerCase()) || '';
 
     /* Papel fora da lista do sistema não entra: viraria um papel novo no
        grupo comprador, e a cobertura de papéis críticos é contada por
        igualdade exata. Sem correspondência, o padrão neutro. */
-    const papelBruto = limparTexto(o.papel, 60);
-    const papel = papeis.find((v) => v.toLowerCase() === papelBruto.toLowerCase()) || '';
+    const papel = papeis.find((v) => v.toLowerCase() === limparTexto(o.papel, 60).toLowerCase()) || '';
 
     itens.push({
       n: n,
-      segmento: achado || 'Outros',
+      segmento: segmento,
+      confianca: confianca,
+      porque: limparTexto(o.porque, 120),
+      /* Só faz sentido junto de "Outros": é o que o vendedor aceita num
+         clique em vez de abrir a lista inteira e comparar de novo. */
+      maisProximo: segmento === 'Outros' ? maisProximo : '',
       papel: papel,
       /* O insight é rascunho nosso, e curto de propósito: o que não cabe em
          três linhas o vendedor não fala numa ligação. */
@@ -1384,10 +1456,17 @@ Deno.serve(async (req: Request) => {
        O site entra para a empresa pequena, que ninguém conhece — e só para
        algumas, porque cada busca custa tempo de resposta. */
     if (tipo === 'segmentos') {
-      const dominios = (Array.isArray(ctx.dominios) ? ctx.dominios : []).slice(0, 6);
-      const sites = await Promise.all(dominios.map(async (d) => {
+      /* Alinhado por posição com os leads, e dito assim ao modelo: antes o
+         texto do site entrava marcado só pelo domínio, e ele tinha de casar
+         domínio com empresa sozinho — trabalho que dá errado justamente no
+         lote grande, que é quando isto importa. Doze porque as buscas correm
+         em paralelo com 4s de teto cada; o que passar disso o modelo resolve
+         com a descrição do LinkedIn, que já vem na entrada. */
+      const dominios = (Array.isArray(ctx.dominios) ? ctx.dominios : []).slice(0, 12);
+      const sites = await Promise.all(dominios.map(async (d, i) => {
+        if (!d) return '';
         const t = await textoDoSite(String(d));
-        return t ? `\n[site de ${d}] ${t}` : '';
+        return t ? `\n[site do lead ${i + 1} — ${d}] ${t}` : '';
       }));
       entrada = texto + sites.join('');
     }

@@ -869,6 +869,16 @@ dialog.revisao-ia { width: min(680px, 96vw); }
 
 .achado .escolhas { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
 .achado .campo.mini { flex: 1 1 190px; margin-bottom: 0; }
+
+/* O "mais próximo" é um botão dentro do rótulo do campo: aceitar a sugestão
+   num clique, em vez de abrir a lista e comparar de novo. */
+.achado .campo.mini .pill.mini {
+  padding: 1px 8px; font-size: .68rem; cursor: pointer; font-weight: 700;
+  color: var(--navy); border-color: var(--navy);
+}
+.achado .campo.mini .pill.mini:disabled { opacity: .5; cursor: default; }
+.achado .campo.mini .origem { font-style: normal; }
+
 .achado .campo.mini select { padding: 7px 9px; font-size: .82rem; }
 .achado:has(input[data-ev]:not(:checked)),
 .achado:has(input[data-ct]:not(:checked)) { opacity: .5; border-left-color: var(--line); }

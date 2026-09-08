@@ -2153,6 +2153,27 @@
   /* "Usuário" é o padrão neutro: o cargo diz que a pessoa usa, nunca que ela
      decide. Promover por gentileza mataria o alerta de papel crítico ausente,
      que é justamente o que faz o vendedor procurar quem assina. */
+  /* Confiança é o que diz ONDE olhar. Sem ela o vendedor confere os vinte ou
+     nenhum; com ela, confere os três que a IA marcou como palpite. */
+  function rotuloDaSugestao(l) {
+    if (!l.segmentoSugerido) return '';
+    if (l.confiancaSegmento === 'baixa') return ' \u00b7 palpite';
+    if (l.confiancaSegmento === 'media') return ' \u00b7 por proximidade';
+    return ' \u00b7 sugerido';
+  }
+
+  /* Quando nada coube, o mais próximo vira um botão: "Outros" resolvido num
+     clique vale mais que "Outros" com um conselho embaixo. */
+  function motivoDoSegmento(l, i) {
+    const partes = [];
+    if (l.porqueSegmento) partes.push(esc(l.porqueSegmento));
+    if (l.maisProximoSegmento) {
+      partes.push('mais pr\u00f3ximo: <button type="button" class="pill mini" ' +
+        'onclick="App.usarSegmentoProximo(' + i + ',this)">' + esc(l.maisProximoSegmento) + '</button>');
+    }
+    return partes.length ? '<span class="origem">' + partes.join(' \u00b7 ') + '</span>' : '';
+  }
+
   function opcoesPapel(escolhido) {
     const alvo = (escolhido && P.PAPEIS.indexOf(escolhido) !== -1) ? escolhido : 'Usuário';
     return P.PAPEIS.map(function (n) {
@@ -2196,8 +2217,9 @@
         '<span class="pill' + (duvida ? '' : ' navy') + '">' + esc(l.empresa || 'sem empresa') + '</span>' +
         '</label>' +
         '<div class="row escolhas">' +
-          '<label class="campo mini"><span>Segmento' + (l.segmentoSugerido ? ' \u00b7 sugerido' : '') + '</span>' +
-          '<select data-segmento="' + i + '">' + opcoesSegmento(l.segmentoSugerido) + '</select></label>' +
+          '<label class="campo mini"><span>Segmento' + rotuloDaSugestao(l) + '</span>' +
+          '<select data-segmento="' + i + '">' + opcoesSegmento(l.segmentoSugerido) + '</select>' +
+          motivoDoSegmento(l, i) + '</label>' +
           /* O papel é o que a cobertura do grupo comprador conta. Sugerido pelo
              cargo, conferido aqui: o cargo diz muito e não diz tudo. */
           '<label class="campo mini"><span>Papel na compra' + (l.papelSugerido ? ' \u00b7 sugerido' : '') + '</span>' +
