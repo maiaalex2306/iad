@@ -22,6 +22,11 @@
       ajuda: 'A reunião semanal numa tela: o que mudou na decisão de cada cliente nos últimos 7 dias.' },
     { hash: '#/cadastros', ico: '📇', nome: 'Cadastros', render: V.cadastros,
       ajuda: 'Empresas, contatos, oportunidades, segmentos, tipos de tarefa, produtos e usuários.' },
+    /* Saiu da engrenagem do topo e entrou no menu: era a única tela do app
+       escondida atrás de um ícone, e ninguém procura nuvem, backup e
+       importação num símbolo. */
+    { hash: '#/dados', ico: '⚙️', nome: 'Dados', render: V.dados,
+      ajuda: 'Nuvem, Linked Helper, backup, importação de planilha, instalação no celular e demonstração.' },
     { hash: '#/contas', ico: '🏢', nome: 'Contas', render: V.contas, foraDasAbas: true },
     /* Deixou de ser tela escondida: é a teoria que o vendedor precisa antes de
        marcar a próxima reunião, e teoria fora do menu é teoria que ninguém lê. */
@@ -72,14 +77,14 @@
       const id = hash.slice(5);
       conteudo.innerHTML = V.cockpit(id);
       pintarArquivos(id);
-    } else if (hash === '#/dados') {
-      conteudo.innerHTML = V.dados();
-      pintarUso();
-      pintarLeads();
     } else {
       const rota = ROTAS.find(function (r) { return r.hash === hash; }) || ROTAS[0];
       conteudo.innerHTML = rota.render();
-      pintarUsuariosNuvem();
+      /* Duas telas se completam depois de desenhadas: Dados mede o espaço
+         usado e busca os leads na ponte; Cadastros lista quem está no
+         servidor. Nenhuma das duas pode segurar o render. */
+      if (rota.hash === '#/dados') { pintarUso(); pintarLeads(); }
+      else pintarUsuariosNuvem();
     }
 
     document.querySelectorAll('nav.tabs a').forEach(function (a) {
