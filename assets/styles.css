@@ -1086,3 +1086,40 @@ button.quem .nome, button.quem .onde { padding-right: 8px; }
    encostava na barra e aparecia como um risco laranja de dez pixels. */
 .faixa-aviso { margin: 0 0 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; line-height: 1.5; }
 .faixa-aviso .btn { flex: 0 0 auto; }
+
+
+/* ---------- Aprendizado da carteira: a evolução semanal ----------
+   A seta é o elemento que carrega a tela, e ela não pode significar "subiu":
+   tem de significar "melhorou". Ciclo de vendas caindo é seta verde para
+   baixo, e é por isso que a cor vem do julgamento e o glifo vem do sentido. */
+.tend { font-size: .8em; margin-left: 4px; }
+.tend.subiu { color: var(--ok); }
+.tend.caiu { color: var(--risk); }
+.tend.igual, .tend.muted { color: var(--muted); }
+
+.tabela-evolucao td:first-child { min-width: 250px; }
+.tabela-evolucao td:first-child .tiny.muted { display: block; font-weight: 400; }
+.tabela-evolucao th, .tabela-evolucao td { font-variant-numeric: tabular-nums; }
+/* A semana em curso está incompleta por definição. Marcá-la evita a leitura
+   errada de sempre: "caiu pela metade" quando é quarta-feira. */
+.semana-corrente { background: rgba(31,74,140,.05); }
+.tabela-evolucao th.semana-corrente { border-bottom-color: var(--navy); }
+
+tr.linha-seca td { background: rgba(196,58,58,.05); }
+td.subiu { color: var(--ok); font-weight: 600; }
+
+.duas-colunas-plano { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 12px; }
+@media (max-width: 640px) { .duas-colunas-plano { grid-template-columns: 1fr; gap: 10px; } }
+.coluna-plano h4 { margin: 0 0 4px; font-size: .82rem; text-transform: uppercase; letter-spacing: .04em; }
+.coluna-plano h4.subiu { color: var(--ok); }
+.coluna-plano h4.caiu { color: var(--risk); }
+.coluna-plano ul { margin: 0; padding-left: 1.1em; }
+.coluna-plano li { margin-bottom: 4px; }
+
+.leitura-plano {
+  margin: 12px 0 0; padding: 10px 14px; border-left: 3px solid var(--navy);
+  background: var(--surface-2, rgba(31,74,140,.05)); font-size: .96rem;
+}
+.passos-plano { margin: 0; padding-left: 1.3em; }
+.passos-plano li { margin-bottom: 10px; }
+.passos-plano li .tiny.muted { display: block; margin-top: 2px; }

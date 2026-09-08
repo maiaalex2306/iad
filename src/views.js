@@ -514,6 +514,7 @@
       '</div>' +
 
       riscosCriticos(resumos) +
+      evolucaoDaCarteira() +
       aprendizado();
   }
 
@@ -543,11 +544,163 @@
       '<div class="lista">' + criticos + '</div>';
   }
 
+  /* ---------------- Plano de desenvolvimento constante ----------------
+
+     O aprendizado antigo respondia uma pergunta só: o que separou os negócios
+     ganhos dos perdidos. Boa pergunta, e lenta — precisa de negócio fechado, e
+     quem está começando não tem nenhum. Enquanto isso a carteira ensina toda
+     semana, e ninguém estava lendo.
+
+     Este bloco lê. Semana a semana, sempre contra a semana anterior, porque
+     um número sozinho não ensina: "ticket médio de R$ 42 mil" só quer dizer
+     alguma coisa ao lado dos R$ 51 mil da semana passada. */
+
+  let semanasDoAprendizado = 8;
+
+  /* O glifo diz para onde o número foi; a cor diz se isso é bom. Separar os
+     dois é obrigatório aqui: ciclo de vendas caindo é uma seta para BAIXO em
+     verde, e uma seta verde para cima nesse caso seria mentira em cima de
+     mentira — a pessoa leria "o ciclo aumentou, que bom". */
+  function setaDe(v) {
+    if (v.direcao === 'igual') return '<span class="tend igual">=</span>';
+    if (v.direcao === 'sem-base') return '<span class="tend muted">—</span>';
+    const glifo = v.delta > 0 ? '▲' : '▼';
+    const cor = v.direcao === 'melhorou' ? 'subiu' : 'caiu';
+    const titulo = (v.delta > 0 ? 'subiu' : 'caiu') +
+      (v.direcao === 'melhorou' ? ', e para este indicador isso é melhora' : ', e para este indicador isso é piora');
+    return '<span class="tend ' + cor + '" title="' + titulo + '">' + glifo + '</span>';
+  }
+
+  function valorDoIndicador(ind, v) {
+    if (v == null) return '—';
+    if (ind.unidade === '%') return Math.round(v * 100) + '%';
+    if (ind.unidade === 'R$') return U.compacto(v);
+    if (ind.unidade === 'd') return U.numero(v, 0) + 'd';
+    return U.numero(v, ind.id === 'pontos' ? 0 : 0);
+  }
+
+  /* A faixa de destaque: os três que o usuário pediu pelo nome, mais o número
+     que fecha o ciclo (pontos de decisão). Cada um com o valor da última semana
+     fechada e a comparação com a anterior. */
+  function destaquesDoAprendizado(ev) {
+    const escolhidos = ['pontos', 'ticket', 'ciclo', 'parado'];
+    return '<div class="grid k4">' + escolhidos.map(function (id) {
+      const ind = ev.indicadores.filter(function (i) { return i.id === id; })[0];
+      if (!ind) return '';
+      const v = ind.variacao;
+      const antes = ind.antes == null ? '' :
+        'semana anterior: ' + valorDoIndicador(ind, ind.antes);
+      return '<div class="kpi"><div class="rot">' + esc(ind.nome) + '</div>' +
+        '<div class="val">' + valorDoIndicador(ind, ind.agora) + ' ' + setaDe(v) + '</div>' +
+        '<div class="obs">' + (antes || 'sem base de comparação ainda') + '</div></div>';
+    }).join('') + '</div>';
+  }
+
+  function tabelaDaEvolucao(ev) {
+    const cabecalho = ev.semanas.map(function (sem, i) {
+      const corrente = i === ev.semanas.length - 1;
+      return '<th class="right' + (corrente ? ' semana-corrente' : '') + '">' + esc(sem.rotulo) +
+        (corrente ? '<span class="tiny muted"> em curso</span>' : '') + '</th>';
+    }).join('');
+
+    const linhas = ev.indicadores.map(function (ind) {
+      const celulas = ind.serie.map(function (v, i) {
+        const corrente = i === ev.semanas.length - 1;
+        return '<td class="right' + (corrente ? ' semana-corrente' : '') + '">' +
+          valorDoIndicador(ind, v) + '</td>';
+      }).join('');
+      return '<tr><td><strong>' + esc(ind.nome) + '</strong>' +
+        '<span class="tiny muted">' + esc(ind.oQue) + '</span></td>' +
+        celulas + '<td class="right">' + setaDe(ind.variacao) + '</td></tr>';
+    }).join('');
+
+    return '<div class="tabela-rolagem"><table class="tabela-evolucao"><thead><tr>' +
+      '<th>Indicador</th>' + cabecalho + '<th class="right">Tend.</th>' +
+      '</tr></thead><tbody>' + linhas + '</tbody></table></div>' +
+      '<p class="tiny muted" style="margin-top:8px">A seta compara as duas últimas semanas <strong>fechadas</strong>. ' +
+      'A semana em curso fica de fora da comparação — meia semana sempre parece queda.</p>';
+  }
+
+  /* A tabela que responde a pergunta central do sistema: executar move decisão?
+     E qual execução move? Trinta e-mails que renderam zero ponto e duas visitas
+     que renderam seis é a informação que muda a semana seguinte. */
+  function rendimentoDasTarefas(ev) {
+    const r = ev.rendimento;
+    if (!r.linhas.length) {
+      return '<div class="card" style="margin-top:12px"><h3>O que cada tipo de tarefa rendeu</h3>' +
+        '<div class="vazio small">Nenhuma tarefa concluída nas últimas ' + semanasDoAprendizado +
+        ' semanas. Esta tabela é o elo entre execução e decisão: sem tarefa fechada, não há o que ligar.</div></div>';
+    }
+    const linhas = r.linhas.map(function (l) {
+      const seco = l.pontos === 0 && l.feitas >= 3;
+      return '<tr' + (seco ? ' class="linha-seca"' : '') + '><td><strong>' + esc(l.tipo) + '</strong></td>' +
+        '<td class="right">' + l.feitas + '</td>' +
+        '<td class="right">' + (l.feitas ? Math.round((l.comRelato / l.feitas) * 100) : 0) + '%</td>' +
+        '<td class="right' + (l.pontos ? ' subiu' : '') + '">' + (l.pontos ? '+' + l.pontos : '0') + '</td>' +
+        '<td class="right">' + U.numero(l.porTarefa, 2) + '</td></tr>';
+    }).join('');
+
+    return '<div class="card" style="margin-top:12px"><h3>O que cada tipo de tarefa rendeu</h3>' +
+      '<p class="tiny muted">Últimas ' + semanasDoAprendizado + ' semanas. Pontos de decisão que subiram ' +
+      'nos negócios daquelas tarefas — é o que separa execução que move de execução que só ocupa a agenda.</p>' +
+      '<div class="tabela-rolagem"><table><thead><tr><th>Tipo</th><th class="right">Feitas</th>' +
+      '<th class="right">Com relato</th><th class="right">Pontos</th><th class="right">Por tarefa</th>' +
+      '</tr></thead><tbody>' + linhas + '</tbody></table></div>' +
+      (r.estimado
+        ? '<p class="tiny muted" style="margin-top:8px">Parte da atribuição é estimada: tarefas concluídas antes ' +
+          'desta versão não carimbavam qual delas moveu a nota, então elas casam pela data. As novas são exatas.</p>'
+        : '') +
+      '<p class="tiny muted" style="margin-top:6px">Tarefa fechada sem relato nunca move decisão — por definição, ' +
+      'não porque o app puna: sem contar o que o cliente fez, não há o que reler.</p>' +
+      '</div>';
+  }
+
+  function blocoDoPlano() {
+    return '<div class="card" style="margin-top:12px"><div class="row">' +
+      '<h3 style="margin:0">Plano de desenvolvimento</h3><span class="espaco"></span>' +
+      (global.IADIA && global.IADIA.disponivel()
+        ? '<button class="btn alt mini" onclick="App.planoDeDesenvolvimento()"' +
+          ' data-ajuda-titulo="Plano de desenvolvimento" data-ajuda="A IA lê a série das últimas semanas e o' +
+          ' rendimento por tipo de tarefa, e escreve o que está melhorando, o que está piorando e o que mudar' +
+          ' na semana que vem.">Gerar o plano da semana</button>'
+        : '<span class="tiny muted">assistente fora do ar</span>') +
+      '</div>' +
+      '<p class="tiny muted">A IA lê os mesmos números da tabela acima — nada além deles — e diz o que ' +
+      'está melhorando, o que está piorando e o que mudar na semana que vem.</p>' +
+      '<div id="plano-desenvolvimento"></div></div>';
+  }
+
+  function evolucaoDaCarteira() {
+    const est = Store.dados();
+    const ops = est.oportunidades.filter(function (o) { return true; });
+    const ev = E.evolucao(ops, est.tarefas || [], semanasDoAprendizado);
+
+    const seletor = [4, 8, 12].map(function (n) {
+      return '<button class="pill' + (n === semanasDoAprendizado ? ' orange' : '') +
+        '" onclick="App.semanasDoAprendizado(' + n + ')">' + n + ' semanas</button>';
+    }).join('');
+
+    return '<div class="sec-titulo"><h2>Aprendizado da carteira</h2>' +
+      '<span class="espaco"></span><div class="row">' + seletor + '</div></div>' +
+      (ev.temBase
+        ? ''
+        : '<div class="aviso">Ainda não há duas semanas fechadas para comparar. Os números abaixo já valem; ' +
+          'as setas começam a valer na semana que vem.</div>') +
+      destaquesDoAprendizado(ev) +
+      '<div class="card" style="margin-top:12px"><h3>Semana a semana</h3>' +
+      '<p class="tiny muted">Só entra aqui o que aconteceu dentro da semana e ficou datado — por isso a série ' +
+      'é exata também para trás. Valor de negócio não entra: o campo é sobrescrito quando muda, e devolver o ' +
+      'valor de hoje com data de julho seria pior do que não responder.</p>' +
+      tabelaDaEvolucao(ev) + '</div>' +
+      rendimentoDasTarefas(ev) +
+      blocoDoPlano();
+  }
+
   /* O que a carteira fechada já ensinou. Com pouca amostra, diz que é pouca amostra. */
   function aprendizado() {
     const a = E.aprendizado(Store.dados().oportunidades);
     if (!a.total) {
-      return '<div class="sec-titulo"><h2>Aprendizado da carteira</h2></div>' +
+      return '<div class="sec-titulo"><h2>Ganhos contra perdas</h2></div>' +
         '<div class="card"><div class="vazio small">Nenhum negócio encerrado ainda. Ao fechar uma oportunidade — ganha ou perdida — o app congela a foto das oito decisões daquele dia. É a comparação entre essas fotos que valida o modelo.</div></div>';
     }
 
@@ -562,7 +715,7 @@
 
     const top = a.porDimensao.filter(function (d) { return d.diferenca != null && d.diferenca > 0; })[0];
 
-    return '<div class="sec-titulo"><h2>Aprendizado da carteira</h2><span class="tiny muted">' + a.total + ' negócio(s) encerrado(s)</span></div>' +
+    return '<div class="sec-titulo"><h2>Ganhos contra perdas</h2><span class="tiny muted">' + a.total + ' negócio(s) encerrado(s)</span></div>' +
       '<div class="grid k4">' +
         '<div class="kpi"><div class="rot">Taxa de ganho</div><div class="val">' + pct(a.taxaGanho) + '</div><div class="obs">' + a.ganhos + ' ganhos</div></div>' +
         '<div class="kpi"><div class="rot">Perdas por inação</div><div class="val">' + pct(a.taxaInacao) + '</div><div class="obs">' + a.perdidosInacao + ' clientes não decidiram</div></div>' +
@@ -3529,6 +3682,7 @@
     pipelineFiltro = Object.assign({}, VAZIO_PIPELINE);
     tarefasFiltro = Object.assign({}, VAZIO_TAREFAS);
     tarefasMarcadas = {};
+    semanasDoAprendizado = 8;
   }
 
   function conferirSessao(usuarioId) {
@@ -3545,6 +3699,8 @@
     pendenteAcesso: function () { return pendente; },
     tarefasFiltrar, tarefasEstado, tarefasVisiveis, tarefasDaPagina, tarefasSelecionadas, tarefasMarcar,
     pipelineEstado, pipelineFiltrar, pipelineLimparTudo, gavetaDeFiltros, conferirSessao, zerarFiltros,
+    definirSemanasDoAprendizado: function (n) { semanasDoAprendizado = n; },
+    semanasDoAprendizado: function () { return semanasDoAprendizado; },
     oportunidadesDoLHSemTarefa,
     definirFiltro: function (f) { filtroGrupo = f; },
     definirFiltroHistorico: function (f) { filtroHistorico = f; },

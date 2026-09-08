@@ -486,6 +486,74 @@
     }).catch(function () { return null; });
   }
 
+  /* O retrato da CARTEIRA — não de um negócio. É o que vai para a IA no plano
+     de desenvolvimento: a série das semanas e o rendimento por tipo de tarefa,
+     em texto, exatamente os números que estão na tela. Nada além deles: se a
+     IA receber mais do que o usuário vê, o plano cita coisas que ele não tem
+     como conferir. */
+  function retratoDaCarteira(ev) {
+    const linhas = [];
+    linhas.push('SÉRIE SEMANAL (da mais antiga para a mais nova; a última está em curso):');
+    linhas.push('semanas: ' + ev.semanas.map(function (s) { return s.rotulo; }).join(' | '));
+    ev.indicadores.forEach(function (i) {
+      const valores = i.serie.map(function (v) {
+        if (v == null) return '—';
+        if (i.unidade === '%') return Math.round(v * 100) + '%';
+        if (i.unidade === 'R$') return 'R$ ' + Math.round(v);
+        if (i.unidade === 'd') return Math.round(v) + 'd';
+        return String(Math.round(v * 100) / 100);
+      });
+      linhas.push('- ' + i.nome + ' (' + (i.maiorEMelhor ? 'maior é melhor' : 'menor é melhor') + '): ' +
+        valores.join(' | ') + ' → ' + i.variacao.direcao);
+    });
+
+    linhas.push('');
+    linhas.push('RENDIMENTO POR TIPO DE TAREFA no período (tarefas concluídas → pontos de decisão que subiram):');
+    if (!ev.rendimento.linhas.length) {
+      linhas.push('- nenhuma tarefa concluída no período.');
+    } else {
+      ev.rendimento.linhas.forEach(function (l) {
+        linhas.push('- ' + l.tipo + ': ' + l.feitas + ' feitas, ' +
+          (l.feitas ? Math.round((l.comRelato / l.feitas) * 100) : 0) + '% com relato, ' +
+          '+' + l.pontos + ' pontos (' + (Math.round(l.porTarefa * 100) / 100) + ' por tarefa)');
+      });
+    }
+    return linhas.join('\n');
+  }
+
+  /* O plano de desenvolvimento da semana. Diferente de tudo o mais aqui: os
+     outros pedidos olham um negócio, este olha o hábito de quem vende. */
+  function planoDeDesenvolvimento(ev) {
+    if (!disponivel()) {
+      return Promise.resolve({ erro: 'O assistente não está no ar. Veja Configuração → Assistente de IA.' });
+    }
+    const pedido = Nuvem.chamarFuncao('assistente', {
+      tipo: 'desenvolvimento',
+      texto: retratoDaCarteira(ev),
+      contexto: { hoje: global.IADStore.hoje(), semanas: ev.semanas.length }
+    });
+    const prazo = new Promise(function (resolve) {
+      setTimeout(function () { resolve({ estourou: true }); }, PRAZO_REUNIAO);
+    });
+
+    return Promise.race([pedido, prazo]).then(function (resp) {
+      if (resp && resp.estourou) return { erro: 'O assistente demorou demais e eu parei de esperar.' };
+      if (!resp) return { erro: 'O servidor respondeu vazio.' };
+      if (resp.erro) return { erro: resp.erro };
+      if (!Array.isArray(resp.mudancas)) {
+        return { erro: 'O assistente respondeu, mas não no formato esperado. Voltou: ' + amostraDaResposta(resp) };
+      }
+      return {
+        leitura: String(resp.leitura || ''),
+        indoBem: (resp.indoBem || []).slice(0, 4).map(String),
+        indoMal: (resp.indoMal || []).slice(0, 4).map(String),
+        mudancas: resp.mudancas.slice(0, 3).filter(function (m) { return m && m.acao; })
+      };
+    }).catch(function (e) {
+      return { erro: (e && e.message) || 'O servidor recusou o plano.' };
+    });
+  }
+
   /* As oito notas propostas a partir do que já está registrado, mais o texto
      de uma reunião quando o vendedor colar uma.
 
@@ -630,6 +698,8 @@
     classificarSegmentos: classificarSegmentos,
     planoDaOportunidade: planoDaOportunidade,
     sugerirNotas: sugerirNotas,
+    planoDeDesenvolvimento: planoDeDesenvolvimento,
+    retratoDaCarteira: retratoDaCarteira,
     retratoDaOportunidade: retratoDaOportunidade,
     lerTexto: lerTexto,
     ehTexto: ehTexto,

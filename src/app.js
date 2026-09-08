@@ -1927,6 +1927,50 @@
         '\n\nElas estão em Tarefas, com a conversa do LinkedIn dentro.');
     },
 
+    semanasDoAprendizado: function (n) { V.definirSemanasDoAprendizado(Number(n) || 8); render(); },
+
+    /* O plano da semana. Escreve na própria tela em vez de abrir diálogo: é
+       texto para reler ao lado da tabela que o gerou, não um aviso para
+       dispensar. */
+    planoDeDesenvolvimento: function () {
+      const alvo = document.getElementById('plano-desenvolvimento');
+      if (!alvo) return;
+      alvo.innerHTML = '<p class="small muted">Lendo as últimas ' + V.semanasDoAprendizado() + ' semanas…</p>';
+      const est = Store.dados();
+      const ev = E.evolucao(est.oportunidades, est.tarefas || [], V.semanasDoAprendizado());
+      IA.planoDeDesenvolvimento(ev).then(function (r) {
+        if (!r || r.erro) {
+          alvo.innerHTML = '<div class="aviso">Não consegui gerar o plano: ' +
+            U.esc((r && r.erro) || 'sem resposta') + '</div>';
+          return;
+        }
+        const lista = function (titulo, itens, classe) {
+          if (!itens.length) return '';
+          return '<div class="coluna-plano"><h4 class="' + classe + '">' + titulo + '</h4><ul class="small">' +
+            itens.map(function (t) { return '<li>' + U.esc(t) + '</li>'; }).join('') + '</ul></div>';
+        };
+        const mudancas = r.mudancas.map(function (m) {
+          return '<li><strong>' + U.esc(m.acao) + '</strong>' +
+            (m.porque ? '<span class="tiny muted">Porque: ' + U.esc(m.porque) + '</span>' : '') +
+            (m.medir ? '<span class="tiny muted">Como saber se deu certo: ' + U.esc(m.medir) + '</span>' : '') +
+            '</li>';
+        }).join('');
+
+        alvo.innerHTML =
+          (r.leitura ? '<p class="leitura-plano">' + U.esc(r.leitura) + '</p>' : '') +
+          '<div class="duas-colunas-plano">' +
+            lista('Melhorou', r.indoBem, 'subiu') +
+            lista('Piorou', r.indoMal, 'caiu') +
+          '</div>' +
+          (mudancas
+            ? '<h4 style="margin:14px 0 6px">O que mudar na semana que vem</h4>' +
+              '<ol class="passos-plano">' + mudancas + '</ol>'
+            : '<p class="small muted">A IA não propôs mudança: com esta amostra, ela não tem o que sustentar.</p>') +
+          '<p class="tiny muted" style="margin-top:10px">Gerado em ' + U.data(Store.hoje()) +
+          ' a partir dos números da tabela acima — e de nada além deles.</p>';
+      });
+    },
+
     tarefasLimpar: function (alvo) {
       if (alvo === 'responsavel') V.tarefasFiltrar({ responsavel: 'todos' });
       else if (alvo === 'empresa') V.tarefasFiltrar({ empresa: '', negocio: '' });
@@ -3685,6 +3729,11 @@
     const temRelato = !!(d.relato && d.relato.length >= 60);
 
     Store.concluirTarefa(tarefaId, quando, temRelato);
+    tarefaEmCurso = { tarefaId: tarefaId, tipoTarefa: d.tipo || '' };
+    const encerrar = function () {
+      tarefaEmCurso = null;
+      if (aoTerminar) aoTerminar();
+    };
 
     /* As perguntas entram antes da leitura da ata: assim a releitura das oito
        — que acontece no fim — já enxerga as evidências que elas produziram. */
@@ -3693,10 +3742,10 @@
 
     const depois = function () {
       if (d.evidenciaDireta === 'sim') {
-        App.novaEvidencia(op.id, null, dimensaoAlvo, { canal: d.tipo, data: quando }, aoTerminar);
+        App.novaEvidencia(op.id, null, dimensaoAlvo, { canal: d.tipo, data: quando }, encerrar);
         return;
       }
-      if (aoTerminar) aoTerminar();
+      encerrar();
     };
 
     if (temRelato) {
@@ -3824,6 +3873,13 @@
      nunca desce sozinha — a IA relê o mesmo retrato a cada tarefa e propor 0
      para uma decisão que alguém pontuou à mão apagaria esse trabalho sem
      ninguém ver. Devolve o que mudou, para o relatório. */
+  /* Qual tarefa está sendo concluída agora. A releitura das oito acontece duas
+     ou três chamadas adiante — depois de anexar documentos e de a IA responder
+     —, e o caminho entre aqui e lá é uma cadeia de callbacks com assinaturas
+     que outras telas também usam. Em vez de alargar todas elas, o fluxo (que é
+     modal, um de cada vez) deixa a origem anotada aqui e limpa no fim. */
+  let tarefaEmCurso = null;
+
   function aplicarNotasDaIA(opId, decisoes) {
     const mudancas = [];
     (decisoes || []).forEach(function (proposta) {
@@ -3838,7 +3894,7 @@
       const permitida = travada ? Math.max(1, atual) : pedida;
       if (permitida <= atual) return;                        /* só sobe */
 
-      Store.pontuar(opId, d.id, permitida, 'Lido pelo assistente na conclusão da tarefa');
+      Store.pontuar(opId, d.id, permitida, 'Lido pelo assistente na conclusão da tarefa', tarefaEmCurso);
       mudancas.push({ nome: d.nome, de: atual, para: permitida,
         travada: travada, porque: proposta.porque || '', trecho: proposta.trecho || '' });
     });

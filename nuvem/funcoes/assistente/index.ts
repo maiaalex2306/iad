@@ -150,7 +150,10 @@ const FORMATOS: Record<string, Record<string, Regra>> = {
   segmentos: {},
   /* 'reuniao' é o único tipo que devolve uma lista. Validado à parte, em
      validarReuniao, porque cada item passa pelas mesmas regras da evidência. */
-  reuniao: {}
+  reuniao: {},
+  /* 'desenvolvimento' lê a carteira inteira, não um negócio: a série das
+     semanas e o rendimento por tipo de tarefa. Validado à parte. */
+  desenvolvimento: {}
 };
 
 const ITENS_MAXIMOS = 12;
@@ -460,6 +463,30 @@ Regras absolutas:
 - Nada de texto fora do JSON.
 
 A entrada traz, para cada lead: nome, cargo e perfil da pessoa, nome da empresa, site, cidade, o que a pessoa faz lá, a descrição da empresa quando disponível, o texto do site quando disponível, e a troca de mensagens entre a SDR e a pessoa.${nomes.length ? '' : '\n\nAtenção: a lista de segmentos veio vazia. Devolva "Outros" para todos.'}`;
+  }
+
+  if (tipo === 'desenvolvimento') {
+    return `${BASE}
+
+Tarefa: você recebe a série semanal dos indicadores de UMA carteira de vendas e quanto cada tipo de tarefa rendeu em pontos de decisão. Escreva o plano de desenvolvimento da semana para quem vende nesta carteira.
+
+Devolva {"leitura":"...", "indoBem":[...], "indoMal":[...], "mudancas":[{"acao":"...","porque":"...","medir":"..."}]}.
+
+- leitura: DUAS frases dizendo o que a série mostra no conjunto. Comece pelo que mais mudou. Cite número.
+- indoBem: até 4 frases curtas, uma por indicador que melhorou. Cada uma cita o número e a variação. Se nada melhorou, devolva lista vazia — não force.
+- indoMal: até 4 frases curtas, uma por indicador que piorou. Mesma regra.
+- mudancas: no MÁXIMO 3, e são o ponto da tarefa. Cada uma tem:
+  - acao: o que mudar no jeito de trabalhar na semana que vem, começando por um verbo. Concreta e executável. Nada de "melhorar o acompanhamento" ou "focar mais".
+  - porque: o número da série que justifica, citado.
+  - medir: qual indicador desta mesma lista vai mostrar se deu certo, e em quantas semanas.
+
+Regras desta tarefa, e são o ponto todo:
+- Use SÓ os números recebidos. Não estime, não projete, não compare com "mercado" nem com "benchmark" — você não tem esse dado.
+- Tarefa concluída é esforço; ponto de decisão é resultado. Quando muita tarefa rendeu pouco ponto, diga isso com todas as letras e vá atrás de qual tipo está seco.
+- Um tipo de tarefa com muitas execuções e zero ponto é o achado mais valioso da tabela. Não passe por cima dele.
+- Semana com pouco dado é semana com pouco dado: diga que a amostra é curta em vez de inventar tendência. Duas semanas não fazem tendência.
+- Não elogie por elogiar e não invente causa que os números não mostram. "Caiu porque a equipe estava desmotivada" é ficção.
+- Português do Brasil, direto, sem jargão de coach.`;
   }
 
   if (tipo === 'insight') {
@@ -1003,6 +1030,37 @@ function validarSegmentos(bruto: Record<string, unknown>, ctx: Record<string, un
    nota fora de 0..2 é descartada, e nota maior que zero sem trecho literal
    cai para zero — se o modelo não consegue apontar onde o cliente disse, ele
    está inferindo, e inferência não pontua decisão. */
+/* O plano de desenvolvimento. A validação aqui é de forma, não de conteúdo:
+   texto livre não dá para conferir contra uma lista fechada. O que dá para
+   impor é o tamanho — três mudanças, não dez — e que cada mudança traga o
+   porquê e o como medir, que é o que separa plano de conselho solto. */
+function validarDesenvolvimento(bruto: Record<string, unknown>) {
+  const frases = (v: unknown, quantas: number) =>
+    (Array.isArray(v) ? v : []).map((x) => limparTexto(x, 240)).filter(Boolean).slice(0, quantas);
+
+  const brutas = Array.isArray(bruto.mudancas) ? bruto.mudancas : [];
+  const mudancas = [];
+  for (const item of brutas.slice(0, 6)) {
+    if (!item || typeof item !== 'object') continue;
+    const o = item as Record<string, unknown>;
+    const acao = limparTexto(o.acao, 220);
+    if (!acao) continue;
+    mudancas.push({
+      acao,
+      porque: limparTexto(o.porque, 240),
+      medir: limparTexto(o.medir, 200)
+    });
+    if (mudancas.length === 3) break;
+  }
+
+  return {
+    leitura: limparTexto(bruto.leitura, 400),
+    indoBem: frases(bruto.indoBem, 4),
+    indoMal: frases(bruto.indoMal, 4),
+    mudancas
+  };
+}
+
 function validarNotas(bruto: Record<string, unknown>, textoOriginal: string) {
   const dimensoes = DIMENSOES.map((d) => d[0]);
   const brutas = Array.isArray(bruto.decisoes) ? bruto.decisoes : [];
@@ -1440,7 +1498,8 @@ Deno.serve(async (req: Request) => {
   if (!FORMATOS[tipo]) return responder({ erro: 'tipo desconhecido' }, 400);
 
   /* Transcrição de reunião é longa por natureza; um lote de empresas também. */
-  const limite = (tipo === 'reuniao' || tipo === 'segmentos' || tipo === 'plano' || tipo === 'notas')
+  const limite = (tipo === 'reuniao' || tipo === 'segmentos' || tipo === 'plano' || tipo === 'notas' ||
+                  tipo === 'desenvolvimento')
     ? LIMITE_REUNIAO : LIMITE_TEXTO;
   const texto = String(pedido.texto || '').slice(0, limite).trim();
   if (texto.length < 10) return responder({ campos: {}, frases: {} });
@@ -1506,12 +1565,14 @@ Deno.serve(async (req: Request) => {
       if (tipo === 'segmentos') return responder({ itens: [] });
       if (tipo === 'plano') return responder({ passos: [], atencao: [] });
       if (tipo === 'notas') return responder({ decisoes: [] });
+      if (tipo === 'desenvolvimento') return responder({ leitura: '', indoBem: [], indoMal: [], mudancas: [] });
       return responder({ campos: {}, frases: {} });
     }
     if (tipo === 'reuniao') return responder(validarReuniao(json, ctx, entrada));
     if (tipo === 'segmentos') return responder(validarSegmentos(json, ctx));
     if (tipo === 'plano') return responder(validarPlano(json));
     if (tipo === 'notas') return responder(validarNotas(json, entrada));
+    if (tipo === 'desenvolvimento') return responder(validarDesenvolvimento(json));
     return responder(validar(tipo, json, ctx));
   } catch (e) {
     return responder({ erro: String((e as Error).message || e) }, 502);

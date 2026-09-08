@@ -712,6 +712,250 @@
     };
   }
 
+  /* ---------- Evolução semanal: a carteira aprendendo, ou não ----------
+
+     Um número sozinho não ensina nada. "Ticket médio R$ 42 mil" só vira
+     informação ao lado do R$ 51 mil da semana passada. Por isso tudo aqui sai
+     em série, semana a semana, com a comparação com a semana anterior.
+
+     A régua do que entra na série é uma só: SÓ INDICADOR DE FLUXO — coisa que
+     aconteceu dentro da semana e ficou datada no registro. Pontos de decisão,
+     evidências, tarefas, ganhos, ciclo dos negócios fechados ali: tudo isso o
+     app sabe reconstruir para qualquer semana passada, exatamente.
+
+     O que NÃO entra: indicador que depende do estado de um campo que não guarda
+     histórico. O valor de uma oportunidade é sobrescrito quando muda — perguntar
+     "qual era o ticket médio da carteira em julho" devolveria os valores de
+     hoje com data de julho, que é pior do que não responder. As duas exceções
+     são tempo parado e negócios parados: esses eu reconstruo do log de
+     evidências, que é datado, e por isso eles são exatos também no passado. */
+
+  function segundaDe(data) {
+    const d = new Date(data + 'T00:00:00');
+    const diaDaSemana = (d.getDay() + 6) % 7;               /* segunda = 0 */
+    d.setDate(d.getDate() - diaDaSemana);
+    return d.toISOString().slice(0, 10);
+  }
+
+  function somarDias(data, n) {
+    const d = new Date(data + 'T00:00:00');
+    d.setDate(d.getDate() + n);
+    return d.toISOString().slice(0, 10);
+  }
+
+  function rotuloSemana(inicio) {
+    const p = inicio.split('-');
+    const f = somarDias(inicio, 6).split('-');
+    return p[2] + '/' + p[1] + '–' + f[2] + '/' + f[1];
+  }
+
+  /* As últimas N semanas, da mais antiga para a mais nova, terminando na semana
+     corrente. A semana corrente é parcial de propósito: comparar quarta-feira
+     com uma semana inteira é o erro clássico deste tipo de tela, então ela vai
+     marcada e a comparação principal usa as duas últimas semanas fechadas. */
+  function semanasAte(quantas, hoje) {
+    const fim = segundaDe(hoje || new Date().toISOString().slice(0, 10));
+    const lista = [];
+    for (let i = quantas - 1; i >= 0; i--) {
+      const inicio = somarDias(fim, -7 * i);
+      lista.push({ inicio: inicio, fim: somarDias(inicio, 6), rotulo: rotuloSemana(inicio) });
+    }
+    return lista;
+  }
+
+  /* Última evidência do cliente ATÉ uma data. É isto que permite dizer quanto
+     tempo a conta estava parada no fim de uma semana de dois meses atrás. */
+  function paradaEm(op, data) {
+    const ate = eventosDeDecisao(op).filter(function (e) { return e.data && e.data <= data; });
+    if (!ate.length) return op.criadoEm && op.criadoEm <= data ? diasEntre(op.criadoEm, data) : null;
+    const ultima = ate.reduce(function (max, e) { return e.data > max ? e.data : max; }, ate[0].data);
+    return diasEntre(ultima, data);
+  }
+
+  function existiaEm(op, data) {
+    if (op.criadoEm && op.criadoEm > data) return false;
+    if (op.desfecho && op.desfecho.data && op.desfecho.data <= data) return false;
+    return true;
+  }
+
+  function medianaOuMedia(lista) {
+    if (!lista.length) return null;
+    return lista.reduce(function (s, n) { return s + n; }, 0) / lista.length;
+  }
+
+  /* Os indicadores de UMA semana. */
+  function semanaDaCarteira(oportunidades, tarefas, semana) {
+    const dentro = function (data) { return data && data >= semana.inicio && data <= semana.fim; };
+
+    let pontos = 0, evidencias = 0;
+    oportunidades.forEach(function (op) {
+      (op.snapshots || []).forEach(function (s) {
+        if (dentro(s.data) && s.dimensaoAlterada) pontos += Math.max(0, (s.para || 0) - (s.de || 0));
+      });
+      eventosDeDecisao(op).forEach(function (e) { if (dentro(e.data)) evidencias++; });
+    });
+
+    const feitas = (tarefas || []).filter(function (t) {
+      return t.status !== 'aberta' && dentro(t.concluidaEm);
+    });
+    const comRelato = feitas.filter(function (t) { return t.comRelato && !t.semRegistro; });
+
+    const fechadas = oportunidades.filter(function (op) { return op.desfecho && dentro(op.desfecho.data); });
+    const ganhos = fechadas.filter(function (op) { return op.desfecho.tipo === 'ganho'; });
+    const valorGanho = ganhos.reduce(function (s, op) { return s + (op.desfecho.valorFinal || 0); }, 0);
+
+    const abertasNoFim = oportunidades.filter(function (op) { return existiaEm(op, semana.fim); });
+    const paradas = abertasNoFim.map(function (op) { return paradaEm(op, semana.fim); })
+      .filter(function (d) { return d != null; });
+
+    return {
+      inicio: semana.inicio, fim: semana.fim, rotulo: semana.rotulo,
+      pontos: pontos,
+      evidencias: evidencias,
+      tarefas: feitas.length,
+      relato: feitas.length ? comRelato.length / feitas.length : null,
+      ganhos: ganhos.length,
+      valorGanho: valorGanho,
+      ticket: ganhos.length ? valorGanho / ganhos.length : null,
+      ciclo: medianaOuMedia(ganhos.map(function (op) { return op.desfecho.diasEmAberto || 0; })),
+      parado: medianaOuMedia(paradas),
+      travadas: paradas.filter(function (d) { return d > 30; }).length,
+      abertas: abertasNoFim.length
+    };
+  }
+
+  /* O catálogo dos indicadores: o rótulo, a unidade, e — o que importa — de que
+     lado fica o "melhor". Ciclo de vendas caindo é bom; tarefa caindo não é. Sem
+     esta coluna, a seta verde mentiria em metade da tabela. */
+  const INDICADORES = [
+    { id: 'pontos', nome: 'Pontos de decisão que andaram', unidade: 'n', maiorEMelhor: true,
+      oQue: 'Soma do que as oito decisões subiram na semana. É o resultado; o resto é esforço.' },
+    { id: 'evidencias', nome: 'Evidências do cliente', unidade: 'n', maiorEMelhor: true,
+      oQue: 'Quantas vezes o cliente fez ou disse algo que ficou registrado.' },
+    { id: 'tarefas', nome: 'Tarefas concluídas', unidade: 'n', maiorEMelhor: true,
+      oQue: 'Volume de execução da semana.' },
+    { id: 'relato', nome: 'Concluídas com relato', unidade: '%', maiorEMelhor: true,
+      oQue: 'Das tarefas fechadas, quantas contaram o que aconteceu. Só essas podem mover decisão.' },
+    { id: 'ticket', nome: 'Ticket médio ganho', unidade: 'R$', maiorEMelhor: true,
+      oQue: 'Valor médio dos negócios ganhos na semana.' },
+    { id: 'ciclo', nome: 'Ciclo de vendas', unidade: 'd', maiorEMelhor: false,
+      oQue: 'Dias entre abrir e ganhar, nos negócios fechados na semana.' },
+    { id: 'parado', nome: 'Tempo médio parado', unidade: 'd', maiorEMelhor: false,
+      oQue: 'Dias sem evidência do cliente, na média da carteira aberta no fim da semana.' },
+    { id: 'travadas', nome: 'Negócios parados +30d', unidade: 'n', maiorEMelhor: false,
+      oQue: 'Quantos passaram de um mês sem sinal do comprador.' }
+  ];
+
+  function variacao(atual, anterior, maiorEMelhor) {
+    if (atual == null || anterior == null) return { direcao: 'sem-base', delta: null, pct: null };
+    const delta = atual - anterior;
+    if (Math.abs(delta) < 1e-9) return { direcao: 'igual', delta: 0, pct: 0 };
+    const melhorou = maiorEMelhor ? delta > 0 : delta < 0;
+    return {
+      direcao: melhorou ? 'melhorou' : 'piorou',
+      delta: delta,
+      pct: anterior ? delta / Math.abs(anterior) : null
+    };
+  }
+
+  /* Quais tarefas de fato movem decisão. É a pergunta que fecha o ciclo do
+     sistema: executar é meio, decisão é fim, e sem isto ninguém sabe se as
+     trinta ligações da semana valeram mais que as duas visitas.
+
+     A atribuição é exata quando o snapshot traz o carimbo da tarefa. Para o que
+     foi pontuado antes de o carimbo existir, sobra casar pelo mesmo dia e mesmo
+     negócio — o que é estimativa, e vai marcado como estimativa. */
+  function rendimentoPorTipoDeTarefa(oportunidades, tarefas, de, ate) {
+    const dentro = function (d) { return d && (!de || d >= de) && (!ate || d <= ate); };
+    const feitas = (tarefas || []).filter(function (t) {
+      return t.status !== 'aberta' && dentro(t.concluidaEm);
+    });
+    if (!feitas.length) return { linhas: [], estimado: false, total: 0 };
+
+    const porId = {};
+    feitas.forEach(function (t) { porId[t.id] = t; });
+
+    const ganhoPorTarefa = {};
+    let houveEstimativa = false;
+    oportunidades.forEach(function (op) {
+      (op.snapshots || []).forEach(function (s) {
+        if (!s.dimensaoAlterada || !dentro(s.data)) return;
+        const ganho = Math.max(0, (s.para || 0) - (s.de || 0));
+        if (!ganho) return;
+        if (s.tarefaId && porId[s.tarefaId]) {
+          ganhoPorTarefa[s.tarefaId] = (ganhoPorTarefa[s.tarefaId] || 0) + ganho;
+          return;
+        }
+        /* sem carimbo: a tarefa daquele negócio fechada no mesmo dia */
+        const candidata = feitas.filter(function (t) {
+          return t.oportunidadeId === op.id && t.concluidaEm === s.data;
+        })[0];
+        if (candidata) {
+          ganhoPorTarefa[candidata.id] = (ganhoPorTarefa[candidata.id] || 0) + ganho;
+          houveEstimativa = true;
+        }
+      });
+    });
+
+    const porTipo = {};
+    feitas.forEach(function (t) {
+      const chave = t.tipo || 'Sem tipo';
+      porTipo[chave] = porTipo[chave] || { tipo: chave, feitas: 0, comRelato: 0, pontos: 0, semRegistro: 0 };
+      porTipo[chave].feitas++;
+      if (t.comRelato && !t.semRegistro) porTipo[chave].comRelato++;
+      if (t.semRegistro) porTipo[chave].semRegistro++;
+      porTipo[chave].pontos += ganhoPorTarefa[t.id] || 0;
+    });
+
+    const linhas = Object.keys(porTipo).map(function (k) {
+      const l = porTipo[k];
+      l.porTarefa = l.feitas ? l.pontos / l.feitas : 0;
+      return l;
+    }).sort(function (a, b) { return b.pontos - a.pontos || b.feitas - a.feitas; });
+
+    return {
+      linhas: linhas,
+      estimado: houveEstimativa,
+      total: linhas.reduce(function (s, l) { return s + l.pontos; }, 0)
+    };
+  }
+
+  /* A série inteira, pronta para a tela e para a IA. */
+  function evolucao(oportunidades, tarefas, quantasSemanas, hoje) {
+    const semanas = semanasAte(quantasSemanas || 8, hoje)
+      .map(function (s) { return semanaDaCarteira(oportunidades, tarefas, s); });
+
+    const corrente = semanas[semanas.length - 1];
+    /* A comparação principal é entre as duas últimas semanas FECHADAS: a
+       corrente ainda está acontecendo, e meia semana sempre parece queda. */
+    const fechadas = semanas.slice(0, -1);
+    const ultima = fechadas[fechadas.length - 1] || null;
+    const penultima = fechadas[fechadas.length - 2] || null;
+
+    const indicadores = INDICADORES.map(function (ind) {
+      const serie = semanas.map(function (s) { return s[ind.id]; });
+      return Object.assign({}, ind, {
+        serie: serie,
+        agora: ultima ? ultima[ind.id] : null,
+        antes: penultima ? penultima[ind.id] : null,
+        corrente: corrente ? corrente[ind.id] : null,
+        variacao: variacao(ultima ? ultima[ind.id] : null,
+                           penultima ? penultima[ind.id] : null, ind.maiorEMelhor)
+      });
+    });
+
+    const rendimento = rendimentoPorTipoDeTarefa(
+      oportunidades, tarefas, semanas[0].inicio, corrente.fim);
+
+    return {
+      semanas: semanas, indicadores: indicadores, rendimento: rendimento,
+      ultima: ultima, penultima: penultima, corrente: corrente,
+      melhorou: indicadores.filter(function (i) { return i.variacao.direcao === 'melhorou'; }),
+      piorou: indicadores.filter(function (i) { return i.variacao.direcao === 'piorou'; }),
+      temBase: !!penultima
+    };
+  }
+
   /* Aprendizado: compara a foto da decisão no fechamento entre ganhos e perdas.
      É a única forma de o IAD deixar de ser hipótese. */
   function aprendizado(oportunidades) {
@@ -759,6 +1003,7 @@
     filtrar, mesesDisponiveis, segmentosDisponiveis, rotuloMes, segmentoDe, faixaSaude,
     porMes, porSegmento, porEtapa, matrizDecisoes, distribuicaoEvidencia,
     autoria, compromisso, mobilizadores, bloqueadores, tempoNaEtapa, medianaEtapaGanhos, deltaSemana, curva, historico, lacunas,
+    evolucao, rendimentoPorTipoDeTarefa, semanasAte, INDICADORES,
     stakeholdersDaOp, diasEntre, indiceEtapa, depoisDaProposta
   };
 })(window);

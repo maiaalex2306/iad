@@ -470,7 +470,12 @@
   }
 
   /* Toda mudança de pontuação vira snapshot e entra no histórico visível. */
-  function pontuar(id, dimensao, valor, justificativa) {
+  /* "origem" diz o que provocou esta mudança de nota — normalmente a conclusão
+     de uma tarefa. Carimbar no snapshot é o que permite responder, semanas
+     depois, quais tarefas de fato movem decisão e quais só movem o calendário.
+     Sem o carimbo só sobra adivinhar pela data, que erra sempre que duas coisas
+     acontecem no mesmo dia. */
+  function pontuar(id, dimensao, valor, justificativa, origem) {
     const op = oportunidade(id);
     if (!op) return null;
     const anterior = op.dims[dimensao] || 0;
@@ -478,10 +483,15 @@
 
     op.dims[dimensao] = valor;
     const iad = Object.keys(op.dims).reduce(function (s, k) { return s + op.dims[k]; }, 0);
-    op.snapshots.push({
+    const marca = {
       data: hoje(), iad: iad, dims: Object.assign({}, op.dims),
       dimensaoAlterada: dimensao, de: anterior, para: valor
-    });
+    };
+    if (origem && origem.tarefaId) {
+      marca.tarefaId = origem.tarefaId;
+      marca.tipoTarefa = origem.tipoTarefa || '';
+    }
+    op.snapshots.push(marca);
     op.eventos.unshift({
       id: uid('evt'), tipo: 'pontuacao', data: hoje(), dimensao: dimensao,
       titulo: 'passou de ' + anterior + ' para ' + valor,
