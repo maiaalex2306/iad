@@ -3735,6 +3735,8 @@
     const entrou = [];
     if (base.evidencias) entrou.push(base.evidencias + (base.evidencias === 1 ? ' evidência do cliente' : ' evidências do cliente'));
     if (base.pessoas) entrou.push(base.pessoas + (base.pessoas === 1 ? ' pessoa nova' : ' pessoas novas'));
+    if (base.completados) entrou.push(base.completados +
+      (base.completados === 1 ? ' ficha de contato completada' : ' fichas de contato completadas'));
 
     const linhas = mudancas.map(function (m) {
       return '<li class="achado">' +
@@ -3757,10 +3759,25 @@
       '</li>';
     }).join('');
 
+    /* A ficha da empresa. Vem depois do negócio e antes das decisões porque é
+       contexto: uma ata de uma hora costuma dizer quantas plantas o cliente
+       tem, onde ficam e o que ele precisa resolver — e isso ia embora junto
+       com o texto. Só aparece o que estava EM BRANCO e foi preenchido; o
+       assistente não corrige o que alguém digitou. */
+    const daEmpresa = (base.empresa || []).map(function (m) {
+      return '<li class="achado">' +
+        '<div class="row"><span class="pill">' + esc(m.campo) + '</span>' +
+        '<strong>' + esc(m.para) + '</strong><span class="espaco"></span></div></li>';
+    }).join('');
+
     return '<form method="dialog"><div class="corpo">' +
       '<h2>Pronto — o assistente já registrou</h2>' +
       (doNegocio
         ? '<p class="small"><strong>O negócio mudou.</strong></p><ul class="achados">' + doNegocio + '</ul>'
+        : '') +
+      (daEmpresa
+        ? '<p class="small"><strong>A ficha da empresa ganhou o que estava em branco.</strong></p>' +
+          '<ul class="achados">' + daEmpresa + '</ul>'
         : '') +
       (entrou.length
         ? '<p class="small">Entrou nesta oportunidade: <strong>' + esc(entrou.join(' e ')) + '</strong>.</p>'

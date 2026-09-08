@@ -234,6 +234,7 @@
       return {
         evidencias: apenasConhecidas(r.evidencias),
         contatos: r.contatos || [],
+        empresa: (r.empresa && typeof r.empresa === 'object') ? r.empresa : {},
         negocio: (r.negocio && typeof r.negocio === 'object') ? r.negocio : {},
         decisoes: (Array.isArray(r.decisoes) ? r.decisoes : []).filter(function (d) {
           return d && dimensoes.indexOf(d.dimensao) !== -1 && d.nota >= 0 && d.nota <= 2;

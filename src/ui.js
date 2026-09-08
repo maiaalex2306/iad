@@ -227,7 +227,8 @@
             ? numeroDigitado(el.value)
             : el.value.trim();
         });
-        aoConfirmar(dados, dlg.documentosIA || [], dlg.contatosIA || [], dlg.empresaNovaIA || null);
+        aoConfirmar(dados, dlg.documentosIA || [], dlg.contatosIA || [], dlg.empresaNovaIA || null,
+          dlg.materialIA || '');
       } else if (aoCancelar && dlg.returnValue !== 'extra') {
         aoCancelar();
       }
@@ -531,6 +532,11 @@
         }
         botao.disabled = true;
         estado.textContent = 'Analisando…';
+        /* O material fica guardado no diálogo. A extração preenche campos —
+           título, empresa, pessoas — e joga o resto fora, que é pouco quando
+           o que foi colado é uma ata de uma hora. Quem salva o formulário
+           decide o que fazer com o texto inteiro. */
+        dlg.materialIA = texto;
         const ctx = c.contexto ? c.contexto() : {};
         global.IADIA.extrair(c.extrair, texto, ctx).then(function (r) {
           botao.disabled = false;

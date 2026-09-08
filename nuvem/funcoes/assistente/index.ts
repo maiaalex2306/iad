@@ -340,7 +340,7 @@ Não devolva valor, etapa nem data de fechamento.`;
 
 Tarefa: o vendedor enviou a transcrição de uma reunião, a ata ou as anotações dele. Separe TUDO que o cliente fez ou disse em evidências, uma para cada dimensão afetada. Um documento costuma render de duas a seis.
 
-Devolva {"evidencias": [ ... ], "contatos": [ ... ], "negocio": { ... }, "decisoes": [ ... ]}.
+Devolva {"evidencias": [ ... ], "contatos": [ ... ], "empresa": { ... }, "negocio": { ... }, "decisoes": [ ... ]}.
 
 Cada item de "evidencias" tem:
 - dimensao: uma das oito. Vale a mesma observação das notas: num documento nosso, os dados que o cliente forneceu ou confirmou — a operação atual dele, os números da unidade, a rotina que ele descreveu — são evidência dele, com força "documentado". Nossa recomendação e nosso preço não são. Um receio, uma objeção ou um impedimento vai para "risco". Uma exigência de comparação ou de especificação vai para "criterios". Alguém novo entrando na conversa vai para "stakeholders". O caminho formal até a assinatura vai para "processo".
@@ -353,7 +353,9 @@ ${listaForcas()}
 - compromissoTexto / compromissoData / compromissoDono: só no item onde o próximo passo foi combinado.
 - frase: o trecho literal do documento que sustenta esta evidência.
 
-Cada item de "contatos" é uma pessoa do lado do cliente que apareceu no documento: {nome, cargo, papel, frase}. papel é um de ${PAPEIS.join(' | ')}.
+Cada item de "contatos" é uma pessoa do lado do cliente que apareceu no documento: {nome, cargo, papel, email, telefone, sentimento, influencia, frase}. papel é um de ${PAPEIS.join(' | ')}. sentimento é um de ${SENTIMENTOS.join(' | ')} e só quando o documento mostrar como a pessoa reagiu. influencia é "1" opina, "2" influencia, "3" decide. Devolva email e telefone só se aparecerem no material. Inclua também quem JÁ está cadastrado, quando o documento disser algo novo sobre a pessoa — cargo, papel, contato: o app usa isso para completar o que está em branco na ficha dela.
+
+"empresa" é o que o material diz sobre a EMPRESA CLIENTE, e só o que ele diz: {descricao, necessidades, porte, cidade, uf, site, telefone, cnpj}. Omita todo campo que o material não informar. "necessidades" é o que o cliente precisa resolver, com as palavras dele. Nada de suposição: o app usa isto para completar campos vazios da ficha, e um palpite gravado ali vira fato para quem abrir a conta amanhã.
 
 "negocio" é o que o material diz sobre o NEGÓCIO em si. Devolva apenas os campos que o material realmente informa; omita o resto. Nunca invente número, data nem etapa.
 - valor: o valor deste negócio para nós, em reais, só o número (ex.: 91379.04). É o que o cliente pagaria em doze meses. Quando o material é uma proposta com implantação e mensalidade, valor é a implantação mais DOZE mensalidades — sempre doze, mesmo que o documento mostre um cálculo com menos (é comum a tabela de ROI usar seis por causa de carência; esse número é do cálculo de retorno, não do contrato). Economia estimada, benefício, ROI e payback NÃO são o valor do negócio — são argumento de venda; não os devolva aqui.
@@ -914,6 +916,17 @@ function validarReuniao(bruto: Record<string, unknown>, ctx: Record<string, unkn
     if (papel) registro.papel = papel;
     const frase = limparTexto(c.frase, 200);
     if (frase) registro.frase = frase;
+    /* Os campos de ficha. Passam pelas mesmas listas fechadas de sempre —
+       sentimento inventado mudaria a cor do grupo comprador, e influência
+       fora de 1..3 quebraria a conta da cobertura. */
+    const email = limparTexto(c.email, 120);
+    if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) registro.email = email;
+    const telefone = limparTexto(c.telefone, 40);
+    if (telefone) registro.telefone = telefone;
+    const sentimento = SENTIMENTOS.find((x) => x === limparTexto(c.sentimento, 20).toLowerCase());
+    if (sentimento) registro.sentimento = sentimento;
+    const influencia = String(Math.floor(Number(c.influencia)));
+    if (['1', '2', '3'].indexOf(influencia) !== -1) registro.influencia = influencia;
     contatos.push(registro);
   }
 
@@ -926,9 +939,30 @@ function validarReuniao(bruto: Record<string, unknown>, ctx: Record<string, unkn
   return {
     evidencias: evidencias,
     contatos: contatos,
+    empresa: validarFichaDaEmpresa(bruto.empresa),
     negocio: validarNegocio(bruto.negocio, ctx, hoje),
     decisoes: notas.decisoes || []
   };
+}
+
+/* A ficha da empresa que o material revelou. Vai completar campos VAZIOS da
+   conta — o app nunca sobrescreve o que alguém digitou —, e por isso o rigor
+   aqui é de tamanho e de existência, não de lista fechada: descrição e
+   necessidades são texto livre por natureza. O segmento fica de fora de
+   propósito: ele agrupa o painel inteiro e tem validação própria. */
+function validarFichaDaEmpresa(bruto: unknown) {
+  if (!bruto || typeof bruto !== 'object') return {};
+  const e = bruto as Record<string, unknown>;
+  const saida: Record<string, string> = {};
+  const por = [
+    ['descricao', 600], ['necessidades', 600], ['porte', 40], ['cidade', 80],
+    ['uf', 4], ['site', 160], ['telefone', 40], ['cnpj', 20]
+  ] as [string, number][];
+  for (const [campo, max] of por) {
+    const v = limparTexto(e[campo], max);
+    if (v) saida[campo] = v;
+  }
+  return saida;
 }
 
 /* O que o material diz sobre o negócio: valor, etapa, previsão, concorrentes.

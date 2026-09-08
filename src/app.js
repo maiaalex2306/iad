@@ -1165,7 +1165,7 @@
          negócio abre sempre, e a empresa se cadastra de dentro dele — pelo
          próprio campo Empresa, que é onde ela olha ao perceber que falta. */
       const campos = camposOportunidade(contas, contaId);
-      U.formulario('Nova oportunidade', campos, valores || {}, function (d, docs, pessoas, empresaNova) {
+      U.formulario('Nova oportunidade', campos, valores || {}, function (d, docs, pessoas, empresaNova, material) {
         if (!d.titulo) return;
 
         /* A empresa que a IA achou e não existia entra aqui, se ficou marcada.
@@ -1209,6 +1209,22 @@
             (quantos ? '\n· ' + (quantos === 1 ? '1 contato' : quantos + ' contatos') + ' adicionados' : '') +
             (itens ? '\n· ' + (itens === 1 ? '1 item' : itens + ' itens') + ' do catálogo' : '') +
             '\n· negócio criado.\n\nConfira o papel de cada pessoa na compra — é ele que alimenta a cobertura do grupo comprador.');
+        }
+
+        /* E agora o material inteiro, de novo, com a leitura de reunião.
+
+           A extração do cadastro tira campos: título, segmento, a ficha da
+           empresa, as pessoas. É pouco quando o que foi colado é uma ata de
+           uma hora — todo o resto, que é justamente a decisão do cliente, ia
+           embora com o texto, e o negócio nascia zerado ao lado de duas
+           reuniões de conteúdo. Colar a mesma ata depois, numa tarefa, para
+           só então o índice andar, é trabalho que o app já tinha em mãos.
+
+           Só quando o material é grande: um "indicação na feira, falei com o
+           Marcelo" não tem oito decisões dentro, e abrir uma leitura por
+           causa disso seria gastar uma chamada para dizer que não achou nada. */
+        if (material && material.length >= 400 && IA.disponivel()) {
+          App.processarReuniao(op.id, material, true, [], null);
         }
       }, function (dlg) {
         /* O contato acompanha a empresa: trocar de empresa tem de trocar a
@@ -1566,19 +1582,51 @@
         evidencias++;
       });
 
+      let completados = 0;
       (resultado.contatos || []).forEach(function (c) {
         if (!c || !c.nome) return;
-        if (contatoPeloNome(op.contaId, c.nome)) return;   /* já existe */
-        Store.criarContato({
+        /* contatoPeloNome devolve o ID, não a ficha — é assim que a evidência
+           usa. Aqui precisa da ficha para completá-la. */
+        const jaExiste = Store.contato(contatoPeloNome(op.contaId, c.nome));
+        if (jaExiste) {
+          /* A pessoa já estava cadastrada e o material disse algo novo sobre
+             ela. Isso costumava ser jogado fora: o contato entrava uma vez,
+             sem cargo e sem papel, e continuava assim para sempre por mais
+             reuniões que tivesse. Agora completa — e SÓ completa: o que já
+             estava preenchido é escolha de alguém e não se mexe. */
+          if (completarEmBranco(jaExiste, {
+            cargo: c.cargo, email: c.email, telefone: c.telefone
+          })) completados++;
+          /* Papel, sentimento e influência têm padrão de fábrica, então
+             "vazio" não existe neles: só entram quando ainda estão no padrão.
+             O papel importa mais do que parece — todo contato nasce "Usuário",
+             e uma conta inteira parada em Usuário mostra 0% dos papéis
+             críticos cobertos, que é alarme que não distingue nada. */
+          if (c.papel && jaExiste.papel === 'Usuário' && c.papel !== 'Usuário') {
+            jaExiste.papel = c.papel;
+            completados++;
+          }
+          if (c.sentimento && jaExiste.sentimento === 'nao_acessado') jaExiste.sentimento = c.sentimento;
+          if (c.influencia && !jaExiste.influencia) jaExiste.influencia = Number(c.influencia);
+          Store.vincularStakeholder(op, jaExiste.id);
+          Store.salvar();
+          return;
+        }
+        const novo = Store.criarContato({
           contaId: op.contaId, nome: c.nome, cargo: c.cargo || '',
-          papel: c.papel || 'Usuário', sentimento: 'neutro',
-          perfil: 'nao_classificado', influencia: 2
+          papel: c.papel || 'Usuário', email: c.email || '', telefone: c.telefone || '',
+          sentimento: c.sentimento || 'neutro',
+          perfil: 'nao_classificado', influencia: Number(c.influencia) || 2
         });
+        Store.vincularStakeholder(op, novo.id);
+        Store.salvar();
         pessoas++;
       });
 
+      const empresa = aplicarFichaDaEmpresa(op.contaId, resultado.empresa);
       const negocio = aplicarNegocioDaIA(opId, resultado.negocio);
-      const base = { evidencias: evidencias, pessoas: pessoas, negocio: negocio };
+      const base = { evidencias: evidencias, pessoas: pessoas,
+        completados: completados, empresa: empresa, negocio: negocio };
       render();
 
       /* As oito vieram na mesma resposta: não há segunda chamada a fazer.
@@ -1707,9 +1755,15 @@
         const feita = d.situacao === 'feita';
         const quando = feita ? (d.feitaEm || Store.hoje()) : (d.vencimento || Store.hoje());
 
+        /* Com quem foi. Se a pessoa é nova, nasce aqui e já entra no grupo
+           comprador do negócio — é a mesma pessoa, não faz sentido cadastrar
+           duas vezes. */
+        const comQuem = contatoDaTarefa(alvo, d);
+
         const tarefa = Store.criarTarefa({
           oportunidadeId: alvo.id, titulo: d.titulo, descricao: d.descricao || '', tipo: d.tipo,
           decisaoAlvo: d.decisaoAlvo, vencimento: quando, hora: d.hora || '',
+          contatoId: comQuem ? comQuem.id : null,
           origem: feita ? 'registrada' : 'planejada'
         });
         if (d.donoId) Store.atualizarTarefa(tarefa.id, { donoId: d.donoId });
@@ -1725,6 +1779,7 @@
         U.ligarDocumentos(dlg, 'arquivo', 'relato');
         ligarPainelDeMetodo(dlg);
         if (!op) ligarEmpresaENegocio(dlg);
+        ligarContatoDaTarefa(dlg);
         const situacao = dlg.querySelector('[name="situacao"]');
         const ajustar = function () {
           const feita = situacao.value === 'feita';
@@ -2097,6 +2152,13 @@
           opcoes: opcoesDeNegocio(contaAtual) },
         { id: 'negocioNovo', rotulo: 'Nome da nova negociação',
           placeholder: 'Reúso da ETE, Água de processo, Torre de resfriamento…' },
+        { id: 'contatoId', rotulo: 'Com quem (contato)', tipo: 'select',
+          padrao: t.contatoId || '', opcoes: opcoesDeContato(contaAtual) },
+        { id: 'contatoNome', rotulo: 'Nome do novo contato' },
+        { id: 'contatoCargo', rotulo: 'Cargo', largura: 'metade' },
+        { id: 'contatoPapel', rotulo: 'Papel na compra', tipo: 'select', largura: 'metade', opcoes: P.PAPEIS },
+        { id: 'contatoEmail', rotulo: 'E-mail', largura: 'metade' },
+        { id: 'contatoTelefone', rotulo: 'Telefone / WhatsApp', largura: 'metade' },
 
         { tipo: 'secao', rotulo: 'A tarefa' },
         { id: 'titulo', rotulo: 'Assunto da tarefa', padrao: t.titulo },
@@ -2119,17 +2181,26 @@
         /* Mudar a data por aqui é correção, não adiamento: quem adia usa o
            botão de adiar, e é ele que conta. Misturar os dois apagaria o
            sinal de "esta tarefa já foi empurrada quatro vezes". */
+        const comQuem = contatoDaTarefa(alvo, d);
         Store.atualizarTarefa(id, {
           titulo: d.titulo, descricao: d.descricao || '', tipo: d.tipo,
           vencimento: d.vencimento || t.vencimento,
           hora: d.hora || '', donoId: d.donoId || null,
-          oportunidadeId: alvo.id, decisaoAlvo: d.decisaoAlvo || ''
+          oportunidadeId: alvo.id, decisaoAlvo: d.decisaoAlvo || '',
+          contatoId: comQuem ? comQuem.id : (d.contatoId === NOVO_CONTATO ? t.contatoId : (d.contatoId || null))
         });
         render();
       }, function (dlg) {
         ligarEmpresaENegocio(dlg);
+        ligarContatoDaTarefa(dlg);
+        /* As duas ligações acima repintam os selects a partir da empresa, e
+           repintar apaga o que estava escolhido. Devolver aqui é o que faz
+           "Editar" abrir mostrando a tarefa como ela é, e não como ela
+           começaria se fosse nova. */
         const negocio = dlg.querySelector('[name="oportunidadeId"]');
         if (negocio && t.oportunidadeId) negocio.value = t.oportunidadeId;
+        const comQuem = dlg.querySelector('[name="contatoId"]');
+        if (comQuem && t.contatoId) comQuem.value = t.contatoId;
       }, null, [
         { rotulo: 'Excluir', classe: 'ghost', acao: function () {
           if (!U.confirmar('Excluir esta tarefa?')) return false;
@@ -3656,7 +3727,8 @@
     if (op) {
       const conta = Store.conta(op.contaId);
       return [{ tipo: 'secao', rotulo: 'Onde vai gravar',
-        ajuda: (conta ? conta.nome : 'sem empresa') + ' · ' + op.titulo }];
+        ajuda: (conta ? conta.nome : 'sem empresa') + ' · ' + op.titulo }]
+        .concat(camposDoContatoDaTarefa(op.contaId, o));
     }
 
     const contas = Store.dados().contas.slice().sort(function (a, b) {
@@ -3679,7 +3751,64 @@
          processo" — o nome que menos ajuda a distinguir. */
       { id: 'negocioNovo', rotulo: 'Nome da nova negociação',
         placeholder: 'Reúso da ETE, Água de processo, Torre de resfriamento…' }
+    ].concat(camposDoContatoDaTarefa(padraoConta, o));
+  }
+
+  /* Com quem é a tarefa. Faltava, e a falta era grave: sem a pessoa, a
+     evidência que sai da conclusão nasce órfã, e é o contato que carrega o
+     papel na compra — que é o que alimenta a cobertura do grupo comprador. A
+     tarefa dizia em que negócio mexeu e não dizia com quem se falou.
+
+     Fica logo abaixo do destino porque a pergunta é a mesma: onde isto
+     acontece, e com quem. E traz a porta de cadastrar, porque a pessoa nova
+     costuma aparecer justamente na tarefa em que ela apareceu. */
+  function camposDoContatoDaTarefa(contaId, o) {
+    return [
+      { id: 'contatoId', rotulo: 'Com quem (contato)', tipo: 'select',
+        padrao: (o && o.contatoId) || '', opcoes: opcoesDeContato(contaId) },
+      { id: 'contatoNome', rotulo: 'Nome do novo contato' },
+      { id: 'contatoCargo', rotulo: 'Cargo', largura: 'metade' },
+      { id: 'contatoPapel', rotulo: 'Papel na compra', tipo: 'select', largura: 'metade', opcoes: P.PAPEIS },
+      { id: 'contatoEmail', rotulo: 'E-mail', largura: 'metade' },
+      { id: 'contatoTelefone', rotulo: 'Telefone / WhatsApp', largura: 'metade' }
     ];
+  }
+
+  /* O contato escolhido, ou o que acabou de ser digitado. Vincular ao grupo
+     comprador é de propósito: quem participa de uma tarefa participa da
+     compra, e deixar isso solto era o jeito de o grupo comprador ficar com
+     0% de cobertura enquanto o vendedor conversava com meia empresa. */
+  function contatoDaTarefa(op, d) {
+    if (d.contatoId && d.contatoId !== NOVO_CONTATO) {
+      const existente = Store.contato(d.contatoId);
+      if (existente) { Store.vincularStakeholder(op, existente.id); Store.salvar(); }
+      return existente || null;
+    }
+    if (d.contatoId !== NOVO_CONTATO || !d.contatoNome) return null;
+    const novo = Store.criarContato({
+      contaId: op.contaId, nome: d.contatoNome, cargo: d.contatoCargo || '',
+      papel: d.contatoPapel || 'Usuário', email: d.contatoEmail || '',
+      telefone: d.contatoTelefone || '', sentimento: 'neutro',
+      perfil: 'nao_classificado', influencia: 2
+    });
+    Store.vincularStakeholder(op, novo.id);
+    Store.salvar();
+    return novo;
+  }
+
+  /* Duas ligações: quando não há negócio fixo, a lista de pessoas segue a
+     empresa escolhida (senão a tarefa nasce com o contato de outra conta);
+     e em qualquer caso os campos do contato novo só aparecem quando alguém
+     escolhe cadastrar. */
+  function ligarContatoDaTarefa(dlg) {
+    const contato = dlg.querySelector('[name="contatoId"]');
+    if (!contato) return;
+    if (dlg.querySelector('[name="contaId"]')) { ligarContatoDaEmpresa(dlg); return; }
+    const ajustar = function () {
+      U.mostrarCampos(dlg, CAMPOS_CONTATO_NOVO, contato.value === NOVO_CONTATO);
+    };
+    contato.addEventListener('change', ajustar);
+    ajustar();
   }
 
   /* Só as negociações abertas da empresa escolhida, mais a saída de abrir uma
@@ -3833,6 +3962,43 @@
      continua gritando "0% de prontidão" no cockpit, que é o sinal útil. Ele
      existe para dizer que a proposta foi precoce, não para impedir o app de
      registrar que ela existe. */
+  /* Completar o que está em branco, e só isso. A regra vale para a empresa e
+     para as pessoas, e é o que torna seguro deixar a IA escrever na ficha:
+     ela preenche buraco, nunca corrige quem digitou. Devolve se mexeu. */
+  function completarEmBranco(registro, novos) {
+    let mexeu = false;
+    Object.keys(novos || {}).forEach(function (k) {
+      const valor = novos[k];
+      if (!valor) return;
+      if (registro[k] && String(registro[k]).trim()) return;
+      registro[k] = valor;
+      mexeu = true;
+    });
+    return mexeu;
+  }
+
+  /* A ficha da empresa, alimentada pelo que a reunião revelou. Uma ata de
+     uma hora costuma dizer quantas plantas o cliente tem, onde ficam, o que
+     ele produz e o que ele precisa resolver — e tudo isso ia embora com o
+     texto. Agora fica na conta, que é onde a próxima pessoa vai procurar. */
+  function aplicarFichaDaEmpresa(contaId, ficha) {
+    const conta = Store.conta(contaId);
+    if (!conta || !ficha) return [];
+    const antes = {};
+    Object.keys(ficha).forEach(function (k) { antes[k] = conta[k]; });
+    if (!completarEmBranco(conta, ficha)) return [];
+    Store.salvar();
+    const ROTULO = { descricao: 'O que a empresa faz', necessidades: 'Necessidades',
+      porte: 'Porte', cidade: 'Cidade', uf: 'UF', site: 'Site',
+      telefone: 'Telefone', cnpj: 'CNPJ' };
+    return Object.keys(ficha).filter(function (k) {
+      return !antes[k] && conta[k];
+    }).map(function (k) {
+      return { campo: ROTULO[k] || k, de: 'em branco',
+        para: String(conta[k]).slice(0, 120), trecho: '' };
+    });
+  }
+
   function aplicarNegocioDaIA(opId, negocio) {
     const n = negocio || {};
     const op = Store.oportunidade(opId);
@@ -3916,7 +4082,7 @@
      para marcar. Fica a porta de ajuste, para quem discordar. */
   function mostrarResumo(opId, base, mudancas, decisoes, depois, erroDaReleitura) {
     const op = Store.oportunidade(opId);
-    const mexeuNoNegocio = (base.negocio || []).length;
+    const mexeuNoNegocio = (base.negocio || []).length + (base.empresa || []).length + (base.completados || 0);
     if (!op || (!base.evidencias && !base.pessoas && !mudancas.length && !mexeuNoNegocio && !erroDaReleitura)) {
       if (depois) depois();
       return;
