@@ -12,7 +12,11 @@
 
   const Nuvem = global.IADNuvem;
   const PRAZO = 12000;
-  const PRAZO_REUNIAO = 60000;
+  /* 90s: a resposta de reunião passou a caber até 8000 tokens — as oito
+     decisões vinham sendo cortadas fora por falta de espaço —, e escrever
+     mais leva mais tempo. Desistir aos 60 agora seria desistir de respostas
+     que estão chegando. */
+  const PRAZO_REUNIAO = 90000;
 
   /* Estar conectado ao servidor não quer dizer que a função do assistente foi
      publicada — são dois passos separados, e o segundo é manual. Sem esta
@@ -113,7 +117,10 @@
      rede e chave quando o problema é volume. Cortamos antes de mandar, e
      dizemos que cortamos: material demais some, e some justamente a parte que
      a pessoa carregou por último. */
-  const LIMITE_PEDIDO = 24000;
+  /* 38000 e não 24000: a função no servidor aceita 40000 para reunião, e
+     cortar mais cedo aqui era jogar fora material que caberia. Os 2000 de
+     folga são o cabeçalho que a função acrescenta. */
+  const LIMITE_PEDIDO = 38000;
 
   /* O corpo que voltou, legível e curto. `mensagem` é o campo que o nuvem.js
      usa quando a resposta não era JSON — ali está o texto cru, que é
@@ -201,9 +208,21 @@
        que precisa para as duas coisas de uma vez, e sem perder o histórico:
        ele lê as evidências antigas e o material novo lado a lado. */
     if (op && resumoOp) {
+      /* O retrato entra com orçamento próprio e o material fica inteiro.
+
+         Antes os dois eram concatenados e a tesoura caía no fim — ou seja,
+         sempre no material NOVO, que é justamente o que o modelo precisa ler.
+         Numa conta com histórico grande, o retrato comia metade da cota e a
+         ata chegava pela metade; a decisão que estava na segunda metade
+         voltava como "não sabemos". O retrato é resumo que o app regenera a
+         qualquer momento; a ata o vendedor colou uma vez. */
+      const retrato = retratoDaOportunidade(op, resumoOp);
+      const cotaDoRetrato = Math.min(retrato.length, Math.floor(LIMITE_PEDIDO * 0.25));
       t = 'RETRATO ATUAL DA OPORTUNIDADE (o que já estava registrado):\n' +
-        retratoDaOportunidade(op, resumoOp) +
-        '\n\n=== MATERIAL NOVO QUE O VENDEDOR ACABOU DE MANDAR ===\n' + t;
+        retrato.slice(0, cotaDoRetrato) +
+        (retrato.length > cotaDoRetrato ? '\n[…retrato resumido…]' : '') +
+        '\n\n=== MATERIAL NOVO QUE O VENDEDOR ACABOU DE MANDAR ===\n' +
+        t.slice(0, LIMITE_PEDIDO - cotaDoRetrato - 200);
     }
     if (t.length > LIMITE_PEDIDO) t = t.slice(0, LIMITE_PEDIDO);
 

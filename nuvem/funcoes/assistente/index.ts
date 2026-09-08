@@ -340,7 +340,9 @@ Não devolva valor, etapa nem data de fechamento.`;
 
 Tarefa: o vendedor enviou a transcrição de uma reunião, a ata ou as anotações dele. Separe TUDO que o cliente fez ou disse em evidências, uma para cada dimensão afetada. Um documento costuma render de duas a seis.
 
-Devolva {"evidencias": [ ... ], "contatos": [ ... ], "empresa": { ... }, "negocio": { ... }, "decisoes": [ ... ]}.
+Devolva {"decisoes": [ ... ], "evidencias": [ ... ], "contatos": [ ... ], "empresa": { ... }, "negocio": { ... }}.
+
+ESCREVA "decisoes" PRIMEIRO, antes de tudo. É o campo que mais importa: sem ele o vendedor fica com o índice zerado, que é o mesmo que não ter lido o documento.
 
 Cada item de "evidencias" tem:
 - dimensao: uma das oito. Vale a mesma observação das notas: num documento nosso, os dados que o cliente forneceu ou confirmou — a operação atual dele, os números da unidade, a rotina que ele descreveu — são evidência dele, com força "documentado". Nossa recomendação e nosso preço não são. Um receio, uma objeção ou um impedimento vai para "risco". Uma exigência de comparação ou de especificação vai para "criterios". Alguém novo entrando na conversa vai para "stakeholders". O caminho formal até a assinatura vai para "processo".
@@ -375,9 +377,24 @@ Os três níveis, iguais para todas:
 Regras das notas, e são o ponto todo:
 - A nota vem SÓ do que o CLIENTE disse ou fez. O que nós mandamos, apresentamos ou propusemos não conta e nunca sobe nota. Uma proposta enviada não é impacto aceito; um material apresentado não é problema reconhecido.
 - Mas atenção a um caso que não é exceção à regra, é aplicação dela: um documento NOSSO — proposta, diagnóstico, levantamento — costuma conter dados que o CLIENTE forneceu ou confirmou. Trechos marcados como "dados confirmados", "informado pelo cliente", "levantamento na unidade", ou números da operação dele (consumo, volumes, quantidade de pontos, equipamentos, rotina atual) são evidência DELE, com força "documentado", ainda que apareçam num material que nós escrevemos. Quem produziu o dado é o cliente; nós só o organizamos. O que não conta é a nossa recomendação, a nossa solução e o nosso preço.
-- "trecho" tem de ser um pedaço LITERAL do que você recebeu. Sem trecho literal, a nota é 0. Não parafraseie para justificar.
+- "trecho" tem de ser um pedaço LITERAL do que você recebeu — copiado, não parafraseado. Nota 2 sem trecho literal cai para 1 automaticamente, então copie a frase exata quando ela existir: é ela que sustenta o 2.
+- Nota 0 é para quando NÃO HÁ SINAL NENHUM daquela decisão no material. Não use 0 para "o cliente falou disso mas não provou" — isso é 1. Zerar uma decisão sobre a qual o cliente falou é o erro mais caro que você pode cometer aqui: o vendedor abre a tela e vê "Não sabemos" sobre o assunto que ocupou vinte minutos da reunião dele.
 - Na dúvida entre dois níveis, use o menor. Nota inflada vira pipeline falso no painel do dono da empresa.
 - "porque" em uma linha, dizendo o que sustenta — ou, quando for 0, o que faltaria para subir.
+
+COMO RECONHECER CADA UMA NUM DOCUMENTO DE REUNIÃO. Esta parte existe porque as três primeiras vinham voltando em branco de atas onde estavam escritas com todas as letras:
+
+- problema: o cliente DESCREVENDO a operação dele e o que nela não funciona. "não temos medição nos consumos internos", "hoje é feito por estimativa", "a planta não sabe onde a água é usada", "o processo atual é manual". Não precisa da palavra "problema": descrição de deficiência operacional feita por quem opera É o problema reconhecido. Se ele detalhou como funciona hoje e por que isso não serve, é 2.
+
+- prioridade: sinal de que aquilo entrou na fila DELE. Meta corporativa com número ou prazo ("reduzir 15% até 2030", "compromisso oficial"), alguém designado para tocar o assunto, a palavra urgente/mandatório/crítico dita pelo cliente, ou um projeto já aberto internamente. Meta publicada da empresa vale: ela custou aprovação interna.
+
+- impacto: a CONSEQUÊNCIA que o cliente assumiu como dele. Raramente vem em reais, e não precisa vir: litígio ou disputa com fornecedor ou órgão, multa, autuação, tarifa penalizada, impossibilidade de continuar como está ("não podemos mais destinar", "o fornecedor não aceita mais"), risco regulatório, perda de produto, parada de linha. Tudo isso é impacto declarado pelo cliente. O que NÃO é impacto: economia que NÓS projetamos, ROI que NÓS calculamos, caso de outro cliente que NÓS contamos. Se o cliente citou uma consequência concreta que recai sobre ele, dê 1 no mínimo; se ele dimensionou (valor, prazo, volume, órgão), dê 2.
+
+- criterios: exigência de comparação, especificação, teste ou prova pedida por ele.
+- stakeholders: gente nova entrando, área nova citada, alçada mencionada.
+- consenso: duas ou mais pessoas do cliente convergindo, ou uma decisão conjunta registrada.
+- risco: receio, objeção, impedimento ou restrição que ELE levantou.
+- processo: o caminho formal até a assinatura — compras, jurídico, alçada, orçamento, prazo de contratação.
 
 Regras desta tarefa:
 - Uma evidência por fato. Não junte dois assuntos na mesma linha.
@@ -401,9 +418,24 @@ Os três níveis, iguais para todas:
 
 Regras desta tarefa, e são o ponto todo:
 - A nota vem SÓ do que o CLIENTE disse ou fez. O que nós mandamos, apresentamos ou propusemos não conta e nunca sobe nota. Uma proposta enviada não é impacto aceito; um material apresentado não é problema reconhecido.
-- "trecho" tem de ser um pedaço LITERAL do retrato que sustenta a nota. Sem trecho literal, a nota é 0. Não parafraseie para justificar.
+- "trecho" tem de ser um pedaço LITERAL do que você recebeu — copiado, não parafraseado. Nota 2 sem trecho literal cai para 1 automaticamente, então copie a frase exata quando ela existir: é ela que sustenta o 2.
+- Nota 0 é para quando NÃO HÁ SINAL NENHUM daquela decisão no material. Não use 0 para "o cliente falou disso mas não provou" — isso é 1. Zerar uma decisão sobre a qual o cliente falou é o erro mais caro que você pode cometer aqui: o vendedor abre a tela e vê "Não sabemos" sobre o assunto que ocupou vinte minutos da reunião dele.
 - Na dúvida entre dois níveis, use o menor. Uma nota inflada vira pipeline falso no painel do dono da empresa, e ninguém descobre a tempo.
 - "porque" em uma linha, dizendo o que sustenta — ou, quando for 0, o que faltaria para subir.
+
+COMO RECONHECER CADA UMA NUM DOCUMENTO DE REUNIÃO. Esta parte existe porque as três primeiras vinham voltando em branco de atas onde estavam escritas com todas as letras:
+
+- problema: o cliente DESCREVENDO a operação dele e o que nela não funciona. "não temos medição nos consumos internos", "hoje é feito por estimativa", "a planta não sabe onde a água é usada", "o processo atual é manual". Não precisa da palavra "problema": descrição de deficiência operacional feita por quem opera É o problema reconhecido. Se ele detalhou como funciona hoje e por que isso não serve, é 2.
+
+- prioridade: sinal de que aquilo entrou na fila DELE. Meta corporativa com número ou prazo ("reduzir 15% até 2030", "compromisso oficial"), alguém designado para tocar o assunto, a palavra urgente/mandatório/crítico dita pelo cliente, ou um projeto já aberto internamente. Meta publicada da empresa vale: ela custou aprovação interna.
+
+- impacto: a CONSEQUÊNCIA que o cliente assumiu como dele. Raramente vem em reais, e não precisa vir: litígio ou disputa com fornecedor ou órgão, multa, autuação, tarifa penalizada, impossibilidade de continuar como está ("não podemos mais destinar", "o fornecedor não aceita mais"), risco regulatório, perda de produto, parada de linha. Tudo isso é impacto declarado pelo cliente. O que NÃO é impacto: economia que NÓS projetamos, ROI que NÓS calculamos, caso de outro cliente que NÓS contamos. Se o cliente citou uma consequência concreta que recai sobre ele, dê 1 no mínimo; se ele dimensionou (valor, prazo, volume, órgão), dê 2.
+
+- criterios: exigência de comparação, especificação, teste ou prova pedida por ele.
+- stakeholders: gente nova entrando, área nova citada, alçada mencionada.
+- consenso: duas ou mais pessoas do cliente convergindo, ou uma decisão conjunta registrada.
+- risco: receio, objeção, impedimento ou restrição que ELE levantou.
+- processo: o caminho formal até a assinatura — compras, jurídico, alçada, orçamento, prazo de contratação.
 - Nunca invente pessoa, número, prazo ou fala que não esteja no retrato.
 - Português do Brasil.`;
   }
@@ -596,7 +628,26 @@ function recusouPorTamanho(status: number, corpo: string): boolean {
     /context|too large|maximum context|reduce the length|tokens per minute|rate_limit_exceeded/i.test(corpo);
 }
 
-async function chamarIA(sistema: string, usuario: string): Promise<string> {
+/* Quanto o modelo pode ESCREVER, por tipo de pedido.
+
+   2500 para todos era o defeito mais caro do sistema, e o mais silencioso. A
+   resposta de uma reunião carrega até doze evidências com citação literal
+   cada, a lista de pessoas, a ficha da empresa, o negócio E as oito decisões
+   com o porquê e o trecho de cada uma. Isso passa de 2500 tokens sem esforço.
+   Quando passava, a resposta vinha cortada — e o corte cai sempre no fim, que
+   era justamente onde ficavam as oito. O vendedor via as evidências entrarem e
+   o índice continuar 0/16, sem erro nenhum na tela: o modelo tinha respondido,
+   só não tinha chegado até lá.
+
+   Extração de ficha continua barata e curta; quem lê documento inteiro
+   precisa de espaço para responder. */
+function tetoDeSaida(tipo: string): number {
+  if (tipo === 'reuniao' || tipo === 'notas') return 8000;
+  if (tipo === 'segmentos' || tipo === 'plano' || tipo === 'desenvolvimento') return 4000;
+  return 2500;
+}
+
+async function chamarIA(sistema: string, usuario: string, teto: number): Promise<string> {
   if (PROVEDOR === 'anthropic') {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -609,7 +660,7 @@ async function chamarIA(sistema: string, usuario: string): Promise<string> {
         /* Haiku porque a tarefa é extração curta e o custo por preenchimento
            fica na casa de um centavo. Trocável por IA_MODELO. */
         model: MODELO || 'claude-haiku-4-5',
-        max_tokens: 2500,
+        max_tokens: teto,
         system: sistema,
         messages: [{ role: 'user', content: usuario }]
       })
@@ -626,7 +677,7 @@ async function chamarIA(sistema: string, usuario: string): Promise<string> {
     const corpo: Record<string, unknown> = {
       model: modelo,
       temperature: 0.1,
-      max_tokens: 2500,
+      max_tokens: teto,
       messages: [
         { role: 'system', content: sistema },
         { role: 'user', content: usuario }
@@ -1095,6 +1146,34 @@ function validarDesenvolvimento(bruto: Record<string, unknown>) {
   };
 }
 
+/* Casar a citação com o texto que a gerou.
+
+   A versão anterior normalizava só o palheiro e comparava com a agulha crua.
+   Aspas curvas, reticências unicode, travessão e acento passavam batido, e
+   qualquer um deles nos primeiros 40 caracteres derrubava a nota. Agora as
+   duas pontas passam pela mesma peneira — e a busca tenta dois pedaços da
+   citação, porque o modelo às vezes acerta o miolo e erra o começo. */
+function achatar(t: string): string {
+  return String(t || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\u2018\u2019\u201c\u201d]/g, "'")
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/\u2026/g, '...')
+    .replace(/[^a-z0-9 ]/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim().toLowerCase();
+}
+
+function citacaoExiste(trecho: string, textoOriginal: string): boolean {
+  const alvo = achatar(trecho);
+  if (alvo.length < 12) return false;
+  const fonte = achatar(textoOriginal);
+  if (fonte.indexOf(alvo.slice(0, 40)) !== -1) return true;
+  /* o miolo, para quando o modelo enfeitou o começo da citação */
+  if (alvo.length >= 60 && fonte.indexOf(alvo.slice(20, 60)) !== -1) return true;
+  return false;
+}
+
 function validarNotas(bruto: Record<string, unknown>, textoOriginal: string) {
   const dimensoes = DIMENSOES.map((d) => d[0]);
   const brutas = Array.isArray(bruto.decisoes) ? bruto.decisoes : [];
@@ -1112,12 +1191,22 @@ function validarNotas(bruto: Record<string, unknown>, textoOriginal: string) {
     nota = Math.floor(nota);
 
     const trecho = limparTexto(o.trecho, 240);
-    /* O trecho tem de existir mesmo no retrato. Comparação frouxa, por um
-       pedaço do começo, porque o modelo costuma cortar a citação. */
-    const chave = trecho.slice(0, 40).toLowerCase();
-    const citaDeVerdade = chave.length >= 12 &&
-      textoOriginal.replace(/\s+/g, ' ').toLowerCase().indexOf(chave) !== -1;
-    if (nota > 0 && !citaDeVerdade) nota = 0;
+    const citaDeVerdade = citacaoExiste(trecho, textoOriginal);
+    /* Sem citação literal, o teto é 1 — não 0.
+
+       Era 0, e essa era a trava que zerava carteira inteira. Ela tratava
+       "não consegui casar a citação" como "o cliente não disse nada", e as
+       duas coisas não são a mesma. O modelo cita com aspa curva, com
+       reticências, com um acento a menos, ou de um pedaço que o corte de
+       tamanho comeu — e a decisão inteira caía para "Não sabemos" num
+       documento onde o problema estava escrito com todas as letras.
+
+       Um sinal que o modelo leu e não consegue apontar com o dedo é
+       exatamente a definição da nota 1 do método: "há sinal, mas vago,
+       indireto". Então vira 1. A nota 2 continua exigindo citação literal
+       AQUI e, no app, evidência confirmada ou documentada — duas travas
+       independentes, que é onde o rigor tem de estar. */
+    if (nota > 1 && !citaDeVerdade) nota = 1;
 
     vistas.add(dimensao);
     decisoes.push({
@@ -1564,7 +1653,7 @@ Deno.serve(async (req: Request) => {
       entrada = texto + sites.join('');
     }
 
-    let bruto = await chamarIA(promptDe(tipo, ctx), entrada);
+    let bruto = await chamarIA(promptDe(tipo, ctx), entrada, tetoDeSaida(tipo));
     let json = lerJSON(bruto);
 
     /* Segunda passada para empresa, e só quando a primeira achou de quem se
@@ -1581,7 +1670,7 @@ Deno.serve(async (req: Request) => {
       if (nome) {
         const comBusca = await enriquecerConta(entrada, site, nome);
         if (comBusca !== entrada) {
-          const brutoDois = await chamarIA(promptDe(tipo, ctx), comBusca);
+          const brutoDois = await chamarIA(promptDe(tipo, ctx), comBusca, tetoDeSaida(tipo));
           const jsonDois = lerJSON(brutoDois);
           /* O que a segunda achou vence onde a primeira estava vazia, e vence
              também no que é dado oficial — razão social, CNPJ e endereço saem
