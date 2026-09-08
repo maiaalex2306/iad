@@ -22,7 +22,11 @@
       <div class="sub">O funil organiza. A decisão fecha.</div>
     </div>
     <div class="espaco"></div>
-    <div id="quem" class="quem"></div>
+    <div class="quem-caixa">
+      <button id="quem" class="quem" onclick="App.menuUsuario(event)" aria-haspopup="true" aria-expanded="false"
+              title="Sua conta: empresa ativa, troca de conta, senha e sair"></button>
+      <div id="menu-quem" class="menu-quem" hidden></div>
+    </div>
     <button onclick="App.ir('#/playbook')" data-ajuda-titulo="O método" data-ajuda="A teoria inteira: como uma tarefa vira avanço, o que conta como evidência em cada uma das oito decisões, e o que fazer em cada canal." title="O método">❓</button>
     <button onclick="App.sair()" data-ajuda-titulo="Sair" data-ajuda="Encerra a sessão neste aparelho. Os dados sincronizados continuam no servidor." title="Sair">⏻</button>
   </header>

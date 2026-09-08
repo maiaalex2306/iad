@@ -206,11 +206,78 @@
   }
 
   /* Barra do administrador: o único que escolhe empresa e usuário. */
+  /* ---------------- Menu da conta ----------------
+
+     "Trocar de empresa" e "trocar de usuário" são duas coisas de naturezas
+     diferentes neste app, e o menu diz qual é qual em vez de fingir que são a
+     mesma:
+
+     · empresa — quem é administrador escolhe qual empresa está enxergando, e
+       a escolha vale para o app inteiro: o que ele criar a partir dali nasce
+       nela. Para quem não é, a empresa é uma só, porque o cadastro da pessoa
+       pertence a uma empresa. Dizer isso é melhor do que oferecer uma lista
+       com um item;
+
+     · usuário — trocar de pessoa é trocar de conta, e conta se troca entrando
+       com ela. Não existe "virar outro vendedor" com um clique: o dono de
+       cada registro é quem está logado, e um app que deixasse alternar sem
+       senha estaria dizendo que a senha não importa. */
+  function menuDoUsuario() {
+    const A = global.IADAuth;
+    const u = A.atual();
+    if (!u) return '';
+
+    const naNuvem = global.IADNuvem.mandaNoAcesso();
+    const papel = { admin: 'Administrador', gestor: 'Gestor' }[u.papel] || 'Vendedor';
+    const iniciais = iniciaisDe(u.nome || u.login || u.email || '?');
+
+    /* Empresa ativa: para o administrador é escolha; para o resto é fato. */
+    let bloco;
+    if (A.ehAdmin()) {
+      const f = A.filtros();
+      const empresas = A.tenants();
+      bloco = '<div class="menu-secao"><span>Empresa que estou vendo</span></div>' +
+        '<div class="menu-lista">' +
+        [{ id: 'todas', nome: 'Todas as empresas' }].concat(empresas).map(function (t) {
+          const ativa = f.tenant === t.id;
+          return '<button class="menu-item' + (ativa ? ' ativo' : '') + '"' +
+            ' onclick="App.trocarEmpresa(\'' + esc(t.id) + '\')">' +
+            '<span class="marca-ativa">' + (ativa ? '✓' : '') + '</span>' + esc(t.nome) + '</button>';
+        }).join('') + '</div>' +
+        '<p class="menu-nota">O que você cadastrar passa a pertencer à empresa escolhida. Com “Todas”, nasce na primeira da lista.</p>';
+    } else {
+      const t = A.tenant(u.tenantId);
+      bloco = '<div class="menu-secao"><span>Empresa</span></div>' +
+        '<div class="menu-empresa"><strong>' + esc((t && t.nome) || 'Sem empresa') + '</strong></div>' +
+        '<p class="menu-nota">Sua conta pertence a esta empresa. Para trabalhar em outra, entre com a conta dela — é o botão abaixo.</p>';
+    }
+
+    return '<div class="menu-topo">' +
+      '<span class="avatar grande">' + esc(iniciais) + '</span>' +
+      '<div><strong>' + esc(u.nome || u.login) + '</strong>' +
+      '<span class="tiny muted">' + esc(u.email || u.login || '') + '</span>' +
+      '<span class="pill tiny">' + esc(papel) + '</span></div></div>' +
+
+      bloco +
+
+      '<div class="menu-secao"><span>Conta</span></div>' +
+      '<button class="menu-item" onclick="App.trocarDeConta()">' +
+      '<span class="marca-ativa">⇄</span>Trocar de conta</button>' +
+      (naNuvem
+        ? '<button class="menu-item" onclick="App.trocarSenha()">' +
+          '<span class="marca-ativa">🔑</span>Trocar minha senha</button>'
+        : '') +
+      '<button class="menu-item" onclick="App.irDoMenu(\'#/dados\')">' +
+      '<span class="marca-ativa">⚙</span>Configuração</button>' +
+      '<button class="menu-item saida" onclick="App.sair()">' +
+      '<span class="marca-ativa">⏻</span>Sair</button>';
+  }
+
   function barraAdmin() {
     const A = global.IADAuth;
     if (!A.ehAdmin()) return '';
-    /* No Pipeline os dois selects estão dentro da barra de filtros, com o
-       resto. Repeti-los aqui em cima daria dois controles para a mesma
+    /* No Pipeline o filtro por pessoa já está dentro da barra de filtros, com
+       o resto. Repeti-lo aqui em cima daria dois controles para a mesma
        pergunta, e mudar um sem mudar o outro é como se inventa contradição. */
     if ((location.hash || '') === '#/pipeline') return '';
     const f = A.filtros();
@@ -219,13 +286,14 @@
       return u.papel !== 'admin' && (f.tenant === 'todas' || u.tenantId === f.tenant);
     });
 
+    /* A empresa saiu daqui: ela é escopo, não filtro de tela, e passou a viver
+       no menu da conta, que é onde a pessoa olha para saber onde está. Ter os
+       dois seria o mesmo problema de sempre — duas portas para o mesmo estado,
+       e uma delas sempre esquecida. */
     return '<div class="barra-admin">' +
       '<span class="etiqueta">Administrador</span>' +
-      '<label>Empresa<select onchange="App.filtrarTenant(this.value)">' +
-        '<option value="todas"' + (f.tenant === 'todas' ? ' selected' : '') + '>Todas as empresas</option>' +
-        empresas.map(function (t) {
-          return '<option value="' + esc(t.id) + '"' + (f.tenant === t.id ? ' selected' : '') + '>' + esc(t.nome) + '</option>';
-        }).join('') + '</select></label>' +
+      '<span class="tiny">' + esc(f.tenant === 'todas' ? 'Todas as empresas'
+        : ((A.tenant(f.tenant) || {}).nome || 'Empresa')) + '</span>' +
       '<label>Usuário<select onchange="App.filtrarUsuarioAdmin(this.value)">' +
         '<option value="todos"' + (f.usuario === 'todos' ? ' selected' : '') + '>Todos os usuários</option>' +
         pessoas.map(function (u) {
@@ -839,15 +907,10 @@
               .concat(pessoas.map(function (u) { return { valor: u.id, rotulo: u.nome || u.email || u.login }; })),
             f.responsavel);
 
-    /* Trocar de empresa não é filtro de tela: muda o que o app inteiro
-       carrega. Fica aqui na barra, e a barra de administrador some nesta
-       tela — um controle por pergunta, sempre. */
-    const doTenant = A.ehAdmin()
-      ? seletor('Empresa (do sistema)', 'App.filtrarTenant(this.value)',
-          [{ valor: 'todas', rotulo: 'Todas as empresas' }]
-            .concat(A.tenants().map(function (t) { return { valor: t.id, rotulo: t.nome }; })),
-          A.filtros().tenant)
-      : '';
+    /* A empresa não está aqui de propósito: trocar de empresa não é filtrar
+       uma tela, é mudar onde a pessoa está trabalhando — e isso mora no menu
+       da conta, no topo, junto do nome dela. Um controle por pergunta. */
+    const doTenant = '';
 
     return '<div class="filtros-tarefa filtros-negocio">' +
       doTenant + doResponsavel +
@@ -3310,7 +3373,7 @@
   global.IADViews = {
     hoje, painel, pipeline, tarefas, cockpit, revisao, contas, cadastros, playbook, dados, itemArquivo, listaLeads,
     revisaoDaImportacao, resumoDaLeitura, planoDaIA, definirPlano, planoGuardado, revisaoDasNotas,
-    acesso, barraAdmin, definirTelaAcesso, definirPrimeiraEmpresa, listaUsuariosNuvem,
+    acesso, barraAdmin, menuDoUsuario, definirTelaAcesso, definirPrimeiraEmpresa, listaUsuariosNuvem,
     pendenteAcesso: function () { return pendente; },
     tarefasFiltrar, tarefasEstado, tarefasVisiveis, tarefasDaPagina, tarefasSelecionadas, tarefasMarcar,
     pipelineEstado, pipelineFiltrar, pipelineLimparTudo, gavetaDeFiltros,

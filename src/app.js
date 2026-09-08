@@ -151,9 +151,15 @@
   /* Quem está logado e de onde: some quando ninguém está. */
   function pintarTopo() {
     const alvo = document.getElementById('quem');
+    const menu = document.getElementById('menu-quem');
     if (!alvo) return;
     const u = A.atual();
-    if (!u) { alvo.innerHTML = ''; return; }
+    if (!u) {
+      alvo.innerHTML = '';
+      if (menu) { menu.hidden = true; menu.innerHTML = ''; }
+      return;
+    }
+    if (menu && !menu.hidden) menu.innerHTML = V.menuDoUsuario();
     /* Para o administrador, repetir "Administrador" nas duas linhas não diz nada;
        o que ele precisa ver é qual recorte está enxergando no momento. */
     let onde;
@@ -166,8 +172,28 @@
       onde = (t && t.nome) || '';
     }
     alvo.innerHTML = '<span class="nome">' + U.esc(u.nome || u.login) + '</span>' +
-      '<span class="onde">' + U.esc(onde) + '</span>';
+      '<span class="onde">' + U.esc(onde) + '</span><span class="seta">▾</span>';
   }
+
+  /* O menu abre no clique e fecha em qualquer outro: clique fora, Esc, ou
+     uma escolha dentro dele. Fechar sozinho é o que separa um menu de um
+     painel que fica no caminho. */
+  function fecharMenuUsuario() {
+    const menu = document.getElementById('menu-quem');
+    const botao = document.getElementById('quem');
+    if (menu) menu.hidden = true;
+    if (botao) botao.setAttribute('aria-expanded', 'false');
+  }
+
+  document.addEventListener('click', function (e) {
+    const menu = document.getElementById('menu-quem');
+    if (!menu || menu.hidden) return;
+    if (e.target.closest('.quem-caixa')) return;
+    fecharMenuUsuario();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') fecharMenuUsuario();
+  });
 
   function montarNav() {
     document.querySelector('nav.tabs').innerHTML = ROTAS.filter(function (r) { return !r.foraDasAbas; }).map(function (r) {
@@ -342,6 +368,16 @@
          desenho é justamente não mostrar botão morto. Ausência silenciosa por
          defeito é indistinguível de ausência silenciosa por escolha. */
       IA.verificar().then(function (mudou) { if (mudou) render(); });
+
+      /* Só o administrador enxerga mais de uma empresa, e é a lista do
+         servidor que faz o "trocar de empresa" ter o que trocar. Falhar aqui
+         não impede nada: ele fica com a empresa do próprio perfil, que é o
+         que tinha antes. */
+      if (A.ehAdmin()) {
+        N.empresasDaNuvem().then(function (lista) {
+          if (A.espelharEmpresas(lista)) render();
+        }, function () {});
+      }
 
       /* Trazer o que já existe no servidor é o que faz a troca de aparelho
          funcionar; falhar aqui não impede de usar o app com a cópia local. */
@@ -1658,6 +1694,41 @@
       render();
     },
 
+    /* ---------- Menu da conta ---------- */
+
+    menuUsuario: function (e) {
+      if (e) e.stopPropagation();
+      const menu = document.getElementById('menu-quem');
+      const botao = document.getElementById('quem');
+      if (!menu) return;
+      const abrindo = menu.hidden;
+      if (abrindo) menu.innerHTML = V.menuDoUsuario();
+      menu.hidden = !abrindo;
+      if (botao) botao.setAttribute('aria-expanded', abrindo ? 'true' : 'false');
+    },
+
+    /* Trocar a empresa ativa é o filtro global do administrador — o mesmo que
+       a barra dele e a barra do Pipeline usam. Um estado, três portas. */
+    trocarEmpresa: function (id) {
+      A.definirFiltros({ tenant: id, usuario: 'todos' });
+      fecharMenuUsuario();
+      render();
+    },
+
+    irDoMenu: function (hash) {
+      fecharMenuUsuario();
+      location.hash = hash;
+    },
+
+    /* Trocar de pessoa é trocar de conta, e conta se troca entrando com ela.
+       Alternar sem senha seria dizer que a senha não importa — e o dono de
+       cada registro criado é quem está logado, não quem a tela diz que é. */
+    trocarDeConta: function () {
+      if (!U.confirmar('Sair desta conta e entrar com outra?\n\n' +
+        'O que já foi sincronizado continua no servidor. O que estiver só neste aparelho continua aqui.')) return;
+      App.sair(true, 'Entre com a outra conta.');
+    },
+
     /* ---------- Filtros do Pipeline ---------- */
 
     pipelineCampo: function (campo, valor) {
@@ -2593,11 +2664,14 @@
       render();
     },
 
-    sair: function (semPerguntar) {
+    sair: function (semPerguntar, recado) {
       if (!semPerguntar && !U.confirmar('Sair do sistema?')) return;
+      fecharMenuUsuario();
       A.encerrarSessao();
       const N = global.IADNuvem;
-      const depois = function () { V.definirTelaAcesso('login', null, ''); render(); };
+      /* O recado sobrevive ao logout de propósito: quem clicou em "trocar de
+         conta" precisa ver na tela de entrada por que está ali. */
+      const depois = function () { V.definirTelaAcesso('login', null, recado || ''); render(); };
       if (N.conectado()) N.sair().then(depois, depois); else depois();
     },
 

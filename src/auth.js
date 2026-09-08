@@ -256,6 +256,32 @@
     return u;
   }
 
+  /* A lista de empresas do servidor, espelhada aqui. Só o administrador a
+     recebe — as políticas do banco não devolvem as outras para mais ninguém —
+     e é ela que faz "trocar de empresa" ter mais de um item. Antes disto o
+     espelho guardava apenas a empresa do próprio perfil, e o administrador
+     tinha o filtro de empresa com uma opção só: a dele. */
+  function espelharEmpresas(lista) {
+    if (!Array.isArray(lista) || !lista.length) return 0;
+    const estado = Store.obter();
+    estado.tenants = estado.tenants || [];
+    let novas = 0;
+    lista.forEach(function (linha) {
+      if (!linha || !linha.id) return;
+      let t = tenant(linha.id);
+      if (!t) {
+        t = { id: linha.id, nome: '', cnpj: '', criadoEm: Store.hoje() };
+        estado.tenants.push(t);
+        novas++;
+      }
+      t.nome = linha.nome || t.nome || 'Empresa sem nome';
+      t.cnpj = linha.cnpj || t.cnpj || '';
+      if (linha.ativo !== undefined) t.ativo = linha.ativo !== false;
+    });
+    Store.salvar();
+    return novas;
+  }
+
   /* Um login local só vale para quem não veio do servidor — hoje, o Adm.
      É a porta de serviço: sem internet, ou antes de a nuvem existir. */
   function ehLocal(texto) {
@@ -313,7 +339,7 @@
   }
 
   global.IADAuth = {
-    entrar, encerrarSessao, atual, ehAdmin, ehGestor, sessao, filtros, definirFiltros,
+    entrar, encerrarSessao, atual, ehAdmin, ehGestor, sessao, filtros, definirFiltros, espelharEmpresas,
     usuarios, tenants, tenant, usuario, porLogin, criarUsuario, criarTenant,
     gerarCodigo, confirmarCodigo, completarPerfil, salvarUsuario, excluirUsuario,
     definirSenha, conferirSenha, garantirAdministrador, abrirSessao,
