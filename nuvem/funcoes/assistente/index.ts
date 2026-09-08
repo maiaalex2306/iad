@@ -467,13 +467,17 @@ Regras desta tarefa:
   if (tipo === 'segmentos') {
     const papeis = (Array.isArray(ctx.papeis) ? ctx.papeis.map(String) : []);
     const nomes = segmentosDoTenant(ctx);
+    /* Catálogo só com nomes é outro jogo: sem subsegmentos, "Químicos" é uma
+       palavra e não uma definição, e a régua de correspondência tem de ser
+       outra. O modelo precisa saber em qual dos dois casos está. */
+    const detalhados = nomes.some((s) => s.subsegmentos || s.oportunidades || s.personas);
     return `Você prepara, para uma equipe de vendas B2B brasileira, os leads que acabaram de chegar do LinkedIn. Para cada um: classifica a empresa no segmento mais próximo, diz que papel a pessoa tende a ter na compra, e escreve o reenquadramento comercial.
 
 SEGMENTOS DESTA EQUIPE — o que cada um cobre:
 ${descreverSegmentos(ctx)}
 
 Como escolher o segmento — faça nesta ordem, para cada lead:
-1. Leia o que a empresa faz (descrição, site, cargo da pessoa, conversa).
+1. Leia o que a empresa faz. E comece pelo NOME DELA: em português o nome quase sempre entrega o setor — "Vita Ambiental Engenharia" é meio ambiente, "Laticínios São Jorge" é alimentos, "Metalúrgica Pilar" é metalurgia, "Transportadora Aliança" é logística. Só depois vão a descrição, o site, o cargo da pessoa e a conversa. Muito lead do LinkedIn vem sem descrição nenhuma, e desistir por causa disso é jogar fora o sinal mais forte que existe na linha.
 2. Percorra os segmentos acima UM A UM e pergunte: o que esta empresa faz aparece nos subsegmentos ou nas oportunidades deste segmento?
 3. Se aparecer em mais de um, fique com aquele onde a empresa é CLIENTE do que a lista descreve, não fornecedor dela.
 4. Se nenhum bater exatamente, pegue o MAIS PRÓXIMO por cadeia produtiva, por processo industrial ou pelo tipo de cliente que atende. Uma fábrica de embalagem plástica para alimento está mais perto de "Alimentos" do que de "Outros". Um laticínio pequeno é "Alimentos" mesmo que a lista só cite frigoríficos.
@@ -496,7 +500,9 @@ Regras absolutas:
 - Um item de saída para cada lead da entrada, com o mesmo "n".
 - Nada de texto fora do JSON.
 
-A entrada traz, para cada lead: nome, cargo e perfil da pessoa, nome da empresa, site, cidade, o que a pessoa faz lá, a descrição da empresa quando disponível, o texto do site quando disponível, e a troca de mensagens entre a SDR e a pessoa.${nomes.length ? '' : '\n\nAtenção: a lista de segmentos veio vazia. Devolva "Outros" para todos.'}`;
+Um aviso sobre a pessoa física: quando o lead for alguém abordado como PESSOA e não como empresa — morador de condomínio, consultor autônomo, mentor, coach, investidor —, "Outros" é a resposta certa e não é derrota. Diga isso no "porque". O que não pode é uma empresa industrial com nome autoexplicativo cair em "Outros" por falta de descrição.
+
+A entrada traz, para cada lead: nome, cargo e perfil da pessoa, nome da empresa, site, cidade, o que a pessoa faz lá, a descrição da empresa quando disponível, o texto do site quando disponível, e a troca de mensagens entre a SDR e a pessoa.${nomes.length ? '' : '\n\nAtenção: a lista de segmentos veio vazia. Devolva "Outros" para todos.'}${detalhados ? '' : '\n\nOs segmentos desta equipe vieram SÓ COM O NOME, sem subsegmentos nem exemplos. Então trabalhe pelo significado do nome de cada um no mercado brasileiro, e seja mais generoso na aproximação: com a lista assim, exigir correspondência exata é o mesmo que mandar tudo para "Outros".'}`;
   }
 
   if (tipo === 'desenvolvimento') {
@@ -643,7 +649,11 @@ function recusouPorTamanho(status: number, corpo: string): boolean {
    precisa de espaço para responder. */
 function tetoDeSaida(tipo: string): number {
   if (tipo === 'reuniao' || tipo === 'notas') return 8000;
-  if (tipo === 'segmentos' || tipo === 'plano' || tipo === 'desenvolvimento') return 4000;
+  /* Um lote de vinte leads devolve vinte itens com porquê e insight cada.
+     Não cabia em 2500 e mal cabia em 4000 — e quando não cabe, o JSON chega
+     truncado e o lote inteiro cai em "Outros" sem explicação. */
+  if (tipo === 'segmentos') return 8000;
+  if (tipo === 'plano' || tipo === 'desenvolvimento') return 4000;
   return 2500;
 }
 
@@ -1064,19 +1074,52 @@ function validarSegmentos(bruto: Record<string, unknown>, ctx: Record<string, un
   const brutos = Array.isArray(bruto.itens) ? bruto.itens : [];
   const itens: Array<Record<string, string | number>> = [];
 
+  /* Casar o nome que o modelo devolveu com o nome que está no catálogo.
+
+     Três níveis, do mais seguro ao mais frouxo, e cada um existe por um erro
+     que aconteceu:
+
+     1. Igual depois de achatar. "Químicos" contra "Quimicos" é a mesma coisa
+        para qualquer pessoa e eram duas coisas diferentes para este código:
+        ele comparava só com toLowerCase, e acento em português está em
+        Químicos, Serviços, Construção, Saneamento — quase metade de um
+        catálogo típico. Uma classificação certa virava "Outros" por causa de
+        um til.
+
+     2. Um contém o outro. "Alimentos e Bebidas" quando a lista diz
+        "Alimentos": o modelo acertou o segmento e errou a cópia.
+
+     3. Palavra em comum, comparada pela raiz. "Indústria Química" contra
+        "Químicos" não passa por substring nenhuma — nenhuma das duas contém a
+        outra — e é o mesmo segmento; o que separa as duas é o gênero da
+        palavra. A raiz corta um "s" final e uma vogal final, o que junta
+        química/químicos e metalúrgica/metalurgia sem juntar petróleo com
+        petroquímico. Cinco letras no mínimo, para não casar por "de" e "da". */
   const casar = (valor: unknown, lista: string[]): string => {
-    const t = limparTexto(valor, 80);
+    const t = achatar(limparTexto(valor, 80));
     if (!t) return '';
-    const exato = lista.find((v) => v.toLowerCase() === t.toLowerCase());
-    if (exato) return exato;
-    /* "Alimentos e Bebidas" quando a lista diz "Alimentos": o modelo acertou
-       o segmento e errou a cópia. Descartar isso mandava para "Outros" uma
-       classificação correta — que é exatamente o que não se quer aqui. */
-    const contido = lista.find((v) => {
-      const a = v.toLowerCase(), b = t.toLowerCase();
-      return a.length >= 4 && b.length >= 4 && (b.indexOf(a) !== -1 || a.indexOf(b) !== -1);
+    const achatados = lista.map((v) => ({ original: v, chave: achatar(v) }));
+
+    const exato = achatados.find((v) => v.chave === t);
+    if (exato) return exato.original;
+
+    const contido = achatados.find((v) =>
+      v.chave.length >= 4 && t.length >= 4 && (t.indexOf(v.chave) !== -1 || v.chave.indexOf(t) !== -1));
+    if (contido) return contido.original;
+
+    const raiz = (w: string): string => {
+      let r = w;
+      if (r.length > 5 && r.slice(-1) === 's') r = r.slice(0, -1);
+      if (r.length > 4 && 'aeiou'.indexOf(r.slice(-1)) !== -1) r = r.slice(0, -1);
+      return r;
+    };
+    const palavras = t.split(' ').filter((w) => w.length >= 5).map(raiz);
+    const porPalavra = achatados.find((v) => {
+      const dele = v.chave.split(' ').filter((w) => w.length >= 5).map(raiz);
+      return dele.some((w) => palavras.some((x) => x === w ||
+        (x.length >= 5 && w.length >= 5 && (x.indexOf(w) === 0 || w.indexOf(x) === 0))));
     });
-    return contido || '';
+    return porPalavra ? porPalavra.original : '';
   };
 
   for (const item of brutos.slice(0, 100)) {

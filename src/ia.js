@@ -377,10 +377,25 @@
         };
       });
       const classificadas = Object.keys(mapa).filter(function (k) { return mapa[k].segmento && mapa[k].segmento !== 'Outros'; }).length;
-      return { mapa: mapa, motivo: classificadas ? '' :
-        'O assistente leu as ' + empresas.length + ' empresas e não achou nenhum dos seus ' +
-        catalogo.length + ' segmentos que coubesse. Abaixo, em cada lead, está o que ele ' +
-        'considerou mais próximo — escolha ou deixe em Outros.' };
+      if (classificadas) return { mapa: mapa, motivo: '' };
+
+      /* Lote inteiro em "Outros" tem duas causas muito diferentes, e o aviso
+         antigo servia para as duas — ou seja, não servia para nenhuma.
+
+         Se os segmentos estão só com o nome, o assistente tinha uma palavra e
+         nenhuma definição para trabalhar, e a correção está em Cadastros, não
+         aqui. Se estão descritos, o problema é outro e a saída é escolher à
+         mão. Mandar o vendedor para o lugar certo é metade do conserto. */
+      const descritos = catalogo.filter(function (s) {
+        return s.subsegmentos || s.oportunidades || s.personas;
+      }).length;
+      const comum = 'O assistente leu as ' + empresas.length + ' empresas e nenhuma coube nos seus ' +
+        catalogo.length + ' segmentos. Em cada lead abaixo está o que ele considerou mais próximo.';
+      return { mapa: mapa, motivo: descritos
+        ? comum + ' Escolha ou deixe em Outros.'
+        : comum + ' Os seus segmentos estão cadastrados só com o nome — em Cadastros → Segmentos, ' +
+          'preencher subsegmentos ("defensivos; saneantes; tratamento de água") é o que mais melhora ' +
+          'este acerto, porque é ali que o assistente descobre o que cada nome quer dizer na sua operação.' };
     }).catch(function (e) {
       return { mapa: {}, motivo: 'Não consegui falar com o assistente: ' + (e && e.message ? e.message : 'erro desconhecido') };
     });
