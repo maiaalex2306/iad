@@ -19,7 +19,7 @@
    A chave service_role NUNCA entra aqui, nem em nenhum outro arquivo do app:
    essa ignora as políticas.
 
-   Quem configurar pelo app (⚙︎ Dados → Nuvem) sobrescreve o que está abaixo,
+   Quem configurar pelo app (Configuração → Nuvem) sobrescreve o que está abaixo,
    só naquele navegador. */
 window.IADConfig = {
   supabase: {

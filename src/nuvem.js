@@ -89,7 +89,7 @@
 
   function tentar(caminho, opcoes, podeRenovar) {
     const c = config();
-    if (!c.url) return Promise.reject(new Error('Configure o endereço do Supabase em ⚙︎ Dados.'));
+    if (!c.url) return Promise.reject(new Error('Configure o endereço do Supabase em Configuração → Nuvem.'));
     const o = opcoes || {};
     return fetch(c.url + caminho, {
       method: o.metodo || 'GET',

@@ -36,7 +36,7 @@ ser colada em lugar nenhum do app — ela ignora todas as políticas.
 
 ## 4. Conectar o app
 
-1. No IAD CRM: **⚙︎ Dados** → seção **Nuvem (Supabase)** → **Configurar**.
+1. No IAD CRM: **Configuração** → seção **Nuvem (Supabase)** → **Configurar**.
 2. Cole a URL e a chave pública. Salve.
 3. **Criar acesso na nuvem** com seu nome, e-mail e senha.
 4. O Supabase manda um e-mail de confirmação — este é real, sai de verdade.

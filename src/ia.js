@@ -131,7 +131,7 @@
      — e a tela tinha uma frase só para três causas diferentes. Frase única
      para causas diferentes é o que faz alguém mexer no lugar errado. */
   function extrair(tipo, texto, contexto) {
-    if (!disponivel()) return Promise.resolve({ erro: 'O assistente não está no ar. Veja ⚙︎ Dados → Assistente de IA.' });
+    if (!disponivel()) return Promise.resolve({ erro: 'O assistente não está no ar. Veja Configuração → Assistente de IA.' });
     let t = String(texto || '').trim();
     if (t.length < 12) return Promise.resolve({ erro: 'Texto curto demais para eu ler.' });
 
@@ -186,7 +186,7 @@
      Prazo maior porque aqui o modelo lê uma transcrição, não uma frase. */
   function analisarReuniao(texto, contexto, op, resumoOp) {
     if (!disponivel()) {
-      return Promise.resolve({ erro: 'O assistente não está no ar. Veja ⚙︎ Dados → Assistente de IA.' });
+      return Promise.resolve({ erro: 'O assistente não está no ar. Veja Configuração → Assistente de IA.' });
     }
     let t = String(texto || '').trim();
     if (t.length < 60) return Promise.resolve({ erro: 'Texto curto demais para eu separar evidências.' });
@@ -495,7 +495,7 @@
      muda é o custo: oito formulários viram uma tela. */
   function sugerirNotas(op, r, textoExtra) {
     if (!disponivel()) {
-      return Promise.resolve({ erro: 'O assistente não está no ar. Veja ⚙︎ Dados → Assistente de IA.' });
+      return Promise.resolve({ erro: 'O assistente não está no ar. Veja Configuração → Assistente de IA.' });
     }
 
     let retrato = retratoDaOportunidade(op, r);

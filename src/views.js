@@ -511,7 +511,7 @@
       '<p class="small muted">Comece com dados de demonstração para entender o modelo, cadastre sua primeira conta ou importe sua carteira de uma planilha.</p>' +
       '<div class="row"><button class="btn alt" onclick="App.carregarDemo()" data-ajuda-titulo="Demonstração" data-ajuda="Carrega uma carteira fictícia com os cinco grupos de pipeline, para treinar a leitura do modelo. Substitui o que está aqui.">Carregar demonstração</button>' +
       '<button class="btn ghost" onclick="App.novaConta()" data-ajuda-titulo="Primeira empresa" data-ajuda="Cadastre a empresa. Depois vêm os contatos e a oportunidade — ou faça tudo de uma vez pelo botão + Oportunidade.">Criar primeira conta</button>' +
-      '<button class="btn ghost" onclick="App.ir(\'#/dados\')" data-ajuda-titulo="Importar planilha" data-ajuda="Traz empresas, contatos ou oportunidades de um CSV. Os modelos ficam em ⚙︎ Dados.">Importar planilha</button></div></div>';
+      '<button class="btn ghost" onclick="App.ir(\'#/dados\')" data-ajuda-titulo="Importar planilha" data-ajuda="Traz empresas, contatos ou oportunidades de um CSV. Os modelos ficam em Configuração → Importar planilha.">Importar planilha</button></div></div>';
   }
 
   /* ---------------- Pipeline ---------------- */
@@ -604,7 +604,7 @@
     }).join(' ');
 
     /* A ponte é a fila de espera: o Linked Helper entrega lá e o lead fica
-       guardado 30 dias. O botão vive aqui, e não em ⚙︎ Dados, porque é aqui
+       guardado 30 dias. O botão vive aqui, e não em Configuração, porque é aqui
        que o vendedor está quando pensa em pipeline. */
     const importar = global.IADIntegracoes.configurada()
       ? '<button class="btn mini" onclick="App.importarLeads()"' +
@@ -2424,7 +2424,7 @@
 
   function dados() {
     const est = Store.dados();
-    return '<h1>Dados e instalação</h1>' +
+    return '<h1>Configuração e instalação</h1>' +
       '<div class="card"><h2>Instalar no desktop e no celular</h2>' +
       '<p class="small">Este é um PWA: o mesmo código roda no navegador, instala no Windows/macOS/Linux e vira ícone no Android e no iPhone.</p>' +
       '<ul class="small"><li><strong>Android/Chrome/Edge:</strong> menu ⋮ → “Instalar aplicativo”.</li>' +

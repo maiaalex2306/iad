@@ -234,7 +234,7 @@
 
   function requisitar(metodo, corpo) {
     const c = config();
-    if (!c.url) return Promise.reject(new Error('Configure o endereço da ponte em ⚙︎ Dados.'));
+    if (!c.url) return Promise.reject(new Error('Configure o endereço da ponte em Configuração → Linked Helper.'));
     const separador = c.url.indexOf('?') === -1 ? '?' : '&';
     const endereco = c.url + (c.token ? separador + 'token=' + encodeURIComponent(c.token) : '');
 

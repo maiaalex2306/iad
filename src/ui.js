@@ -298,7 +298,7 @@
        funciona, fica a linha que diz onde olhar. */
     if (!assistenteAtivo()) {
       return '<p class="ia-fora">✨ Assistente fora do ar. ' +
-        '<a href="#/dados" onclick="IADUI.fecharDialogos()">⚙︎ Dados diz por quê.</a></p>';
+        '<a href="#/dados" onclick="IADUI.fecharDialogos()">Configuração diz por quê.</a></p>';
     }
     return '<div class="caixa-ia">' +
       '<span class="rotulo">✨ ' + esc(c.rotulo || 'Cole a ata ou conte o que aconteceu') + '</span>' +

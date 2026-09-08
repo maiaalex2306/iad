@@ -25,7 +25,7 @@
     /* Saiu da engrenagem do topo e entrou no menu: era a única tela do app
        escondida atrás de um ícone, e ninguém procura nuvem, backup e
        importação num símbolo. */
-    { hash: '#/dados', ico: '⚙️', nome: 'Dados', render: V.dados,
+    { hash: '#/dados', ico: '⚙️', nome: 'Configuração', render: V.dados,
       ajuda: 'Nuvem, Linked Helper, backup, importação de planilha, instalação no celular e demonstração.' },
     { hash: '#/contas', ico: '🏢', nome: 'Contas', render: V.contas, foraDasAbas: true },
     /* Deixou de ser tela escondida: é a teoria que o vendedor precisa antes de

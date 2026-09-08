@@ -153,7 +153,7 @@
     } catch (e) {
       console.warn('Falha ao salvar estado local:', e);
       if (String(e.name).indexOf('Quota') !== -1) {
-        alert('O armazenamento do navegador encheu. Exporte um backup em ⚙︎ Dados e apague anexos antigos.');
+        alert('O armazenamento do navegador encheu. Exporte um backup em Configuração → Backup e apague anexos antigos.');
       }
     }
     ouvintes.forEach(function (fn) { fn(estado); });
