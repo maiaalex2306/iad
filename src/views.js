@@ -2877,6 +2877,67 @@
       '</div>';
   }
 
+  /* O que está guardado, o que está visível e por quê. Existe porque "sumiu
+     tudo" é um print, e um print não distingue as três causas — o servidor não
+     mandou, veio carimbado com outra empresa, ou está tudo aqui e um filtro
+     escondeu. As três têm correções diferentes. */
+  function blocoDiagnostico() {
+    const d = Store.diagnostico();
+    if (!d.usuario) return '';
+
+    const linhas = d.colecoes.map(function (c) {
+      const some = c.guardados > 0 && c.visiveis === 0;
+      return '<tr' + (some ? ' class="linha-alerta"' : '') + '><td>' + esc(c.colecao) + '</td>' +
+        '<td class="right">' + c.guardados + '</td>' +
+        '<td class="right' + (some ? ' atrasado' : '') + '">' + c.visiveis + '</td></tr>';
+    }).join('');
+
+    const empresas = Object.keys(d.registrosPorEmpresa).map(function (id) {
+      const t = (d.empresasEspelhadas.filter(function (x) { return x.id === id; })[0] || {});
+      const minha = id === d.meuTenantId;
+      return '<li' + (minha ? '' : ' class="muted"') + '>' +
+        esc(t.nome || id) + ' — ' + d.registrosPorEmpresa[id] + ' registro(s)' +
+        (minha ? ' <strong>(a sua)</strong>' : ' <span class="atrasado">(de outra conta — invisível para você)</span>') +
+        '</li>';
+    }).join('');
+
+    const escondidos = d.colecoes.some(function (c) { return c.guardados > 0 && c.visiveis === 0; });
+
+    return '<div class="card"><h2>Diagnóstico dos dados</h2>' +
+      '<p class="small muted">Se a tela estiver vazia, a resposta está aqui. Guardados é o que existe ' +
+      'neste aparelho; visíveis é o que as suas permissões e a sua empresa deixam ver.</p>' +
+
+      (escondidos
+        ? '<div class="aviso">Há registros guardados que você não está vendo. Quase sempre é porque eles ' +
+          'pertencem à empresa de outra conta que já entrou neste navegador. Use <strong>Só baixar</strong> ' +
+          'na Nuvem para trazer a carteira desta conta por cima.</div>'
+        : '') +
+
+      '<div class="tabela-rolagem"><table><thead><tr><th>Coleção</th>' +
+      '<th class="right">Guardados</th><th class="right">Visíveis</th></tr></thead>' +
+      '<tbody>' + linhas + '</tbody></table></div>' +
+
+      '<p class="small" style="margin-top:12px"><strong>Você:</strong> ' + esc(d.usuario) +
+      ' · ' + esc(d.papel || '') + ' · empresa <strong>' + esc(d.minhaEmpresa || '(nenhuma)') + '</strong>' +
+      (d.filtrosDoAdmin
+        ? ' · recorte de administrador: empresa ' + esc(d.filtrosDoAdmin.tenant) +
+          ', usuário ' + esc(d.filtrosDoAdmin.usuario)
+        : '') + '</p>' +
+
+      (empresas ? '<p class="small" style="margin:10px 0 4px"><strong>Registros por empresa:</strong></p>' +
+        '<ul class="small">' + empresas + '</ul>' : '') +
+
+      '<p class="small" style="margin:10px 0 0"><strong>Empresas espelhadas neste aparelho:</strong> ' +
+      (d.empresasEspelhadas.length
+        ? d.empresasEspelhadas.map(function (t) { return esc(t.nome || t.id); }).join(' · ')
+        : '(nenhuma)') + '</p>' +
+
+      '<div class="row" style="margin-top:12px">' +
+      '<button class="btn ghost mini" onclick="App.copiarDiagnostico()">Copiar diagnóstico</button>' +
+      '<button class="btn ghost mini" onclick="App.tentarBaixarDeNovo()">Baixar do servidor de novo</button>' +
+      '</div></div>';
+  }
+
   function dados() {
     const est = Store.dados();
     return '<h1>Configuração e instalação</h1>' +
@@ -2901,6 +2962,8 @@
       blocoNuvem() +
       blocoMinhaConta() +
       blocoLinkedHelper() +
+
+      blocoDiagnostico() +
 
       '<div class="card"><h2>Backup</h2>' +
       '<p class="small muted">Os dados ficam no dispositivo (offline). Exporte para levar de máquina ou compartilhar com o time. Anexos não entram no JSON.</p>' +

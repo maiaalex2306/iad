@@ -393,7 +393,15 @@
       if (A.ehAdmin()) {
         N.empresasDaNuvem().then(function (lista) {
           if (A.espelharEmpresas(lista)) render();
-        }, function () {});
+        }, function (e) {
+          /* Falhar aqui deixava o administrador com uma empresa só na lista e
+             nenhuma explicação — o mesmo silêncio de sempre, no lugar em que
+             ele mais atrapalha, que é o de trocar de empresa. */
+          avisoSincronizacao = 'Não consegui listar as empresas do servidor: ' +
+            (e && e.message ? e.message : 'erro desconhecido') +
+            ' — a troca de empresa fica só com a sua.';
+          render();
+        });
       }
 
       /* Trazer o que já existe no servidor é o que faz a troca de aparelho
@@ -2293,6 +2301,32 @@
 
     /* O botão do aviso de sincronização. Repete só a descida — quem acabou de
        entrar quer ver a carteira, não empurrar a cópia local por cima dela. */
+    /* O diagnóstico vira texto para colar numa mensagem. É a diferença entre
+       "sumiu tudo" e um relato que dá para responder. */
+    copiarDiagnostico: function () {
+      const d = Store.diagnostico();
+      const linhas = [
+        'DIAGNÓSTICO IAD CRM — ' + new Date().toISOString(),
+        'Usuário: ' + (d.usuario || '?') + ' (' + (d.login || '?') + ') · papel ' + (d.papel || '?'),
+        'Empresa: ' + (d.minhaEmpresa || '(nenhuma)') + ' [' + (d.meuTenantId || 'sem id') + ']',
+        d.filtrosDoAdmin ? 'Recorte de admin: ' + JSON.stringify(d.filtrosDoAdmin) : '',
+        '',
+        'Coleções (guardados / visíveis):',
+        d.colecoes.map(function (c) { return '  ' + c.colecao + ': ' + c.guardados + ' / ' + c.visiveis; }).join('\n'),
+        '',
+        'Registros por empresa: ' + JSON.stringify(d.registrosPorEmpresa),
+        'Empresas espelhadas: ' + JSON.stringify(d.empresasEspelhadas),
+        'Oportunidades sem dono: ' + d.oportunidadesSemDono
+      ].filter(Boolean).join('\n');
+
+      const pronto = function () { alert('Diagnóstico copiado. Cole na mensagem.'); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(linhas).then(pronto, function () { prompt('Copie o texto abaixo:', linhas); });
+      } else {
+        prompt('Copie o texto abaixo:', linhas);
+      }
+    },
+
     tentarBaixarDeNovo: function () {
       avisoSincronizacao = 'Baixando de novo…';
       render();

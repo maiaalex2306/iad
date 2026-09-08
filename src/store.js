@@ -239,6 +239,53 @@
     return !registro.donoId || registro.donoId === ctx.usuario.id;
   }
 
+  /* Por que a tela está vazia. Sem isto, "sumiu tudo" é um print — e um print
+     não distingue "o servidor não mandou nada", "veio com a empresa errada" e
+     "está tudo aqui e um filtro escondeu". As três têm correções diferentes e
+     eu já perdi rodadas adivinhando qual era. */
+  function diagnostico() {
+    const ctx = contexto();
+    const A = global.IADAuth;
+    const u = ctx.usuario;
+    const colecoes = ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos'];
+
+    const linhas = colecoes.map(function (nome) {
+      const todos = estado[nome] || [];
+      const comDono = ['contas', 'contatos', 'oportunidades', 'tarefas'].indexOf(nome) !== -1;
+      return {
+        colecao: nome,
+        guardados: todos.length,
+        visiveis: todos.filter(function (r) { return visivel(r, comDono); }).length
+      };
+    });
+
+    /* Os tenantIds que aparecem nos registros, com quantos em cada. É a
+       pergunta que resolve o caso mais comum: os dados estão aqui, mas
+       carimbados com a empresa de outra conta. */
+    const porTenant = {};
+    colecoes.forEach(function (nome) {
+      (estado[nome] || []).forEach(function (r) {
+        const k = r.tenantId || '(sem empresa)';
+        porTenant[k] = (porTenant[k] || 0) + 1;
+      });
+    });
+
+    const semDono = (estado.oportunidades || []).filter(function (o) { return !o.donoId; }).length;
+
+    return {
+      usuario: u ? (u.nome || u.login) : null,
+      login: u ? (u.login || u.email) : null,
+      papel: u ? u.papel : null,
+      meuTenantId: ctx.tenantId,
+      minhaEmpresa: (u && A.tenant(u.tenantId) && A.tenant(u.tenantId).nome) || '',
+      empresasEspelhadas: (estado.tenants || []).map(function (t) { return { id: t.id, nome: t.nome }; }),
+      filtrosDoAdmin: ctx.admin ? ctx.filtros : null,
+      colecoes: linhas,
+      registrosPorEmpresa: porTenant,
+      oportunidadesSemDono: semDono
+    };
+  }
+
   /* Mesma forma do estado, já filtrado. As telas leem daqui, nunca de obter(). */
   function dados() {
     const porTenant = function (lista) { return (lista || []).filter(function (r) { return visivel(r, false); }); };
@@ -676,7 +723,7 @@
   global.IADStore = {
     uid, hoje, carregar, salvar, inscrever, obter, substituir, estadoVazio,
     conta, contato, oportunidade, tarefa, contatosDaConta, tarefasDaOportunidade,
-    dados, contexto, tenantDeTrabalho, visivel,
+    dados, contexto, tenantDeTrabalho, visivel, diagnostico,
     criarConta, criarContato, criarOportunidade, atualizarOportunidade, vincularStakeholder,
     pontuar, registrarEvento, removerEvento, definirCompromisso, definirInsight,
     criarTarefa, atualizarTarefa, adiarTarefa, concluirTarefa, excluirTarefa,

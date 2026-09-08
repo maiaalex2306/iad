@@ -1064,3 +1064,7 @@ button.quem .nome, button.quem .onde { padding-right: 8px; }
 .topbar .menu-quem .menu-item.saida { color: var(--dead); border-top: 1px solid var(--line); margin-top: 6px; }
 .topbar .menu-quem .menu-item.saida .marca-ativa { color: var(--dead); }
 .menu-quem .pill { background: var(--bg); color: var(--muted); }
+
+/* Linha do diagnóstico em que há registros guardados e nenhum visível: é
+   exatamente a linha que responde "por que a tela está vazia". */
+.linha-alerta td { background: rgba(179,45,45,.07); }
