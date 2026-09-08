@@ -389,20 +389,27 @@ Regras desta tarefa:
   }
 
   if (tipo === 'segmentos') {
-    return `Você classifica empresas nos segmentos usados por uma equipe de vendas B2B brasileira.
+    const papeis = (Array.isArray(ctx.papeis) ? ctx.papeis.map(String) : []);
+    return `Você prepara, para uma equipe de vendas B2B brasileira, os leads que acabaram de chegar do LinkedIn. Para cada um: classifica a empresa, diz que papel a pessoa tende a ter na compra, e escreve o reenquadramento comercial.
 
 Segmentos disponíveis, e SÓ estes:
 ${(Array.isArray(ctx.segmentos) ? ctx.segmentos.map(String) : []).map((x) => '- ' + x).join('\n')}
 - Outros
 
+Papéis na compra, e SÓ estes:
+${papeis.map((x) => '- ' + x).join('\n')}
+
 Regras absolutas:
-- Responda SOMENTE com um objeto JSON: {"itens":[{"n":1,"segmento":"..."},...]}
-- O valor de "segmento" tem de ser copiado EXATAMENTE de uma das linhas acima, incluindo acentos e maiúsculas.
-- Se nenhum couber com clareza, use "Outros". É melhor "Outros" do que um segmento errado: o gráfico por segmento é lido pelo dono da empresa.
-- Um item de saída para cada empresa da entrada, com o mesmo "n".
+- Responda SOMENTE com um objeto JSON: {"itens":[{"n":1,"segmento":"...","papel":"...","insight":"..."},...]}
+- "segmento" e "papel" têm de ser copiados EXATAMENTE de uma das linhas acima, incluindo acentos e maiúsculas.
+- Se nenhum segmento couber com clareza, use "Outros". É melhor "Outros" do que um segmento errado: o gráfico por segmento é lido pelo dono da empresa.
+- "papel" sai do CARGO da pessoa, não do que ela escreveu. Quem não dá para dizer pelo cargo fica em "Usuário", que é o padrão neutro. Não promova ninguém a "Decisor econômico" por gentileza.
+- "insight" é o reenquadramento: a verdade sobre o negócio DELE que ele não enxerga sozinho, tirada do que a empresa faz e do que a pessoa respondeu. Uma ou duas frases, na linguagem do setor dele, sem citar a nossa solução e sem elogio. Se a conversa e a descrição não derem base para nada além de genérico, devolva "" — insight genérico é pior que nenhum, porque o vendedor o repete achando que tem um.
+- O insight é hipótese NOSSA, não é o cliente falando. Nunca escreva que o cliente disse, admitiu ou confirmou o que quer que seja.
+- Um item de saída para cada lead da entrada, com o mesmo "n".
 - Nada de texto fora do JSON.
 
-A entrada traz, para cada empresa: nome, domínio, o que a pessoa faz lá e, quando disponível, a descrição da empresa e o texto do site.`;
+A entrada traz, para cada lead: nome e cargo da pessoa, nome da empresa, domínio, o que a pessoa faz lá, a descrição da empresa quando disponível, o texto do site quando disponível, e a troca de mensagens entre a SDR e a pessoa.`;
   }
 
   if (tipo === 'insight') {
@@ -889,17 +896,33 @@ function validarNegocio(bruto: unknown, ctx: Record<string, unknown>, hoje: stri
    "Outros" — nunca um nome novo, que quebraria o agrupamento do painel. */
 function validarSegmentos(bruto: Record<string, unknown>, ctx: Record<string, unknown>) {
   const validos = (Array.isArray(ctx.segmentos) ? ctx.segmentos.map(String) : []).concat(['Outros']);
+  const papeis = (Array.isArray(ctx.papeis) ? ctx.papeis.map(String) : []);
   const brutos = Array.isArray(bruto.itens) ? bruto.itens : [];
-  const itens: Array<{ n: number; segmento: string }> = [];
+  const itens: Array<{ n: number; segmento: string; papel: string; insight: string }> = [];
 
   for (const item of brutos.slice(0, 100)) {
     if (!item || typeof item !== 'object') continue;
     const o = item as Record<string, unknown>;
     const n = Number(o.n);
     if (!isFinite(n) || n < 1) continue;
+
     const bruta = limparTexto(o.segmento, 80);
     const achado = validos.find((v) => v.toLowerCase() === bruta.toLowerCase());
-    itens.push({ n: n, segmento: achado || 'Outros' });
+
+    /* Papel fora da lista do sistema não entra: viraria um papel novo no
+       grupo comprador, e a cobertura de papéis críticos é contada por
+       igualdade exata. Sem correspondência, o padrão neutro. */
+    const papelBruto = limparTexto(o.papel, 60);
+    const papel = papeis.find((v) => v.toLowerCase() === papelBruto.toLowerCase()) || '';
+
+    itens.push({
+      n: n,
+      segmento: achado || 'Outros',
+      papel: papel,
+      /* O insight é rascunho nosso, e curto de propósito: o que não cabe em
+         três linhas o vendedor não fala numa ligação. */
+      insight: limparTexto(o.insight, 400)
+    });
   }
   return { itens: itens };
 }
@@ -1251,20 +1274,62 @@ function formatoDaChave(k: string): string {
   return 'formato desconhecido';
 }
 
-async function autenticado(req: Request): Promise<boolean> {
+/* A recusa tem de dizer QUAL das quatro coisas falhou. Enquanto era um
+   booleano, sessão vencida e chave de outro projeto davam a mesma frase — e a
+   frase falava da chave pública, que na maioria das vezes estava certa. Quem
+   lê "o formato é nova (publicável)" seguido de "se não for nova (publicável),
+   faça X" fica sem nada para fazer. */
+type Chamador = { ok: boolean; erro?: string; renove?: boolean };
+
+async function conferirChamador(req: Request): Promise<Chamador> {
+  if (!URL_SUPABASE) {
+    return { ok: false, erro: 'A função não recebeu o endereço do projeto (SUPABASE_URL). ' +
+      'Republique a função pelo painel do Supabase ou pela CLI.' };
+  }
+  if (!ANON) {
+    return { ok: false, erro: 'Esta função não tem chave pública para conferir quem chama.\n\n' +
+      'Settings → API Keys → copie a chave publishable. Depois Edge Functions → assistente → ' +
+      'Secrets → crie IAD_CHAVE_PUBLICA com esse valor e publique a função de novo.' };
+  }
+  const formato = formatoDaChave(ANON);
+  if (formato !== 'nova (publicável)') {
+    return { ok: false, erro: 'A chave pública desta função é do formato ' + formato + '.\n\n' +
+      'Settings → API Keys → copie a chave publishable (sb_publishable_...). Depois Edge ' +
+      'Functions → assistente → Secrets → ponha esse valor em IAD_CHAVE_PUBLICA e publique ' +
+      'a função de novo. Segredo trocado só vale no deploy seguinte.' };
+  }
+
   const auth = req.headers.get('authorization') || '';
-  if (!/^Bearer\s+\S+/i.test(auth)) return false;
-  if (!URL_SUPABASE || !ANON) return false;
+  if (!/^Bearer\s+\S+/i.test(auth)) {
+    return { ok: false, erro: 'O pedido chegou sem sessão. Saia e entre de novo no app.' };
+  }
+
+  let r: Response;
   try {
-    const r = await fetch(URL_SUPABASE + '/auth/v1/user', {
+    r = await fetch(URL_SUPABASE + '/auth/v1/user', {
       headers: { apikey: ANON, authorization: auth }
     });
-    if (!r.ok) return false;
-    const u = await r.json();
-    return !!(u && u.id);
   } catch {
-    return false;
+    return { ok: false, erro: 'A função não conseguiu falar com o serviço de login do próprio projeto.' };
   }
+
+  if (r.ok) {
+    const u = await r.json().catch(() => null);
+    if (u && u.id) return { ok: true };
+    return { ok: false, erro: 'O serviço de login respondeu sem identificar a pessoa.' };
+  }
+
+  /* Duas recusas muito diferentes chegam as duas como 401: a chave pública que
+     esta função tem não vale neste projeto, ou o token de quem está usando
+     venceu. A primeira é um segredo errado, a segunda passa com um F5. */
+  const corpo = await r.text().catch(() => '');
+  if (/api key|apikey|no key|matched no key/i.test(corpo)) {
+    return { ok: false, erro: 'O IAD_CHAVE_PUBLICA desta função não vale neste projeto — ' +
+      'o login recusou a chave, não a pessoa.\n\nConfira se ela foi copiada de Settings → ' +
+      'API Keys DESTE projeto, e publique a função de novo depois de trocar o segredo.' };
+  }
+  return { ok: false, renove: true,
+    erro: 'Sua sessão expirou. Saia e entre de novo — a chave da função está certa.' };
 }
 
 /* ---------- porta de entrada ---------- */
@@ -1281,21 +1346,15 @@ Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') return responder({ erro: 'metodo' }, 405);
 
   if (!CHAVE) return responder({ erro: 'A função está no ar, mas sem chave de IA configurada.' }, 503);
-  /* 401 aqui quase nunca é sessão vencida — quem chega até esta linha já
-     mandou um Bearer válido, senão o app nem teria deixado. O caso comum é a
-     função não conseguir CONFERIR esse token: ela pergunta ao GoTrue usando a
-     chave pública, e o Supabase trocou o formato das chaves. A antiga (JWT) é
-     recusada, e a função fica sem como saber quem está falando.
-
-     Então a recusa diz qual formato ela tem na mão. Formato, nunca a chave. */
-  if (!(await autenticado(req))) {
-    return responder({
-      erro: 'Não consegui confirmar quem está chamando. A chave pública desta ' +
-        'função é do formato ' + formatoDaChave(ANON) + '.\n\n' +
-        'Se não for "nova (publicável)": Settings → API Keys → copie a chave ' +
-        'publishable. Depois Edge Functions → assistente → Secrets → crie ' +
-        'IAD_CHAVE_PUBLICA com esse valor e publique a função de novo.'
-    }, 401);
+  /* Um 401 daqui tem quatro causas que não se parecem: falta o endereço do
+     projeto, falta a chave pública, a chave é de formato ou de projeto errado,
+     ou a sessão de quem está usando venceu. Dizer sempre a mesma coisa manda
+     três dos quatro para o lugar errado. Formato, nunca a chave. */
+  const quem = await conferirChamador(req);
+  if (!quem.ok) {
+    /* "token" no texto é o que faz o app tentar renovar a sessão sozinho antes
+       de mostrar a recusa — e é justamente o caso em que renovar resolve. */
+    return responder({ erro: quem.erro, token: !!quem.renove }, 401);
   }
 
   let pedido: Record<string, unknown>;

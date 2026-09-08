@@ -117,8 +117,15 @@
              outros quatro são do GoTrue e do PostgREST. */
           const msg = (corpo && (corpo.erro || corpo.error_description || corpo.msg || corpo.message || corpo.hint)) ||
             ('O servidor respondeu ' + resposta.status + '.');
+          /* Renovar dependia da recusa citar "jwt" ou "token". Quem escreve a
+             recusa é o servidor, e as nossas Edge Functions explicam o 401 em
+             português — "não consegui confirmar quem está chamando" não casa
+             com nenhuma das duas palavras. Resultado: sessão vencida na tela
+             da IA nunca renovava, e o app culpava a chave pública, que estava
+             certa. Um 401 numa chamada autenticada é motivo suficiente: se a
+             renovação não resolver, o segundo 401 volta como estava. */
           const vencido = resposta.status === 401 && o.autenticado !== false &&
-            sessao() && sessao().refresh_token && /jwt|token/i.test(msg);
+            sessao() && sessao().refresh_token;
           if (vencido && podeRenovar) {
             return renovar().then(function () { return tentar(caminho, opcoes, false); });
           }

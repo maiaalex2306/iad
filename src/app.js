@@ -1898,13 +1898,24 @@
         espera.querySelector('p').textContent =
           comEmpresa.length === 1 ? '1 empresa' : comEmpresa.length + ' empresas';
 
+        espera.querySelector('h2').textContent = 'Lendo as empresas e as conversas…';
         IA.classificarSegmentos(comEmpresa.map(function (l) {
           return {
             nome: l.empresa, dominio: l.empresaDominio, setor: l.empresaSetor,
-            descricao: l.empresaDescricao, oQueFazLa: l.oQueFazLa
+            descricao: l.empresaDescricao, oQueFazLa: l.oQueFazLa,
+            contato: l.nome, cargo: l.cargo, conversa: l.conversa || []
           };
         })).then(function (r) {
-          comEmpresa.forEach(function (l, i) { if (r.mapa[i]) l.segmentoSugerido = r.mapa[i]; });
+          comEmpresa.forEach(function (l, i) {
+            const achado = r.mapa[i];
+            if (!achado) return;
+            if (achado.segmento) l.segmentoSugerido = achado.segmento;
+            if (achado.papel) l.papelSugerido = achado.papel;
+            /* O insight da campanha é o mesmo texto para o lote inteiro; o da
+               IA é sobre esta conversa. Quando existem os dois, vale o desta
+               conversa — foi para isso que a conversa foi lida. */
+            if (achado.insight) l.insight = achado.insight;
+          });
           espera.close(); espera.remove();
           App.revisarImportacao(lista, r.motivo);
         });
@@ -1929,6 +1940,8 @@
           const feitos = escolhidos.map(function (l) {
             const i = lista.indexOf(l);
             const escolha = dlg.querySelector('[data-segmento="' + i + '"]');
+            const papel = dlg.querySelector('[data-papel="' + i + '"]');
+            if (papel) l.papelSugerido = papel.value;
             return importarUmLead(l, escolha ? escolha.value : '');
           }).filter(Boolean);
           if (feitos.length) {
@@ -2570,6 +2583,10 @@
 
     const contato = Store.criarContato({
       contaId: conta.id, nome: lead.nome || 'Contato do LinkedIn', cargo: lead.cargo || '',
+      /* O papel sai do cargo, e é ele que a cobertura do grupo comprador conta.
+         Deixar todo mundo em "Usuário" fazia toda conta importada nascer com
+         0% dos papéis críticos — alarme que não distingue nada. */
+      papel: lead.papelSugerido || 'Usuário',
       linkedin: lead.linkedin || '', email: lead.email || '', telefone: lead.telefone || '',
       sentimento: lead.resposta ? 'neutro' : 'nao_acessado', canalPreferido: 'LinkedIn'
     });

@@ -2150,6 +2150,16 @@
     return '';
   }
 
+  /* "Usuário" é o padrão neutro: o cargo diz que a pessoa usa, nunca que ela
+     decide. Promover por gentileza mataria o alerta de papel crítico ausente,
+     que é justamente o que faz o vendedor procurar quem assina. */
+  function opcoesPapel(escolhido) {
+    const alvo = (escolhido && P.PAPEIS.indexOf(escolhido) !== -1) ? escolhido : 'Usuário';
+    return P.PAPEIS.map(function (n) {
+      return '<option value="' + esc(n) + '"' + (n === alvo ? ' selected' : '') + '>' + esc(n) + '</option>';
+    }).join('');
+  }
+
   function opcoesSegmento(escolhido) {
     /* "Outros" existe sempre: é onde cai o que a IA não soube classificar, e
        de onde a pessoa move depois. Melhor "Outros" do que segmento errado —
@@ -2188,6 +2198,10 @@
         '<div class="row escolhas">' +
           '<label class="campo mini"><span>Segmento' + (l.segmentoSugerido ? ' \u00b7 sugerido' : '') + '</span>' +
           '<select data-segmento="' + i + '">' + opcoesSegmento(l.segmentoSugerido) + '</select></label>' +
+          /* O papel é o que a cobertura do grupo comprador conta. Sugerido pelo
+             cargo, conferido aqui: o cargo diz muito e não diz tudo. */
+          '<label class="campo mini"><span>Papel na compra' + (l.papelSugerido ? ' \u00b7 sugerido' : '') + '</span>' +
+          '<select data-papel="' + i + '">' + opcoesPapel(l.papelSugerido) + '</select></label>' +
         '</div>' +
         '<p class="small muted" style="margin:6px 0 0">' +
           (l.operador ? 'SDR: <strong>' + esc(l.operador) + '</strong>' : 'SDR não identificado') +
@@ -2199,7 +2213,9 @@
               return '<b>' + esc(m.nosso ? (l.operador || 'SDR') : (m.de || l.nome || 'Prospect')) + ':</b> ' + esc(m.texto);
             }).join('\n') + '</p>'
           : (l.resposta ? '<p class="origem">\u201c' + esc(l.resposta) + '\u201d</p>' : '')) +
-        (l.insight ? '<p class="tiny muted" style="margin:6px 0 0">Insight da campanha entra como rascunho.</p>' : '') +
+        (l.insight
+          ? '<p class="tiny muted" style="margin:6px 0 0"><b>Reenquadramento (rascunho):</b> ' + esc(l.insight) + '</p>'
+          : '') +
       '</li>';
     }).join('');
 
