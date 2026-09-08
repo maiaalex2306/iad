@@ -269,7 +269,24 @@
      resultado é "Outros", que é melhor que um segmento errado: o gráfico por
      segmento é lido pelo dono da empresa. */
   function classificarSegmentos(empresas) {
-    if (!disponivel() || !empresas.length) return Promise.resolve({});
+    const Store = global.IADStore;
+    const catalogo = Store.nomesDoCatalogo('segmentos');
+
+    /* Devolver um mapa vazio e nada mais foi o que fez toda empresa importada
+       sair carimbada como "Outros" sem ninguém saber por quê. Agora sai junto
+       o motivo, e ele vai para a tela da importação: um campo em branco que
+       não se explica manda o vendedor procurar no lugar errado. */
+    if (!empresas.length) return Promise.resolve({ mapa: {}, motivo: '' });
+    if (!catalogo.length) {
+      return Promise.resolve({ mapa: {}, motivo:
+        'Sua empresa ainda não tem segmentos cadastrados — por isso tudo veio como "Outros". ' +
+        'Cadastre em Cadastros → Segmentos e importe de novo.' });
+    }
+    if (!disponivel()) {
+      return Promise.resolve({ mapa: {}, motivo:
+        'O assistente está desligado ou não respondeu ao teste — o segmento não foi classificado. ' +
+        'Escolha à mão abaixo.' });
+    }
 
     const linhas = empresas.map(function (e, i) {
       return [
@@ -281,28 +298,39 @@
       ].filter(Boolean).join('\n');
     }).join('\n\n');
 
-    const Store = global.IADStore;
     const pedido = Nuvem.chamarFuncao('assistente', {
       tipo: 'segmentos',
       texto: linhas,
       contexto: {
-        segmentos: Store.nomesDoCatalogo('segmentos'),
+        segmentos: catalogo,
         dominios: empresas.map(function (e) { return e.dominio; }).filter(Boolean)
       }
     });
     const prazo = new Promise(function (resolve) {
-      setTimeout(function () { resolve(null); }, PRAZO_REUNIAO);
+      setTimeout(function () { resolve({ estourou: true }); }, PRAZO_REUNIAO);
     });
 
     return Promise.race([pedido, prazo]).then(function (r) {
+      if (!r || r.estourou) {
+        return { mapa: {}, motivo: 'O assistente demorou mais de ' +
+          Math.round(PRAZO_REUNIAO / 1000) + ' segundos para classificar os segmentos. Escolha à mão abaixo.' };
+      }
+      if (r.erro) return { mapa: {}, motivo: 'O assistente recusou: ' + r.erro };
+      if (!Array.isArray(r.itens)) {
+        return { mapa: {}, motivo: 'O assistente respondeu num formato que não deu para ler.' };
+      }
       const mapa = {};
-      if (!r || !Array.isArray(r.itens)) return mapa;
       r.itens.forEach(function (it) {
         const i = Number(it.n) - 1;
         if (empresas[i] && it.segmento) mapa[i] = it.segmento;
       });
-      return mapa;
-    }).catch(function () { return {}; });
+      const classificadas = Object.keys(mapa).filter(function (k) { return mapa[k] !== 'Outros'; }).length;
+      return { mapa: mapa, motivo: classificadas ? '' :
+        'O assistente respondeu, mas não achou nenhum dos seus ' + catalogo.length +
+        ' segmentos que coubesse nestas empresas. Escolha à mão abaixo.' };
+    }).catch(function (e) {
+      return { mapa: {}, motivo: 'Não consegui falar com o assistente: ' + (e && e.message ? e.message : 'erro desconhecido') };
+    });
   }
 
   /* ---------- o retrato de uma oportunidade ----------

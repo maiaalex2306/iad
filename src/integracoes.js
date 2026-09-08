@@ -41,7 +41,13 @@
     return '';
   }
 
-  /* ---------- de quem é a mensagem ----------
+  /* ---------- a conversa ----------
+     Vem inteira — o que a SDR mandou e o que o prospect respondeu —, porque
+     quem abre a oportunidade depois precisa ler a pergunta para entender a
+     resposta. O que muda por autor é o uso: só o lado do cliente vira
+     evidência.
+
+     ---------- de quem é a mensagem ----------
      O Linked Helper nomeia as mensagens do ponto de vista do prospect:
      "sent" é o que ELE enviou — e que nós recebemos —, e "received" é o que
      ele recebeu, ou seja, a nossa própria prospecção.
@@ -50,20 +56,27 @@
      fosse evidência do cliente. É exatamente o que o método proíbe: atividade
      nossa virando avanço da decisão, e o IAD da carteira inteira subindo
      sozinho. Por isso a escolha é por autor, nunca por nome de campo. */
-  function mensagensDoCliente(plano, nomeDoLead, meuNome) {
+  function mensagensDaConversa(plano, nomeDoLead, meuNome) {
     const nosso = chave(meuNome || '');
     const dele = chave(nomeDoLead || '');
-    const candidatas = [];
+    const todas = [];
+    const vistas = {};
 
     const juntar = function (de, texto, quando) {
       if (!texto || !String(texto).trim()) return;
       const autor = chave(de || '');
-      if (nosso && autor === nosso) return;           /* somos nós */
-      if (dele && autor && autor !== dele) return;    /* terceiro */
-      candidatas.push({
+      const limpo = String(texto).replace(/\s+/g, ' ').trim();
+      const assinatura = autor + '|' + limpo;
+      if (vistas[assinatura]) return;              /* o mesmo texto em dois campos */
+      vistas[assinatura] = true;
+      todas.push({
         de: de || '',
-        texto: String(texto).replace(/\s+/g, ' ').trim(),
-        quando: String(quando || '')
+        texto: limpo,
+        quando: String(quando || ''),
+        /* Quem falou decide tudo o que vem depois: só o lado do cliente vira
+           evidência, e só o nosso lado explica o que a SDR perguntou. */
+        nosso: !!(nosso && autor === nosso),
+        dele: !!(dele && autor === dele)
       });
     };
 
@@ -79,19 +92,25 @@
        os nomes que já dizem que é resposta DELE — "reply", "answer". Nomes
        ambíguos como "message" e "last_message" ficam de fora de propósito:
        podem ser a nossa própria mensagem, e o preço de errar aqui é alto. */
-    if (!candidatas.length) {
+    if (!todas.some(function (m) { return !m.nosso; })) {
       const solta = primeiro(plano, ['reply', 'reply_text', 'last_reply', 'reply_message', 'answer']);
       if (solta) {
-        candidatas.push({
-          de: nomeDoLead || '',
-          texto: String(solta).replace(/\s+/g, ' ').trim(),
-          quando: primeiro(plano, ['reply_date', 'replied_at', 'reply_send_at'])
-        });
+        juntar(nomeDoLead || '', solta,
+          primeiro(plano, ['reply_date', 'replied_at', 'reply_send_at']));
       }
     }
 
-    candidatas.sort(function (a, b) { return a.quando.localeCompare(b.quando); });
-    return candidatas;
+    todas.sort(function (a, b) { return a.quando.localeCompare(b.quando); });
+    return todas;
+  }
+
+  /* As que valem como evidência: nem nossas, nem de terceiro. */
+  function mensagensDoCliente(conversa, temNomeDoLead) {
+    return conversa.filter(function (m) {
+      if (m.nosso) return false;
+      if (temNomeDoLead && chave(m.de) && !m.dele) return false;   /* terceiro */
+      return true;
+    });
   }
 
   /* ---------- emprego atual ----------
@@ -148,8 +167,9 @@
 
     const emprego = empregoAtual(plano);
     const meuNome = primeiro(plano, ['my_full_name']);
-    const conversa = mensagensDoCliente(plano, nome, meuNome);
-    const ultima = conversa[conversa.length - 1] || null;
+    const conversa = mensagensDaConversa(plano, nome, meuNome);
+    const dele = mensagensDoCliente(conversa, !!nome);
+    const ultima = dele[dele.length - 1] || null;
 
     /* O headline do LinkedIn é vitrine, não cargo: "Gerente de Produção |
        Coordenador | Operações Industriais | ..." tem 199 caracteres. Só serve
@@ -186,10 +206,15 @@
       oQueFazLa: String(primeiro(plano, ['position_description_1']) || '').replace(/\s+/g, ' ').slice(0, 300),
       saiuEm: saidaNoPassado(emprego.fim),
 
-      /* conversa — a única camada que é evidência do cliente */
+      /* conversa — a única camada que é evidência do cliente.
+         A troca inteira vem junto: quem abre a oportunidade três semanas
+         depois precisa da pergunta da SDR para entender a resposta. */
       resposta: ultima ? ultima.texto : '',
       respostaEm: ultima ? String(ultima.quando).slice(0, 10) : '',
-      mensagensDele: conversa.length,
+      mensagensDele: dele.length,
+      conversa: conversa.map(function (m) {
+        return { de: m.de, texto: m.texto, quando: String(m.quando).slice(0, 10), nosso: m.nosso };
+      }),
 
       /* relacionamento */
       grau: primeiro(plano, ['member_distance']),

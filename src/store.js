@@ -117,6 +117,10 @@
       if (o.tipo == null) o.tipo = 'Novo negócio';
       if (o.concorrentes == null) o.concorrentes = '';
       if (o.insight == null) o.insight = { texto: '', estado: 'nenhum', atualizadoEm: null };
+      /* Buying group com a mesma pessoa duas vezes: veio da importação, que
+         empurrava o contato recém-criado num grupo que já o continha. A base
+         em uso precisa ser limpa, não só o caminho que a sujava. */
+      o.stakeholders = semRepetir(o.stakeholders);
       (o.eventos || []).forEach(function (e) {
         if (e.tipo === 'decision' && !e.forca) e.forca = 'relato';
       });
@@ -313,6 +317,28 @@
     return novo;
   }
 
+  function semRepetir(ids) {
+    const vistos = {};
+    return (ids || []).filter(function (id) {
+      if (!id || vistos[id]) return false;
+      vistos[id] = true;
+      return true;
+    });
+  }
+
+  /* Vincular alguém ao buying group tinha de passar por aqui, e não por um
+     push solto: a oportunidade nasce já com os contatos da conta, e quem
+     acabou de criar o contato empurrava o mesmo id de novo. O resultado era a
+     mesma pessoa duas vezes no grupo comprador — "2 pessoas, 0% dos papéis
+     críticos" numa conta com um contato só. */
+  function vincularStakeholder(op, contatoId) {
+    if (!op || !contatoId) return false;
+    op.stakeholders = semRepetir(op.stakeholders);
+    if (op.stakeholders.indexOf(contatoId) !== -1) return false;
+    op.stakeholders.push(contatoId);
+    return true;
+  }
+
   function criarOportunidade(dados) {
     const nova = Object.assign({
       id: uid('opp'),
@@ -355,6 +381,7 @@
     if (!nova.stakeholders.length && nova.contaId) {
       nova.stakeholders = contatosDaConta(nova.contaId).map(function (c) { return c.id; });
     }
+    nova.stakeholders = semRepetir(nova.stakeholders);
 
     estado.oportunidades.push(nova);
     salvar();
@@ -606,7 +633,7 @@
     uid, hoje, carregar, salvar, inscrever, obter, substituir, estadoVazio,
     conta, contato, oportunidade, tarefa, contatosDaConta, tarefasDaOportunidade,
     dados, contexto, tenantDeTrabalho, visivel,
-    criarConta, criarContato, criarOportunidade, atualizarOportunidade,
+    criarConta, criarContato, criarOportunidade, atualizarOportunidade, vincularStakeholder,
     pontuar, registrarEvento, removerEvento, definirCompromisso, definirInsight,
     criarTarefa, concluirTarefa, excluirTarefa,
     adotarOrfaos,

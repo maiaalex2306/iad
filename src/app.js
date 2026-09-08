@@ -617,7 +617,7 @@
             contaId: contaId, nome: d.contatoNome, cargo: d.contatoCargo,
             papel: d.contatoPapel, perfil: d.contatoPerfil
           });
-          op.stakeholders.push(contato.id);
+          Store.vincularStakeholder(op, contato.id);
         }
 
         if (d.produtoId) {
@@ -1651,7 +1651,7 @@
       U.formulario('Vincular ao buying group', [
         { id: 'contatoId', rotulo: 'Pessoa', tipo: 'select', opcoes: disponiveis.map(function (c) { return { valor: c.id, rotulo: c.nome + ' — ' + c.papel }; }) }
       ], {}, function (d) {
-        op.stakeholders.push(d.contatoId);
+        Store.vincularStakeholder(op, d.contatoId);
         Store.salvar();
         render();
       });
@@ -1664,7 +1664,7 @@
         return op.stakeholders.indexOf(c.id) === -1;
       });
       if (!soltos.length) return;
-      soltos.forEach(function (c) { op.stakeholders.push(c.id); });
+      soltos.forEach(function (c) { Store.vincularStakeholder(op, c.id); });
       Store.salvar();
       render();
     },
@@ -1888,25 +1888,25 @@
            empresa por empresa à mão é o que faz ninguém classificar — e sem
            segmento o painel por segmento não diz nada. Uma chamada só para o
            lote inteiro, e o vendedor corrige o que quiser na tela seguinte. */
-        const semSegmento = lista.filter(function (l) { return l.empresa; });
-        if (!IA.disponivel() || !semSegmento.length) {
+        const comEmpresa = lista.filter(function (l) { return l.empresa; });
+        if (!comEmpresa.length) {
           espera.close(); espera.remove();
-          return App.revisarImportacao(lista);
+          return App.revisarImportacao(lista, 'Nenhum lead veio com empresa identificada — não há o que classificar.');
         }
 
         espera.querySelector('h2').textContent = 'Classificando os segmentos…';
         espera.querySelector('p').textContent =
-          semSegmento.length === 1 ? '1 empresa' : semSegmento.length + ' empresas';
+          comEmpresa.length === 1 ? '1 empresa' : comEmpresa.length + ' empresas';
 
-        IA.classificarSegmentos(semSegmento.map(function (l) {
+        IA.classificarSegmentos(comEmpresa.map(function (l) {
           return {
             nome: l.empresa, dominio: l.empresaDominio, setor: l.empresaSetor,
             descricao: l.empresaDescricao, oQueFazLa: l.oQueFazLa
           };
-        })).then(function (mapa) {
-          semSegmento.forEach(function (l, i) { if (mapa[i]) l.segmentoSugerido = mapa[i]; });
+        })).then(function (r) {
+          comEmpresa.forEach(function (l, i) { if (r.mapa[i]) l.segmentoSugerido = r.mapa[i]; });
           espera.close(); espera.remove();
-          App.revisarImportacao(lista);
+          App.revisarImportacao(lista, r.motivo);
         });
       }).catch(function (e) {
         espera.close(); espera.remove();
@@ -1914,10 +1914,10 @@
       });
     },
 
-    revisarImportacao: function (lista) {
+    revisarImportacao: function (lista, avisoSegmento) {
       const dlg = document.createElement('dialog');
       dlg.className = 'revisao-ia';
-      dlg.innerHTML = V.revisaoDaImportacao(lista);
+      dlg.innerHTML = V.revisaoDaImportacao(lista, avisoSegmento);
       document.body.appendChild(dlg);
 
       dlg.addEventListener('close', function () {
@@ -1997,7 +1997,8 @@
           if (d.segmento) Store.criarNoCatalogo('segmentos', { nome: d.segmento });
           contaId = Store.criarConta({
             nome: nome, segmento: d.segmento || '',
-            site: lead.empresaSite || '', cidade: lead.empresaCidade || ''
+            site: lead.empresaSite || '', cidade: lead.empresaCidade || '',
+            descricao: lead.empresaDescricao || ''
           }).id;
         }
 
@@ -2010,10 +2011,17 @@
 
         const op = Store.criarOportunidade({
           contaId: contaId, titulo: d.titulo, etapa: d.etapa,
-          notas: lead.linkedin ? 'Origem: Linked Helper · ' + lead.linkedin : 'Origem: Linked Helper'
+          origem: 'Linked Helper', campanha: lead.campanha || '',
+          sdr: lead.operador || '', sdrEmail: lead.operadorEmail || '',
+          notas: notasDoLead(lead)
         });
-        op.stakeholders.push(contato.id);
+        Store.vincularStakeholder(op, contato.id);
         Store.salvar();
+
+        /* A troca inteira com a SDR vai para o histórico mesmo quando o
+           vendedor reescreve a evidência: o texto dele é o que conta como
+           avanço, a conversa é o que explica de onde ele saiu. */
+        registrarTranscricaoDoLead(op, lead);
 
         if (d.evidencia) {
           Store.registrarEvento(op.id, {
@@ -2547,10 +2555,17 @@
     if (!conta) {
       conta = Store.criarConta({
         nome: nome, segmento: segmento || '',
-        site: lead.empresaSite || '', cidade: lead.empresaCidade || ''
+        site: lead.empresaSite || '', cidade: lead.empresaCidade || '',
+        /* A descrição do LinkedIn é a matéria-prima do segmento e do insight.
+           Descartá-la obrigava a IA a reclassificar a empresa do zero mais
+           tarde, sem nada além do nome. */
+        descricao: lead.empresaDescricao || ''
       });
-    } else if (segmento && !conta.segmento) {
-      conta.segmento = segmento;   /* conta antiga sem segmento ganha o daqui */
+    } else {
+      if (segmento && !conta.segmento) conta.segmento = segmento;   /* conta antiga sem segmento ganha o daqui */
+      if (!conta.site && lead.empresaSite) conta.site = lead.empresaSite;
+      if (!conta.cidade && lead.empresaCidade) conta.cidade = lead.empresaCidade;
+      if (!conta.descricao && lead.empresaDescricao) conta.descricao = lead.empresaDescricao;
     }
 
     const contato = Store.criarContato({
@@ -2572,26 +2587,85 @@
       campanha: lead.campanha || '',
       sdr: lead.operador || '',
       sdrEmail: lead.operadorEmail || '',
-      notas: 'ORIGEM LH' + (lead.campanha ? ' · campanha: ' + lead.campanha : '') +
-        (lead.operador ? ' · prospecção de ' + lead.operador : '') +
-        (lead.linkedin ? '\n' + lead.linkedin : '') +
-        (lead.headline ? '\n' + lead.headline : '')
+      notas: notasDoLead(lead)
     });
-    op.stakeholders.push(contato.id);
+    /* A oportunidade nasce com os contatos da conta já vinculados. Empurrar o
+       recém-criado de novo punha a mesma pessoa duas vezes no buying group. */
+    Store.vincularStakeholder(op, contato.id);
     Store.salvar();
 
-    if (lead.resposta) {
-      Store.registrarEvento(op.id, {
-        tipo: 'decision', titulo: lead.resposta.slice(0, 160), dimensao: 'problema',
-        forca: 'relato', contatoId: contato.id, canal: 'LinkedIn',
-        data: lead.respostaEm || Store.hoje()
-      });
-    }
+    registrarConversaDoLead(op, contato, lead);
     if (lead.insight) {
       Store.definirInsight(op.id, { texto: lead.insight, estado: 'formulado' });
     }
     atribuirAoOperador(lead, [conta, contato, op]);
     return op;
+  }
+
+  /* O que não cabe em campo próprio, mas quem abre a conta amanhã precisa ler. */
+  function notasDoLead(lead) {
+    const rede = [
+      lead.grau === 'DISTANCE_1' ? '1º grau' : '',
+      lead.mutuos ? lead.mutuos + (Number(lead.mutuos) === 1 ? ' conexão em comum' : ' conexões em comum') : '',
+      lead.conectadoEm ? 'conectados desde ' + lead.conectadoEm : ''
+    ].filter(Boolean).join(' · ');
+
+    return ['ORIGEM LH' + (lead.campanha ? ' · campanha: ' + lead.campanha : '') +
+      (lead.operador ? ' · prospecção de ' + lead.operador : ''),
+      lead.linkedin, lead.headline, rede,
+      lead.oQueFazLa ? 'Faz lá: ' + lead.oQueFazLa : ''
+    ].filter(Boolean).join('\n');
+  }
+
+  /* A conversa inteira entra no histórico — a pergunta da SDR e a resposta
+     dele —, porque a resposta sozinha não se explica: "Sim, pode enviar o
+     material" só quer dizer alguma coisa ao lado do que foi perguntado.
+
+     Só as falas DELE viram evidência, e a dimensão sai das palavras que ele
+     usou. Carimbar toda resposta de LinkedIn como evidência de "Problema" era
+     dizer que o cliente admitiu um problema quando ele apenas respondeu: nota
+     inventada é pior que campo vazio. Sem pista, a evidência entra sem
+     dimensão — conta como sinal de vida do comprador, não como avanço. */
+  function falasDoLead(lead) {
+    if (lead.conversa && lead.conversa.length) return lead.conversa;
+    if (lead.resposta) return [{ de: lead.nome, texto: lead.resposta, quando: lead.respostaEm, nosso: false }];
+    return [];
+  }
+
+  function registrarTranscricaoDoLead(op, lead) {
+    const conversa = falasDoLead(lead);
+    if (!conversa.length) return conversa;
+
+    const transcricao = conversa.map(function (m) {
+      return (m.quando ? U.data(m.quando) + ' · ' : '') +
+        (m.nosso ? (lead.operador || 'SDR') : (m.de || lead.nome || 'Prospect')) + ': ' + m.texto;
+    }).join('\n');
+
+    op.eventos.unshift({
+      id: Store.uid('evt'), tipo: 'sistema',
+      data: conversa[conversa.length - 1].quando || Store.hoje(),
+      titulo: 'Conversa no LinkedIn com ' + (lead.operador || 'a SDR') +
+        ' (' + conversa.length + (conversa.length === 1 ? ' mensagem' : ' mensagens') + ')',
+      detalhe: transcricao
+    });
+    Store.salvar();
+    return conversa;
+  }
+
+  function registrarConversaDoLead(op, contato, lead) {
+    const conversa = registrarTranscricaoDoLead(op, lead);
+    if (!conversa.length) return;
+
+    const dele = conversa.filter(function (m) { return !m.nosso; });
+    const ultima = dele[dele.length - 1];
+    if (!ultima) return;
+
+    Store.registrarEvento(op.id, {
+      tipo: 'decision', titulo: ultima.texto.slice(0, 160),
+      dimensao: E.sugerirDimensao(ultima.texto) || '',
+      forca: 'relato', contatoId: contato.id, canal: 'LinkedIn',
+      data: ultima.quando || Store.hoje()
+    });
   }
 
   /* O lead pertence a quem prospectou, não a quem clicou em importar. Só

@@ -1349,6 +1349,10 @@
           (dim && e.tipo !== 'pontuacao' ? ' · ' + esc(dim.nome) : '') +
           (e.canal ? ' · ' + esc(e.canal) : '') + '</div>' +
           '<div class="small">' + titulo + '</div>' +
+          /* A transcrição da conversa vem aqui. Guardar a troca com a SDR e
+             não mostrá-la é o mesmo que não guardar: quem abre a conta
+             precisa ler a pergunta para entender a resposta. */
+          (e.detalhe ? '<div class="tiny muted transcricao">' + esc(e.detalhe) + '</div>' : '') +
           (forca || quem
             ? '<div class="tiny muted">' + (forca ? esc(forca.rotulo) : '') + (quem ? (forca ? ' · ' : '') + 'por ' + esc(quem.nome) : '') + '</div>'
             : '') +
@@ -2110,7 +2114,8 @@
       const rede = [
         l.grau === 'DISTANCE_1' ? '1\u00ba grau' : '',
         l.mutuos ? l.mutuos + ' em comum' : '',
-        l.respostaEm ? 'respondeu ' + U.data(l.respostaEm) : ''
+        l.mensagensDele ? l.mensagensDele + (l.mensagensDele === 1 ? ' resposta dele' : ' respostas dele') : '',
+        l.respostaEm ? '\u00faltima em ' + U.data(l.respostaEm) : ''
       ].filter(Boolean).join(' \u00b7 ');
 
       return '<div class="foco ' + (l.saiuEm ? 'u3' : 'u0') + '">' +
@@ -2162,13 +2167,14 @@
     }).join('');
   }
 
-  function revisaoDaImportacao(leads) {
+  function revisaoDaImportacao(leads, avisoSegmento) {
     const linhas = leads.map(function (l, i) {
       const duvida = motivoDeDuvida(l);
       const rede = [
         l.grau === 'DISTANCE_1' ? '1\u00ba grau' : '',
         l.mutuos ? l.mutuos + ' em comum' : '',
-        l.respostaEm ? 'respondeu ' + U.data(l.respostaEm) : ''
+        l.mensagensDele ? l.mensagensDele + (l.mensagensDele === 1 ? ' resposta dele' : ' respostas dele') : '',
+        l.respostaEm ? '\u00faltima em ' + U.data(l.respostaEm) : ''
       ].filter(Boolean).join(' \u00b7 ');
 
       return '<li class="achado">' +
@@ -2188,7 +2194,11 @@
           (l.campanha ? ' \u00b7 campanha: ' + esc(l.campanha) : '') +
           (rede ? ' \u00b7 ' + esc(rede) : '') + '</p>' +
         (duvida ? '<p class="compromisso small" style="margin:6px 0 0">' + esc(duvida) + '</p>' : '') +
-        (l.resposta ? '<p class="origem">\u201c' + esc(l.resposta) + '\u201d</p>' : '') +
+        (l.conversa && l.conversa.length
+          ? '<p class="conversa">' + l.conversa.map(function (m) {
+              return '<b>' + esc(m.nosso ? (l.operador || 'SDR') : (m.de || l.nome || 'Prospect')) + ':</b> ' + esc(m.texto);
+            }).join('\n') + '</p>'
+          : (l.resposta ? '<p class="origem">\u201c' + esc(l.resposta) + '\u201d</p>' : '')) +
         (l.insight ? '<p class="tiny muted" style="margin:6px 0 0">Insight da campanha entra como rascunho.</p>' : '') +
       '</li>';
     }).join('');
@@ -2204,6 +2214,7 @@
         ? '<div class="aviso">' + comDuvida + (comDuvida === 1 ? ' lead veio desmarcado' : ' leads vieram desmarcados') +
           ': quem saiu da empresa ou ainda n\u00e3o respondeu. Marque se quiser trazer assim mesmo.</div>'
         : '') +
+      (avisoSegmento ? '<div class="aviso">' + esc(avisoSegmento) + '</div>' : '') +
       '<ul class="achados">' + linhas + '</ul>' +
       '</div><div class="rodape">' +
       '<button class="btn ghost" value="cancelar" type="submit">Cancelar</button>' +
@@ -2398,6 +2409,7 @@
       (sobem
         ? '<p class="small"><strong>' + sobem + (sobem === 1 ? ' decisão sobe' : ' decisões sobem') + '</strong> com o que já está registrado.</p>'
         : '<div class="aviso">Nada sobe. O que está registrado não sustenta nenhuma das oito \u2014 e isso é uma resposta, não uma falha: falta evid\u00eancia do cliente.</div>') +
+      (avisoSegmento ? '<div class="aviso">' + esc(avisoSegmento) + '</div>' : '') +
       '<ul class="achados">' + linhas + '</ul>' +
       '</div><div class="rodape">' +
       '<button class="btn ghost" value="cancelar" type="submit">Cancelar</button>' +

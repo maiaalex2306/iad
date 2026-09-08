@@ -854,6 +854,19 @@ dialog.revisao-ia { width: min(680px, 96vw); }
   border-left: 2px solid var(--line); padding-left: 9px;
 }
 .achado .compromisso { margin: 6px 0 0; color: var(--risk); }
+
+/* Transcrição da conversa dentro de um evento do histórico: quebras de linha
+   preservadas, porque quem falou e o que falou só se lê uma fala por linha. */
+.evento .transcricao {
+  white-space: pre-wrap; margin-top: 5px; line-height: 1.5;
+  border-left: 2px solid var(--line); padding-left: 9px;
+}
+.achado .conversa {
+  margin: 7px 0 0; font-size: .78rem; line-height: 1.5; color: var(--muted);
+  border-left: 2px solid var(--line); padding-left: 9px; white-space: pre-wrap;
+}
+.achado .conversa b { color: var(--text); font-weight: 600; }
+
 .achado .escolhas { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
 .achado .campo.mini { flex: 1 1 190px; margin-bottom: 0; }
 .achado .campo.mini select { padding: 7px 9px; font-size: .82rem; }
