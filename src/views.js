@@ -2903,6 +2903,17 @@
 
     const escondidos = d.colecoes.some(function (c) { return c.guardados > 0 && c.visiveis === 0; });
 
+    /* O outro retrato, e mais difícil de ler sem ajuda: as listas de
+       configuração vieram e as de trabalho não. Aí não há nada escondido — o
+       servidor respondeu que esta conta não tem empresa nem oportunidade
+       nenhuma, e a causa está no banco. */
+    const conta = function (nome) {
+      const c = d.colecoes.filter(function (x) { return x.colecao === nome; })[0];
+      return c ? c.guardados : 0;
+    };
+    const nadaDeTrabalho = !conta('contas') && !conta('oportunidades') &&
+      (conta('segmentos') || conta('tiposTarefa'));
+
     return '<div class="card"><h2>Diagnóstico dos dados</h2>' +
       '<p class="small muted">Se a tela estiver vazia, a resposta está aqui. Guardados é o que existe ' +
       'neste aparelho; visíveis é o que as suas permissões e a sua empresa deixam ver.</p>' +
@@ -2911,6 +2922,15 @@
         ? '<div class="aviso">Há registros guardados que você não está vendo. Quase sempre é porque eles ' +
           'pertencem à empresa de outra conta que já entrou neste navegador. Use <strong>Só baixar</strong> ' +
           'na Nuvem para trazer a carteira desta conta por cima.</div>'
+        : '') +
+
+      (nadaDeTrabalho
+        ? '<div class="aviso">As listas de configuração vieram do servidor e as de trabalho não: ' +
+          'zero empresas e zero oportunidades. Não há nada escondido aqui — <strong>o servidor respondeu ' +
+          'que esta conta não tem nenhuma</strong>. As duas causas possíveis estão no banco: os registros ' +
+          'estão carimbados com outra empresa, ou a correção que dá ao gestor a visão da empresa inteira ' +
+          '(<code>nuvem/correcao-05-gestor.sql</code>) ainda não foi aplicada. ' +
+          'O arquivo <code>nuvem/diagnostico.sql</code> responde qual das duas em uma consulta.</div>'
         : '') +
 
       '<div class="tabela-rolagem"><table><thead><tr><th>Coleção</th>' +

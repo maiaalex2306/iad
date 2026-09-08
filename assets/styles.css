@@ -1068,3 +1068,10 @@ button.quem .nome, button.quem .onde { padding-right: 8px; }
 /* Linha do diagnóstico em que há registros guardados e nenhum visível: é
    exatamente a linha que responde "por que a tela está vazia". */
 .linha-alerta td { background: rgba(179,45,45,.07); }
+
+/* A faixa que explica por que a tela está vazia. Fica entre o topo e o
+   conteúdo, com a mesma largura do conteúdo — e com margem própria, porque a
+   .aviso foi desenhada para viver dentro de um cartão, e sem isto ela
+   encostava na barra e aparecia como um risco laranja de dez pixels. */
+.faixa-aviso { margin: 0 0 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; line-height: 1.5; }
+.faixa-aviso .btn { flex: 0 0 auto; }

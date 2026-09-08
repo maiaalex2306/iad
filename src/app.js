@@ -82,13 +82,19 @@
 
     const hash = location.hash || '#/hoje';
 
+    /* A faixa entra DENTRO do conteúdo, e não entre a barra e ele: no desktop
+       o topo é fixo, quem fica antes do <main> nasce embaixo dele, e a faixa
+       aparecia como um risco laranja de dez pixels. Aqui ela herda o
+       espaçamento que já existe e não precisa saber a altura do topo. */
+    const faixa = faixaDeAviso();
+
     if (hash.indexOf('#/op/') === 0) {
       const id = hash.slice(5);
-      conteudo.innerHTML = V.cockpit(id);
+      conteudo.innerHTML = faixa + V.cockpit(id);
       pintarArquivos(id);
     } else {
       const rota = ROTAS.find(function (r) { return r.hash === hash; }) || ROTAS[0];
-      conteudo.innerHTML = rota.render();
+      conteudo.innerHTML = faixa + rota.render();
       /* Duas telas se completam depois de desenhadas: Dados mede o espaço
          usado e busca os leads na ponte; Cadastros lista quem está no
          servidor. Nenhuma das duas pode segurar o render. */
@@ -104,13 +110,6 @@
     const barra = document.getElementById('barra-admin');
     if (barra) barra.innerHTML = V.barraAdmin();
 
-    const aviso = document.getElementById('aviso-sinc');
-    if (aviso) {
-      aviso.innerHTML = avisoSincronizacao
-        ? '<div class="aviso">' + U.esc(avisoSincronizacao) +
-          ' <button class="btn ghost mini" onclick="App.tentarBaixarDeNovo()">Tentar de novo</button></div>'
-        : '';
-    }
     window.scrollTo(0, 0);
   }
 
@@ -163,6 +162,33 @@
       App.concluirComRelato(t.oportunidadeId, id, proxima);
     };
     proxima();
+  }
+
+  /* Duas faixas, e a diferença entre elas importa.
+
+     A falha de sincronização é um acontecimento: guardo numa variável e ela
+     some quando dá certo. Já "o servidor não devolveu carteira nenhuma" é um
+     ESTADO — continua verdadeiro no recarregamento seguinte, quando a variável
+     já morreu. Guardar a mensagem faria a segunda desaparecer justamente para
+     quem fechou e abriu o app tentando resolver. Então ela é recalculada do
+     que está guardado, toda vez. */
+  function faixaDeAviso() {
+    if (avisoSincronizacao) {
+      return '<div class="aviso faixa-aviso">' + U.esc(avisoSincronizacao) +
+        '<button class="btn ghost mini" onclick="App.tentarBaixarDeNovo()">Tentar de novo</button></div>';
+    }
+    if (!global.IADNuvem.conectado()) return '';
+
+    const local = Store.obter();
+    const movimento = (local.contas || []).length + (local.oportunidades || []).length;
+    const configuracao = (local.segmentos || []).length + (local.tiposTarefa || []).length;
+    if (movimento || !configuracao) return '';
+
+    return '<div class="aviso faixa-aviso">O servidor respondeu e não devolveu nenhuma empresa nem oportunidade ' +
+      'para esta conta — só as listas de configuração. Isso é permissão ou carimbo de empresa, do lado ' +
+      'do servidor, e não um filtro daqui. ' +
+      '<button class="btn ghost mini" onclick="App.ir(\'#/dados\')">Ver o diagnóstico</button>' +
+      '<button class="btn ghost mini" onclick="App.tentarBaixarDeNovo()">Baixar de novo</button></div>';
   }
 
   /* Quem está logado e de onde: some quando ninguém está. */
@@ -412,6 +438,12 @@
          explicando por quê, e conclui que o sistema perdeu a carteira dele. */
       avisoSincronizacao = '';
       return N.puxar().then(function () {
+        /* Baixar zero registros de movimento não é o mesmo que não baixar, e
+           na tela era: as duas davam um pipeline vazio e calado. Quando as
+           tabelas de configuração vêm cheias e as de trabalho vêm vazias, a
+           resposta é do servidor — permissão ou carimbo de empresa —, e é isso
+           que a faixa diz, em vez de deixar a pessoa concluir que o app perdeu
+           a carteira dela. */
         avisoSincronizacao = '';
         render();
       }, function (e) {
