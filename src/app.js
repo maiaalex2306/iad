@@ -13,6 +13,11 @@
       ajuda: 'A carteira em números e gráficos: quanto do pipeline tem decisão madura, por mês e por segmento.' },
     { hash: '#/pipeline', ico: '🗂️', nome: 'Pipeline', render: V.pipeline,
       ajuda: 'Todos os negócios abertos, em lista ou kanban, agrupados pela saúde da decisão.' },
+    /* Debaixo do Pipeline de propósito: o pipeline é a foto das contas, a
+       tarefa é o que muda a foto. Quem abre o app para trabalhar desce um
+       item e está no lugar certo. */
+    { hash: '#/tarefas', ico: '✅', nome: 'Tarefas', render: V.tarefas,
+      ajuda: 'Todas as suas tarefas numa lista só: filtre por responsável, período, tipo e status, aja em lote, e conclua contando o que aconteceu — que é o que faz as oito decisões andarem.' },
     { hash: '#/revisao', ico: '🔄', nome: 'Revisão', render: V.revisao,
       ajuda: 'A reunião semanal numa tela: o que mudou na decisão de cada cliente nos últimos 7 dias.' },
     { hash: '#/cadastros', ico: '📇', nome: 'Cadastros', render: V.cadastros,
@@ -85,6 +90,39 @@
     const barra = document.getElementById('barra-admin');
     if (barra) barra.innerHTML = V.barraAdmin();
     window.scrollTo(0, 0);
+  }
+
+  /* A tabela e a barra de lote se redesenham sozinhas; o resto da tela, não.
+     Marcar uma linha não pode reconstruir a página inteira: a caixa de busca
+     perderia o foco e a rolagem voltaria ao topo a cada clique. */
+  function repintarTarefas() {
+    if ((location.hash || '') !== '#/tarefas') return;
+    const conteudo = document.getElementById('conteudo');
+    if (!conteudo) return;
+    const rolagem = window.scrollY;
+    const ativo = document.activeElement;
+    const nome = ativo && ativo.tagName === 'INPUT' && ativo.type === 'search' ? 'busca' : '';
+    const posicao = nome ? ativo.selectionStart : 0;
+    conteudo.innerHTML = V.tarefas();
+    if (nome) {
+      const campo = conteudo.querySelector('input[type="search"]');
+      if (campo) { campo.focus(); try { campo.setSelectionRange(posicao, posicao); } catch (e) {} }
+    }
+    window.scrollTo(0, rolagem);
+  }
+
+  /* Concluir várias contando o que aconteceu em cada uma: abre o relato da
+     primeira e, quando ela fecha, chama a próxima. Uma fila, não cinco
+     janelas empilhadas. */
+  function contarUmaAUma(ids) {
+    const proxima = function () {
+      const id = ids.shift();
+      if (!id) { render(); return; }
+      const t = Store.tarefa(id);
+      if (!t || t.status !== 'aberta' || !t.oportunidadeId) { proxima(); return; }
+      App.concluirComRelato(t.oportunidadeId, id, proxima);
+    };
+    proxima();
   }
 
   /* Quem está logado e de onde: some quando ninguém está. */
@@ -1078,7 +1116,7 @@
     },
 
     /* Evidência = o cliente se moveu. É o único registro que altera Evidence Age. */
-    novaEvidencia: function (opId, listaAbertas, dimensaoSugerida, padroes) {
+    novaEvidencia: function (opId, listaAbertas, dimensaoSugerida, padroes, aoTerminar) {
       const op = opId ? Store.oportunidade(opId) : null;
       if (opId && !op) return;
       /* Quando a evidência vem de uma tarefa recém-concluída, o canal e a data
@@ -1197,6 +1235,7 @@
           }
         }
         render();
+        if (aoTerminar) aoTerminar();
       }, function (dlg) {
         /* A dimensão se ajusta ao que está sendo escrito ou ditado; o vendedor pode trocar. */
         const texto = dlg.querySelector('[name="titulo"]');
@@ -1423,6 +1462,7 @@
          documentos NÃO estão nesta lista: ficam visíveis sempre. */
       const DO_RELATO = ['secaoRelato', 'feitaEm', 'relato', 'evidenciaDireta',
         'compromissoTexto', 'compromissoData', 'compromissoDono'].concat(PERGUNTAS);
+      const DO_PLANEJAMENTO = ['vencimento', 'hora'];
 
       const campos = [
         { id: 'titulo', rotulo: 'O que fazer', padrao: o.titulo || '' },
@@ -1444,7 +1484,8 @@
           opcoes: P.DIMENSOES.map(function (d) { return { valor: d.id, rotulo: d.nome }; })
         },
         { tipo: 'slot', slot: 'metodo' },
-        { id: 'vencimento', rotulo: 'Para quando', tipo: 'date', padrao: Store.hoje() },
+        { id: 'vencimento', rotulo: 'Para quando', tipo: 'date', padrao: Store.hoje(), largura: 'metade' },
+        { id: 'hora', rotulo: 'Hora (opcional)', tipo: 'time', largura: 'metade' },
 
         { id: 'secaoRelato', tipo: 'secao', rotulo: 'O que aconteceu',
           ajuda: 'O assistente lê tudo junto — o que você escreveu e o conteúdo dos documentos anexados acima — separa o que o CLIENTE fez e relê as oito decisões. Preencha o que tiver; nada aqui é obrigatório.' },
@@ -1476,7 +1517,7 @@
 
         const tarefa = Store.criarTarefa({
           oportunidadeId: opId, titulo: d.titulo, tipo: d.tipo,
-          decisaoAlvo: d.decisaoAlvo, vencimento: quando,
+          decisaoAlvo: d.decisaoAlvo, vencimento: quando, hora: d.hora || '',
           origem: feita ? 'registrada' : 'planejada'
         });
         /* Tarefa a fazer também guarda o material: a proposta que vou enviar
@@ -1494,7 +1535,7 @@
         const ajustar = function () {
           const feita = situacao.value === 'feita';
           U.mostrarCampos(dlg, DO_RELATO, feita);
-          U.mostrarCampos(dlg, ['vencimento'], !feita);
+          U.mostrarCampos(dlg, DO_PLANEJAMENTO, !feita);
         };
         situacao.addEventListener('change', ajustar);
         ajustar();
@@ -1503,10 +1544,10 @@
 
     /* Concluir uma tarefa que já estava aberta. Mesmos campos do "já foi
        feita", sem repetir o que a tarefa já sabe (título, canal, decisão). */
-    concluirComRelato: function (opId, tarefaId) {
+    concluirComRelato: function (opId, tarefaId, aoTerminar) {
       const op = Store.oportunidade(opId);
       const tarefa = Store.dados().tarefas.filter(function (t) { return t.id === tarefaId; })[0];
-      if (!op || !tarefa) return;
+      if (!op || !tarefa) { if (aoTerminar) aoTerminar(); return; }
 
       const campos = [
         { id: 'feitaEm', rotulo: 'Quando foi feita', tipo: 'date', padrao: Store.hoje(), largura: 'metade' },
@@ -1529,14 +1570,20 @@
 
       U.formulario('Concluir: ' + tarefa.titulo, campos, {}, function (d, docs) {
         d.tipo = tarefa.tipo;
-        concluirComOQueAconteceu(op, tarefaId, d, docs, tarefa.decisaoAlvo);
+        concluirComOQueAconteceu(op, tarefaId, d, docs, tarefa.decisaoAlvo, aoTerminar);
       }, function (dlg) {
         U.ligarDocumentos(dlg, 'arquivo', 'relato');
-      });
+      /* Cancelar não pode parar a fila: quem desistiu de contar esta segue
+         para a próxima, e a tarefa fica aberta como estava. */
+      }, aoTerminar || null);
     },
 
+    /* O quadradinho do cockpit fecha a tarefa sem contar nada. Fecha mesmo —
+       tem gente que só quer riscar a linha —, mas fica marcado como sem
+       relato, igual ao lote: uma tarefa que não moveu decisão nenhuma não
+       pode parecer, na tela seguinte, igual a uma que moveu. */
     concluirTarefa: function (id) {
-      Store.concluirTarefa(id);
+      Store.concluirTarefa(id, null, false, true);
       render();
     },
 
@@ -1544,6 +1591,201 @@
       if (!U.confirmar('Excluir esta tarefa?')) return;
       Store.excluirTarefa(id);
       render();
+    },
+
+    /* ---------- Tela de Tarefas ---------- */
+
+    tarefasResponsavel: function (v) { V.tarefasFiltrar({ responsavel: v, pagina: 1 }); render(); },
+    tarefasStatus: function (v) { V.tarefasFiltrar({ status: v, pagina: 1 }); render(); },
+    tarefasBusca: function (v) {
+      /* Digitar não pode redesenhar a tela a cada tecla: o campo perderia o
+         foco no meio da palavra. O filtro entra, a tabela é repintada, e a
+         caixa de busca fica onde está. */
+      V.tarefasFiltrar({ busca: v, pagina: 1 });
+      clearTimeout(App._buscaTarefa);
+      App._buscaTarefa = setTimeout(function () { repintarTarefas(); }, 220);
+    },
+    tarefasPeriodo: function (de, ate) {
+      const m = { pagina: 1 };
+      if (de !== null) m.de = de;
+      if (ate !== null) m.ate = ate;
+      V.tarefasFiltrar(m);
+      render();
+    },
+    tarefasTipo: function (tipo, ligado) {
+      const atuais = V.tarefasEstado().tipos.slice();
+      const i = atuais.indexOf(tipo);
+      if (ligado && i === -1) atuais.push(tipo);
+      if (!ligado && i !== -1) atuais.splice(i, 1);
+      V.tarefasFiltrar({ tipos: atuais, pagina: 1 });
+      render();
+    },
+    tarefasOrdenar: function (chave) {
+      const f = V.tarefasEstado();
+      V.tarefasFiltrar(f.ordem === chave ? { crescente: !f.crescente } : { ordem: chave, crescente: true });
+      render();
+    },
+    tarefasPagina: function (n) { V.tarefasFiltrar({ pagina: Math.max(1, n) }); render(); },
+    tarefasPorPagina: function (n) { V.tarefasFiltrar({ porPagina: Number(n) || 25, pagina: 1 }); render(); },
+    tarefasResumo: function (aberto) { V.tarefasFiltrar({ resumoAberto: !!aberto }); },
+
+    tarefasLimpar: function (alvo) {
+      if (alvo === 'responsavel') V.tarefasFiltrar({ responsavel: 'todos' });
+      else if (alvo === 'periodo') V.tarefasFiltrar({ de: '', ate: '' });
+      else if (alvo === 'status') V.tarefasFiltrar({ status: 'todos' });
+      else if (alvo === 'busca') V.tarefasFiltrar({ busca: '' });
+      else if (alvo.indexOf('tipo:') === 0) {
+        const nome = alvo.slice(5);
+        V.tarefasFiltrar({ tipos: V.tarefasEstado().tipos.filter(function (t) { return t !== nome; }) });
+      }
+      V.tarefasFiltrar({ pagina: 1 });
+      render();
+    },
+
+    tarefasMarcar: function (id, ligado) { V.tarefasMarcar([id], ligado); repintarTarefas(); },
+    tarefasMarcarPagina: function (ligado) { V.tarefasMarcar(V.tarefasDaPagina(), ligado); repintarTarefas(); },
+    tarefasMarcarTudo: function (ligado) { V.tarefasMarcar(V.tarefasVisiveis(), ligado); repintarTarefas(); },
+    tarefasLimparSelecao: function () { V.tarefasMarcar(null, false); repintarTarefas(); },
+
+    tarefasAdiar: function () {
+      const ids = V.tarefasSelecionadas();
+      if (!ids.length) return;
+      U.formulario('Adiar ' + ids.length + (ids.length === 1 ? ' tarefa' : ' tarefas'), [
+        { id: 'data', rotulo: 'Nova data', tipo: 'date', padrao: Store.hoje() },
+        { id: 'motivo', rotulo: 'Por que adiou (opcional)',
+          placeholder: 'O cliente pediu, faltou material, agenda cheia…' }
+      ], {}, function (d) {
+        if (!d.data) return;
+        ids.forEach(function (id) { Store.adiarTarefa(id, d.data, d.motivo); });
+        V.tarefasMarcar(null, false);
+        render();
+      });
+    },
+
+    tarefasAtribuir: function () {
+      const ids = V.tarefasSelecionadas();
+      if (!ids.length) return;
+      const usuarios = A.usuarios();
+      if (!usuarios.length) { alert('Nenhum usuário cadastrado.'); return; }
+      U.formulario('Atribuir ' + ids.length + (ids.length === 1 ? ' tarefa' : ' tarefas'), [
+        { id: 'donoId', rotulo: 'Responsável', tipo: 'select',
+          opcoes: usuarios.map(function (u) { return { valor: u.id, rotulo: u.nome }; }) }
+      ], {}, function (d) {
+        if (!d.donoId) return;
+        ids.forEach(function (id) { Store.atualizarTarefa(id, { donoId: d.donoId }); });
+        V.tarefasMarcar(null, false);
+        render();
+      });
+    },
+
+    /* Concluir em lote é a única porta desta tela por onde uma tarefa fecha
+       sem dizer o que aconteceu — e por isso ela não fecha calada.
+
+       O método inteiro depende de uma distinção: riscar a linha é atividade
+       nossa; o que move as oito decisões é o que o CLIENTE fez, e isso só
+       existe se alguém contar. Fechar cinco tarefas em silêncio deixaria o
+       funil andando e o índice parado, sem nada na tela explicando por quê.
+       Então perguntamos, e a saída de contar uma a uma é a primeira. */
+    tarefasConcluir: function () {
+      const ids = V.tarefasSelecionadas();
+      if (!ids.length) return;
+      const comNegocio = ids.filter(function (id) {
+        const t = Store.tarefa(id);
+        return t && t.status === 'aberta' && t.oportunidadeId;
+      });
+
+      U.formulario('Concluir ' + ids.length + (ids.length === 1 ? ' tarefa' : ' tarefas'), [
+        { tipo: 'secao', rotulo: 'Como quer fechar',
+          ajuda: 'Fechar sem relato move o funil e não move nenhuma das oito decisões: quem as move é o que o cliente fez, e isso está no que você contar. As fechadas sem relato ficam marcadas e voltam no filtro "Concluídas sem relato".' },
+        { id: 'modo', rotulo: 'Modo', tipo: 'select', padrao: comNegocio.length ? 'uma' : 'lote',
+          opcoes: [
+            { valor: 'uma', rotulo: 'Contar o que aconteceu — uma a uma (' + comNegocio.length + ')' },
+            { valor: 'lote', rotulo: 'Fechar sem relato, resolvo depois' }
+          ] },
+        { id: 'feitaEm', rotulo: 'Data da conclusão', tipo: 'date', padrao: Store.hoje() }
+      ], {}, function (d) {
+        if (d.modo === 'uma' && comNegocio.length) {
+          V.tarefasMarcar(null, false);
+          contarUmaAUma(comNegocio.slice());
+          return;
+        }
+        ids.forEach(function (id) {
+          const t = Store.tarefa(id);
+          if (t && t.status === 'aberta') Store.concluirTarefa(id, d.feitaEm || Store.hoje(), false, true);
+        });
+        V.tarefasMarcar(null, false);
+        render();
+        alert(ids.length + (ids.length === 1 ? ' tarefa fechada' : ' tarefas fechadas') +
+          ' sem relato.\n\nNenhuma das oito decisões se moveu — para isso é preciso contar o que o cliente fez. ' +
+          'Elas estão no filtro “Concluídas sem relato”, esperando.');
+      });
+    },
+
+    editarTarefa: function (id) {
+      const t = Store.tarefa(id);
+      if (!t) return;
+      const contas = Store.dados().contas;
+      const ops = Store.dados().oportunidades.filter(function (o) { return !o.desfecho || o.id === t.oportunidadeId; });
+      const nome = function (o) {
+        const c = contas.filter(function (x) { return x.id === o.contaId; })[0];
+        return o.titulo + (c ? ' — ' + c.nome : '');
+      };
+      U.formulario('Editar tarefa', [
+        { id: 'titulo', rotulo: 'O que fazer', padrao: t.titulo },
+        { id: 'tipo', rotulo: 'Como (canal)', tipo: 'select', largura: 'metade',
+          padrao: t.tipo, opcoes: Store.nomesDoCatalogo('tiposTarefa') },
+        { id: 'vencimento', rotulo: 'Para quando', tipo: 'date', largura: 'metade', padrao: t.vencimento },
+        { id: 'hora', rotulo: 'Hora (opcional)', tipo: 'time', largura: 'metade', padrao: t.hora || '' },
+        { id: 'donoId', rotulo: 'Responsável', tipo: 'select', largura: 'metade',
+          padrao: t.donoId || '',
+          opcoes: [{ valor: '', rotulo: '— sem responsável —' }]
+            .concat(A.usuarios().map(function (u) { return { valor: u.id, rotulo: u.nome }; })) },
+        { id: 'oportunidadeId', rotulo: 'Negociação', tipo: 'select', padrao: t.oportunidadeId || '',
+          opcoes: [{ valor: '', rotulo: '— sem negócio —' }]
+            .concat(ops.map(function (o) { return { valor: o.id, rotulo: nome(o) }; })) },
+        { id: 'decisaoAlvo', rotulo: 'Decisão que pretende provocar', tipo: 'select', padrao: t.decisaoAlvo || '',
+          opcoes: [{ valor: '', rotulo: '— nenhuma —' }]
+            .concat(P.DIMENSOES.map(function (d) { return { valor: d.id, rotulo: d.nome }; })) }
+      ], {}, function (d) {
+        if (!d.titulo) return;
+        /* Mudar a data por aqui é correção, não adiamento: quem adia usa o
+           botão de adiar, e é ele que conta. Misturar os dois apagaria o
+           sinal de "esta tarefa já foi empurrada quatro vezes". */
+        Store.atualizarTarefa(id, {
+          titulo: d.titulo, tipo: d.tipo, vencimento: d.vencimento || t.vencimento,
+          hora: d.hora || '', donoId: d.donoId || null,
+          oportunidadeId: d.oportunidadeId || null, decisaoAlvo: d.decisaoAlvo || ''
+        });
+        render();
+      }, null, null, [
+        { rotulo: 'Excluir', classe: 'ghost', acao: function () {
+          if (!U.confirmar('Excluir esta tarefa?')) return false;
+          Store.excluirTarefa(id);
+          render();
+        } }
+      ]);
+    },
+
+    /* Criar tarefa a partir da tela de Tarefas: aqui o negócio ainda não é
+       conhecido, então ele é o primeiro campo. Depois de escolhido, o resto é
+       o mesmo formulário de sempre — um caminho só para criar tarefa. */
+    novaTarefaLivre: function () {
+      const contas = Store.dados().contas;
+      const ops = Store.dados().oportunidades.filter(function (o) { return !o.desfecho; });
+      if (!ops.length) {
+        if (U.confirmar('Nenhum negócio aberto. Cadastrar uma oportunidade agora?')) App.novaOportunidade();
+        return;
+      }
+      const nome = function (o) {
+        const c = contas.filter(function (x) { return x.id === o.contaId; })[0];
+        return o.titulo + (c ? ' — ' + c.nome : '');
+      };
+      U.formulario('Para qual negócio?', [
+        { id: 'oportunidadeId', rotulo: 'Negociação', tipo: 'select',
+          opcoes: ops.map(function (o) { return { valor: o.id, rotulo: nome(o) }; }) }
+      ], {}, function (d) {
+        if (d.oportunidadeId) App.novaTarefa(d.oportunidadeId);
+      });
     },
 
     /* ---------- Arquivos ---------- */
@@ -2802,7 +3044,7 @@
      esse conjunto que o assistente lê. São os documentos que trazem a
      informação — proposta, dossiê, planilha de consumo —, e ler só o que foi
      digitado seria jogar fora justamente a parte mais rica. */
-  function concluirComOQueAconteceu(op, tarefaId, d, docs, dimensaoAlvo) {
+  function concluirComOQueAconteceu(op, tarefaId, d, docs, dimensaoAlvo, aoTerminar) {
     const quando = d.feitaEm || Store.hoje();
     const temRelato = !!(d.relato && d.relato.length >= 60);
 
@@ -2815,8 +3057,10 @@
 
     const depois = function () {
       if (d.evidenciaDireta === 'sim') {
-        App.novaEvidencia(op.id, null, dimensaoAlvo, { canal: d.tipo, data: quando });
+        App.novaEvidencia(op.id, null, dimensaoAlvo, { canal: d.tipo, data: quando }, aoTerminar);
+        return;
       }
+      if (aoTerminar) aoTerminar();
     };
 
     if (temRelato) {

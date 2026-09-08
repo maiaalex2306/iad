@@ -1245,7 +1245,8 @@
         (t.tipo ? '<span class="pill tiny">' + esc(t.tipo) + '</span> ' : '') + esc(t.titulo) +
         (d ? ' <span class="tiny muted">\u2192 ' + esc(d.nome) + '</span>' : '') +
         (feita && t.origem === 'registrada' ? ' <span class="tiny muted" title="Anotada depois de acontecer">· registrada</span>' : '') +
-        (feita && t.comRelato ? ' <span class="tiny muted" title="Teve ata lida pelo assistente">· com ata</span>' : '') + '</span>' +
+        (feita && t.comRelato ? ' <span class="tiny muted" title="Teve ata lida pelo assistente">· com ata</span>' : '') +
+        (feita && t.semRegistro ? ' <span class="tiny atrasado" title="Fechada sem contar o que aconteceu: não moveu nenhuma das oito decisões">· sem relato</span>' : '') + '</span>' +
         '<span class="espaco"></span>' +
         '<span class="tiny ' + (atrasada ? 'atrasado' : 'muted') + '">' +
         (feita ? 'feita ' + U.data(t.concluidaEm || t.vencimento) : U.data(t.vencimento)) + '</span>' +
@@ -1368,7 +1369,381 @@
       '<div class="timeline">' + eventos + '</div></div>';
   }
 
-  /* ---------------- Revisão semanal ---------------- */
+  /* ---------------- Tarefas: a tela inteira ----------------
+
+     A tarefa é a unidade de trabalho do vendedor e era a única coisa do app
+     sem tela própria: vivia dentro do cockpit de UM negócio. Quem tem trinta
+     contas não trabalha assim — abre a lista do dia, filtra o que atrasou,
+     age em bloco.
+
+     A regra que esta tela não pode afrouxar: concluir uma tarefa é o momento
+     em que a decisão avança, e quem faz a decisão avançar é o que o CLIENTE
+     fez — não o fato de a linha ficar riscada. Por isso "Concluir" abre o
+     relato, e o fechamento em lote existe mas se identifica como o que é:
+     dívida, marcada na linha e filtrável. */
+
+  let tarefasFiltro = {
+    responsavel: 'meu',      /* meu | todos | <id de usuário> */
+    status: 'atrasadas',     /* atrasadas | pendentes | concluidas | sem-registro | todos */
+    tipos: [],               /* vazio = todos */
+    de: '', ate: '',
+    busca: '',
+    ordem: 'data',           /* data | valor | empresa */
+    crescente: true,
+    pagina: 1,
+    porPagina: 25,
+    resumoAberto: true
+  };
+  let tarefasMarcadas = {};
+
+  const STATUS_TAREFA = [
+    ['atrasadas', 'Atrasadas', '⚠'],
+    ['pendentes', 'Pendentes', '◴'],
+    ['concluidas', 'Concluídas', '✓'],
+    ['sem-registro', 'Concluídas sem relato', '⚡'],
+    ['todos', 'Todos os status', '▦']
+  ];
+
+  /* O ícone diz o canal antes de a pessoa ler o título. Tipo que o usuário
+     criou e não está aqui cai no genérico — nunca some da lista. */
+  const ICONE_TIPO = {
+    'Reunião': '\u{1F91D}', 'Visita': '\u{1F697}', 'Telefonema': '\u{1F4DE}',
+    'WhatsApp': '\u{1F4AC}', 'E-mail': '✉️', 'Apresentação': '\u{1F4CA}',
+    'Proposta': '\u{1F4C4}', 'Preparação': '\u{1F9F0}', 'Cobrar retorno': '\u{1F501}',
+    'LinkedIn': '\u{1F517}'
+  };
+  function iconeDoTipo(tipo) { return ICONE_TIPO[tipo] || '\u{1F4CC}'; }
+
+  function iniciaisDe(nome) {
+    const partes = String(nome || '?').trim().split(/\s+/);
+    return ((partes[0] || '?')[0] + (partes.length > 1 ? partes[partes.length - 1][0] : '')).toUpperCase();
+  }
+
+  /* Todas as tarefas visíveis ao usuário, já com o negócio e a conta juntos:
+     a linha da tabela precisa dos três, e buscar um por um a cada render é o
+     tipo de coisa que trava a lista em carteira grande. */
+  function tarefasComContexto() {
+    const est = Store.dados();
+    const contas = {}, ops = {};
+    est.contas.forEach(function (c) { contas[c.id] = c; });
+    est.oportunidades.forEach(function (o) { ops[o.id] = o; });
+    return est.tarefas.map(function (t) {
+      const op = ops[t.oportunidadeId] || null;
+      return { t: t, op: op, conta: op ? (contas[op.contaId] || null) : null };
+    });
+  }
+
+  function statusDaTarefa(t) {
+    if (t.status === 'aberta') return t.vencimento < Store.hoje() ? 'atrasada' : 'pendente';
+    return t.semRegistro ? 'sem-registro' : 'concluida';
+  }
+
+  const ROTULO_STATUS = {
+    atrasada: ['ATRASADA', 'dead'], pendente: ['PENDENTE', 'warn'],
+    concluida: ['CONCLUÍDA', 'ok'], 'sem-registro': ['SEM RELATO', 'risk']
+  };
+
+  function tarefaPassaNoFiltro(linha, f, eu) {
+    const t = linha.t;
+    const situacao = statusDaTarefa(t);
+
+    if (f.responsavel === 'meu') { if (t.donoId && eu && t.donoId !== eu.id) return false; }
+    else if (f.responsavel !== 'todos') { if (t.donoId !== f.responsavel) return false; }
+
+    if (f.status === 'atrasadas' && situacao !== 'atrasada') return false;
+    if (f.status === 'pendentes' && situacao !== 'pendente') return false;
+    if (f.status === 'concluidas' && t.status === 'aberta') return false;
+    if (f.status === 'sem-registro' && situacao !== 'sem-registro') return false;
+
+    if (f.tipos.length && f.tipos.indexOf(t.tipo) === -1) return false;
+
+    /* Feita se situa pela data em que foi feita; aberta, pelo vencimento.
+       Filtrar tudo pelo vencimento esconderia o que se concluiu na semana. */
+    const quando = t.status === 'aberta' ? t.vencimento : (t.concluidaEm || t.vencimento);
+    if (f.de && quando < f.de) return false;
+    if (f.ate && quando > f.ate) return false;
+
+    if (f.busca) {
+      const alvo = [t.titulo, t.tipo, linha.op && linha.op.titulo, linha.conta && linha.conta.nome]
+        .filter(Boolean).join(' ').toLowerCase();
+      if (alvo.indexOf(f.busca.toLowerCase()) === -1) return false;
+    }
+    return true;
+  }
+
+  function tarefasFiltradas() {
+    const f = tarefasFiltro;
+    const eu = global.IADAuth.atual();
+    const lista = tarefasComContexto().filter(function (l) { return tarefaPassaNoFiltro(l, f, eu); });
+
+    const chave = function (l) {
+      if (f.ordem === 'valor') return (l.op && l.op.valor) || 0;
+      if (f.ordem === 'empresa') return (l.conta && l.conta.nome ? l.conta.nome : '~').toLowerCase();
+      return (l.t.status === 'aberta' ? l.t.vencimento : (l.t.concluidaEm || l.t.vencimento)) +
+        ' ' + (l.t.hora || '00:00');
+    };
+    lista.sort(function (a, b) {
+      const x = chave(a), y = chave(b);
+      const r = (typeof x === 'number') ? x - y : String(x).localeCompare(String(y));
+      return f.crescente ? r : -r;
+    });
+    return lista;
+  }
+
+  function chipsDoFiltro() {
+    const f = tarefasFiltro;
+    const chips = [];
+    const eu = global.IADAuth.atual();
+    const chip = function (rotulo, acao) {
+      return '<span class="chip">' + esc(rotulo) +
+        '<button type="button" onclick="App.tarefasLimpar(\'' + acao + '\')" aria-label="Remover filtro">✕</button></span>';
+    };
+
+    if (f.responsavel === 'meu') chips.push(chip(eu ? eu.nome : 'Minhas tarefas', 'responsavel'));
+    else if (f.responsavel !== 'todos') {
+      const u = global.IADAuth.usuarios().filter(function (x) { return x.id === f.responsavel; })[0];
+      chips.push(chip(u ? u.nome : 'Responsável', 'responsavel'));
+    }
+    if (f.de || f.ate) {
+      chips.push(chip('Agendamento: ' + (f.de ? U.data(f.de) : '…') + ' – ' + (f.ate ? U.data(f.ate) : '…'), 'periodo'));
+    }
+    f.tipos.forEach(function (t) { chips.push(chip(t, 'tipo:' + t)); });
+    if (f.status !== 'todos') {
+      const s = STATUS_TAREFA.filter(function (x) { return x[0] === f.status; })[0];
+      chips.push(chip(s ? s[1] : f.status, 'status'));
+    }
+    if (f.busca) chips.push(chip('“' + f.busca + '”', 'busca'));
+    return chips.join('');
+  }
+
+  /* O resumo da semana existe para responder, antes de qualquer filtro, a
+     pergunta com que o vendedor abre a tela: em que pé eu estou? */
+  function resumoDaSemana() {
+    const eu = global.IADAuth.atual();
+    const hoje = Store.hoje();
+    const limite = new Date(); limite.setDate(limite.getDate() + 7);
+    const emSete = limite.toISOString().slice(0, 10);
+    const inicio = new Date(); inicio.setDate(inicio.getDate() - 7);
+    const seteAtras = inicio.toISOString().slice(0, 10);
+
+    const minhas = tarefasComContexto().filter(function (l) {
+      return !l.t.donoId || !eu || l.t.donoId === eu.id;
+    });
+    const atrasadas = minhas.filter(function (l) { return statusDaTarefa(l.t) === 'atrasada'; });
+    const hojeAte = minhas.filter(function (l) {
+      return l.t.status === 'aberta' && l.t.vencimento >= hoje && l.t.vencimento <= emSete;
+    });
+    const feitas = minhas.filter(function (l) {
+      return l.t.status !== 'aberta' && (l.t.concluidaEm || '') >= seteAtras;
+    });
+    const semRelato = feitas.filter(function (l) { return l.t.semRegistro; });
+
+    const valorParado = atrasadas.reduce(function (s, l) { return s + ((l.op && l.op.valor) || 0); }, 0);
+
+    /* O número que fecha o ciclo: das tarefas concluídas, quanto de decisão
+       de fato andou. Tarefa fechada é esforço; ponto de IAD é resultado, e é
+       ele que diz se as tarefas da semana valeram alguma coisa. */
+    const negocios = {};
+    feitas.forEach(function (l) { if (l.op) negocios[l.op.id] = l.op; });
+    const pontos = Object.keys(negocios).reduce(function (soma, id) {
+      return soma + Math.max(0, E.deltaSemana(negocios[id]).iadDelta);
+    }, 0);
+
+    const numero = function (n, rotulo, classe) {
+      return '<div class="kpi-tarefa"><strong class="' + (classe || '') + '">' + n + '</strong>' +
+        '<span class="tiny muted">' + esc(rotulo) + '</span></div>';
+    };
+
+    return '<details class="card resumo-tarefas"' + (tarefasFiltro.resumoAberto ? ' open' : '') +
+      ' ontoggle="App.tarefasResumo(this.open)">' +
+      '<summary><strong>Resumo das tarefas da semana</strong></summary>' +
+      '<div class="row kpis-tarefa">' +
+      numero(atrasadas.length, 'atrasadas', atrasadas.length ? 'atrasado' : '') +
+      numero(hojeAte.length, 'nos próximos 7 dias') +
+      numero(feitas.length, 'concluídas nos últimos 7 dias') +
+      numero('+' + pontos, 'pontos de decisão que andaram', pontos ? 'subiu' : 'muted') +
+      numero(semRelato.length, 'fechadas sem relato', semRelato.length ? 'atrasado' : '') +
+      '<div class="kpi-tarefa"><strong>' + U.moeda(valorParado) + '</strong>' +
+      '<span class="tiny muted">em negócios com tarefa atrasada</span></div>' +
+      '</div>' +
+      (semRelato.length
+        ? '<p class="aviso" style="margin:10px 0 0">' + semRelato.length +
+          (semRelato.length === 1 ? ' tarefa foi fechada' : ' tarefas foram fechadas') +
+          ' sem contar o que aconteceu. Elas moveram o funil e não moveram nenhuma das oito decisões. ' +
+          '<button class="btn ghost mini" onclick="App.tarefasStatus(\'sem-registro\')">Ver e completar</button></p>'
+        : '') +
+      '</details>';
+  }
+
+  /* O que esta tarefa deveria destravar. É a ponte entre a lista e o método:
+     sem ela a tela vira agenda, e agenda não faz conta andar. */
+  function faltaNaLinha(linha) {
+    if (!linha.op) return '<span class="tiny muted">sem negócio</span>';
+    const alvo = P.DIMENSOES.filter(function (d) { return d.id === linha.t.decisaoAlvo; })[0];
+    const lacunas = E.lacunas(linha.op);
+    const primeira = lacunas[0];
+    if (alvo) {
+      const nota = linha.op.dims[alvo.id] || 0;
+      return '<span class="tiny">' + esc(alvo.nome) + ' <span class="muted">' + nota + '/2</span></span>';
+    }
+    if (!primeira) return '<span class="tiny muted">nada em aberto</span>';
+    return '<span class="tiny muted">falta: ' + esc(primeira.dimensao ? primeira.dimensao.nome : primeira.tipo) + '</span>';
+  }
+
+  function linhaDeTarefa(linha) {
+    const t = linha.t, op = linha.op, conta = linha.conta;
+    const situacao = statusDaTarefa(t);
+    const rot = ROTULO_STATUS[situacao];
+    const dono = global.IADAuth.usuarios().filter(function (u) { return u.id === t.donoId; })[0];
+    const quando = t.status === 'aberta' ? t.vencimento : (t.concluidaEm || t.vencimento);
+    const marcada = !!tarefasMarcadas[t.id];
+
+    return '<tr class="' + (marcada ? 'marcada' : '') + '">' +
+      '<td class="col-marca"><input type="checkbox" data-tarefa="' + t.id + '"' + (marcada ? ' checked' : '') +
+      ' onchange="App.tarefasMarcar(\'' + t.id + '\',this.checked)" aria-label="Selecionar"></td>' +
+
+      '<td><span class="icone-tipo" title="' + esc(t.tipo || '') + '">' + iconeDoTipo(t.tipo) + '</span> ' +
+      (op
+        ? '<a href="#/op/' + op.id + '"><strong>' + esc(t.titulo) + '</strong></a>'
+        : '<strong>' + esc(t.titulo) + '</strong>') +
+      (t.adiamentos ? '<span class="tiny atrasado"> · adiada ' + t.adiamentos + 'x</span>' : '') +
+      (t.status !== 'aberta' && t.comRelato ? '<span class="tiny muted"> · com relato</span>' : '') +
+      '</td>' +
+
+      '<td><span class="pill ' + rot[1] + '">' + rot[0] + '</span></td>' +
+      '<td class="nowrap">' + U.data(quando) + (t.hora ? ' <span class="tiny muted">às ' + esc(t.hora) + '</span>' : '') + '</td>' +
+      '<td><span class="avatar" title="' + esc(dono ? dono.nome : 'sem responsável') + '">' +
+      esc(dono ? iniciaisDe(dono.nome) : '—') + '</span></td>' +
+
+      '<td>' + (op
+        ? '<a href="#/op/' + op.id + '">' + esc(op.titulo) + '</a>' +
+          '<span class="tiny muted">' + esc(conta ? conta.nome : '') + '</span>'
+        : '<span class="tiny muted">—</span>') + '</td>' +
+
+      '<td>' + faltaNaLinha(linha) + '</td>' +
+      '<td class="right nowrap">' + U.moeda(op ? op.valor : 0) + '</td>' +
+      '<td class="nowrap">' +
+      (t.status === 'aberta' && op
+        ? '<button class="btn mini" onclick="App.concluirComRelato(\'' + op.id + '\',\'' + t.id + '\')"' +
+          ' data-ajuda-titulo="Concluir contando o que aconteceu" data-ajuda="É aqui que a conta anda: o assistente lê o que você escrever e anexar, separa o que o CLIENTE fez e relê as oito decisões.">Concluir</button>'
+        : '') +
+      '<button class="btn ghost mini" onclick="App.editarTarefa(\'' + t.id + '\')">Editar</button>' +
+      '</td></tr>';
+  }
+
+  function barraDeLote(total) {
+    const n = Object.keys(tarefasMarcadas).length;
+    if (!n) return '';
+    return '<div class="barra-lote">' +
+      '<strong>' + n + ' selecionada' + (n > 1 ? 's' : '') + '</strong>' +
+      '<button class="link" onclick="App.tarefasLimparSelecao()">Limpar seleção</button>' +
+      '<span class="espaco"></span>' +
+      '<button class="link" onclick="App.tarefasAdiar()">Adiar</button>' +
+      '<button class="link" onclick="App.tarefasAtribuir()">Atribuir responsável</button>' +
+      '<button class="link verde" onclick="App.tarefasConcluir()"' +
+      ' data-ajuda-titulo="Concluir em lote" data-ajuda="Fechar em lote não move nenhuma das oito decisões — quem move é o que o cliente fez, e isso está no relato. O app pergunta antes e oferece contar uma a uma.">Marcar como concluída</button>' +
+      '</div>' +
+      (n < total
+        ? '<div class="lote-tudo"><label><input type="checkbox" onchange="App.tarefasMarcarTudo(this.checked)"> ' +
+          'Selecionar todas as ' + total + ' tarefas deste filtro</label></div>'
+        : '');
+  }
+
+  function tarefas() {
+    const eu = global.IADAuth.atual();
+    const f = tarefasFiltro;
+    const lista = tarefasFiltradas();
+    const paginas = Math.max(1, Math.ceil(lista.length / f.porPagina));
+    const pagina = Math.min(f.pagina, paginas);
+    const daPagina = lista.slice((pagina - 1) * f.porPagina, pagina * f.porPagina);
+
+    const usuarios = global.IADAuth.usuarios();
+    const tipos = Store.nomesDoCatalogo('tiposTarefa');
+
+    const opcaoResponsavel = [{ valor: 'meu', rotulo: 'Minhas tarefas' }, { valor: 'todos', rotulo: 'Todas as pessoas' }]
+      .concat(usuarios.map(function (u) { return { valor: u.id, rotulo: u.nome }; }))
+      .map(function (o) {
+        return '<option value="' + esc(o.valor) + '"' + (f.responsavel === o.valor ? ' selected' : '') + '>' +
+          esc(o.rotulo) + '</option>';
+      }).join('');
+
+    const opcaoStatus = STATUS_TAREFA.map(function (sx) {
+      return '<option value="' + sx[0] + '"' + (f.status === sx[0] ? ' selected' : '') + '>' +
+        sx[2] + ' ' + esc(sx[1]) + '</option>';
+    }).join('');
+
+    const caixasTipo = tipos.map(function (t) {
+      return '<label class="caixa-tipo"><input type="checkbox"' +
+        (f.tipos.indexOf(t) !== -1 ? ' checked' : '') +
+        ' onchange="App.tarefasTipo(\'' + esc(t).replace(/'/g, '&#39;') + '\',this.checked)"> ' +
+        iconeDoTipo(t) + ' ' + esc(t) + '</label>';
+    }).join('');
+
+    const ordenar = function (chave, rotulo, extra) {
+      const ativo = f.ordem === chave;
+      return '<th class="' + (extra || '') + '"><button class="ordenador' + (ativo ? ' ativo' : '') +
+        '" onclick="App.tarefasOrdenar(\'' + chave + '\')">' + esc(rotulo) +
+        (ativo ? (f.crescente ? ' ▲' : ' ▼') : '') + '</button></th>';
+    };
+
+    const corpo = daPagina.map(linhaDeTarefa).join('') ||
+      '<tr><td colspan="9"><div class="vazio small">Nenhuma tarefa neste filtro.</div></td></tr>';
+
+    return '<div class="row" style="align-items:center">' +
+      '<h1 style="margin:0">Tarefas</h1><span class="espaco"></span>' +
+      '<button class="btn ghost mini" onclick="IADUI.fecharDialogos();location.hash=\'#/playbook\'"' +
+      ' data-ajuda-titulo="O método" data-ajuda="Por que concluir uma tarefa sem contar o que aconteceu não move nenhuma das oito decisões.">? Método</button>' +
+      '<button class="btn" onclick="App.novaTarefaLivre()">+ Criar tarefa</button></div>' +
+
+      '<div class="filtros-tarefa">' +
+      '<label class="campo mini"><span>Responsável</span>' +
+      '<select onchange="App.tarefasResponsavel(this.value)">' + opcaoResponsavel + '</select></label>' +
+      '<label class="campo mini"><span>De</span><input type="date" value="' + esc(f.de) +
+      '" onchange="App.tarefasPeriodo(this.value, null)"></label>' +
+      '<label class="campo mini"><span>Até</span><input type="date" value="' + esc(f.ate) +
+      '" onchange="App.tarefasPeriodo(null, this.value)"></label>' +
+      '<label class="campo mini"><span>Status</span>' +
+      '<select onchange="App.tarefasStatus(this.value)">' + opcaoStatus + '</select></label>' +
+      '<label class="campo mini cresce"><span>Buscar</span><input type="search" value="' + esc(f.busca) +
+      '" placeholder="tarefa, empresa ou negócio" oninput="App.tarefasBusca(this.value)"></label>' +
+      '</div>' +
+
+      (tipos.length ? '<details class="tipos-tarefa"><summary>Tipos de tarefa' +
+        (f.tipos.length ? ' <span class="pill navy">' + f.tipos.length + '</span>' : ' <span class="tiny muted">todos</span>') +
+        '</summary><div class="row">' + caixasTipo + '</div></details>' : '') +
+
+      '<div class="row chips">' + chipsDoFiltro() + '</div>' +
+
+      resumoDaSemana() +
+
+      barraDeLote(lista.length) +
+
+      '<div class="card" style="padding:0"><div class="tabela-rolagem"><table class="tabela-tarefas"><thead><tr>' +
+      '<th class="col-marca"><input type="checkbox" onchange="App.tarefasMarcarPagina(this.checked)" aria-label="Selecionar a página"></th>' +
+      '<th>Tarefa</th><th>Status</th>' +
+      ordenar('data', 'Data e hora', 'nowrap') +
+      '<th>Responsável</th>' +
+      ordenar('empresa', 'Negociação') +
+      '<th>O que ela destrava</th>' +
+      ordenar('valor', 'Valor', 'right') +
+      '<th></th>' +
+      '</tr></thead><tbody>' + corpo + '</tbody></table></div></div>' +
+
+      '<div class="row paginacao">' +
+      '<span class="tiny muted">Exibindo ' + daPagina.length + ' de ' + lista.length +
+      (lista.length === 1 ? ' tarefa' : ' tarefas') + '</span>' +
+      '<select onchange="App.tarefasPorPagina(this.value)">' +
+      [10, 25, 50, 100].map(function (n) {
+        return '<option value="' + n + '"' + (f.porPagina === n ? ' selected' : '') + '>' + n + ' por página</option>';
+      }).join('') + '</select>' +
+      '<span class="espaco"></span>' +
+      '<button class="btn ghost mini"' + (pagina <= 1 ? ' disabled' : '') +
+      ' onclick="App.tarefasPagina(' + (pagina - 1) + ')">Anterior</button>' +
+      '<span class="tiny muted">' + pagina + ' / ' + paginas + '</span>' +
+      '<button class="btn ghost mini"' + (pagina >= paginas ? ' disabled' : '') +
+      ' onclick="App.tarefasPagina(' + (pagina + 1) + ')">Próxima</button>' +
+      '</div>';
+  }
 
   /* ---------------- Revisão semanal ---------------- */
   function revisao() {
@@ -2455,11 +2830,48 @@
       '</div></form>';
   }
 
+  /* A tela é redesenhada pelo router a cada ação; o filtro e a seleção vivem
+     aqui para sobreviver a isso. O app mexe neles só por estas portas. */
+  function tarefasFiltrar(mudancas) {
+    Object.assign(tarefasFiltro, mudancas || {});
+    /* Trocar de filtro com dez linhas marcadas fecharia, no lote seguinte,
+       tarefas que já saíram da tela. A seleção morre com o filtro. */
+    if (mudancas && ('responsavel' in mudancas || 'status' in mudancas || 'tipos' in mudancas ||
+        'de' in mudancas || 'ate' in mudancas || 'busca' in mudancas)) {
+      tarefasMarcadas = {};
+    }
+  }
+  function tarefasEstado() { return tarefasFiltro; }
+  function tarefasVisiveis() { return tarefasFiltradas().map(function (l) { return l.t.id; }); }
+  function tarefasDaPagina() {
+    const f = tarefasFiltro;
+    const lista = tarefasFiltradas();
+    const paginas = Math.max(1, Math.ceil(lista.length / f.porPagina));
+    const pagina = Math.min(f.pagina, paginas);
+    return lista.slice((pagina - 1) * f.porPagina, pagina * f.porPagina)
+      .map(function (l) { return l.t.id; });
+  }
+  function tarefasSelecionadas() {
+    /* Só as que ainda estão no filtro: marcar tudo, mudar o filtro e concluir
+       não pode alcançar uma tarefa que a pessoa não está vendo. */
+    const visiveis = {};
+    tarefasVisiveis().forEach(function (id) { visiveis[id] = true; });
+    return Object.keys(tarefasMarcadas).filter(function (id) { return visiveis[id]; });
+  }
+  function tarefasMarcar(ids, ligado) {
+    if (ids === null) { tarefasMarcadas = {}; return; }
+    ids.forEach(function (id) {
+      if (ligado) tarefasMarcadas[id] = true;
+      else delete tarefasMarcadas[id];
+    });
+  }
+
   global.IADViews = {
-    hoje, painel, pipeline, cockpit, revisao, contas, cadastros, playbook, dados, itemArquivo, listaLeads,
+    hoje, painel, pipeline, tarefas, cockpit, revisao, contas, cadastros, playbook, dados, itemArquivo, listaLeads,
     revisaoDaImportacao, resumoDaLeitura, planoDaIA, definirPlano, planoGuardado, revisaoDasNotas,
     acesso, barraAdmin, definirTelaAcesso, definirPrimeiraEmpresa, listaUsuariosNuvem,
     pendenteAcesso: function () { return pendente; },
+    tarefasFiltrar, tarefasEstado, tarefasVisiveis, tarefasDaPagina, tarefasSelecionadas, tarefasMarcar,
     definirFiltro: function (f) { filtroGrupo = f; },
     definirFiltroHistorico: function (f) { filtroHistorico = f; },
     definirFiltroHoje: function (f) { filtroHoje = f; },

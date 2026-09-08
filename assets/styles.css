@@ -225,6 +225,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--navy-2); ou
 }
 .tarefa-linha .quadro:hover { background: var(--ok); border-color: var(--ok); }
 .atrasado { color: var(--dead); font-weight: 700; }
+.subiu { color: var(--ok); font-weight: 700; }
 
 .lista-arquivos { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
 .arquivo { border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: var(--surface); }
@@ -889,3 +890,88 @@ dialog.revisao-ia { width: min(680px, 96vw); }
   color: var(--ok); border-color: var(--ok); background: transparent; cursor: default;
 }
 .tarefa-linha .btn.mini { flex: none; }
+
+/* ---------- Tela de Tarefas ----------
+   A lista onde o vendedor trabalha. Duas decisões de layout que não são
+   estéticas: a tabela rola sozinha na horizontal (nove colunas não cabem no
+   celular, e a página inteira rolando de lado é pior que a tabela rolando),
+   e a barra de lote é grudenta — some da vista rolar dez linhas e perder o
+   botão que se ia clicar. */
+.filtros-tarefa { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0 8px; }
+.filtros-tarefa .campo.mini { flex: 0 1 180px; margin-bottom: 0; }
+.filtros-tarefa .campo.mini input,
+.filtros-tarefa .campo.mini select { padding: 7px 10px; font-size: .84rem; background: var(--surface); }
+.filtros-tarefa .campo.mini.cresce { flex: 1 1 240px; }
+
+.tipos-tarefa { margin: 0 0 8px; }
+.tipos-tarefa > summary { cursor: pointer; font-size: .8rem; color: var(--muted); padding: 4px 0; }
+.tipos-tarefa .row { flex-wrap: wrap; gap: 6px 14px; padding: 6px 0 2px; }
+.caixa-tipo { display: inline-flex; align-items: center; gap: 5px; font-size: .82rem; cursor: pointer; }
+
+.chips { flex-wrap: wrap; gap: 6px; margin: 0 0 10px; min-height: 0; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 6px 3px 10px;
+  border: 1px solid var(--line); border-radius: 999px; background: var(--surface);
+  font-size: .74rem; font-weight: 600; color: var(--text);
+}
+.chip button {
+  border: 0; background: none; color: var(--muted); cursor: pointer;
+  font-size: .8rem; line-height: 1; padding: 2px 4px; border-radius: 999px;
+}
+.chip button:hover { color: var(--dead); background: var(--bg); }
+
+.resumo-tarefas { padding: 12px 16px; margin-bottom: 12px; }
+.resumo-tarefas > summary { cursor: pointer; list-style: none; }
+.resumo-tarefas > summary::-webkit-details-marker { display: none; }
+.resumo-tarefas > summary::after { content: ' ▾'; color: var(--muted); }
+.resumo-tarefas[open] > summary::after { content: ' ▴'; }
+.kpis-tarefa { flex-wrap: wrap; gap: 20px; margin-top: 12px; }
+.kpi-tarefa { display: flex; flex-direction: column; gap: 2px; min-width: 110px; }
+.kpi-tarefa strong { font-size: 1.35rem; line-height: 1.1; }
+
+.barra-lote {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  background: var(--navy); color: #fff; padding: 10px 14px; border-radius: 10px 10px 0 0;
+  font-size: .84rem;
+}
+.barra-lote .link { color: #cfe0ff; }
+.barra-lote .link.verde { color: #7ee2a8; }
+.link {
+  border: 0; background: none; cursor: pointer; font: inherit; font-weight: 700;
+  color: var(--navy); padding: 2px 0; text-decoration: none;
+}
+.link:hover { text-decoration: underline; }
+.lote-tudo {
+  background: var(--bg); border: 1px solid var(--line); border-top: 0;
+  padding: 8px 14px; font-size: .8rem;
+}
+
+.tabela-tarefas th { white-space: nowrap; font-size: .72rem; text-transform: uppercase; letter-spacing: .3px; color: var(--muted); }
+.tabela-tarefas td { vertical-align: middle; }
+.tabela-tarefas .col-marca { width: 34px; }
+.tabela-tarefas tr.marcada td { background: rgba(31,74,140,.07); }
+.tabela-tarefas a { color: var(--navy); text-decoration: none; font-weight: 600; }
+.tabela-tarefas a:hover { text-decoration: underline; }
+.tabela-tarefas .tiny.muted { display: block; }
+.nowrap { white-space: nowrap; }
+.icone-tipo { font-size: 1rem; margin-right: 2px; }
+.avatar {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 999px;
+  background: var(--bg); border: 1px solid var(--line);
+  font-size: .7rem; font-weight: 700; color: var(--muted);
+}
+.ordenador {
+  border: 0; background: none; cursor: pointer; font: inherit; color: inherit;
+  text-transform: inherit; letter-spacing: inherit; padding: 0;
+}
+.ordenador.ativo { color: var(--navy); }
+
+.paginacao { align-items: center; gap: 10px; flex-wrap: wrap; margin: 10px 0 24px; }
+.paginacao select { width: auto; flex: 0 0 auto; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font-size: .78rem; }
+
+@media (max-width: 700px) {
+  .filtros-tarefa .campo.mini { flex: 1 1 140px; }
+  .barra-lote { gap: 10px; }
+}

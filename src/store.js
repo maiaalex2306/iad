@@ -102,6 +102,9 @@
     dados.tarefas.forEach(function (t) {
       if (!t.origem) t.origem = 'planejada';
       if (t.comRelato == null) t.comRelato = false;
+      if (t.hora == null) t.hora = '';
+      if (t.semRegistro == null) t.semRegistro = false;
+      if (t.adiamentos == null) t.adiamentos = 0;
     });
     dados.contatos.forEach(function (c) {
       if (c.influencia == null) c.influencia = 2;
@@ -539,23 +542,63 @@
     const nova = Object.assign({
       id: uid('tsk'), titulo: '', tipo: 'Reunião', oportunidadeId: null,
       contatoId: null, decisaoAlvo: '', vencimento: hoje(),
+      /* A hora é opcional e existe porque agenda sem hora não é agenda: numa
+         lista com trinta tarefas do mesmo dia, a ordem é a hora. */
+      hora: '',
       status: 'aberta', concluidaEm: null, criadoEm: hoje(),
-      origem: 'planejada', comRelato: false
+      origem: 'planejada', comRelato: false,
+      /* Tarefa fechada em lote, sem contar o que aconteceu. Não é detalhe de
+         auditoria: é dívida visível. Fechar move o funil e não move nenhuma
+         das oito decisões, e sem esta marca a diferença some da tela. */
+      semRegistro: false,
+      adiamentos: 0
     }, carimbo(true), dados);
     estado.tarefas.push(nova);
     salvar();
     return nova;
   }
 
+  function atualizarTarefa(id, mudancas) {
+    const t = tarefa(id);
+    if (!t) return null;
+    Object.assign(t, mudancas || {});
+    salvar();
+    return t;
+  }
+
+  /* Adiar é um fato, não uma correção de digitação: a tarefa adiada quatro
+     vezes é o sintoma que o vendedor não vê sozinho. Fica contado na tarefa e
+     escrito no histórico do negócio. */
+  function adiarTarefa(id, novaData, motivo) {
+    const t = tarefa(id);
+    if (!t || !novaData || novaData === t.vencimento) return null;
+    const antes = t.vencimento;
+    t.vencimento = novaData;
+    t.adiamentos = (t.adiamentos || 0) + 1;
+    if (t.oportunidadeId) {
+      const op = oportunidade(t.oportunidadeId);
+      if (op) {
+        op.eventos.unshift({
+          id: uid('evt'), tipo: 'sistema', data: hoje(),
+          titulo: 'Tarefa adiada de ' + antes + ' para ' + novaData + ': ' + t.titulo +
+            (motivo ? ' (' + motivo + ')' : '')
+        });
+      }
+    }
+    salvar();
+    return t;
+  }
+
   /* A data vem de fora porque a tarefa registrada depois aconteceu ontem, não
      hoje — e datar tudo como hoje faria o Evidence Age mentir. O canal entra
      no título do evento: é o que permite ler depois por onde a decisão andou. */
-  function concluirTarefa(id, quando, comRelato) {
+  function concluirTarefa(id, quando, comRelato, semRegistro) {
     const t = tarefa(id);
     if (!t) return null;
     t.status = 'concluida';
     t.concluidaEm = quando || hoje();
     if (comRelato) t.comRelato = true;
+    t.semRegistro = !!semRegistro;
     if (t.oportunidadeId) {
       const op = oportunidade(t.oportunidadeId);
       if (op) {
@@ -635,7 +678,7 @@
     dados, contexto, tenantDeTrabalho, visivel,
     criarConta, criarContato, criarOportunidade, atualizarOportunidade, vincularStakeholder,
     pontuar, registrarEvento, removerEvento, definirCompromisso, definirInsight,
-    criarTarefa, concluirTarefa, excluirTarefa,
+    criarTarefa, atualizarTarefa, adiarTarefa, concluirTarefa, excluirTarefa,
     adotarOrfaos,
     catalogo, catalogoAtivos, nomesDoCatalogo, criarNoCatalogo, atualizarNoCatalogo,
     removerDoCatalogo, produto,

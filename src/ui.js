@@ -99,7 +99,7 @@
      a senha de quem chegou pelo convite, fechar sem preencher deixa a pessoa
      dentro do app e sem como voltar amanhã. Quem chama precisa poder dizer
      isso. Nas outras caixas o parâmetro não é passado e nada muda. */
-  function formulario(titulo, campos, valores, aoConfirmar, aoMontar, aoCancelar) {
+  function formulario(titulo, campos, valores, aoConfirmar, aoMontar, aoCancelar, extras) {
     const dlg = document.createElement('dialog');
     const html = campos.map(function (c) {
       const v = (valores && valores[c.id] != null) ? valores[c.id] : (c.padrao != null ? c.padrao : '');
@@ -155,12 +155,31 @@
       return '<label class="campo' + (c.largura === 'metade' ? ' meia' : '') + '"><span>' + esc(c.rotulo) + '</span><input type="' + (c.tipo || 'text') + '" name="' + c.id + '" value="' + esc(v) + '"' + (c.placeholder ? ' placeholder="' + esc(c.placeholder) + '"' : '') + '></label>';
     }).join('');
 
+    /* Ações que não são "salvar" nem "cancelar" — excluir, por exemplo. Ficam
+       à esquerda, longe do botão que a pessoa vai clicar sem ler. */
+    const botoesExtras = (extras || []).map(function (b, i) {
+      return '<button class="btn ' + (b.classe || 'ghost') + '" type="button" data-extra="' + i + '">' +
+        esc(b.rotulo) + '</button>';
+    }).join('');
+
     dlg.innerHTML =
       '<form method="dialog"><div class="corpo"><h2>' + esc(titulo) + '</h2>' + html + '</div>' +
-      '<div class="rodape"><button class="btn ghost" value="cancelar" type="submit">Cancelar</button>' +
+      '<div class="rodape">' + botoesExtras + '<span class="espaco"></span>' +
+      '<button class="btn ghost" value="cancelar" type="submit">Cancelar</button>' +
       '<button class="btn" value="ok" type="submit">Salvar</button></div></form>';
 
     document.body.appendChild(dlg);
+    dlg.querySelectorAll('[data-extra]').forEach(function (botao) {
+      botao.addEventListener('click', function () {
+        const b = (extras || [])[Number(botao.dataset.extra)];
+        if (!b || !b.acao) return;
+        /* A ação devolve false para dizer "não fecha" — é o que permite um
+           excluir com confirmação que, cancelada, deixa a janela aberta. */
+        if (b.acao(dlg) === false) return;
+        dlg.returnValue = 'extra';
+        dlg.close();
+      });
+    });
     ligarVoz(dlg);
     ligarOlho(dlg);
     ligarIA(dlg, campos);
@@ -182,7 +201,7 @@
             : el.value.trim();
         });
         aoConfirmar(dados, dlg.documentosIA || [], dlg.contatosIA || [], dlg.empresaNovaIA || null);
-      } else if (aoCancelar) {
+      } else if (aoCancelar && dlg.returnValue !== 'extra') {
         aoCancelar();
       }
       dlg.remove();
