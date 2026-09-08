@@ -2953,9 +2953,13 @@
         : '(nenhuma)') + '</p>' +
 
       '<div class="row" style="margin-top:12px">' +
+      (global.IADNuvem.conectado()
+        ? '<button class="btn" onclick="App.perguntarAoServidor()"' +
+          ' data-ajuda-titulo="Perguntar ao servidor" data-ajuda="O app pergunta ao banco o que ele acha de você: se a correção do gestor está aplicada, qual empresa ele diz que é a sua, e quantos registros ele deixa você ler. É o que separa as três causas de tela vazia.">Perguntar ao servidor por quê</button>'
+        : '') +
       '<button class="btn ghost mini" onclick="App.copiarDiagnostico()">Copiar diagnóstico</button>' +
       '<button class="btn ghost mini" onclick="App.tentarBaixarDeNovo()">Baixar do servidor de novo</button>' +
-      '</div></div>';
+      '</div><div id="resposta-servidor"></div></div>';
   }
 
   function dados() {

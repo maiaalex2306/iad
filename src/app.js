@@ -2333,6 +2333,74 @@
 
     /* O botão do aviso de sincronização. Repete só a descida — quem acabou de
        entrar quer ver a carteira, não empurrar a cópia local por cima dela. */
+    /* Pergunta ao servidor o que ele acha de quem está chamando e escreve o
+       veredito na própria tela. É o que fecha o caso sem ninguém abrir o SQL
+       Editor: as três causas de pipeline vazio se distinguem pelas respostas
+       de sou_gestor(), meu_tenant() e a contagem que o RLS deixa passar. */
+    perguntarAoServidor: function () {
+      const alvo = document.getElementById('resposta-servidor');
+      if (!alvo) return;
+      alvo.innerHTML = '<p class="small muted">Perguntando ao servidor…</p>';
+      const N = global.IADNuvem;
+
+      Promise.all([N.comoOServidorMeVe(), N.primeirasLinhas('contas'), N.primeirasLinhas('oportunidades')])
+        .then(function (r) {
+          const v = r[0], contas = r[1], ops = r[2];
+          const eu = A.atual() || {};
+          const linhas = [];
+          const diz = function (rot, texto) {
+            linhas.push('<li><strong>' + U.esc(rot) + ':</strong> ' + texto + '</li>');
+          };
+
+          diz('sou_gestor() existe no banco', v.souGestor.existe
+            ? 'sim, e devolveu <strong>' + String(v.souGestor.valor) + '</strong>'
+            : '<strong class="atrasado">NÃO</strong> — a correção 5 nunca rodou neste servidor');
+          diz('meu_tenant()', v.meuTenant.existe ? U.esc(String(v.meuTenant.valor)) : 'função ausente');
+          diz('sou_admin()', v.souAdmin.existe ? String(v.souAdmin.valor) : 'função ausente');
+          diz('Empresa do seu perfil', U.esc(eu.tenantId || '(nenhuma)'));
+          const quanto = function (r) {
+            if (r.erro) return '<span class="atrasado">' + U.esc(r.erro) + '</span>';
+            if (!r.tem) return '<strong class="atrasado">nenhuma</strong>';
+            return r.quantas >= r.limite ? 'pelo menos ' + r.limite : String(r.quantas);
+          };
+          diz('Contas que o servidor deixa você ler', quanto(contas));
+          diz('Oportunidades que o servidor deixa você ler', quanto(ops));
+
+          /* O veredito, que é o ponto de tudo isto: uma frase e o que fazer. */
+          let veredito;
+          if (!v.souGestor.existe) {
+            veredito = 'A correção 5 não foi aplicada neste servidor. Sem ela o gestor é tratado como ' +
+              'vendedor comum e só vê o que tem o dono_id dele — e estas contas foram criadas por outro ' +
+              'login seu. <strong>Rode nuvem/correcao-05-gestor.sql no SQL Editor.</strong>';
+          } else if (v.souGestor.valor !== true) {
+            veredito = 'A correção está aplicada, mas o servidor não considera você gestor: o papel na ' +
+              'tabela perfis não é gestor nem admin. <strong>Um administrador precisa mudar o seu papel</strong> ' +
+              'em Cadastros → Usuários.';
+          } else if (v.meuTenant.existe && String(v.meuTenant.valor) !== String(eu.tenantId || '')) {
+            veredito = 'O servidor diz que a sua empresa é outra: <strong>' + U.esc(String(v.meuTenant.valor)) +
+              '</strong>, e o app está trabalhando com ' + U.esc(eu.tenantId || '(nenhuma)') +
+              '. Saia e entre de novo para o app pegar a empresa certa.';
+          } else if (contas.erro || ops.erro) {
+            veredito = 'O servidor recusou a leitura em vez de devolver uma lista vazia — ' +
+              'isso é erro de permissão ou de instalação, não carteira vazia. ' +
+              '<strong>Me mande este quadro.</strong>';
+          } else if (contas.tem || ops.tem) {
+            veredito = 'O servidor tem registros para você e o app mostrou zero. ' +
+              '<strong>Aí o problema é do app</strong> — me mande este quadro.';
+          } else {
+            veredito = 'Você é gestor, na empresa certa, e o servidor não tem nenhuma conta nesta empresa. ' +
+              'Os seus registros estão carimbados com <strong>outra empresa</strong> — uma das outras que ' +
+              'já entraram neste navegador. É preciso movê-los no banco, ou apontar o seu perfil para a ' +
+              'empresa deles. O arquivo nuvem/diagnostico.sql mostra em qual delas estão.';
+          }
+
+          alvo.innerHTML = '<ul class="small" style="margin:10px 0">' + linhas.join('') + '</ul>' +
+            '<div class="aviso">' + veredito + '</div>';
+        }, function (e) {
+          alvo.innerHTML = '<div class="aviso">Não consegui perguntar: ' + U.esc(e.message) + '</div>';
+        });
+    },
+
     /* O diagnóstico vira texto para colar numa mensagem. É a diferença entre
        "sumiu tudo" e um relato que dá para responder. */
     copiarDiagnostico: function () {

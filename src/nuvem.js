@@ -316,6 +316,42 @@
       .then(function (r) { return (Array.isArray(r) ? r[0] : r) || null; });
   }
 
+  /* Pergunta ao servidor o que ELE acha de quem está chamando. É a única forma
+     de separar, de dentro do app, as três causas de "o pipeline está vazio":
+     a correção que dá ao gestor a visão da empresa nunca foi aplicada (a função
+     não existe), o servidor não considera a pessoa gestora, ou os registros
+     estão em outra empresa. Sem isto a resposta só sai abrindo o SQL Editor. */
+  function comoOServidorMeVe() {
+    const perguntar = function (nome) {
+      return chamar('/rest/v1/rpc/' + nome, { metodo: 'POST', corpo: {} })
+        .then(function (r) { return { existe: true, valor: Array.isArray(r) ? r[0] : r }; },
+              function (e) {
+                /* 404 é a função não existir — o sinal de que a correção não
+                   rodou. Qualquer outro erro é outra coisa, e vai como está. */
+                return { existe: e.status !== 404, erro: e.message, status: e.status || 0 };
+              });
+    };
+    return Promise.all([perguntar('sou_gestor'), perguntar('meu_tenant'), perguntar('sou_admin')])
+      .then(function (r) {
+        return { souGestor: r[0], meuTenant: r[1], souAdmin: r[2] };
+      });
+  }
+
+  /* O servidor devolve alguma linha desta tabela para quem está chamando?
+
+     A primeira versão lia o total do cabeçalho content-range, que é o jeito
+     certo de contar — e o navegador não enxerga esse cabeçalho a menos que o
+     servidor o exponha por CORS. Dava "NaN" na tela, ou seja, a ferramenta de
+     diagnóstico com um defeito de diagnóstico. Buscar as primeiras linhas
+     responde a mesma pergunta sem depender de nada. */
+  function primeirasLinhas(tabela, quantas) {
+    return chamar('/rest/v1/' + tabela + '?select=id&limit=' + (quantas || 5))
+      .then(function (linhas) {
+        const n = Array.isArray(linhas) ? linhas.length : 0;
+        return { tem: n > 0, quantas: n, limite: quantas || 5 };
+      }, function (e) { return { erro: e.message, status: e.status || 0 }; });
+  }
+
   function definirPapelDoPerfil(id, papel) {
     return chamar('/rest/v1/rpc/definir_papel_do_perfil', {
       metodo: 'POST', corpo: { p_id: id, p_papel: papel }
@@ -534,7 +570,7 @@
     perfisDaNuvem, empresasDaNuvem, souAdminNaNuvem, existeEmpresa,
     definirEmpresaDoPerfil, definirPapelDoPerfil, salvarMeuNome,
     definirBloqueioDoPerfil, definirBloqueioDaEmpresa,
-    definirDadosDaEmpresa, definirDadosDoPerfil, minhaSituacao,
+    definirDadosDaEmpresa, definirDadosDoPerfil, minhaSituacao, comoOServidorMeVe, primeirasLinhas,
     convitesDaNuvem, convidar, removerConvite, recuperarSenha, criarEmpresa, chamarFuncao,
     adotarTokens,
     trocarMinhaSenha,
