@@ -2766,6 +2766,7 @@
       dlg.className = 'revisao-ia';
       dlg.innerHTML = V.revisaoDaImportacao(lista, avisoSegmento);
       document.body.appendChild(dlg);
+      ligarMarcacaoEmLote(dlg);
 
       dlg.addEventListener('close', function () {
         if (dlg.returnValue === 'ok') {
@@ -3392,6 +3393,33 @@
       });
     }
     return campos;
+  }
+
+  /* Marcar e desmarcar todos, com o contador acompanhando.
+
+     O contador não é enfeite: a lista rola, e o botão mexe em caixas que estão
+     fora da tela. Sem um número mudando, "Marcar todos" numa lista de vinte é
+     um clique que não parece ter feito nada. Ele também acompanha os cliques
+     avulsos, senão passaria a mentir no instante seguinte. */
+  function ligarMarcacaoEmLote(dlg) {
+    const caixas = Array.prototype.slice.call(dlg.querySelectorAll('[data-lead]'));
+    const conta = dlg.querySelector('[data-conta-marcados]');
+    if (!caixas.length) return;
+
+    const pintar = function () {
+      if (!conta) return;
+      const n = caixas.filter(function (c) { return c.checked; }).length;
+      conta.textContent = n + ' de ' + caixas.length + (n === 1 ? ' marcado' : ' marcados');
+    };
+    dlg.querySelectorAll('[data-marcar]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        const ligar = b.getAttribute('data-marcar') === 'todos';
+        caixas.forEach(function (c) { c.checked = ligar; });
+        pintar();
+      });
+    });
+    caixas.forEach(function (c) { c.addEventListener('change', pintar); });
+    pintar();
   }
 
   /* Um lead vira três registros. Sem janela e sem digitação: o que não veio

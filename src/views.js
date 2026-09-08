@@ -3659,6 +3659,18 @@
           ': quem saiu da empresa ou ainda n\u00e3o respondeu. Marque se quiser trazer assim mesmo.</div>'
         : '') +
       (avisoSegmento ? '<div class="aviso">' + esc(avisoSegmento) + '</div>' : '') +
+      /* Com vinte leads na tela, decidir o que entra é vinte cliques — ou dois,
+         se der para começar do extremo certo. Quem trouxe um lote quase todo
+         bom desmarca as exceções; quem trouxe um lote quase todo ruim limpa
+         tudo e marca as três que valem. O contador ao lado existe porque o
+         botão muda o que está fora da vista: sem ele, marcar todos numa lista
+         rolada é um clique sem retorno visível. */
+      '<div class="row barra-marcar">' +
+        '<button type="button" class="btn ghost mini" data-marcar="todos">Marcar todos</button>' +
+        '<button type="button" class="btn ghost mini" data-marcar="nenhum">Desmarcar todos</button>' +
+        '<span class="espaco"></span>' +
+        '<span class="tiny muted" data-conta-marcados></span>' +
+      '</div>' +
       '<ul class="achados">' + linhas + '</ul>' +
       '</div><div class="rodape">' +
       '<button class="btn ghost" value="cancelar" type="submit">Cancelar</button>' +

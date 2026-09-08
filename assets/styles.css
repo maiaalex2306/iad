@@ -1155,3 +1155,15 @@ td.subiu { color: var(--ok); font-weight: 600; }
 .nota-manual.n1 { color: var(--warn); }
 .nota-manual.n2 { color: var(--ok); }
 .escada-manual .tiny.muted { display: block; }
+
+
+/* A barra de marcar em lote da importação do LH. Fica grudada acima da lista
+   e não rola com ela: o botão que comanda vinte linhas precisa continuar à
+   mão depois da terceira. */
+.barra-marcar {
+  position: sticky; top: 0; z-index: 2;
+  gap: 8px; align-items: center;
+  padding: 8px 0; margin: 10px 0 2px;
+  background: var(--surface, #fff);
+  border-bottom: 1px solid var(--line);
+}
