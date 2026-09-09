@@ -50,6 +50,9 @@
      veio, senão as mesmas respostas voltam a cada busca, para sempre. */
   let vindosDoBaldeAntigo = false;
   let baldeDeOrigem = '';
+  /* Quantos ficaram de fora por já terem sido descartados. Filtrar em
+     silêncio faria a pessoa achar que a ponte perdeu entrega. */
+  let avisoDeDescartados = 0;
   /* Falha da última sincronização, para a tela poder dizer o que houve. */
   let avisoSincronizacao = '';
 
@@ -708,7 +711,31 @@
      uma lista vinda de outro lugar, e duplicar isto seria duplicar a
      classificação de segmento, o casamento de contas e a leitura das
      recusas — três coisas que precisam ser iguais nos dois caminhos. */
-  function classificarEEntregar(lista, espera) {
+  function classificarEEntregar(listaCrua, espera) {
+    /* Os descartados saem antes de tudo — antes até de a IA ler, que com
+       centenas de leads é dinheiro e minutos jogados fora numa lista que a
+       pessoa já disse para não mostrar mais. */
+    const descartados = listaCrua.filter(function (l) { return Store.foiDescartado(l); });
+    const lista = listaCrua.filter(function (l) { return !Store.foiDescartado(l); });
+
+    /* A baixa dos descartados vai junto: se a ponte reentregou alguém que já
+       tinha sido descartado, apagar agora evita que ele volte na próxima. */
+    if (descartados.length) {
+      const ids = descartados.map(function (l) { return l.id; });
+      if (vindosDoBaldeAntigo) global.IADIntegracoes.marcarNoBalde(ids, baldeDeOrigem);
+      else global.IADIntegracoes.marcarProcessados(ids);
+    }
+
+    if (!lista.length) {
+      espera.close(); espera.remove();
+      alert(descartados.length
+        ? 'As ' + descartados.length + ' resposta(s) que chegaram já tinham sido descartadas antes. ' +
+          'Nada novo para importar.'
+        : 'Nenhuma resposta nova na ponte.');
+      return;
+    }
+    if (descartados.length) avisoDeDescartados = descartados.length;
+
     /* Várias SDRs mandam prospects de segmentos diferentes. Classificar
        empresa por empresa à mão é o que faz ninguém classificar — e sem
        segmento o painel por segmento não diz nada. Uma chamada só para o
@@ -2027,6 +2054,11 @@
 
     /* ---------- Filtros do Pipeline ---------- */
 
+    desfazerDescarte: function (id) {
+      Store.desfazerDescarte(id);
+      render();
+    },
+
     pipelineCampo: function (campo, valor) {
       const m = {};
       m[campo] = valor;
@@ -3243,7 +3275,8 @@
     revisarImportacao: function (lista, avisoSegmento) {
       const dlg = document.createElement('dialog');
       dlg.className = 'revisao-ia';
-      dlg.innerHTML = V.revisaoDaImportacao(lista, avisoSegmento);
+      dlg.innerHTML = V.revisaoDaImportacao(lista, avisoSegmento, avisoDeDescartados);
+      avisoDeDescartados = 0;
       document.body.appendChild(dlg);
       ligarMarcacaoEmLote(dlg, lista);
       guardarRecusas(lista);
@@ -3269,8 +3302,7 @@
             const ids = escolhidos.map(function (l) { return l.id; });
             /* Baixa no balde de onde vieram. Dar baixa no balde errado
                deixaria as respostas voltando a cada busca, para sempre. */
-            if (vindosDoBaldeAntigo) global.IADIntegracoes.marcarNoBalde(ids, baldeDeOrigem);
-            else global.IADIntegracoes.marcarProcessados(ids);
+            darBaixa(ids);
             vindosDoBaldeAntigo = false;
             baldeDeOrigem = '';
             leads = (leads || []).filter(function (l) {
@@ -3917,6 +3949,16 @@
      fora da tela. Sem um número mudando, "Marcar todos" numa lista de vinte é
      um clique que não parece ter feito nada. Ele também acompanha os cliques
      avulsos, senão passaria a mentir no instante seguinte. */
+  /* Baixa na ponte, sempre no balde de onde a lista veio. Estava espalhada em
+     três lugares e dois deles usavam o balde da empresa logada — então
+     excluir um lead resgatado de outro balde não apagava nada, e ele voltava
+     na busca seguinte. */
+  function darBaixa(ids) {
+    if (!ids || !ids.length) return;
+    if (vindosDoBaldeAntigo) global.IADIntegracoes.marcarNoBalde(ids, baldeDeOrigem);
+    else global.IADIntegracoes.marcarProcessados(ids);
+  }
+
   function ligarMarcacaoEmLote(dlg, lista) {
     const caixas = Array.prototype.slice.call(dlg.querySelectorAll('[data-lead]'));
     const conta = dlg.querySelector('[data-conta-marcados]');
@@ -3955,9 +3997,14 @@
     dlg.querySelectorAll('[data-excluir]').forEach(function (b) {
       b.addEventListener('click', function () {
         const i = Number(b.getAttribute('data-excluir'));
+        const lead = lista[i];
         const id = sumir(i);
         if (!id) return;
-        global.IADIntegracoes.marcarProcessados([id]);
+        /* Duas coisas, e a segunda é a que faltava: apagar a ENTREGA da ponte
+           e registrar a PESSOA como descartada. Sem a segunda, a próxima
+           mensagem dela chega com id novo e reaparece na lista. */
+        Store.descartarLead(lead, 'Excluído na tela de importação');
+        darBaixa([id]);
         leads = (leads || []).filter(function (l) { return l.id !== id; });
         pintar();
       });
@@ -3973,10 +4020,11 @@
            reversível pela cabeça de quem clicou, excluir doze não é. */
         if (!U.confirmar('Excluir ' + alvos.length +
           (alvos.length === 1 ? ' lead desmarcado' : ' leads desmarcados') +
-          ' da ponte?\n\nEles não voltam na próxima busca. Nada é apagado do CRM — ' +
-          'estes leads nunca viraram registro.')) return;
+          ' da ponte?\n\nEles não voltam na próxima busca, nem quando o Linked Helper ' +
+          'reentregar as mesmas pessoas. Nada é apagado do CRM — estes leads nunca viraram registro.')) return;
+        alvos.forEach(function (i) { Store.descartarLead(lista[i], 'Excluído em lote na importação'); });
         const ids = alvos.map(sumir).filter(Boolean);
-        global.IADIntegracoes.marcarProcessados(ids);
+        darBaixa(ids);
         leads = (leads || []).filter(function (l) { return ids.indexOf(l.id) === -1; });
         pintar();
       });

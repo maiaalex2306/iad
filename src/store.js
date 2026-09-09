@@ -42,7 +42,9 @@
          respostas que dizem NÃO, guardadas fora do pipeline de propósito.
          Dentro dele elas seriam negócio; aqui elas são o que a campanha
          produziu de errado, que é a única coisa capaz de melhorar a próxima. */
-      recusas: []
+      recusas: [],
+      /* Leads que alguém mandou nunca mais mostrar. */
+      descartes: []
     };
   }
 
@@ -89,6 +91,7 @@
     dados.tenants = dados.tenants || [];
     dados.usuarios = dados.usuarios || [];
     dados.recusas = dados.recusas || [];
+    dados.descartes = dados.descartes || [];
     migrarParaCincoDegraus(dados);
     migrarDesfechos(dados);
 
@@ -99,7 +102,7 @@
       dados.tenants.push({ id: uid('ten'), nome: 'Minha empresa', cnpj: '', ativo: true, criadoEm: hoje() });
     }
     const primeiro = dados.tenants[0] ? dados.tenants[0].id : null;
-    ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos', 'recusas']
+    ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos', 'recusas', 'descartes']
       .forEach(function (colecao) {
         (dados[colecao] || []).forEach(function (r) { if (r.tenantId == null) r.tenantId = primeiro; });
       });
@@ -864,6 +867,66 @@
     return nova;
   }
 
+  /* ---------- descartes ----------
+
+     Excluir um lead apagava a entrega da ponte, e só. Funciona enquanto a
+     entrega for única — mas o Linked Helper reentrega a mesma pessoa a cada
+     nova mensagem, e a ponte carimba um id novo em cada entrega. O mesmo
+     Gerson Ferreira volta com outro id, e o app, que só conhecia ids, não
+     tem como saber que já foi descartado. Com centenas de leads isso deixa a
+     tela de importação inutilizável.
+
+     A chave é a pessoa, não a entrega: o perfil do LinkedIn quando existe,
+     porque é o único identificador estável que o Linked Helper entrega; e
+     nome+empresa achatados quando não existe. */
+  function chaveDoLead(lead) {
+    const achatar = function (t) {
+      return String(t || '').toLowerCase().normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+    };
+    const perfil = String(lead.linkedin || '').trim().toLowerCase()
+      .replace(/^https?:\/\//, '').replace(/^www\./, '')
+      .replace(/\?.*$/, '').replace(/\/+$/, '');
+    if (perfil) return 'in:' + perfil;
+    const nome = achatar(lead.nome);
+    const empresa = achatar(lead.empresa);
+    if (!nome && !empresa) return '';
+    return 'p:' + nome + '|' + empresa;
+  }
+
+  function descartarLead(lead, porque) {
+    const chave = chaveDoLead(lead);
+    if (!chave) return null;
+    estado.descartes = estado.descartes || [];
+    if (estado.descartes.some(function (d) { return d.chave === chave; })) return null;
+    const novo = Object.assign({
+      id: uid('dsc'), chave: chave,
+      nome: lead.nome || '', empresa: lead.empresa || '', cargo: lead.cargo || '',
+      linkedin: lead.linkedin || '', campanha: lead.campanha || '', sdr: lead.sdr || '',
+      porque: porque || 'Descartado na importação', data: hoje()
+    }, carimbo(false));
+    estado.descartes.push(novo);
+    salvar();
+    return novo;
+  }
+
+  function foiDescartado(lead) {
+    const chave = chaveDoLead(lead);
+    if (!chave) return false;
+    return (estado.descartes || []).some(function (d) {
+      return d.chave === chave && visivel(d);
+    });
+  }
+
+  function descartes() {
+    return (estado.descartes || []).filter(function (d) { return visivel(d); });
+  }
+
+  function desfazerDescarte(id) {
+    estado.descartes = (estado.descartes || []).filter(function (d) { return d.id !== id; });
+    salvar();
+  }
+
   function recusas() {
     return (estado.recusas || []).filter(function (r) { return visivel(r); });
   }
@@ -1099,6 +1162,7 @@
     criarConta, criarContato, criarOportunidade, atualizarOportunidade, vincularStakeholder,
     pontuar, registrarEvento, removerEvento, definirCompromisso, definirInsight,
     registrarRecusa, recusas, recusasPorCampanha, limparRecusas, excluirRecusa,
+    descartarLead, foiDescartado, descartes, desfazerDescarte, chaveDoLead,
     criarTarefa, atualizarTarefa, adiarTarefa, concluirTarefa, excluirTarefa,
     adotarOrfaos,
     catalogo, catalogoAtivos, nomesDoCatalogo, criarNoCatalogo, atualizarNoCatalogo,

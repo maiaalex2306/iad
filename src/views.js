@@ -4295,6 +4295,7 @@
       '<div class="row"><button class="btn ghost" onclick="App.carregarDemo()" data-ajuda-titulo="Demonstração" data-ajuda="Carrega uma carteira fictícia com os cinco grupos de pipeline, para treinar a leitura do modelo. Substitui o que está aqui.">Carregar demonstração</button>' +
       '<button class="btn ghost" onclick="App.limpar()" data-ajuda-titulo="Apagar tudo" data-ajuda="Apaga a carteira deste aparelho. Não apaga o que já foi sincronizado no servidor, nem os acessos.">Apagar tudo</button></div></div>' +
 
+      listaDeDescartados() +
       auditoriaDasCampanhas();
   }
 
@@ -4309,6 +4310,38 @@
      Por campanha, e não por pessoa, porque é a campanha que se conserta. O
      motivo mais frequente vem em destaque: é ele que diz o que corrigir na
      próxima lista. */
+  /* Os descartados, e uma porta de volta.
+
+     Descarte sem desfazer é armadilha: basta um clique errado numa lista de
+     duzentos para a pessoa perder um lead bom e não ter como saber que
+     perdeu. A lista mora aqui, longe do dia a dia, porque olhar para ela é
+     coisa de quem está investigando — não de quem está importando. */
+  function listaDeDescartados() {
+    const lista = Store.descartes();
+    if (!lista.length) {
+      return '<div class="card"><h2>Leads descartados</h2>' +
+        '<p class="small muted">Quem você excluir na tela de importação fica aqui, e não volta a aparecer ' +
+        'nas buscas seguintes — nem quando o Linked Helper reentregar a mesma pessoa. Nenhum até agora.</p></div>';
+    }
+    const linhas = lista.slice().sort(function (a, b) {
+      return String(b.data).localeCompare(String(a.data));
+    }).map(function (d) {
+      return '<tr><td><strong>' + esc(d.nome || '(sem nome)') + '</strong>' +
+        (d.cargo ? '<div class="tiny muted">' + esc(d.cargo) + '</div>' : '') + '</td>' +
+        '<td>' + esc(d.empresa || '—') + '</td>' +
+        '<td class="small">' + esc(d.campanha || '—') + '</td>' +
+        '<td class="nowrap tiny muted">' + U.data(d.data) + '</td>' +
+        '<td><button class="btn ghost mini" onclick="App.desfazerDescarte(\'' + d.id + '\')">Voltar a mostrar</button></td></tr>';
+    }).join('');
+
+    return '<div class="card"><h2>Leads descartados <span class="pill">' + lista.length + '</span></h2>' +
+      '<p class="small muted">Estas pessoas não aparecem mais nas buscas do Linked Helper. ' +
+      'A identificação é pelo perfil do LinkedIn quando existe, senão por nome e empresa — ' +
+      'por isso o descarte sobrevive à reentrega, que traz a mesma pessoa com identificação nova.</p>' +
+      '<div class="tabela-rolagem"><table><thead><tr><th>Pessoa</th><th>Empresa</th>' +
+      '<th>Campanha</th><th>Quando</th><th></th></tr></thead><tbody>' + linhas + '</tbody></table></div></div>';
+  }
+
   function auditoriaDasCampanhas() {
     const grupos = Store.recusasPorCampanha();
     if (!grupos.length) {
@@ -4633,7 +4666,7 @@
       '</span></label>';
   }
 
-  function revisaoDaImportacao(leads, avisoSegmento) {
+  function revisaoDaImportacao(leads, avisoSegmento, quantosDescartados) {
     const linhas = leads.map(function (l, i) {
       const duvida = motivoDeDuvida(l);
       const rede = [
@@ -4696,6 +4729,13 @@
           'Marque se quiser trazer assim mesmo.</div>'
         : '') +
       (avisoSegmento ? '<div class="aviso">' + esc(avisoSegmento) + '</div>' : '') +
+      /* Filtrar em silêncio faria a pessoa achar que a ponte perdeu entrega.
+         O número diz que o descarte está valendo, que é o contrário. */
+      (quantosDescartados
+        ? '<p class="tiny muted">' + quantosDescartados +
+          (quantosDescartados === 1 ? ' resposta não aparece aqui' : ' respostas não aparecem aqui') +
+          ' porque essas pessoas já tinham sido excluídas antes. Elas não voltam mais.</p>'
+        : '') +
       /* Com vinte leads na tela, decidir o que entra é vinte cliques — ou dois,
          se der para começar do extremo certo. Quem trouxe um lote quase todo
          bom desmarca as exceções; quem trouxe um lote quase todo ruim limpa
