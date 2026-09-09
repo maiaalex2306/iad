@@ -259,8 +259,14 @@
     let alvo = tenantDeTrabalho();
     const temRegistros = estado.contas.length || estado.oportunidades.length;
     if (!alvo && temRegistros) {
-      const novoTenant = { id: uid('ten'), nome: 'Minha empresa', cnpj: '', ativo: true, criadoEm: hoje() };
-      estado.tenants.push(novoTenant);
+      /* Reaproveita a que já existe. Criar uma "Minha empresa" a cada
+         importação enchia a lista de empresas iguais, e empresa duplicada é o
+         que torna registro invisível: cada uma tem id próprio, e o carimbo do
+         registro aponta para um só. */
+      const jaTem = (estado.tenants || []).filter(function (t) { return t.nome === 'Minha empresa'; })[0];
+      const novoTenant = jaTem ||
+        { id: uid('ten'), nome: 'Minha empresa', cnpj: '', ativo: true, criadoEm: hoje() };
+      if (!jaTem) estado.tenants.push(novoTenant);
       alvo = novoTenant.id;
     }
     ['contas', 'contatos', 'segmentos', 'tiposTarefa', 'produtos'].forEach(function (colecao) {

@@ -499,12 +499,44 @@
     const estado = Store.obter();
     const donoId = (sessao().user || {}).id;
 
+    /* Só sobe o que é desta empresa.
+
+       paraBanco carimba tenant_id em tudo o que passa por ele. Enquanto a
+       cópia local for de uma empresa só, isso é inofensivo. Mas este app é
+       multiempresa e o mesmo navegador atende várias: quem trabalhou na AcP,
+       entrou como Bio Water Care e clicou em Sincronizar mandava a carteira da
+       AcP para dentro da Bio Water Care, recarimbada. A demonstração vai pelo
+       mesmo caminho.
+
+       Registro sem empresa sobe: é o do vendedor que cadastrou offline antes
+       de o carimbo existir, e o dono dele é quem está logado agora. */
+    /* Quem é "outra empresa" e quem é só registro sem carimbo de servidor:
+
+       a empresa do servidor tem id UUID, criado pelo Postgres. O carimbo que o
+       próprio app inventa quando encontra registro órfão tem a forma
+       `ten_xxx`, e nunca existiu em servidor nenhum — é do vendedor que
+       cadastrou antes de haver empresa. Segurar esse é perdê-lo para sempre,
+       porque nenhum login vai casar com ele.
+
+       Então só fica retido o que está carimbado com um UUID diferente do meu:
+       aquilo é carteira de outra empresa de verdade. */
+    const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const daEmpresa = function (r) {
+      const dele = String(r.tenantId || '');
+      if (!dele) return true;
+      if (dele === String(perfil.tenant_id)) return true;
+      return !UUID.test(dele);
+    };
+
     /* Uma tabela que falha não pode esconder as outras. Com Promise.all, o
        primeiro erro aborta tudo e o problema seguinte só aparece depois de
        consertar este — descobrir de um em um custa uma rodada por defeito.
        Aqui todas as tabelas são tentadas e os erros voltam juntos. */
+    let retidos = 0;
     const envios = TABELAS.map(function (t) {
-      const linhas = (estado[t.local] || []).map(function (r) { return paraBanco(r, perfil.tenant_id, donoId); });
+      const minhas = (estado[t.local] || []).filter(daEmpresa);
+      retidos += ((estado[t.local] || []).length - minhas.length);
+      const linhas = minhas.map(function (r) { return paraBanco(r, perfil.tenant_id, donoId); });
       if (!linhas.length) return Promise.resolve({ tabela: t.remota, enviados: 0 });
       return chamar('/rest/v1/' + t.remota, {
         metodo: 'POST',
@@ -521,7 +553,10 @@
       if (falhas.length) {
         throw new Error(falhas.map(function (f) { return f.tabela + ': ' + f.erro; }).join(' — '));
       }
-      return resultados.reduce(function (s, r) { return s + r.enviados; }, 0);
+      return {
+        enviados: resultados.reduce(function (s, r) { return s + r.enviados; }, 0),
+        retidos: retidos
+      };
     });
   }
 
@@ -587,10 +622,33 @@
   }
 
   function sincronizar() {
-    return empurrar().then(function (enviados) {
+    return empurrar().then(function (subida) {
       return puxar().then(function (recebidos) {
         localStorage.setItem('iad-crm:nuvem-ultima', new Date().toISOString());
-        return { enviados: enviados, recebidos: recebidos };
+        return { enviados: subida.enviados, retidos: subida.retidos, recebidos: recebidos };
+      });
+    });
+  }
+
+  /* A entrada no app.
+
+     Antes ela só baixava. Subir dependia de alguém lembrar de clicar em
+     Sincronizar, e a descida era automática — então bastava não clicar uma vez
+     para a carteira existir só neste aparelho, e o login seguinte a apagava.
+     Assimetria entre o que sobe e o que desce é o defeito; a perda foi o
+     sintoma.
+
+     Subir primeiro, e sem deixar a falha da subida impedir a descida: quem
+     acabou de entrar precisa ver a carteira mesmo que o envio tenha falhado. */
+  function sincronizarNaEntrada() {
+    return empurrar().then(
+      function (subida) { return subida; },
+      function (e) { return { enviados: 0, retidos: 0, erroAoEnviar: e.message }; }
+    ).then(function (subida) {
+      return puxar().then(function (recebidos) {
+        localStorage.setItem('iad-crm:nuvem-ultima', new Date().toISOString());
+        return { enviados: subida.enviados, retidos: subida.retidos,
+          erroAoEnviar: subida.erroAoEnviar, recebidos: recebidos };
       });
     });
   }
@@ -627,7 +685,7 @@
     perfisDaNuvem, empresasDaNuvem, souAdminNaNuvem, existeEmpresa,
     definirEmpresaDoPerfil, definirPapelDoPerfil, salvarMeuNome,
     definirBloqueioDoPerfil, definirBloqueioDaEmpresa,
-    definirDadosDaEmpresa, definirDadosDoPerfil, minhaSituacao, comoOServidorMeVe, primeirasLinhas, ondeEstaoOsRegistros,
+    sincronizarNaEntrada, definirDadosDaEmpresa, definirDadosDoPerfil, minhaSituacao, comoOServidorMeVe, primeirasLinhas, ondeEstaoOsRegistros,
     convitesDaNuvem, convidar, removerConvite, recuperarSenha, criarEmpresa, chamarFuncao,
     adotarTokens,
     trocarMinhaSenha,

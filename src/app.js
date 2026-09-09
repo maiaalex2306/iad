@@ -462,14 +462,25 @@
         });
       }
 
-      /* Trazer o que já existe no servidor é o que faz a troca de aparelho
-         funcionar; falhar aqui não impede de usar o app com a cópia local.
+      /* Subir o que está aqui e trazer o que existe lá — nesta ordem. Subir
+         primeiro é o que impede a descida de apagar trabalho que ainda não
+         tinha ido para o servidor; falhar aqui não impede de usar o app com a
+         cópia local.
 
          O que não pode é falhar calado. Quem acabou de entrar com outra conta
          fica olhando a cópia da conta anterior — ou nenhuma — sem nada na tela
          explicando por quê, e conclui que o sistema perdeu a carteira dele. */
       avisoSincronizacao = '';
-      return N.puxar().then(function () {
+      return N.sincronizarNaEntrada().then(function (r) {
+        /* Se algo ficou retido, é carteira de outra empresa neste navegador.
+           Dizer isso agora evita a conclusão errada — "sincronizei e não subiu
+           tudo" — e a pior de todas, sincronizar de novo achando que resolve. */
+        if (r && r.retidos) {
+          avisoSincronizacao = r.retidos + ' registro(s) deste aparelho são de outra empresa e ' +
+            'não foram enviados. Eles continuam aqui: entre com o login daquela empresa para mandá-los.';
+          render();
+          return;
+        }
         /* Baixar zero registros de movimento não é o mesmo que não baixar, e
            na tela era: as duas davam um pipeline vazio e calado. Quando as
            tabelas de configuração vêm cheias e as de trabalho vêm vazias, a
@@ -2866,7 +2877,8 @@
       global.IADNuvem.sincronizar()
         .then(function (r) {
           render();
-          recadoNuvem('Enviados ' + r.enviados + ' registro(s), recebidos ' + r.recebidos + '.');
+          recadoNuvem('Enviados ' + r.enviados + ' registro(s), recebidos ' + r.recebidos + '.' +
+            (r.retidos ? ' ' + r.retidos + ' de outra empresa ficaram só neste aparelho.' : ''));
         })
         .catch(function (e) { render(); recadoNuvem('Não sincronizou: ' + e.message, true); });
     },
