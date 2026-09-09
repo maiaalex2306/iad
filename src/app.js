@@ -3495,26 +3495,58 @@
 
   /* O domínio identifica a empresa melhor que o nome: "Envu" e "Envu Brasil"
      são a mesma, "Alpha Engenharia" e "Alpha Alimentos" não são. O nome fica
-     como reserva, porque muito registro vem sem site. */
+     como reserva, porque muito registro vem sem site.
+
+     E a reserva casa por PALAVRA INTEIRA. Enquanto era prefixo solto, "Vale"
+     casava com "Valentina Alimentos": duas empresas viravam uma conta só, com
+     o contato de uma entrando no buying group da outra. Erro caro e silencioso
+     — ninguém confere um buying group que já está preenchido.
+
+     Palavra única e curta não casa por nome nenhum. "Bio" dentro de "Bio
+     Solvit" é a mesma empresa; "Bio" dentro de "Bio Ritmo" não é, e não há
+     no nome o que decida. Sem domínio para desempatar, conta nova é o erro
+     barato: duas contas se fundem depois, um buying group errado não se
+     desfaz. */
+  function dominioDe(x) {
+    return String(x || '').replace(/^https?:\/\//, '').replace(/^www\./, '')
+      .replace(/\/.*$/, '').trim().toLowerCase();
+  }
+
+  function mesmoNomeDeEmpresa(a, b) {
+    if (!a || !b) return false;
+    if (a === b) return true;
+    /* Uma palavra só de cada lado já foi tratada acima pela igualdade. Daqui
+       para baixo, só vale se o nome mais curto tiver duas palavras ou mais. */
+    const curto = a.length <= b.length ? a : b;
+    const longo = curto === a ? b : a;
+    if (curto.indexOf(' ') === -1) return false;
+    return longo.indexOf(curto + ' ') === 0;
+  }
+
   function contaJaExistente(lead) {
     const contas = Store.dados().contas;
-    const dominio = String(lead.empresaDominio || lead.empresaSite || '')
-      .replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '').toLowerCase();
+    const dominio = dominioDe(lead.empresaDominio || lead.empresaSite);
     if (dominio) {
-      const porSite = contas.filter(function (c) {
-        const dela = String(c.site || '').replace(/^https?:\/\//, '').replace(/^www\./, '')
-          .replace(/\/.*$/, '').toLowerCase();
-        return dela && dela === dominio;
-      })[0];
+      const porSite = contas.filter(function (c) { return dominioDe(c.site) === dominio; })[0];
       if (porSite) return porSite;
     }
-    if (!lead.empresa) return null;
+
+    /* Lead sem empresa: a conta nasce com o nome da pessoa. Sem isto, a
+       segunda interação da mesma pessoa criava uma segunda conta com o mesmo
+       nome, e nada no sistema dizia que eram a mesma. */
+    if (!lead.empresa) {
+      const perfil = perfilLinkedin(lead.linkedin);
+      if (!perfil) return null;
+      const dono = Store.dados().contatos.filter(function (c) {
+        return perfilLinkedin(c.linkedin) === perfil;
+      })[0];
+      return dono ? (Store.conta(dono.contaId) || null) : null;
+    }
+
     const alvo = achatarNome(lead.empresa);
     if (!alvo) return null;
     return contas.filter(function (c) {
-      const dela = achatarNome(c.nome);
-      if (!dela) return false;
-      return dela === alvo || dela.indexOf(alvo) === 0 || alvo.indexOf(dela) === 0;
+      return mesmoNomeDeEmpresa(alvo, achatarNome(c.nome));
     })[0] || null;
   }
 
@@ -3524,12 +3556,25 @@
      nova — o desfecho congelou a foto da decisão, e mexer nele reescreveria
      um resultado já apurado. */
   function oportunidadeJaExistente(contaId, lead) {
+    const abertas = Store.dados().oportunidades.filter(function (o) {
+      return o.contaId === contaId && !o.desfecho && o.origem === 'Linked Helper';
+    });
+    if (!abertas.length) return null;
+
+    /* Boa parte dos registros do Linked Helper chega sem campanha: depende da
+       ação e das opções de exportação. Tratar "sem campanha" como uma campanha
+       diferente abria um negócio paralelo na mesma empresa toda vez que isso
+       acontecia — dois cartões da mesma conta, um deles rotulado com nada.
+       Registro sem campanha pertence ao negócio de LH que já está aberto. */
     const campanha = achatarNome(lead.campanha);
-    return Store.dados().oportunidades.filter(function (o) {
-      if (o.contaId !== contaId || o.desfecho) return false;
-      if (o.origem !== 'Linked Helper') return false;
+    if (!campanha) return abertas[0];
+
+    return abertas.filter(function (o) {
       return achatarNome(o.campanha) === campanha;
-    })[0] || null;
+    })[0] ||
+      /* Campanha nova numa empresa cujo negócio de LH ainda não tinha campanha
+         nenhuma: é o mesmo negócio, que agora ganhou nome. */
+      abertas.filter(function (o) { return !achatarNome(o.campanha); })[0] || null;
   }
 
   /* O Linked Helper reenvia a conversa inteira a cada interação, não só a
@@ -3554,6 +3599,7 @@
 
     /* ---------- a empresa ---------- */
     let conta = contaJaExistente(lead);
+    const ehContaNova = !conta;
     if (!conta) {
       conta = Store.criarConta({
         nome: nome, segmento: segmento || '',
@@ -3616,7 +3662,14 @@
         sdrEmail: lead.operadorEmail || '',
         notas: notasDoLead(lead)
       });
-    } else if (lead.resposta && op.etapa === 'Prospecção') {
+    } else {
+      /* O negócio que nasceu de um registro sem campanha passa a ter a
+         campanha do primeiro registro que trouxer uma: sem isso o painel por
+         campanha nunca enxergaria esse pipeline. */
+      completarEmBranco(op, { campanha: lead.campanha, sdr: lead.operador, sdrEmail: lead.operadorEmail });
+    }
+
+    if (op && lead.resposta && op.etapa === 'Prospecção' && !ehNegocioNovo) {
       /* Da primeira vez ninguém tinha respondido. Agora respondeu: a etapa
          estava atrás da realidade, e é exatamente essa diferença que o
          método chama de negócio escondido. */
@@ -3635,7 +3688,16 @@
     }
     const tarefa = tarefaDoLead(op, contato, lead,
       ehNegocioNovo || ehContatoNovo || falasNovas.length, ehNegocioNovo);
-    atribuirAoOperador(lead, [conta, contato, op, tarefa]);
+
+    /* Só o que nasceu nesta leitura. A tarefa reaproveitada também fica de
+       fora: ela já está na lista de alguém, e mudá-la de dono a tiraria de lá
+       sem avisar. */
+    atribuirAoOperador(lead, [
+      ehContaNova ? conta : null,
+      ehContatoNovo ? contato : null,
+      ehNegocioNovo ? op : null,
+      (tarefa && tarefa.criadaAgora) ? tarefa : null
+    ]);
     return { op: op, novo: ehNegocioNovo, contatoNovo: ehContatoNovo, falas: falasNovas.length };
   }
 
@@ -3666,6 +3728,7 @@
     })[0];
 
     if (aberta) {
+      aberta.criadaAgora = false;
       if (!temNovidade) return aberta;
       aberta.descricao = descricaoDaTarefaDoLead(op, contato, lead);
       /* O contato da tarefa passa a ser quem falou por último: é com ele que
@@ -3677,7 +3740,7 @@
 
     if (!temNovidade) return null;
 
-    return Store.criarTarefa({
+    const nova = Store.criarTarefa({
       titulo: ehNegocioNovo
         ? 'Empresa Importada do LH - Fazer Contato'
         : 'Nova interação no LH - Responder',
@@ -3688,6 +3751,10 @@
       origem: 'planejada',
       descricao: descricaoDaTarefaDoLead(op, contato, lead)
     });
+    /* Marca de trabalho, não campo do registro: diz a quem chamou que esta
+       tarefa nasceu agora e por isso pode receber o dono da SDR. */
+    nova.criadaAgora = true;
+    return nova;
   }
 
   /* As importações que aconteceram antes de a tarefa existir. Aqui o lead já
@@ -3829,7 +3896,16 @@
 
   /* O lead pertence a quem prospectou, não a quem clicou em importar. Só
      funciona quando o operador do Linked Helper também é usuário do IAD —
-     senão o registro fica com quem importou, que é o comportamento normal. */
+     senão o registro fica com quem importou, que é o comportamento normal.
+
+     E vale só para registro que acabou de nascer — quem chama passa só esses.
+     Reescrever o dono a cada interação devolvia à SDR um negócio que o vendedor
+     já tinha assumido: o cliente responde de novo no LinkedIn e o cartão sai da
+     carteira de quem está trabalhando nele.
+
+     O teste de "já tem dono" não serve aqui: a criação carimba o dono como
+     sendo quem está logado. Todo registro nasce com dono, então a pergunta
+     certa não é se ele tem um, é se ele é desta leitura. */
   function atribuirAoOperador(lead, registros) {
     if (!lead.operadorEmail) return;
     const dono = A.porLogin(lead.operadorEmail);
