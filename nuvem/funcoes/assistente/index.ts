@@ -663,6 +663,40 @@ async function modelosDoGroq(): Promise<string[]> {
   }
 }
 
+/* ---------- quando o nome do modelo morre ----------
+
+   Provedores aposentam nomes de modelo sem aviso, e o nome fica escrito num
+   segredo que alguém definiu meses atrás. Aconteceu duas vezes em uma semana
+   aqui: o app inteiro parou de classificar por causa de uma string.
+
+   A função já perguntava a lista viva ao provedor — só que para escrever a
+   mensagem de erro. Agora ela usa: escolhe um substituto e refaz o pedido.
+   O vendedor não fica sem resposta esperando alguém mexer num segredo.
+
+   A ordem é por capacidade, não por preferência de marca. Para o trabalho
+   pesado — ler ata, propor as oito notas — vai o maior que estiver de pé;
+   para a classificação em lote vai o menor, que é o que cabe no limite por
+   minuto. Quem não estiver na lista entra depois, por ordem do provedor:
+   um modelo desconhecido responde melhor do que modelo nenhum. */
+const PREFERIDOS_BONS = [
+  'openai/gpt-oss-120b', 'qwen/qwen3.8-27b', 'qwen/qwen3.6-27b',
+  'groq/compound', 'openai/gpt-oss-20b', 'groq/compound-mini'
+];
+const PREFERIDOS_RAPIDOS = [
+  'openai/gpt-oss-20b', 'groq/compound-mini', 'qwen/qwen3.6-27b',
+  'qwen/qwen3.8-27b', 'openai/gpt-oss-120b'
+];
+
+async function modeloSubstituto(rapido: boolean, recusado: string): Promise<string> {
+  if (PROVEDOR === 'anthropic') return '';
+  const vivos = await modelosDoGroq();
+  if (!vivos.length) return '';
+  const ordem = rapido ? PREFERIDOS_RAPIDOS : PREFERIDOS_BONS;
+  const achado = ordem.find((m) => vivos.includes(m) && m !== recusado);
+  if (achado) return achado;
+  return vivos.find((m) => m !== recusado) || '';
+}
+
 async function explicarRecusa(r: Response, modelo: string): Promise<string> {
   const corpo = await r.text().catch(() => '');
   const curto = corpo.replace(/\s+/g, ' ').slice(0, 200);
@@ -764,7 +798,10 @@ async function chamarIA(sistema: string, usuario: string, teto: number, rapido =
   }
 
   /* Groq — API compatível com o formato OpenAI. */
-  const modelo = escolhido || 'llama-3.3-70b-versatile';
+  /* Sem segredo definido, o padrão do código. Ele também envelhece — este
+     mesmo lugar já teve um nome que morreu —, e é por isso que a troca
+     automática abaixo existe: o padrão é um palpite, não uma garantia. */
+  let modelo = escolhido || 'openai/gpt-oss-120b';
 
   const pedir = (comJson: boolean) => {
     const corpo: Record<string, unknown> = {
@@ -795,6 +832,22 @@ async function chamarIA(sistema: string, usuario: string, teto: number, rapido =
   if (r.status === 400) {
     const aviso = await r.clone().text().catch(() => '');
     if (/response_format|json_object|json mode/i.test(aviso)) { comJson = false; r = await pedir(false); }
+  }
+
+  /* 404 no endpoint de chat quer dizer uma coisa só: o modelo pedido não
+     existe. Em vez de devolver isso ao vendedor, troca por um que exista e
+     refaz. Uma vez só — se o substituto também falhar, o problema não é o
+     nome do modelo e insistir esconderia a causa de verdade. */
+  if (r.status === 404) {
+    const outro = await modeloSubstituto(rapido, modelo);
+    if (outro) {
+      modelo = outro;
+      r = await pedir(comJson);
+      if (r.status === 400) {
+        const aviso = await r.clone().text().catch(() => '');
+        if (/response_format|json_object|json mode/i.test(aviso)) { comJson = false; r = await pedir(false); }
+      }
+    }
   }
 
   /* Material grande demais deixou de ser problema do vendedor. Ele anexou o

@@ -70,8 +70,19 @@ No Groq, uma combinação que funciona:
 
 | Nome | Valor |
 | --- | --- |
-| `IA_MODELO` | `llama-3.3-70b-versatile` |
-| `IA_MODELO_RAPIDO` | `llama-3.1-8b-instant` |
+| `IA_MODELO` | `openai/gpt-oss-120b` |
+| `IA_MODELO_RAPIDO` | `openai/gpt-oss-20b` |
+
+**Nomes de modelo morrem.** O Groq aposenta nomes sem aviso, e o nome fica
+escrito num segredo que alguém definiu meses atrás — a função inteira para
+por causa de uma string. Por isso ela não desiste: ao receber 404, pergunta
+ao provedor quais modelos existem hoje, escolhe um substituto e refaz o
+pedido. A tabela acima é o que se pede; o que roda pode ser outro, se o
+pedido tiver morrido.
+
+A troca automática é rede de segurança, não substituto de configurar: ela
+escolhe pelo tamanho, e o modelo certo para a sua operação você descobre
+lendo uma ata de verdade e conferindo as oito notas.
 
 `SUPABASE_URL` e `SUPABASE_ANON_KEY` já existem no ambiente — não crie.
 
