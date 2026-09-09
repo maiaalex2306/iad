@@ -46,6 +46,8 @@
 
   let promptInstalacao = null;
   let leads = null;
+  /* Lote que veio do balde antigo: a baixa dele é noutro endereço. */
+  let vindosDoBaldeAntigo = false;
   /* Falha da última sincronização, para a tela poder dizer o que houve. */
   let avisoSincronizacao = '';
 
@@ -687,6 +689,80 @@
   }
 
   const OPCOES_SIM_NAO = [{ valor: 'nao', rotulo: 'Não' }, { valor: 'sim', rotulo: 'Sim' }];
+
+  /* A janela de espera da importação, num lugar só: dois caminhos chegam à
+     mesma tela e a diferença entre eles é só de onde a lista veio. */
+  function janelaDeEspera() {
+    const espera = document.createElement('dialog');
+    espera.innerHTML = '<div class="corpo"><h2>Buscando na ponte…</h2>' +
+      '<p class="small muted">Procurando quem respondeu no LinkedIn.</p></div>';
+    document.body.appendChild(espera);
+    espera.showModal();
+    return espera;
+  }
+
+  /* Da lista em mãos até a tela de revisão. Era o corpo de importarLeads;
+     virou função porque o resgate do balde antigo chega no mesmo ponto com
+     uma lista vinda de outro lugar, e duplicar isto seria duplicar a
+     classificação de segmento, o casamento de contas e a leitura das
+     recusas — três coisas que precisam ser iguais nos dois caminhos. */
+  function classificarEEntregar(lista, espera) {
+    /* Várias SDRs mandam prospects de segmentos diferentes. Classificar
+       empresa por empresa à mão é o que faz ninguém classificar — e sem
+       segmento o painel por segmento não diz nada. Uma chamada só para o
+       lote inteiro, e o vendedor corrige o que quiser na tela seguinte. */
+    const comEmpresa = lista.filter(function (l) { return l.empresa; });
+    if (!comEmpresa.length) {
+      espera.close(); espera.remove();
+      return App.revisarImportacao(lista, 'Nenhum lead veio com empresa identificada — não há o que classificar.');
+    }
+    espera.querySelector('h2').textContent = 'Classificando os segmentos…';
+      espera.querySelector('p').textContent =
+        comEmpresa.length === 1 ? '1 empresa' : comEmpresa.length + ' empresas';
+
+      espera.querySelector('h2').textContent = 'Lendo as empresas e as conversas…';
+      IA.classificarSegmentos(comEmpresa.map(function (l) {
+        return {
+          nome: l.empresa, dominio: l.empresaDominio, site: l.empresaSite,
+          setor: l.empresaSetor, cidade: l.empresaCidade,
+          descricao: l.empresaDescricao, oQueFazLa: l.oQueFazLa,
+          contato: l.nome, cargo: l.cargo, headline: l.headline,
+          conversa: l.conversa || []
+        };
+      }), function (aviso) {
+        const linha = espera.querySelector('p');
+        if (linha) linha.textContent = aviso;
+      }).then(function (r) {
+        comEmpresa.forEach(function (l, i) {
+          const achado = r.mapa[i];
+          if (!achado) return;
+          if (achado.segmento) l.segmentoSugerido = achado.segmento;
+          l.confiancaSegmento = achado.confianca || '';
+          l.porqueSegmento = achado.porque || '';
+          l.maisProximoSegmento = achado.maisProximo || '';
+          if (achado.papel) l.papelSugerido = achado.papel;
+          /* A conta que a IA reconheceu como sendo a mesma empresa. Vem
+             como id, já conferido contra a carteira do lado do servidor. */
+          l.contaSugerida = achado.contaExistente || '';
+          l.porqueConta = achado.porqueConta || '';
+          /* A leitura da IA sobre a resposta. A regra do app continua
+             valendo sozinha e é ela que roda quando o assistente falha —
+             esta aqui pega o que a regra não pega: a recusa educada, a que
+             vem enrolada em elogio, a que não usa nenhuma palavra-chave. */
+          l.respostaDaIA = achado.resposta || '';
+          l.porqueRecusa = achado.porqueRecusa || '';
+          /* O insight da campanha é o mesmo texto para o lote inteiro; o da
+             IA é sobre esta conversa. Quando existem os dois, vale o desta
+             conversa — foi para isso que a conversa foi lida. */
+          if (achado.insight) l.insight = achado.insight;
+        });
+        espera.close(); espera.remove();
+        App.revisarImportacao(lista, r.motivo);
+    }).catch(function (e) {
+      espera.close(); espera.remove();
+      alert(e.message);
+    });
+  }
 
   const App = {
     ir: function (hash) { location.hash = hash; },
@@ -3060,15 +3136,46 @@
       });
     },
 
+    /* Resgate do balde antigo.
+
+       Quem montou o endereço do Linked Helper sem o `e=` — o que era o único
+       jeito antes dos baldes por empresa — continua entregando num lugar que
+       o app não olha mais. As respostas ficam ali, visíveis para ninguém, até
+       expirarem em trinta dias. Foi o que aconteceu com a Bio Water Care.
+
+       Para qual empresa elas vão é decisão de quem clica: o app não tem como
+       saber de qual campanha veio cada uma. Por isso a pergunta é explícita e
+       diz o nome da empresa que vai receber. */
+    resgatarBaldeAntigo: function () {
+      const I = global.IADIntegracoes;
+      const quem = I.nomeDaEmpresaAtual();
+      if (!quem) {
+        alert('Escolha uma empresa antes. As respostas resgatadas vão para a empresa escolhida, ' +
+          'e com o recorte em "Todas as empresas" eu não sei para qual.');
+        return;
+      }
+      I.buscarNoBaldeAntigo().then(function (lista) {
+        if (!lista.length) {
+          alert('O balde antigo está vazio. Nada foi entregue sem identificador de empresa, ' +
+            'ou o que havia já foi resgatado.');
+          return;
+        }
+        if (!U.confirmar(lista.length + ' resposta(s) foram entregues sem identificador de empresa.\n\n' +
+          'Trazer todas para ' + quem + '?\n\n' +
+          'Confira se elas são mesmo desta empresa: o Linked Helper não disse de qual campanha vieram, ' +
+          'porque o endereço não trazia essa informação.')) return;
+        leads = lista;
+        vindosDoBaldeAntigo = true;
+        classificarEEntregar(lista, janelaDeEspera());
+      }, function (e) {
+        alert('Não consegui ler o balde antigo: ' + e.message);
+      });
+    },
+
     /* Importação em lote: busca, confere e traz de uma vez. É o mesmo caminho
        do converterLead, sem a janela por lead — o que muda é a escala. */
     importarLeads: function () {
-      const espera = document.createElement('dialog');
-      espera.innerHTML = '<div class="corpo"><h2>Buscando na ponte…</h2>' +
-        '<p class="small muted">Procurando quem respondeu no LinkedIn.</p></div>';
-      document.body.appendChild(espera);
-      espera.showModal();
-
+      const espera = janelaDeEspera();
       global.IADIntegracoes.buscar().then(function (lista) {
         leads = lista;
         if (!lista.length) {
@@ -3088,60 +3195,13 @@
            empresa por empresa à mão é o que faz ninguém classificar — e sem
            segmento o painel por segmento não diz nada. Uma chamada só para o
            lote inteiro, e o vendedor corrige o que quiser na tela seguinte. */
-        const comEmpresa = lista.filter(function (l) { return l.empresa; });
-        if (!comEmpresa.length) {
-          espera.close(); espera.remove();
-          return App.revisarImportacao(lista, 'Nenhum lead veio com empresa identificada — não há o que classificar.');
-        }
-
-        espera.querySelector('h2').textContent = 'Classificando os segmentos…';
-        espera.querySelector('p').textContent =
-          comEmpresa.length === 1 ? '1 empresa' : comEmpresa.length + ' empresas';
-
-        espera.querySelector('h2').textContent = 'Lendo as empresas e as conversas…';
-        IA.classificarSegmentos(comEmpresa.map(function (l) {
-          return {
-            nome: l.empresa, dominio: l.empresaDominio, site: l.empresaSite,
-            setor: l.empresaSetor, cidade: l.empresaCidade,
-            descricao: l.empresaDescricao, oQueFazLa: l.oQueFazLa,
-            contato: l.nome, cargo: l.cargo, headline: l.headline,
-            conversa: l.conversa || []
-          };
-        }), function (aviso) {
-          const linha = espera.querySelector('p');
-          if (linha) linha.textContent = aviso;
-        }).then(function (r) {
-          comEmpresa.forEach(function (l, i) {
-            const achado = r.mapa[i];
-            if (!achado) return;
-            if (achado.segmento) l.segmentoSugerido = achado.segmento;
-            l.confiancaSegmento = achado.confianca || '';
-            l.porqueSegmento = achado.porque || '';
-            l.maisProximoSegmento = achado.maisProximo || '';
-            if (achado.papel) l.papelSugerido = achado.papel;
-            /* A conta que a IA reconheceu como sendo a mesma empresa. Vem
-               como id, já conferido contra a carteira do lado do servidor. */
-            l.contaSugerida = achado.contaExistente || '';
-            l.porqueConta = achado.porqueConta || '';
-            /* A leitura da IA sobre a resposta. A regra do app continua
-               valendo sozinha e é ela que roda quando o assistente falha —
-               esta aqui pega o que a regra não pega: a recusa educada, a que
-               vem enrolada em elogio, a que não usa nenhuma palavra-chave. */
-            l.respostaDaIA = achado.resposta || '';
-            l.porqueRecusa = achado.porqueRecusa || '';
-            /* O insight da campanha é o mesmo texto para o lote inteiro; o da
-               IA é sobre esta conversa. Quando existem os dois, vale o desta
-               conversa — foi para isso que a conversa foi lida. */
-            if (achado.insight) l.insight = achado.insight;
-          });
-          espera.close(); espera.remove();
-          App.revisarImportacao(lista, r.motivo);
-        });
-      }).catch(function (e) {
+        classificarEEntregar(lista, espera);
+      }, function (e) {
         espera.close(); espera.remove();
-        alert(e.message);
+        alert('Não consegui buscar na ponte: ' + e.message);
       });
     },
+
 
     /* O botão vive dentro do <dialog> da importação, que não passa pelo render
        do app: mexer no select ali é mexer no DOM que já está na tela. */
@@ -3183,7 +3243,12 @@
             return importarUmLead(l, escolha ? escolha.value : '');
           }).filter(Boolean);
           if (feitos.length) {
-            global.IADIntegracoes.marcarProcessados(escolhidos.map(function (l) { return l.id; }));
+            const ids = escolhidos.map(function (l) { return l.id; });
+            /* Baixa no balde de onde vieram. Dar baixa no balde errado
+               deixaria as respostas voltando a cada busca, para sempre. */
+            if (vindosDoBaldeAntigo) global.IADIntegracoes.marcarNoBaldeAntigo(ids);
+            else global.IADIntegracoes.marcarProcessados(ids);
+            vindosDoBaldeAntigo = false;
             leads = (leads || []).filter(function (l) {
               return escolhidos.indexOf(l) === -1;
             });

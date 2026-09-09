@@ -286,6 +286,45 @@
     return base + (partes.length ? '?' + partes.join('&') : '');
   }
 
+  /* O balde antigo, e por que ele precisa de porta própria.
+
+     Antes dos baldes por empresa, a ponte guardava tudo num lugar só. Quem
+     montou o endereço do Linked Helper naquela época — ou quem montou depois
+     sem o `e=` — continua entregando ali. E o app, que agora pergunta sempre
+     pelo balde de uma empresa, nunca mais vê essas entregas: elas ficam
+     visíveis para ninguém até expirarem em trinta dias.
+
+     Esta é a porta de resgate. Ela lê o balde sem identificador e traz para a
+     empresa que está escolhida agora — o que é uma decisão de quem clica, não
+     um palpite do app, e por isso ela mora num botão e não no caminho normal. */
+  function requisitarNoBaldeAntigo(metodo, corpo) {
+    const c = config();
+    if (!c.url) return Promise.reject(new Error('Configure o endereço da ponte em Configuração → Linked Helper.'));
+    const separador = c.url.indexOf('?') === -1 ? '?' : '&';
+    const endereco = c.url + (c.token ? separador + 'token=' + encodeURIComponent(c.token) : '');
+    return fetch(endereco, {
+      method: metodo,
+      headers: corpo ? { 'content-type': 'application/json' } : undefined,
+      body: corpo ? JSON.stringify(corpo) : undefined
+    }).then(function (resposta) {
+      if (resposta.status === 401) throw new Error('A ponte recusou a chave de leitura.');
+      if (!resposta.ok) throw new Error('A ponte respondeu ' + resposta.status + '.');
+      return resposta.json();
+    });
+  }
+
+  function buscarNoBaldeAntigo() {
+    return requisitarNoBaldeAntigo('GET').then(function (corpo) {
+      return (corpo.itens || []).map(normalizar);
+    });
+  }
+
+  function marcarNoBaldeAntigo(ids) {
+    return requisitarNoBaldeAntigo('POST', { marcar: ids }).catch(function (e) {
+      console.warn('Não consegui dar baixa no balde antigo:', e);
+    });
+  }
+
   function requisitar(metodo, corpo) {
     const c = config();
     if (!c.url) return Promise.reject(new Error('Configure o endereço da ponte em Configuração → Linked Helper.'));
@@ -326,5 +365,6 @@
   }
 
   global.IADIntegracoes = { config, salvarConfig, configurada, buscar, marcarProcessados,
-    normalizar, empresaAtual, nomeDaEmpresaAtual, enderecoDeEntrada };
+    normalizar, empresaAtual, nomeDaEmpresaAtual, enderecoDeEntrada,
+    buscarNoBaldeAntigo, marcarNoBaldeAntigo };
 })(window);
