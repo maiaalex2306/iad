@@ -207,11 +207,20 @@
     const configuracao = (local.segmentos || []).length + (local.tiposTarefa || []).length;
     if (movimento || !configuracao) return '';
 
+    /* "Baixar de novo" saiu daqui. Era o botão errado no lugar errado: a faixa
+       existe porque o servidor devolveu vazio, e baixar de novo só grava o
+       mesmo vazio outra vez. O caminho útil é o contrário — mandar para cima o
+       que está aqui — e, quando há uma cópia de antes, voltar para ela. */
+    const copia = Store.copiaDeSeguranca();
     return '<div class="aviso faixa-aviso">O servidor respondeu e não devolveu nenhuma empresa nem oportunidade ' +
       'para esta conta — só as listas de configuração. Isso é permissão ou carimbo de empresa, do lado ' +
       'do servidor, e não um filtro daqui. ' +
-      '<button class="btn ghost mini" onclick="App.ir(\'#/dados\')">Ver o diagnóstico</button>' +
-      '<button class="btn ghost mini" onclick="App.tentarBaixarDeNovo()">Baixar de novo</button></div>';
+      (copia
+        ? 'Existe uma cópia deste aparelho de ' + U.esc(U.data(copia.em)) + ', com ' +
+          copia.contas + ' empresa(s) e ' + copia.oportunidades + ' negociação(ões). ' +
+          '<button class="btn mini" onclick="App.restaurarCopiaLocal()">Restaurar essa cópia</button>'
+        : '') +
+      '<button class="btn ghost mini" onclick="App.ir(\'#/dados\')">Ver o diagnóstico</button></div>';
   }
 
   /* Quem está logado e de onde: some quando ninguém está. */
@@ -470,9 +479,14 @@
         avisoSincronizacao = '';
         render();
       }, function (e) {
-        avisoSincronizacao = 'Não consegui trazer os dados do servidor: ' +
-          (e && e.message ? e.message : 'erro desconhecido') +
-          ' — o que está na tela é a última cópia baixada neste aparelho.';
+        /* A recusa por vazio-sobre-cheio já se explica sozinha, e explicar
+           duas vezes ("não consegui trazer" + "não baixei de propósito") faz a
+           pessoa achar que houve falha quando houve proteção. */
+        avisoSincronizacao = (e && e.vazioSobreCheio)
+          ? e.message + ' Sincronize para mandar esta carteira ao servidor.'
+          : 'Não consegui trazer os dados do servidor: ' +
+            (e && e.message ? e.message : 'erro desconhecido') +
+            ' — o que está na tela é a última cópia baixada neste aparelho.';
         render();
       });
     });
@@ -2820,11 +2834,31 @@
         avisoSincronizacao = '';
         render();
       }, function (e) {
-        avisoSincronizacao = 'Ainda não consegui trazer os dados: ' +
-          (e && e.message ? e.message : 'erro desconhecido') +
-          ' — o que está na tela é a última cópia baixada neste aparelho.';
+        avisoSincronizacao = (e && e.vazioSobreCheio)
+          ? e.message
+          : 'Ainda não consegui trazer os dados: ' +
+            (e && e.message ? e.message : 'erro desconhecido') +
+            ' — o que está na tela é a última cópia baixada neste aparelho.';
         render();
       });
+    },
+
+    /* O passo atrás. Existe porque baixar já apagou carteira de gente uma vez:
+       o servidor devolveu vazio, o app gravou o vazio por cima, e não havia
+       para onde voltar. */
+    restaurarCopiaLocal: function () {
+      const c = Store.copiaDeSeguranca();
+      if (!c) { alert('Não há cópia guardada neste aparelho.'); return; }
+      if (!U.confirmar('Restaurar a cópia de ' + U.data(c.em) + '?\n\n' +
+        c.contas + ' empresa(s), ' + c.oportunidades + ' negociação(ões) e ' + c.tarefas + ' tarefa(s).\n\n' +
+        'Ela volta para este aparelho. Para ficar no servidor também, sincronize depois.')) return;
+      if (Store.restaurarCopiaDeSeguranca()) {
+        avisoSincronizacao = '';
+        render();
+        alert('Cópia restaurada. Confira a carteira e, se estiver certa, sincronize para mandá-la ao servidor.');
+      } else {
+        alert('Não consegui ler a cópia guardada.');
+      }
     },
 
     sincronizarNuvem: function () {
@@ -2840,9 +2874,28 @@
     puxarNuvem: function () {
       if (!U.confirmar('Baixar a carteira da nuvem? O que estiver só neste aparelho e ainda não foi enviado será substituído.')) return;
       recadoNuvem('Baixando…');
+      const terminar = function (n) { render(); recadoNuvem(n + ' registro(s) baixados.'); };
       global.IADNuvem.puxar()
-        .then(function (n) { render(); recadoNuvem(n + ' registro(s) baixados.'); })
-        .catch(function (e) { render(); recadoNuvem('Não baixou: ' + e.message, true); });
+        .then(terminar)
+        .catch(function (e) {
+          /* Substituir carteira por vazio é destruição, e destruição não passa
+             na mesma confirmação que uma sincronização comum. A segunda
+             pergunta diz o número — é o número que faz a pessoa parar. */
+          if (e && e.vazioSobreCheio) {
+            render();
+            recadoNuvem('Não baixei: o servidor está vazio para esta conta.', true);
+            if (U.confirmar(e.message + '\n\nQuer mesmo apagar os ' + e.locais +
+                ' registros deste aparelho e ficar com a carteira vazia do servidor?')) {
+              Store.guardarCopiaDeSeguranca('antes de baixar o vazio do servidor');
+              global.IADNuvem.puxar(true)
+                .then(terminar)
+                .catch(function (e2) { render(); recadoNuvem('Não baixou: ' + e2.message, true); });
+            }
+            return;
+          }
+          render();
+          recadoNuvem('Não baixou: ' + e.message, true);
+        });
     },
 
     sairNuvem: function () {

@@ -187,6 +187,60 @@
     ouvintes.forEach(function (fn) { fn(estado); });
   }
 
+  /* ---------- a cópia de antes ----------
+
+     A sincronização baixa o que o servidor tem e escreve por cima do que
+     está aqui. Enquanto o servidor devolve a carteira, isso é o certo. No dia
+     em que ele devolve vazio — permissão, carimbo de empresa errado, usuário
+     recém-criado —, escrever por cima apaga o trabalho de quem estava
+     trabalhando offline, que é justamente quem este app promete proteger.
+
+     Então toda substituição vinda de fora guarda antes o que havia. Uma cópia
+     só, a última: não é histórico, é o passo atrás. */
+  const CHAVE_ANTES = 'iad-crm:estado:antes-de-baixar';
+
+  function guardarCopiaDeSeguranca(porque) {
+    try {
+      const movimento = (estado.contas || []).length + (estado.oportunidades || []).length;
+      if (!movimento) return false;   /* não vale a pena guardar o nada */
+      localStorage.setItem(CHAVE_ANTES, JSON.stringify({
+        em: new Date().toISOString(), porque: porque || '', estado: estado
+      }));
+      return true;
+    } catch (e) {
+      console.warn('Não consegui guardar a cópia de segurança:', e);
+      return false;
+    }
+  }
+
+  function copiaDeSeguranca() {
+    try {
+      const bruto = localStorage.getItem(CHAVE_ANTES);
+      if (!bruto) return null;
+      const c = JSON.parse(bruto);
+      if (!c || !c.estado) return null;
+      return { em: c.em, porque: c.porque || '',
+        contas: (c.estado.contas || []).length,
+        oportunidades: (c.estado.oportunidades || []).length,
+        tarefas: (c.estado.tarefas || []).length };
+    } catch (e) { return null; }
+  }
+
+  function restaurarCopiaDeSeguranca() {
+    try {
+      const bruto = localStorage.getItem(CHAVE_ANTES);
+      if (!bruto) return false;
+      const c = JSON.parse(bruto);
+      if (!c || !c.estado) return false;
+      substituir(c.estado);
+      return true;
+    } catch (e) { return false; }
+  }
+
+  function descartarCopiaDeSeguranca() {
+    try { localStorage.removeItem(CHAVE_ANTES); } catch (e) { /* nada a fazer */ }
+  }
+
   function inscrever(fn) { ouvintes.push(fn); }
   function obter() { return estado; }
 
@@ -897,6 +951,7 @@
 
   global.IADStore = {
     uid, hoje, carregar, salvar, inscrever, obter, substituir, estadoVazio,
+    guardarCopiaDeSeguranca, copiaDeSeguranca, restaurarCopiaDeSeguranca, descartarCopiaDeSeguranca,
     conta, contato, oportunidade, tarefa, contatosDaConta, tarefasDaOportunidade,
     daquiADias, PRAZO_PADRAO_DE_FECHAMENTO,
     dados, contexto, tenantDeTrabalho, visivel, diagnostico,

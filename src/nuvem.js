@@ -525,7 +525,31 @@
     });
   }
 
-  function puxar() {
+  /* Tabelas de movimento — o trabalho do vendedor. As de configuração
+     (segmentos, tipos de tarefa, produtos) são listas que o servidor pode
+     legitimamente devolver sozinhas. */
+  const MOVIMENTO = ['contas', 'contatos', 'oportunidades', 'tarefas'];
+
+  function quantoDeMovimento(fonte) {
+    return MOVIMENTO.reduce(function (soma, nome) {
+      return soma + ((fonte[nome] || []).length);
+    }, 0);
+  }
+
+  /* Baixar substitui a cópia local pela do servidor. Enquanto o servidor
+     devolve a carteira, é o que se espera de uma sincronização.
+
+     Só que ele também devolve vazio — usuário sem carimbo de empresa, papel
+     que o RLS não reconhece, empresa recém-criada. Aí "substituir pelo que
+     veio" apaga o trabalho de quem estava trabalhando offline. Foi o que
+     aconteceu: a faixa avisava que o servidor não tinha devolvido nada e
+     oferecia um botão "Baixar de novo" que, a cada clique, gravava esse nada
+     por cima da carteira.
+
+     Agora vazio não passa por cima de cheio. A cópia local fica, o erro sobe
+     com nome, e quem quiser mesmo substituir precisa dizer isso — é o que o
+     `forcar` significa. */
+  function puxar(forcar) {
     const buscas = TABELAS.map(function (t) {
       return chamar('/rest/v1/' + t.remota + '?select=*').then(
         function (linhas) { return { local: t.local, linhas: (linhas || []).map(paraApp) }; },
@@ -541,6 +565,21 @@
       /* Só troca a cópia local depois que todas as tabelas vieram: substituir
          parte delas deixaria a carteira pela metade, com contas sem contatos. */
       const estado = Store.obter();
+
+      const veio = {};
+      resultados.forEach(function (r) { veio[r.local] = r.linhas; });
+      const aqui = quantoDeMovimento(estado);
+      if (!forcar && aqui && !quantoDeMovimento(veio)) {
+        const e = new Error('O servidor não devolveu nenhuma conta, contato, ' +
+          'oportunidade ou tarefa, e existem ' + aqui + ' aqui neste aparelho. ' +
+          'Não baixei: gravar o vazio por cima apagaria esse trabalho.');
+        e.vazioSobreCheio = true;
+        e.locais = aqui;
+        throw e;
+      }
+
+      /* O passo atrás, guardado antes de escrever. */
+      Store.guardarCopiaDeSeguranca('antes de baixar do servidor');
       resultados.forEach(function (r) { estado[r.local] = r.linhas; });
       Store.salvar();
       return resultados.reduce(function (s, r) { return s + r.linhas.length; }, 0);
