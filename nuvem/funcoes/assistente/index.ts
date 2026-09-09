@@ -717,7 +717,18 @@ async function explicarRecusa(r: Response, modelo: string): Promise<string> {
        por dia — e quanto falta para liberar. Essa frase é a diferença entre
        "espere um minuto" e "só amanhã", e era jogada fora aqui. */
     const detalhe = (curto.match(/"message"\s*:\s*"([^"]+)"/) || [])[1] || curto;
+
+    /* E quanto esperar vem escrito, em duas formas: o cabeçalho retry-after e
+       o "Please try again in 42.5s" da mensagem. O app esperava 20 segundos
+       fixos e tentava uma vez — chute que erra dos dois lados: espera demais
+       quando falta pouco, e volta cedo demais quando falta um minuto, o que
+       gasta a tentativa à toa. Agora o número atravessa até o cliente. */
+    const doCabecalho = Number(r.headers.get('retry-after') || 0);
+    const daMensagem = Number((curto.match(/try again in ([\d.]+)s/i) || [])[1] || 0);
+    const segundos = Math.ceil(Math.max(doCabecalho, daMensagem)) || 0;
+
     return 'Limite de uso do provedor atingido no modelo "' + modelo + '".' +
+      (segundos ? ' [esperar:' + segundos + ']' : '') +
       (detalhe ? '\n\n' + detalhe : '') +
       '\n\nSe o limite for por minuto, espere e tente de novo. Se for por dia, ' +
       'troque o modelo no segredo IA_MODELO ou mude de plano no provedor.';
@@ -1875,10 +1886,20 @@ Deno.serve(async (req: Request) => {
          lote grande, que é quando isto importa. Doze porque as buscas correm
          em paralelo com 4s de teto cada; o que passar disso o modelo resolve
          com a descrição do LinkedIn, que já vem na entrada. */
+      /* O texto do site é a parte mais cara da entrada e a menos necessária:
+         mil e duzentos caracteres por lead, num pedido cujo teto é oito mil
+         tokens por minuto nesta conta. E na maioria das vezes ele repete o
+         que a descrição do LinkedIn já disse.
+
+         Então só busca o site de quem NÃO trouxe descrição — é para esse lead
+         que a busca foi feita, o que ninguém conhece e cuja linha só tem o
+         nome. Quem já veio descrito não paga por uma segunda fonte. */
+      const semDescricao = Array.isArray(ctx.semDescricao) ? ctx.semDescricao : [];
       const dominios = (Array.isArray(ctx.dominios) ? ctx.dominios : []).slice(0, 12);
       const sites = await Promise.all(dominios.map(async (d, i) => {
         if (!d) return '';
-        const t = await textoDoSite(String(d));
+        if (semDescricao.length && !semDescricao[i]) return '';
+        const t = await textoDoSite(String(d), '/', 700);
         return t ? `\n[site do lead ${i + 1} — ${d}] ${t}` : '';
       }));
       entrada = texto + sites.join('');

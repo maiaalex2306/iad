@@ -413,8 +413,12 @@
 
        E blocos separados falham separado, que é o ganho maior: antes, um
        tropeço no décimo lead levava os outros dezenove junto. */
-    const POR_BLOCO = 5;
+    /* Quatro, não cinco: com teto de oito mil tokens por minuto, um bloco de
+       cinco leads chegou a 7425 tokens — cabia por pouco e não deixava nada
+       para o bloco seguinte no mesmo minuto. */
+    const POR_BLOCO = 4;
     const ESPERA_ENTRE_BLOCOS = 1200;
+    const TENTATIVAS = 3;
 
     const blocos = [];
     for (let inicio = 0; inicio < empresas.length; inicio += POR_BLOCO) {
@@ -425,11 +429,21 @@
       return new Promise(function (r) { setTimeout(r, ms); });
     };
 
-    /* "Rate limit" quase sempre é por minuto e quase sempre passa sozinho.
-       Uma repetição só, depois de esperar: duas viraria uma importação que
-       fica dois minutos parada sem dizer por quê. */
+    /* "Rate limit" quase sempre é por minuto e passa sozinho — desde que a
+       espera seja a certa. Vinte segundos fixos erravam dos dois lados: espera
+       demais quando falta pouco, e volta cedo demais quando falta um minuto,
+       gastando a tentativa à toa. O provedor diz quantos segundos faltam, e o
+       servidor passa esse número adiante entre colchetes. */
     const limiteDeUso = function (erro) {
       return /rate limit|limite de uso|429|tokens per minute|too many requests/i.test(String(erro || ''));
+    };
+
+    const quantoEsperar = function (erro) {
+      const m = /\[esperar:(\d+)\]/.exec(String(erro || ''));
+      const pedido = m ? Number(m[1]) : 0;
+      /* Um segundo a mais que o pedido, e teto de 70: acima disso não é limite
+         por minuto, é limite por dia, e esperar não resolve. */
+      return Math.min(Math.max(pedido + 1, 15), 70) * 1000;
     };
 
     /* Quatro chamadas em série, e uma delas podendo esperar 20 segundos pelo
@@ -437,7 +451,7 @@
        na mesma frase e a pessoa acha que travou. */
     const dizer = function (t) { if (typeof avisar === 'function') avisar(t); };
 
-    const pedirBloco = function (bloco, jaTentou) {
+    const pedirBloco = function (bloco, tentativa) {
       const texto = bloco.itens.map(function (e, k) {
         return linhaDoLead(e, k + 1);          /* numeração local do bloco */
       }).join('\n\n');
@@ -459,7 +473,10 @@
           /* Alinhado por posição com os leads DESTE bloco, e com o site como
              reserva: o Linked Helper entrega organization_website_1 muito
              mais vezes do que organization_domain_1. */
-          dominios: bloco.itens.map(function (e) { return e.dominio || e.site || ''; })
+          dominios: bloco.itens.map(function (e) { return e.dominio || e.site || ''; }),
+          /* Quem já veio com descrição do LinkedIn não precisa que o servidor
+             vá ao site: é a parte mais cara da entrada e diria o mesmo. */
+          semDescricao: bloco.itens.map(function (e) { return !e.descricao; })
         }
       });
       const prazo = new Promise(function (resolve) {
@@ -467,9 +484,11 @@
       });
 
       return Promise.race([pedido, prazo]).then(function (r) {
-        if (r && r.erro && limiteDeUso(r.erro) && !jaTentou) {
-          dizer('O provedor pediu para esperar. Tentando de novo em 20 segundos…');
-          return esperar(20000).then(function () { return pedirBloco(bloco, true); });
+        if (r && r.erro && limiteDeUso(r.erro) && tentativa < TENTATIVAS) {
+          const ms = quantoEsperar(r.erro);
+          dizer('O provedor pediu para esperar ' + Math.round(ms / 1000) + 's. ' +
+            'Tentativa ' + (tentativa + 1) + ' de ' + TENTATIVAS + '…');
+          return esperar(ms).then(function () { return pedirBloco(bloco, tentativa + 1); });
         }
         return r;
       }).catch(function (e) {
@@ -490,7 +509,7 @@
           .then(function () {
             dizer('Lendo ' + (bloco.inicio + 1) + '–' + (bloco.inicio + bloco.itens.length) +
               ' de ' + empresas.length + '…');
-            return pedirBloco(bloco, false);
+            return pedirBloco(bloco, 1);
           })
           .then(function (r) {
             if (!r || r.estourou) {
