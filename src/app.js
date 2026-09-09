@@ -2891,8 +2891,14 @@
           Store.definirInsight(op.id, { texto: lead.insight, estado: 'formulado' });
         }
 
+        /* Empresa que veio do LH é empresa com quem ninguém falou ainda, venha
+           ela pelo lote ou uma por uma. A tarefa de fazer o contato nasce nos
+           dois caminhos: sem ela o cartão fica na Conexão sem data marcada,
+           que é como nasce negócio zumbi. */
+        const tarefa = tarefaDoLead(op, contato, lead);
+
         /* O lead é de quem prospectou, não de quem clicou em importar. */
-        atribuirAoOperador(lead, [Store.conta(contaId), contato, op]);
+        atribuirAoOperador(lead, [Store.conta(contaId), contato, op, tarefa]);
 
         leads = (leads || []).filter(function (l) { return l.id !== id; });
         global.IADIntegracoes.marcarProcessados([id]);
