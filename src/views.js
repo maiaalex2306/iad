@@ -3769,7 +3769,66 @@
       '<div class="card"><h2>Demonstração</h2>' +
       '<p class="small muted">Carrega uma carteira fictícia com os grupos de pipeline para treinar a leitura do modelo.</p>' +
       '<div class="row"><button class="btn ghost" onclick="App.carregarDemo()" data-ajuda-titulo="Demonstração" data-ajuda="Carrega uma carteira fictícia com os cinco grupos de pipeline, para treinar a leitura do modelo. Substitui o que está aqui.">Carregar demonstração</button>' +
-      '<button class="btn ghost" onclick="App.limpar()" data-ajuda-titulo="Apagar tudo" data-ajuda="Apaga a carteira deste aparelho. Não apaga o que já foi sincronizado no servidor, nem os acessos.">Apagar tudo</button></div></div>';
+      '<button class="btn ghost" onclick="App.limpar()" data-ajuda-titulo="Apagar tudo" data-ajuda="Apaga a carteira deste aparelho. Não apaga o que já foi sincronizado no servidor, nem os acessos.">Apagar tudo</button></div></div>' +
+
+      auditoriaDasCampanhas();
+  }
+
+  /* ---------- não conformidades das campanhas do Linked Helper ----------
+
+     A recusa some duas vezes: o lead é desmarcado na importação e depois
+     excluído da ponte. Some certo — ela não é negócio —, e some errado, porque
+     era o único sinal de que a campanha estava falando com o público errado.
+     Vinte leads e seis recusas é um dado sobre a campanha, não sobre as seis
+     pessoas.
+
+     Por campanha, e não por pessoa, porque é a campanha que se conserta. O
+     motivo mais frequente vem em destaque: é ele que diz o que corrigir na
+     próxima lista. */
+  function auditoriaDasCampanhas() {
+    const grupos = Store.recusasPorCampanha();
+    if (!grupos.length) {
+      return '<div class="card"><h2>Não conformidades das campanhas</h2>' +
+        '<p class="small muted">Toda resposta do Linked Helper lida como uma recusa fica registrada aqui, ' +
+        'fora do pipeline, para que os motivos possam ser estudados depois. Nenhuma até agora.</p></div>';
+    }
+    const total = grupos.reduce(function (n, g) { return n + g.itens.length; }, 0);
+
+    const corpo = grupos.map(function (g) {
+      const sdrs = Object.keys(g.sdrs).sort(function (a, b) { return g.sdrs[b] - g.sdrs[a]; });
+      const linhas = g.itens.map(function (r) {
+        return '<tr>' +
+          '<td>' + U.data(r.data) + '</td>' +
+          '<td><strong>' + esc(r.nome || 'sem nome') + '</strong>' +
+            (r.empresa ? '<br><span class="tiny muted">' + esc(r.empresa) + '</span>' : '') + '</td>' +
+          '<td>' + esc(r.motivo) +
+            '<br><span class="tiny muted">lido por ' + (r.origem === 'ia' ? 'assistente' : 'regra') + '</span></td>' +
+          '<td class="tiny">' + esc(String(r.texto || '').slice(0, 220)) + '</td>' +
+          '<td><button class="btn ghost mini" onclick="App.excluirRecusa(\'' + r.id + '\')">Excluir</button></td>' +
+        '</tr>';
+      }).join('');
+
+      return '<details style="margin-top:12px"><summary>' +
+        '<strong>' + esc(g.campanha) + '</strong> · ' +
+        g.itens.length + (g.itens.length === 1 ? ' recusa' : ' recusas') +
+        (g.principal ? ' · mais comum: ' + esc(g.principal) : '') +
+        (sdrs.length ? ' · ' + esc(sdrs.join(', ')) : '') +
+        '</summary>' +
+        '<div class="tabela-rolagem"><table class="tabela"><thead><tr>' +
+        '<th>Quando</th><th>Quem</th><th>O que foi lido</th><th>O que a pessoa disse</th><th></th>' +
+        '</tr></thead><tbody>' + linhas + '</tbody></table></div>' +
+        '<div class="row" style="margin-top:8px">' +
+        '<button class="btn ghost mini" onclick="App.limparRecusas(\'' + esc(g.campanha).replace(/'/g, "\\'") + '\')">' +
+        'Apagar as desta campanha</button></div>' +
+        '</details>';
+    }).join('');
+
+    return '<div class="card"><h2>Não conformidades das campanhas</h2>' +
+      '<p class="small muted">' + total + (total === 1 ? ' resposta lida' : ' respostas lidas') +
+      ' como recusa em ' + grupos.length + (grupos.length === 1 ? ' campanha' : ' campanhas') +
+      '. Elas ficam fora do pipeline de propósito: dentro dele seriam negócio nascido de um não. ' +
+      'Aqui servem para descobrir com quem a campanha está falando por engano.</p>' +
+      corpo + '</div>';
   }
 
   /* Senha só é senha depois de trocada por quem vai usá-la: a inicial passou
@@ -3940,7 +3999,16 @@
     const texto = dele.length ? dele.map(function (m) { return m.texto; }).join(' ') : (l.resposta || '');
     if (!texto) return '';
     const achada = RECUSAS.filter(function (r) { return r.re.test(texto); })[0];
-    return achada ? achada.diz : '';
+    if (achada) return achada.diz;
+    /* A regra pega a recusa que usa as palavras de sempre. A IA pega a que
+       não usa nenhuma — "que legal, mas não é para mim", "hoje moro em casa",
+       "não é bem a minha praia". Uma não substitui a outra: a regra funciona
+       com o assistente fora do ar, e é o lote grande, onde ele falha, que
+       ninguém lê à mão. */
+    if (l.respostaDaIA === 'negativa') {
+      return l.porqueRecusa || 'o assistente leu a resposta como uma recusa';
+    }
+    return '';
   }
 
   /* O lead que já virou registro numa importação anterior. Ele não deveria
@@ -4453,7 +4521,7 @@
 
   global.IADViews = {
     hoje, painel, pipeline, tarefas, cockpit, revisao, contas, cadastros, playbook, dados, itemArquivo, listaLeads,
-    revisaoDaImportacao, resumoDaLeitura, planoDaIA, definirPlano, planoGuardado, revisaoDasNotas,
+    revisaoDaImportacao, recusaDoCliente, resumoDaLeitura, planoDaIA, definirPlano, planoGuardado, revisaoDasNotas,
     acesso, barraAdmin, menuDoUsuario, definirTelaAcesso, definirPrimeiraEmpresa, listaUsuariosNuvem,
     pendenteAcesso: function () { return pendente; },
     tarefasFiltrar, tarefasEstado, tarefasVisiveis, tarefasDaPagina, tarefasSelecionadas, tarefasMarcar,

@@ -540,16 +540,24 @@ Papéis na compra, e SÓ estes:
 ${papeis.map((x) => '- ' + x).join('\n')}
 
 Regras absolutas:
-- Responda SOMENTE com um objeto JSON: {"itens":[{"n":1,"segmento":"...","confianca":"alta|media|baixa","porque":"...","maisProximo":"...","papel":"...","insight":"..."${contas.length ? ',"contaExistente":"...","porqueConta":"..."' : ''}},...]}
+- Responda SOMENTE com um objeto JSON: {"itens":[{"n":1,"segmento":"...","confianca":"alta|media|baixa","porque":"...","maisProximo":"...","papel":"...","resposta":"positiva|negativa|neutra","porqueRecusa":"...","insight":"..."${contas.length ? ',"contaExistente":"...","porqueConta":"..."' : ''}},...]}
 - "segmento" tem de ser copiado EXATAMENTE de uma das linhas de SEGMENTOS acima, ou ser "Outros". Nada fora disso — nem um nome parecido, nem um subsegmento.
 - "confianca": "alta" quando o que a empresa faz está escrito na lista; "media" quando você chegou por proximidade; "baixa" quando é palpite.
 - "porque": no máximo 12 palavras, dizendo o que na empresa levou a esse segmento.
 - "maisProximo": preencha SEMPRE que "segmento" for "Outros", com o nome do segmento que chegou mais perto; nos outros casos devolva "".
 - "papel" tem de ser copiado EXATAMENTE de uma das linhas de papéis. Ele sai do CARGO da pessoa, não do que ela escreveu. Quem não dá para dizer pelo cargo fica em "Usuário", que é o padrão neutro. Não promova ninguém a "Decisor econômico" por gentileza.
+- "resposta" diz o que a pessoa respondeu à SDR, e só pode ser: "positiva", "negativa" ou "neutra".
+  - "negativa" quando ela recusa, se exclui do público ou pede para parar: "não tenho relação com isso", "me retire da lista", "não moro em condomínio", "não trabalho mais com isso", "não temos interesse", "por favor não me envie". Também quando ela responde algo que só faz sentido se ela NÃO for o público da campanha.
+  - "positiva" quando ela aceita, confirma que é o público, pede material, sugere conversa ou indica alguém.
+  - "neutra" quando é cumprimento, agradecimento ou pergunta sem se comprometer: "bom dia", "obrigado pelo contato", "pode ir direto ao ponto?".
+  - Cuidado com a educação brasileira: "Obrigado pelo contato" sozinho é neutra, não positiva. E "Que legal, mas não é para mim" é negativa apesar do elogio.
+- "porqueRecusa": SÓ quando "resposta" for "negativa". Até 12 palavras, dizendo o que ela recusou, na terceira pessoa: "disse que não mora em condomínio", "pediu para sair da lista". Nos outros casos devolva "".
 - "insight" é o reenquadramento: a verdade sobre o negócio DELE que ele não enxerga sozinho, tirada do que a empresa faz e do que a pessoa respondeu. Uma ou duas frases, na linguagem do setor dele, sem citar a nossa solução e sem elogio. Se a conversa e a descrição não derem base para nada além de genérico, devolva "" — insight genérico é pior que nenhum, porque o vendedor o repete achando que tem um.
 - O insight é hipótese NOSSA, não é o cliente falando. Nunca escreva que o cliente disse, admitiu ou confirmou o que quer que seja.
 - Um item de saída para cada lead da entrada, com o mesmo "n".
 - Nada de texto fora do JSON.
+
+Por que "resposta" importa mais do que parece: quem responde NÃO vira, do outro lado, empresa, contato, oportunidade e tarefa se ninguém marcar que era um não. É a pior coisa que este sistema pode fazer — pipeline construído em cima de uma recusa, e um vendedor gastando a semana nele. Na dúvida entre "negativa" e "neutra", prefira "negativa": ela apenas desmarca o lead na tela, e quem vende decide.
 
 Um aviso sobre a pessoa física: quando o lead for alguém abordado como PESSOA e não como empresa — morador de condomínio, consultor autônomo, mentor, coach, investidor —, "Outros" é a resposta certa e não é derrota. Diga isso no "porque". O que não pode é uma empresa industrial com nome autoexplicativo cair em "Outros" por falta de descrição.
 
@@ -1228,6 +1236,11 @@ function validarSegmentos(bruto: Record<string, unknown>, ctx: Record<string, un
        depois. Diante de dúvida, a resposta certa é não juntar. */
     const contaCasada = contas.find((c) => achatar(c.nome) === achatar(limparTexto(o.contaExistente, 120)));
 
+    /* Três valores e nada mais. Vazio quando o modelo inventar um quarto: o
+       app tem a própria regra de recusa e ela continua valendo sozinha. */
+    const resposta = ['positiva', 'negativa', 'neutra']
+      .find((v) => v === achatar(limparTexto(o.resposta, 20))) || '';
+
     itens.push({
       n: n,
       segmento: segmento,
@@ -1244,7 +1257,9 @@ function validarSegmentos(bruto: Record<string, unknown>, ctx: Record<string, un
          mandar o nome de volta obrigaria o app a casar por texto outra vez —
          exatamente o problema que esta pergunta existe para resolver. */
       contaExistente: contaCasada ? contaCasada.id : '',
-      porqueConta: contaCasada ? limparTexto(o.porqueConta, 100) : ''
+      porqueConta: contaCasada ? limparTexto(o.porqueConta, 100) : '',
+      resposta: resposta,
+      porqueRecusa: resposta === 'negativa' ? limparTexto(o.porqueRecusa, 120) : ''
     });
   }
   return { itens: itens };

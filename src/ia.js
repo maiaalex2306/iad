@@ -509,7 +509,8 @@
               mapa[i] = {
                 segmento: it.segmento || '', confianca: it.confianca || '', porque: it.porque || '',
                 maisProximo: it.maisProximo || '', papel: it.papel || '', insight: it.insight || '',
-                contaExistente: it.contaExistente || '', porqueConta: it.porqueConta || ''
+                contaExistente: it.contaExistente || '', porqueConta: it.porqueConta || '',
+                resposta: it.resposta || '', porqueRecusa: it.porqueRecusa || ''
               };
             });
           });

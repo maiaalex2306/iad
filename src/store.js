@@ -37,11 +37,17 @@
     return {
       versao: VERSAO, tenants: [], usuarios: [],
       contas: [], contatos: [], oportunidades: [], tarefas: [],
-      segmentos: [], tiposTarefa: [], produtos: [], config: { moeda: 'BRL' }
+      segmentos: [], tiposTarefa: [], produtos: [], config: { moeda: 'BRL' },
+      /* Auditoria das campanhas do Linked Helper. Não é carteira: são as
+         respostas que dizem NÃO, guardadas fora do pipeline de propósito.
+         Dentro dele elas seriam negócio; aqui elas são o que a campanha
+         produziu de errado, que é a única coisa capaz de melhorar a próxima. */
+      recusas: []
     };
   }
 
   let estado = estadoVazio();
+
   const ouvintes = [];
 
   /* Migração: um export da v1 precisa continuar abrindo. */
@@ -82,6 +88,7 @@
     dados.produtos = dados.produtos || [];
     dados.tenants = dados.tenants || [];
     dados.usuarios = dados.usuarios || [];
+    dados.recusas = dados.recusas || [];
 
     /* Multiempresa: o que já existia passa a pertencer a uma primeira empresa,
        criada aqui, para nada ficar órfão e invisível depois do login. */
@@ -90,7 +97,7 @@
       dados.tenants.push({ id: uid('ten'), nome: 'Minha empresa', cnpj: '', ativo: true, criadoEm: hoje() });
     }
     const primeiro = dados.tenants[0] ? dados.tenants[0].id : null;
-    ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos']
+    ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos', 'recusas']
       .forEach(function (colecao) {
         (dados[colecao] || []).forEach(function (r) { if (r.tenantId == null) r.tenantId = primeiro; });
       });
@@ -346,7 +353,7 @@
     /* A padronização vem antes da adoção, e não depois: o tipo que ela
        acrescenta nasce sem empresa e ficaria invisível até o render seguinte. */
     const padronizou = padronizarTiposTarefa(estado);
-    ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos']
+    ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos', 'recusas']
       .forEach(function (colecao) {
         (estado[colecao] || []).forEach(function (r) {
           if (!r.tenantId) { r.tenantId = ctx.tenantId; adotados++; }
@@ -621,6 +628,72 @@
   function produto(id) { return catalogo('produtos').find(function (p) { return p.id === id; }); }
 
   /* ---------- Tarefas ---------- */
+  /* ---------- auditoria das campanhas do Linked Helper ----------
+
+     Quem respondeu NÃO não vira negócio, e por isso desaparecia: o lead saía
+     da ponte e não sobrava registro nenhum de que a campanha tinha produzido
+     aquela resposta. Vinte leads, seis recusas, e na semana seguinte a mesma
+     campanha rodava igual porque ninguém tinha como saber.
+
+     Fica fora do pipeline de propósito. Dentro dele, uma recusa é negócio
+     zumbi; aqui é o que a campanha errou, que é a única coisa capaz de
+     melhorar a próxima.
+
+     A chave é o id do lead na ponte: a mesma recusa aparece em toda busca até
+     o vendedor excluí-la, e sem isto a tabela contaria a mesma pessoa cinco
+     vezes e a campanha pareceria pior do que é. */
+  function registrarRecusa(dados) {
+    const id = String(dados.leadId || '');
+    if (id && (estado.recusas || []).some(function (r) { return r.leadId === id; })) return null;
+    const nova = Object.assign({
+      id: uid('rec'), leadId: id, campanha: '', sdr: '',
+      nome: '', cargo: '', empresa: '', linkedin: '',
+      texto: '', motivo: '', origem: 'regra', data: hoje(), criadoEm: hoje()
+    }, carimbo(false), dados);
+    estado.recusas = estado.recusas || [];
+    estado.recusas.push(nova);
+    salvar();
+    return nova;
+  }
+
+  function recusas() {
+    return (estado.recusas || []).filter(function (r) { return visivel(r); });
+  }
+
+  /* Agrupado por campanha porque é a campanha que se conserta, não a pessoa.
+     Ordenado pela que mais produziu recusa: é por onde se começa. */
+  function recusasPorCampanha() {
+    const por = {};
+    recusas().forEach(function (r) {
+      const chave = r.campanha || '(sem campanha)';
+      if (!por[chave]) por[chave] = { campanha: chave, itens: [], motivos: {}, sdrs: {} };
+      por[chave].itens.push(r);
+      por[chave].motivos[r.motivo || 'sem motivo'] = (por[chave].motivos[r.motivo || 'sem motivo'] || 0) + 1;
+      if (r.sdr) por[chave].sdrs[r.sdr] = (por[chave].sdrs[r.sdr] || 0) + 1;
+    });
+    return Object.keys(por).map(function (k) {
+      const g = por[k];
+      g.itens.sort(function (a, b) { return String(b.data).localeCompare(String(a.data)); });
+      g.principal = Object.keys(g.motivos).sort(function (a, b) {
+        return g.motivos[b] - g.motivos[a];
+      })[0] || '';
+      return g;
+    }).sort(function (a, b) { return b.itens.length - a.itens.length; });
+  }
+
+  function excluirRecusa(id) {
+    estado.recusas = (estado.recusas || []).filter(function (r) { return r.id !== id; });
+    salvar();
+  }
+
+  function limparRecusas(campanha) {
+    estado.recusas = (estado.recusas || []).filter(function (r) {
+      if (!visivel(r)) return true;                    /* de outra empresa: não é minha para apagar */
+      return campanha ? (r.campanha || '(sem campanha)') !== campanha : false;
+    });
+    salvar();
+  }
+
   function criarTarefa(dados) {
     const nova = Object.assign({
       id: uid('tsk'), titulo: '', descricao: '', tipo: 'Reunião', oportunidadeId: null,
@@ -762,6 +835,7 @@
     dados, contexto, tenantDeTrabalho, visivel, diagnostico,
     criarConta, criarContato, criarOportunidade, atualizarOportunidade, vincularStakeholder,
     pontuar, registrarEvento, removerEvento, definirCompromisso, definirInsight,
+    registrarRecusa, recusas, recusasPorCampanha, limparRecusas, excluirRecusa,
     criarTarefa, atualizarTarefa, adiarTarefa, concluirTarefa, excluirTarefa,
     adotarOrfaos,
     catalogo, catalogoAtivos, nomesDoCatalogo, criarNoCatalogo, atualizarNoCatalogo,

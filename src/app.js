@@ -2742,6 +2742,12 @@
                como id, já conferido contra a carteira do lado do servidor. */
             l.contaSugerida = achado.contaExistente || '';
             l.porqueConta = achado.porqueConta || '';
+            /* A leitura da IA sobre a resposta. A regra do app continua
+               valendo sozinha e é ela que roda quando o assistente falha —
+               esta aqui pega o que a regra não pega: a recusa educada, a que
+               vem enrolada em elogio, a que não usa nenhuma palavra-chave. */
+            l.respostaDaIA = achado.resposta || '';
+            l.porqueRecusa = achado.porqueRecusa || '';
             /* O insight da campanha é o mesmo texto para o lote inteiro; o da
                IA é sobre esta conversa. Quando existem os dois, vale o desta
                conversa — foi para isso que a conversa foi lida. */
@@ -2776,6 +2782,7 @@
       dlg.innerHTML = V.revisaoDaImportacao(lista, avisoSegmento);
       document.body.appendChild(dlg);
       ligarMarcacaoEmLote(dlg, lista);
+      guardarRecusas(lista);
 
       dlg.addEventListener('close', function () {
         if (dlg.returnValue === 'ok') {
@@ -2817,6 +2824,18 @@
         dlg.remove();
       });
       dlg.showModal();
+    },
+
+    excluirRecusa: function (id) {
+      Store.excluirRecusa(id);
+      render();
+    },
+
+    limparRecusas: function (campanha) {
+      if (!U.confirmar('Apagar as recusas registradas da campanha "' + campanha + '"?\n\n' +
+        'É só a auditoria: nada no pipeline muda. O que for lido de novo volta a aparecer aqui.')) return;
+      Store.limparRecusas(campanha);
+      render();
     },
 
     descartarLead: function (id) {
@@ -3495,6 +3514,35 @@
 
     caixas.forEach(function (c) { c.addEventListener('change', pintar); });
     pintar();
+  }
+
+  /* A recusa é gravada quando é LIDA, não quando é importada nem quando é
+     excluída — justamente porque na maioria das vezes ela não vai ser nem uma
+     coisa nem outra: o vendedor exclui e ela some para sempre. É esse o
+     momento em que o dado existe.
+
+     Fica fora do pipeline. Não vira conta, contato nem negócio: vira linha na
+     auditoria da campanha, que é o único lugar onde ela ainda serve para
+     alguma coisa.
+
+     O Store descarta repetição pelo id do lead, então gravar a cada busca não
+     infla a tabela. */
+  function guardarRecusas(lista) {
+    lista.forEach(function (l) {
+      const motivo = V.recusaDoCliente(l);
+      if (!motivo) return;
+      const dele = (l.conversa || []).filter(function (m) { return !m.nosso; });
+      const ultima = dele[dele.length - 1];
+      Store.registrarRecusa({
+        leadId: l.id, campanha: l.campanha || '', sdr: l.operador || '',
+        nome: l.nome || '', cargo: l.cargo || '', empresa: l.empresa || '',
+        linkedin: l.linkedin || '',
+        texto: ultima ? ultima.texto : (l.resposta || ''),
+        motivo: motivo,
+        origem: l.respostaDaIA === 'negativa' ? 'ia' : 'regra',
+        data: (ultima && ultima.quando) || l.respostaEm || Store.hoje()
+      });
+    });
   }
 
   /* ---------- reconciliação: o mesmo mundo chegando duas vezes ----------
