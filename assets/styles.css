@@ -1167,3 +1167,43 @@ td.subiu { color: var(--ok); font-weight: 600; }
   background: var(--surface, #fff);
   border-bottom: 1px solid var(--line);
 }
+
+
+/* ---------- Manual: como o IAD anda ---------- */
+.caminho-iad { margin: 10px 0 0; padding-left: 1.3em; }
+.caminho-iad li { margin-bottom: 7px; }
+.nivel-linha { display: block; margin-bottom: 5px; font-size: .9rem; line-height: 1.45; }
+.nivel-linha b { margin-right: 6px; font-size: .95rem; }
+
+/* A ordem de trabalho das oito. Rola no celular em vez de quebrar em duas
+   linhas desalinhadas — a sequência só significa alguma coisa em fila. */
+.ordem-decisao {
+  display: flex; align-items: center; gap: 6px; flex-wrap: nowrap;
+  overflow-x: auto; padding: 12px 2px; margin-top: 6px;
+}
+.passo-ordem {
+  display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: 5px 12px 5px 6px; background: var(--surface); font-size: .84rem; font-weight: 600;
+}
+.passo-ordem b {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: var(--navy-2); color: #fff; font-size: .72rem;
+}
+.seta-ordem { color: var(--muted); flex: none; }
+
+.limpa-manual { margin: 6px 0 0; padding-left: 1.2em; }
+.limpa-manual li { margin-bottom: 5px; }
+
+/* As faixas do índice. O número grande à esquerda é a âncora de leitura:
+   quem abre esta seção está com um IAD na cabeça e quer achar a linha dele. */
+.escada-iad > div { grid-template-columns: 5.2em 1fr; }
+.faixa-iad {
+  font-weight: 700; font-size: 1rem; letter-spacing: -.01em;
+  font-variant-numeric: tabular-nums;
+}
+.faixa-iad.f0 { color: var(--muted); }
+.faixa-iad.f1 { color: var(--warn); }
+.faixa-iad.f2 { color: var(--ok); }
+.faixa-iad.f3 { color: var(--navy-2); }

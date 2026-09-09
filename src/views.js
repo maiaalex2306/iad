@@ -2936,6 +2936,9 @@
   const SECOES_DO_MANUAL = [
     ['m-regra', 'A regra'],
     ['m-oito', 'As oito decisões'],
+    ['m-avanco', 'Como o IAD anda'],
+    ['m-faixas', 'O que o número diz'],
+    ['m-etapas', 'O que cada etapa pede'],
     ['m-tarefa', 'Tudo entra por tarefa'],
     ['m-contar', 'Como contar o que aconteceu'],
     ['m-telas', 'As telas, uma a uma'],
@@ -3155,6 +3158,236 @@
       'dos papéis críticos da compra você tem mapeado.</p></div>';
   }
 
+  /* ---------------- Como o IAD anda ----------------
+
+     A seção que faltava, e ela precisa ser gerada do playbook — não escrita à
+     mão. Um manual que descreve o gate da proposta em texto fixo fica errado
+     no dia em que alguém mudar GATES_PROPOSTA, e ninguém vai lembrar de vir
+     aqui. Tudo o que é regra sai da constante que a regra usa. */
+
+  function manualDoAvanco() {
+    const niveis = P.DIMENSOES.map(function (d, i) {
+      return '<tr><td class="rotulo-manual"><span class="tiny muted">' + (i + 1) + '</span> <strong>' +
+        esc(d.nome) + '</strong><span class="tiny muted">' + esc(d.pergunta) + '</span></td>' +
+        '<td>' + d.niveis.map(function (n, k) {
+          return '<span class="nivel-linha"><b class="nota-manual n' + k + '">' + k + '</b> ' + esc(n) + '</span>';
+        }).join('') + '</td></tr>';
+    }).join('');
+
+    /* A ordem de trabalho não é a ordem em que as oito aparecem na tela. É a
+       do motor, e ela existe porque decisão tem pré-requisito. */
+    const ordem = ['problema', 'prioridade', 'impacto', 'stakeholders', 'criterios', 'processo', 'consenso', 'risco']
+      .map(function (id, i) {
+        const d = P.DIMENSOES.filter(function (x) { return x.id === id; })[0];
+        return '<span class="passo-ordem"><b>' + (i + 1) + '</b>' + esc(d ? d.nome : id) + '</span>';
+      }).join('<span class="seta-ordem">→</span>');
+
+    const gate = P.GATES_PROPOSTA.map(function (g) {
+      const d = P.DIMENSOES.filter(function (x) { return x.id === g.dim; })[0];
+      return '<tr><td class="rotulo-manual"><strong>' + esc(d ? d.nome : g.dim) + '</strong></td>' +
+        '<td class="nowrap">precisa de <strong>' + g.min + '</strong> ou mais</td>' +
+        '<td>' + esc(d ? d.niveis[g.min] : '') + '</td></tr>';
+    }).join('');
+
+    const foraDoGate = P.DIMENSOES.filter(function (d) {
+      return !P.GATES_PROPOSTA.some(function (g) { return g.dim === d.id; });
+    }).map(function (d) { return d.nome; });
+
+    const forcas = P.FORCAS.map(function (f) {
+      const comprova = f.peso >= P.FORCA_MINIMA_PARA_COMPROVAR;
+      return '<tr><td class="rotulo-manual"><strong>' + esc(f.rotulo) + '</strong></td>' +
+        '<td>' + esc(f.desc) + '</td>' +
+        '<td class="nowrap">' + (comprova
+          ? '<span class="pill ok">sustenta nota 2</span>'
+          : '<span class="pill">teto: nota 1</span>') + '</td></tr>';
+    }).join('');
+
+    const evid = P.FAIXAS_EVIDENCIA.map(function (f, i) {
+      const de = i === 0 ? 0 : P.FAIXAS_EVIDENCIA[i - 1].max + 1;
+      const ate = f.max === Infinity ? 'ou mais' : 'a ' + f.max + ' dias';
+      return '<tr><td class="rotulo-manual"><span class="pill ' + f.classe + '">' + esc(f.rotulo) + '</span></td>' +
+        '<td class="nowrap">' + de + ' ' + ate + '</td>' +
+        '<td>' + esc([
+          'O cliente se moveu esta semana. É o ritmo que fecha negócio.',
+          'Passou uma semana sem sinal dele. Ainda não é problema; é o momento de provocar.',
+          'Duas semanas ou mais em silêncio. O negócio está saindo da mão sem ninguém perceber.',
+          'Mais de um mês. O app chama de Zumbi: requalifique com uma tentativa clara, ou encerre por inação.'
+        ][i]) + '</td></tr>';
+    }).join('');
+
+    const naoContam = P.ATIVIDADES_QUE_NAO_CONTAM.map(function (a) {
+      return '<span class="pill dead">' + esc(a) + '</span>';
+    }).join(' ');
+
+    return '<div class="card" id="m-avanco"><h2>Como o IAD anda</h2>' +
+
+      '<p class="small">O IAD é a soma das oito notas: de <strong>0 a 16</strong>. Ele não sobe porque ' +
+      'você trabalhou. Sobe quando uma das oito decisões amadurece <strong>dentro do cliente</strong>, ' +
+      'e isso acontece de um jeito só: uma evidência nova do cliente entra, e a nota daquela decisão sobe.</p>' +
+
+      '<h3>O caminho de um ponto, do começo ao fim</h3>' +
+      '<ol class="caminho-iad">' +
+      '<li><strong>Você marca uma tarefa</strong> — e diz qual das oito ela pretende provocar.</li>' +
+      '<li><strong>A tarefa acontece</strong> — reunião, visita, telefonema, e-mail.</li>' +
+      '<li><strong>Você conclui contando o que aconteceu</strong> — colando a ata, respondendo as quatro ' +
+      'perguntas, ou escrevendo em duas linhas.</li>' +
+      '<li><strong>O que o CLIENTE fez vira evidência</strong>, com uma força: relato, confirmado ou documentado.</li>' +
+      '<li><strong>A nota sobe</strong> — e com ela o IAD, o grupo do negócio no pipeline e o painel do gestor.</li>' +
+      '</ol>' +
+      '<div class="aviso">Fechar a tarefa sem contar o que aconteceu fecha a tarefa e <strong>não move nada</strong>. ' +
+      'Não é punição do app: sem o relato não existe evidência para reler, e sem evidência não há o que subir.</div>' +
+
+      '<h3>Os três níveis, decisão por decisão</h3>' +
+      '<p class="small">Esta é a régua inteira. A coluna da direita é o que precisa ser verdade para a nota valer.</p>' +
+      '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' + niveis + '</tbody></table></div>' +
+
+      '<h3>A força da evidência — e a única trava que o app não deixa você furar</h3>' +
+      '<p class="small">Toda evidência entra com uma força. Ela decide até onde a nota pode ir: ' +
+      '<strong>nota 2 exige evidência confirmada ou documentada</strong>. Se você marcar 2 com só relatos, ' +
+      'o motor trava em 1 e diz por quê — vale para você e vale para a IA, sem exceção.</p>' +
+      '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' + forcas + '</tbody></table></div>' +
+
+      '<h3>A ordem em que as oito devem ser trabalhadas</h3>' +
+      '<p class="small">Não é a ordem em que elas aparecem na tela. É a do motor, e ela existe porque ' +
+      'decisão tem pré-requisito: ninguém prioriza o que não reconhece como problema, e ninguém aprova ' +
+      'orçamento sem impacto. O cartão <strong>Próximos passos</strong> aponta sempre a primeira lacuna ' +
+      'nesta ordem.</p>' +
+      '<div class="ordem-decisao">' + ordem + '</div>' +
+
+      '<h3>O que NÃO sobe o índice</h3>' +
+      '<p class="small">Trabalho nosso é trabalho, e trabalho não é avanço. Nada disto move uma nota:</p>' +
+      '<div class="row" style="gap:6px;flex-wrap:wrap">' + naoContam + '</div>' +
+      '</div>';
+  }
+
+  function manualDasEtapas() {
+    const etapas = [
+      ['Prospecção', 'Você achou a conta. O cliente ainda não se moveu.',
+       'Nada é exigido para entrar aqui — é onde todo negócio nasce.',
+       'Uma resposta dele. Qualquer sinal de vida do comprador tira o negócio daqui.'],
+      ['Conexão', 'Há conversa com alguém do lado do cliente.',
+       'Uma pessoa mapeada e uma troca registrada.',
+       'Problema reconhecido com as palavras dele — a primeira das oito.'],
+      ['Diagnóstico', 'Você está entendendo a operação dele, com dados dele.',
+       'Problema em 1 ou 2. É aqui que Impacto costuma nascer.',
+       'Impacto e Prioridade saindo do zero, e uma segunda pessoa na conversa.'],
+      ['Benefícios', 'O cliente já enxerga o que ganha, e começa a comparar.',
+       'Problema, Prioridade e Impacto com sinal; Critérios começando.',
+       'Critérios definidos por ele e o caminho de compra (Processo) aparecendo.'],
+      ['Proposta', 'O preço está na mesa.',
+       'ESTA É A ÚNICA ETAPA COM PORTÃO NO SISTEMA — as seis condições abaixo.',
+       'Consenso do grupo e os riscos dele endereçados.'],
+      ['Validação', 'O cliente está checando internamente — jurídico, compras, alçada.',
+       'Decisor econômico mapeado. Sem ele, o app marca falso avançado.',
+       'Processo comprovado: você sabe o caminho exato até a assinatura.'],
+      ['Fechamento', 'Falta a assinatura.',
+       'Consenso e Risco resolvidos, ou o negócio volta.',
+       'O desfecho registrado — é ele que congela a foto das oito e alimenta o Aprendizado.']
+    ].map(function (e) {
+      return '<tr><td class="rotulo-manual"><strong>' + esc(e[0]) + '</strong>' +
+        '<span class="tiny muted">' + esc(e[1]) + '</span></td>' +
+        '<td><span class="tiny muted"><strong>Para estar aqui de verdade:</strong> ' + esc(e[2]) + '</span>' +
+        '<span class="tiny muted"><strong>Para sair daqui:</strong> ' + esc(e[3]) + '</span></td></tr>';
+    }).join('');
+
+    const gate = P.GATES_PROPOSTA.map(function (g) {
+      const d = P.DIMENSOES.filter(function (x) { return x.id === g.dim; })[0];
+      return '<tr><td class="rotulo-manual"><strong>' + esc(d ? d.nome : g.dim) + '</strong></td>' +
+        '<td class="nowrap"><strong>' + g.min + '</strong> ou mais</td>' +
+        '<td>' + esc(d ? d.niveis[g.min] : '') + '</td></tr>';
+    }).join('');
+    const fora = P.DIMENSOES.filter(function (d) {
+      return !P.GATES_PROPOSTA.some(function (g) { return g.dim === d.id; });
+    }).map(function (d) { return d.nome; }).join(' e ');
+
+    return '<div class="card" id="m-etapas"><h2>O que cada etapa pede</h2>' +
+
+      '<div class="aviso">Uma verdade que o manual precisa dizer antes da tabela: <strong>o app não impede ' +
+      'você de arrastar um cartão para onde quiser</strong>. Etapa é onde você anotou; decisão é onde o ' +
+      'cliente está. Só existe uma trava no sistema inteiro, e é a da Proposta — e mesmo ela não bloqueia: ' +
+      'ela denuncia, marcando o negócio como <strong>Falso avançado</strong>. A tabela abaixo é o que ' +
+      'costuma ser verdade em cada etapa quando o negócio é real.</div>' +
+
+      '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' + etapas + '</tbody></table></div>' +
+
+      '<h3>O portão da proposta — as seis condições</h3>' +
+      '<p class="small">A proposta é consequência da qualificação, não ferramenta de descoberta. O app ' +
+      'chama de <strong>Prontidão</strong> o percentual destas seis condições cumpridas, e ela aparece no ' +
+      'painel e no cockpit.</p>' +
+      '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' + gate + '</tbody></table></div>' +
+      '<p class="small" style="margin-top:10px">Repare em quem <strong>não</strong> está no portão: ' +
+      esc(fora) + '. Não é esquecimento — essas duas amadurecem <em>durante</em> a proposta, e exigi-las ' +
+      'antes travaria negócio bom. Mas elas são o que decide na Validação: negócio que chega ali sem ' +
+      'consenso e com risco em aberto é o que some do forecast na última semana.</p>' +
+
+      '<h3>Depois da proposta, três coisas fazem o app gritar</h3>' +
+      '<p class="small">Estando em Proposta ou adiante, qualquer uma destas marca o negócio como ' +
+      '<strong>Falso avançado</strong> — que é o maior destruidor de previsão de vendas:</p>' +
+      '<ul class="limpa-manual">' +
+      '<li>IAD abaixo de <strong>11</strong>;</li>' +
+      '<li>o portão acima <strong>não liberado</strong>;</li>' +
+      '<li>nenhum <strong>decisor econômico</strong> mapeado no grupo comprador.</li>' +
+      '</ul>' +
+      '</div>';
+  }
+
+  function manualDasFaixas() {
+    const evid = P.FAIXAS_EVIDENCIA.map(function (f, i) {
+      const de = i === 0 ? 0 : P.FAIXAS_EVIDENCIA[i - 1].max + 1;
+      const ate = f.max === Infinity ? ' dias ou mais' : ' a ' + f.max + ' dias';
+      return '<tr><td class="rotulo-manual"><span class="pill ' + f.classe + '">' + esc(f.rotulo) + '</span></td>' +
+        '<td class="nowrap">' + de + ate + '</td>' +
+        '<td>' + esc([
+          'O cliente se moveu esta semana. É o ritmo de quem fecha.',
+          'Passou uma semana sem sinal dele. Ainda não é problema — é a hora de provocar.',
+          'Duas semanas ou mais em silêncio. O negócio está saindo da mão sem ninguém perceber.',
+          'Mais de um mês. O app chama de Zumbi. Requalifique com uma tentativa clara, ou encerre por inação — negócio parado no funil é previsão falsa.'
+        ][i]) + '</td></tr>';
+    }).join('');
+
+    return '<div class="card" id="m-faixas"><h2>O que o número do IAD diz</h2>' +
+
+      '<p class="small">De 0 a 16. E o sistema tem <strong>um único limiar</strong>, não uma escala de ' +
+      'cores: <strong>11</strong>. Abaixo dele a decisão está sendo formada; a partir dele ela está ' +
+      'madura. Tudo o mais que o app classifica cruza esse 11 com outras duas coisas — há quanto tempo ' +
+      'o cliente não se move, e quanto do grupo comprador você tem mapeado.</p>' +
+
+      '<div class="escada-manual escada-iad">' +
+      '<div><span class="faixa-iad f0">0–5</span><div><strong>Você ainda não sabe se existe negócio</strong>' +
+      '<span class="tiny muted">Uma ou duas decisões com sinal fraco. Aqui o trabalho é diagnóstico: descobrir ' +
+      'se o cliente reconhece um problema. Um valor grande com IAD 3 não é pipeline, é esperança.</span></div></div>' +
+      '<div><span class="faixa-iad f1">6–10</span><div><strong>Decisão em construção</strong>' +
+      '<span class="tiny muted">O problema está reconhecido e algo mais andou. É a faixa mais comum e a mais ' +
+      'traiçoeira: parece que está caminhando, e falta o que decide. Olhe qual é a primeira lacuna e ataque só ela.</span></div></div>' +
+      '<div><span class="faixa-iad f2">11–13</span><div><strong>Decisão madura — dá para contar no forecast</strong>' +
+      '<span class="tiny muted">É o limiar do sistema. A partir daqui, se o cliente se moveu nos últimos 14 dias e ' +
+      'metade dos papéis críticos está mapeada, o app chama de <strong>Negócio real</strong>. Antes da proposta, ' +
+      'chama de <strong>Oculto promissor</strong> — e esse é o achado mais valioso do pipeline: está mais maduro ' +
+      'do que a etapa mostra, acelere.</span></div></div>' +
+      '<div><span class="faixa-iad f3">14–16</span><div><strong>Comprovado quase por inteiro</strong>' +
+      '<span class="tiny muted">Raro, e quando acontece o que falta costuma não ser decisão: é prazo, alçada ou ' +
+      'assinatura. Se um negócio está em 15 há semanas, o problema não está nas oito — está no Processo, ' +
+      'ou em alguém que ninguém mapeou.</span></div></div>' +
+      '</div>' +
+
+      '<div class="aviso" style="margin-top:14px"><strong>O número sozinho não classifica nada.</strong> ' +
+      'Um negócio com IAD 14 e quarenta dias de silêncio é <strong>Zumbi</strong>, não é real — a regra do ' +
+      'tempo vence todas as outras. É por isso que a tela mostra sempre os três juntos: o índice, os dias ' +
+      'sem evidência e a cobertura do grupo.</div>' +
+
+      '<h3>A segunda régua: há quanto tempo o cliente não se move</h3>' +
+      '<p class="small">O relógio conta desde a <strong>última evidência do cliente</strong> — e não para ' +
+      'porque você mandou e-mail. Atividade nossa não zera contador, por definição.</p>' +
+      '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' + evid + '</tbody></table></div>' +
+
+      '<h3>A terceira: cobertura do grupo comprador</h3>' +
+      '<p class="small">Percentual dos papéis críticos que você tem mapeado e com relacionamento. ' +
+      '<strong>50% ou mais</strong> é uma das três condições de Negócio real. E há um alerta que vale por ' +
+      'si: venda que depende de <strong>uma pessoa só</strong> é o maior risco silencioso do funil — se ' +
+      'ela sair da empresa, o negócio sai junto.</p>' +
+      '</div>';
+  }
+
   function playbook() {
     const dims = P.DIMENSOES.map(function (d) {
       const canais = P.CANAIS.map(function (c) {
@@ -3191,6 +3424,9 @@
       '<p class="small muted">Não conta como avanço:</p><div class="row">' + naoContam + '</div></div>' +
 
       manualDasOito() +
+      manualDoAvanco() +
+      manualDasFaixas() +
+      manualDasEtapas() +
       '<div class="card" id="m-tarefa"><h2>Tudo entra por tarefa</h2>' +
       '<p class="small">Uma evidência nunca aparece do nada: ela vem de uma conversa, uma visita, ' +
       'um e-mail. Por isso há um botão só — <strong>+ Tarefa</strong> — e a tarefa é o lugar onde ' +
