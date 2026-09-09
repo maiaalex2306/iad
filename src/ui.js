@@ -121,7 +121,7 @@
          descobriu sobre a empresa. Fica no meio dos campos, e não no fim,
          porque é ali que a pergunta "esta empresa existe?" aparece. */
       if (c.tipo === 'slot') {
-        return '<div data-' + c.slot + '></div>';
+        return '<div data-slot-campos data-' + c.slot + '></div>';
       }
       if (c.tipo === 'select') {
         return '<label class="campo' + (c.largura === 'metade' ? ' meia' : '') + '"><span>' + esc(c.rotulo) + '</span><select name="' + c.id + '">' +
@@ -227,6 +227,20 @@
             ? numeroDigitado(el.value)
             : el.value.trim();
         });
+        /* Campos que nasceram depois, dentro de um slot.
+
+           A coleta percorre a lista de campos declarados, e um select criado
+           pelo aoMontar não está nessa lista — então ele aparecia na tela,
+           aceitava a escolha e chegava vazio em quem valida. Foi assim que
+           "Escolha o motivo" apareceu para quem tinha acabado de escolher o
+           motivo. Só entra o que ninguém declarou: campo declarado continua
+           mandando, com a conversão de moeda e número que ele tem. */
+        dlg.querySelectorAll('[data-slot-campos] [name], .campo [name]').forEach(function (el) {
+          const nome = el.getAttribute('name');
+          if (!nome || Object.prototype.hasOwnProperty.call(dados, nome)) return;
+          dados[nome] = el.type === 'checkbox' ? el.checked : String(el.value || '').trim();
+        });
+
         aoConfirmar(dados, dlg.documentosIA || [], dlg.contatosIA || [], dlg.empresaNovaIA || null,
           dlg.materialIA || '');
       } else if (aoCancelar && dlg.returnValue !== 'extra') {
