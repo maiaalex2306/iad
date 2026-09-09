@@ -801,8 +801,17 @@ function recusouPorTamanho(status: number, corpo: string): boolean {
 function tetoDeSaida(tipo: string, quantos = 0): number {
   if (tipo === 'reuniao' || tipo === 'notas') return 8000;
   if (tipo === 'segmentos') {
+    /* 260 por lead era a conta do texto de saída, e estava certa para um
+       modelo que só escreve. Os gpt-oss não são: eles gastam tokens
+       raciocinando ANTES de escrever, e esse gasto sai do mesmo teto. Com
+       1040 para quatro leads, o modelo esgotava o orçamento pensando e
+       devolvia geração vazia — o provedor respondia json_validate_failed, que
+       parece erro de prompt e não é.
+
+       500 por lead com piso de 2000 cobre o raciocínio e ainda fica muito
+       abaixo dos 8000 fixos que reservavam o minuto inteiro. */
     if (!quantos) return 4000;
-    return Math.min(Math.max(quantos * 260, 700), 4000);
+    return Math.min(Math.max(quantos * 500, 2000), 5000);
   }
   if (tipo === 'plano' || tipo === 'desenvolvimento') return 4000;
   return 2500;
@@ -867,7 +876,20 @@ async function chamarIA(sistema: string, usuario: string, teto: number, rapido =
   let comJson = true;
   if (r.status === 400) {
     const aviso = await r.clone().text().catch(() => '');
-    if (/response_format|json_object|json mode/i.test(aviso)) { comJson = false; r = await pedir(false); }
+
+    /* Dois 400 diferentes chegam pelo mesmo caminho e pedem a mesma saída.
+       Um é o modelo que não aceita o parâmetro de modo JSON. O outro é
+       json_validate_failed com failed_generation vazio: o modelo aceitou o
+       modo, gastou o teto raciocinando e não escreveu nada — e o provedor
+       chama isso de "ajuste o seu prompt", que manda procurar no lugar
+       errado. Nos dois casos, refazer sem o modo JSON resolve: a instrução
+       já pede JSON, e o que vem torto o validador descarta. */
+    const modoRecusado = /response_format|json_object|json mode/i.test(aviso);
+    const geracaoVazia = /json_validate_failed/i.test(aviso);
+    if (modoRecusado || geracaoVazia) {
+      comJson = false;
+      r = await pedir(false);
+    }
   }
 
   /* 404 no endpoint de chat quer dizer uma coisa só: o modelo pedido não
