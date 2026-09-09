@@ -2788,9 +2788,17 @@
             leads = (leads || []).filter(function (l) {
               return escolhidos.indexOf(l) === -1;
             });
-            alert(feitos.length === 1
-              ? '1 oportunidade criada a partir do Linked Helper.'
-              : feitos.length + ' oportunidades criadas a partir do Linked Helper.');
+            /* Dizer "5 oportunidades criadas" quando três eram interação nova
+               de negócio que já existia é dizer o número errado — e o vendedor
+               vai procurar no pipeline cinco cartões que não estão lá. */
+            const criados = feitos.filter(function (f) { return f.novo; }).length;
+            const atualizados = feitos.length - criados;
+            const contatosNovos = feitos.filter(function (f) { return f.contatoNovo && !f.novo; }).length;
+            alert([
+              criados ? (criados === 1 ? '1 oportunidade criada' : criados + ' oportunidades criadas') : '',
+              atualizados ? (atualizados === 1 ? '1 oportunidade atualizada' : atualizados + ' oportunidades atualizadas') : '',
+              contatosNovos ? (contatosNovos === 1 ? '1 contato novo no buying group' : contatosNovos + ' contatos novos no buying group') : ''
+            ].filter(Boolean).join('\n') + '\n\nOrigem: Linked Helper.');
             location.hash = '#/pipeline';
           }
           render();
@@ -2895,7 +2903,7 @@
            ela pelo lote ou uma por uma. A tarefa de fazer o contato nasce nos
            dois caminhos: sem ela o cartão fica na Conexão sem data marcada,
            que é como nasce negócio zumbi. */
-        const tarefa = tarefaDoLead(op, contato, lead);
+        const tarefa = tarefaDoLead(op, contato, lead, true, true);
 
         /* O lead é de quem prospectou, não de quem clicou em importar. */
         atribuirAoOperador(lead, [Store.conta(contaId), contato, op, tarefa]);
@@ -3430,16 +3438,122 @@
     pintar();
   }
 
-  /* Um lead vira três registros. Sem janela e sem digitação: o que não veio
-     do LinkedIn fica em branco para o vendedor completar depois — melhor um
-     campo vazio do que um palpite virando fato no painel. */
+  /* ---------- reconciliação: o mesmo mundo chegando duas vezes ----------
+
+     A ponte não manda "o lead"; ela manda uma INTERAÇÃO. A mesma pessoa
+     responde de novo na semana seguinte, um colega dela responde a mesma
+     campanha, a mesma pessoa cai numa campanha nova — e cada uma dessas
+     coisas chega como um registro novo, com id novo, que a ponte nunca viu
+     marcado como processado.
+
+     Enquanto isto aqui criava tudo sempre, quatro leituras da mesma empresa
+     deixavam quatro contatos, quatro oportunidades e quatro tarefas. E a
+     conta piorava sozinha: a oportunidade nasce com todos os contatos da
+     conta vinculados, então a quarta cópia entrava com o buying group cheio
+     de cópias da mesma pessoa, e a cobertura de papéis passava a mentir.
+
+     Então antes de criar qualquer coisa, procura-se o que já existe. */
+
+  function achatarNome(x) {
+    return String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  }
+
+  /* O perfil do LinkedIn é o identificador mais confiável que a ponte manda:
+     é único, é estável e vem em quase todo registro. O e-mail vem menos e o
+     nome é o último recurso — homônimo dentro da mesma empresa é raro, mas
+     "Marcos" e "Marcos Silva" na mesma conta são a mesma pessoa. */
+  function perfilLinkedin(url) {
+    const m = /linkedin\.com\/in\/([^/?#]+)/i.exec(String(url || ''));
+    return m ? m[1].toLowerCase() : '';
+  }
+
+  function contatoJaExistente(contaId, lead) {
+    const lista = Store.contatosDaConta(contaId);
+    if (!lista.length) return null;
+
+    const perfil = perfilLinkedin(lead.linkedin);
+    if (perfil) {
+      const porPerfil = lista.filter(function (c) { return perfilLinkedin(c.linkedin) === perfil; })[0];
+      if (porPerfil) return porPerfil;
+    }
+    const email = String(lead.email || '').trim().toLowerCase();
+    if (email) {
+      const porEmail = lista.filter(function (c) {
+        return String(c.email || '').trim().toLowerCase() === email;
+      })[0];
+      if (porEmail) return porEmail;
+    }
+    const nome = achatarNome(lead.nome);
+    if (!nome) return null;
+    return lista.filter(function (c) {
+      const dele = achatarNome(c.nome);
+      if (!dele) return false;
+      return dele === nome || dele.indexOf(nome + ' ') === 0 || nome.indexOf(dele + ' ') === 0;
+    })[0] || null;
+  }
+
+  /* O domínio identifica a empresa melhor que o nome: "Envu" e "Envu Brasil"
+     são a mesma, "Alpha Engenharia" e "Alpha Alimentos" não são. O nome fica
+     como reserva, porque muito registro vem sem site. */
+  function contaJaExistente(lead) {
+    const contas = Store.dados().contas;
+    const dominio = String(lead.empresaDominio || lead.empresaSite || '')
+      .replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '').toLowerCase();
+    if (dominio) {
+      const porSite = contas.filter(function (c) {
+        const dela = String(c.site || '').replace(/^https?:\/\//, '').replace(/^www\./, '')
+          .replace(/\/.*$/, '').toLowerCase();
+        return dela && dela === dominio;
+      })[0];
+      if (porSite) return porSite;
+    }
+    if (!lead.empresa) return null;
+    const alvo = achatarNome(lead.empresa);
+    if (!alvo) return null;
+    return contas.filter(function (c) {
+      const dela = achatarNome(c.nome);
+      if (!dela) return false;
+      return dela === alvo || dela.indexOf(alvo) === 0 || alvo.indexOf(dela) === 0;
+    })[0] || null;
+  }
+
+  /* Uma oportunidade por empresa e campanha, enquanto ela estiver aberta.
+     Campanha diferente é abordagem diferente, com outra promessa e outro
+     ciclo: vira negócio novo. Negócio já fechado também não recebe interação
+     nova — o desfecho congelou a foto da decisão, e mexer nele reescreveria
+     um resultado já apurado. */
+  function oportunidadeJaExistente(contaId, lead) {
+    const campanha = achatarNome(lead.campanha);
+    return Store.dados().oportunidades.filter(function (o) {
+      if (o.contaId !== contaId || o.desfecho) return false;
+      if (o.origem !== 'Linked Helper') return false;
+      return achatarNome(o.campanha) === campanha;
+    })[0] || null;
+  }
+
+  /* O Linked Helper reenvia a conversa inteira a cada interação, não só a
+     mensagem nova. Regravar tudo encheria o histórico de repetição e faria a
+     mesma frase do cliente virar evidência três vezes — IAD subindo porque a
+     ponte falou duas vezes, que é o oposto do método. */
+  function mensagensNovas(op, conversa) {
+    const jaEscrito = (op.eventos || []).filter(function (e) {
+      return e.tipo === 'sistema' && /Conversa no LinkedIn/.test(e.titulo || '');
+    }).map(function (e) { return e.detalhe || ''; }).join('\n');
+    if (!jaEscrito) return conversa;
+    return conversa.filter(function (m) { return jaEscrito.indexOf(m.texto) === -1; });
+  }
+
+  /* Um lead vira três registros quando é gente nova, e vira uma atualização
+     quando não é. Sem janela e sem digitação: o que não veio do LinkedIn fica
+     em branco para o vendedor completar depois — melhor um campo vazio do que
+     um palpite virando fato no painel. */
   function importarUmLead(lead, segmento) {
     const nome = lead.empresa || ('Contato ' + (lead.nome || 'do LinkedIn'));
     if (segmento) Store.criarNoCatalogo('segmentos', { nome: segmento });
 
-    let conta = Store.dados().contas.find(function (c) {
-      return lead.empresa && c.nome.toLowerCase().indexOf(lead.empresa.toLowerCase().slice(0, 12)) !== -1;
-    });
+    /* ---------- a empresa ---------- */
+    let conta = contaJaExistente(lead);
     if (!conta) {
       conta = Store.criarConta({
         nome: nome, segmento: segmento || '',
@@ -3450,49 +3564,79 @@
         descricao: lead.empresaDescricao || ''
       });
     } else {
-      if (segmento && !conta.segmento) conta.segmento = segmento;   /* conta antiga sem segmento ganha o daqui */
+      /* Só o que está vazio. O vendedor que corrigiu o nome da empresa ou
+         escolheu outro segmento não pode ver a próxima leitura desfazer
+         isso — a ponte não sabe mais que ele. */
+      if (segmento && !conta.segmento) conta.segmento = segmento;
       if (!conta.site && lead.empresaSite) conta.site = lead.empresaSite;
       if (!conta.cidade && lead.empresaCidade) conta.cidade = lead.empresaCidade;
       if (!conta.descricao && lead.empresaDescricao) conta.descricao = lead.empresaDescricao;
     }
 
-    const contato = Store.criarContato({
-      contaId: conta.id, nome: lead.nome || 'Contato do LinkedIn', cargo: lead.cargo || '',
-      /* O papel sai do cargo, e é ele que a cobertura do grupo comprador conta.
-         Deixar todo mundo em "Usuário" fazia toda conta importada nascer com
-         0% dos papéis críticos — alarme que não distingue nada. */
-      papel: lead.papelSugerido || 'Usuário',
-      linkedin: lead.linkedin || '', email: lead.email || '', telefone: lead.telefone || '',
-      sentimento: lead.resposta ? 'neutro' : 'nao_acessado', canalPreferido: 'LinkedIn'
-    });
+    /* ---------- o contato ---------- */
+    let contato = contatoJaExistente(conta.id, lead);
+    const ehContatoNovo = !contato;
+    if (!contato) {
+      contato = Store.criarContato({
+        contaId: conta.id, nome: lead.nome || 'Contato do LinkedIn', cargo: lead.cargo || '',
+        /* O papel sai do cargo, e é ele que a cobertura do grupo comprador conta.
+           Deixar todo mundo em "Usuário" fazia toda conta importada nascer com
+           0% dos papéis críticos — alarme que não distingue nada. */
+        papel: lead.papelSugerido || 'Usuário',
+        linkedin: lead.linkedin || '', email: lead.email || '', telefone: lead.telefone || '',
+        sentimento: lead.resposta ? 'neutro' : 'nao_acessado', canalPreferido: 'LinkedIn'
+      });
+    } else {
+      completarEmBranco(contato, {
+        cargo: lead.cargo, linkedin: lead.linkedin, email: lead.email, telefone: lead.telefone
+      });
+      /* "Usuário" e "não acessado" são o padrão de fábrica, não uma escolha:
+         podem ser substituídos. Papel que o vendedor mudou à mão, não. */
+      if (lead.papelSugerido && contato.papel === 'Usuário') contato.papel = lead.papelSugerido;
+      if (lead.resposta && contato.sentimento === 'nao_acessado') contato.sentimento = 'neutro';
+      Store.salvar();
+    }
 
-    /* Quem já respondeu passou da prospecção: dizer que está em Prospecção
-       seria etapa mais atrasada que a realidade, e o IAD compara as duas. */
-    const op = Store.criarOportunidade({
-      contaId: conta.id,
-      titulo: (lead.empresa ? lead.empresa : (lead.nome || 'LinkedIn')) + ' — origem LH',
-      etapa: lead.resposta ? 'Conexão' : 'Prospecção',
-      /* Com várias SDRs mandando prospect, saber de quem veio e de qual
-         campanha é o que permite ler o resultado depois, por pessoa e por
-         campanha. Fica em campo próprio, não perdido dentro das notas. */
-      origem: 'Linked Helper',
-      campanha: lead.campanha || '',
-      sdr: lead.operador || '',
-      sdrEmail: lead.operadorEmail || '',
-      notas: notasDoLead(lead)
-    });
+    /* ---------- a oportunidade ---------- */
+    let op = oportunidadeJaExistente(conta.id, lead);
+    const ehNegocioNovo = !op;
+    if (!op) {
+      /* Quem já respondeu passou da prospecção: dizer que está em Prospecção
+         seria etapa mais atrasada que a realidade, e o IAD compara as duas. */
+      op = Store.criarOportunidade({
+        contaId: conta.id,
+        titulo: (lead.empresa ? lead.empresa : (lead.nome || 'LinkedIn')) + ' — origem LH',
+        etapa: lead.resposta ? 'Conexão' : 'Prospecção',
+        /* Com várias SDRs mandando prospect, saber de quem veio e de qual
+           campanha é o que permite ler o resultado depois, por pessoa e por
+           campanha. Fica em campo próprio, não perdido dentro das notas. */
+        origem: 'Linked Helper',
+        campanha: lead.campanha || '',
+        sdr: lead.operador || '',
+        sdrEmail: lead.operadorEmail || '',
+        notas: notasDoLead(lead)
+      });
+    } else if (lead.resposta && op.etapa === 'Prospecção') {
+      /* Da primeira vez ninguém tinha respondido. Agora respondeu: a etapa
+         estava atrás da realidade, e é exatamente essa diferença que o
+         método chama de negócio escondido. */
+      Store.atualizarOportunidade(op.id, { etapa: 'Conexão' });
+    }
+
     /* A oportunidade nasce com os contatos da conta já vinculados. Empurrar o
-       recém-criado de novo punha a mesma pessoa duas vezes no buying group. */
+       recém-criado de novo punha a mesma pessoa duas vezes no buying group.
+       No caso do colega que respondeu depois, é aqui que ele entra. */
     Store.vincularStakeholder(op, contato.id);
     Store.salvar();
 
-    registrarConversaDoLead(op, contato, lead);
-    if (lead.insight) {
+    const falasNovas = registrarConversaDoLead(op, contato, lead);
+    if (lead.insight && (!op.insight || !op.insight.texto)) {
       Store.definirInsight(op.id, { texto: lead.insight, estado: 'formulado' });
     }
-    const tarefa = tarefaDoLead(op, contato, lead);
+    const tarefa = tarefaDoLead(op, contato, lead,
+      ehNegocioNovo || ehContatoNovo || falasNovas.length, ehNegocioNovo);
     atribuirAoOperador(lead, [conta, contato, op, tarefa]);
-    return op;
+    return { op: op, novo: ehNegocioNovo, contatoNovo: ehContatoNovo, falas: falasNovas.length };
   }
 
   /* Empresa que veio do LH é empresa com quem ninguém falou ainda. A importação
@@ -3503,11 +3647,40 @@
      Então toda importação também abre a tarefa de fazer o contato, vencendo no
      próprio dia da importação, com a conversa do LinkedIn escrita dentro dela.
      Escrita dentro: quem for ligar não devia ter que abrir o negócio e caçar o
-     histórico para descobrir o que a SDR prometeu antes de discar. */
-  function tarefaDoLead(op, contato, lead) {
+     histórico para descobrir o que a SDR prometeu antes de discar.
+
+     Quando a leitura é a segunda de um negócio que já existe, a regra muda de
+     forma e não de intenção. Abrir uma tarefa idêntica a cada interação daria
+     a mesma pilha de tarefa repetida que a lista de hoje tem — e a lista de
+     tarefas repetida é lista que ninguém abre. Então: se a tarefa de contato
+     ainda está aberta, ela é reescrita com a conversa nova, porque quem for
+     ligar precisa da última fala e não da primeira. Se ela já foi feita e o
+     cliente voltou a falar, aí sim nasce uma nova — resposta do cliente sem
+     data marcada para responder é o começo do negócio zumbi. */
+  function tarefaDoLead(op, contato, lead, temNovidade, ehNegocioNovo) {
     Store.criarNoCatalogo('tiposTarefa', { nome: 'Apresentação' });
+
+    const aberta = Store.dados().tarefas.filter(function (t) {
+      return t.oportunidadeId === op.id && t.status === 'aberta' &&
+        /LH/.test(t.titulo || '');
+    })[0];
+
+    if (aberta) {
+      if (!temNovidade) return aberta;
+      aberta.descricao = descricaoDaTarefaDoLead(op, contato, lead);
+      /* O contato da tarefa passa a ser quem falou por último: é com ele que
+         a conversa está de pé. */
+      aberta.contatoId = contato ? contato.id : aberta.contatoId;
+      Store.salvar();
+      return aberta;
+    }
+
+    if (!temNovidade) return null;
+
     return Store.criarTarefa({
-      titulo: 'Empresa Importada do LH - Fazer Contato',
+      titulo: ehNegocioNovo
+        ? 'Empresa Importada do LH - Fazer Contato'
+        : 'Nova interação no LH - Responder',
       tipo: 'Apresentação',
       oportunidadeId: op.id,
       contatoId: contato ? contato.id : null,
@@ -3613,8 +3786,12 @@
   }
 
   function registrarTranscricaoDoLead(op, lead) {
-    const conversa = falasDoLead(lead);
+    const conversa = mensagensNovas(op, falasDoLead(lead));
     if (!conversa.length) return conversa;
+
+    const jaTinhaConversa = (op.eventos || []).some(function (e) {
+      return e.tipo === 'sistema' && /Conversa no LinkedIn/.test(e.titulo || '');
+    });
 
     const transcricao = conversa.map(function (m) {
       return (m.quando ? U.data(m.quando) + ' · ' : '') +
@@ -3624,7 +3801,8 @@
     op.eventos.unshift({
       id: Store.uid('evt'), tipo: 'sistema',
       data: conversa[conversa.length - 1].quando || Store.hoje(),
-      titulo: 'Conversa no LinkedIn com ' + (lead.operador || 'a SDR') +
+      titulo: (jaTinhaConversa ? 'Continuação da conversa no LinkedIn com ' : 'Conversa no LinkedIn com ') +
+        (lead.operador || 'a SDR') +
         ' (' + conversa.length + (conversa.length === 1 ? ' mensagem' : ' mensagens') + ')',
       detalhe: transcricao
     });
@@ -3634,11 +3812,11 @@
 
   function registrarConversaDoLead(op, contato, lead) {
     const conversa = registrarTranscricaoDoLead(op, lead);
-    if (!conversa.length) return;
+    if (!conversa.length) return conversa;
 
     const dele = conversa.filter(function (m) { return !m.nosso; });
     const ultima = dele[dele.length - 1];
-    if (!ultima) return;
+    if (!ultima) return conversa;
 
     Store.registrarEvento(op.id, {
       tipo: 'decision', titulo: ultima.texto.slice(0, 160),
@@ -3646,6 +3824,7 @@
       forca: 'relato', contatoId: contato.id, canal: 'LinkedIn',
       data: ultima.quando || Store.hoje()
     });
+    return conversa;
   }
 
   /* O lead pertence a quem prospectou, não a quem clicou em importar. Só
