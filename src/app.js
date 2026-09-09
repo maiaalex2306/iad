@@ -2163,42 +2163,6 @@
       });
     },
 
-    editarTarefa: function (id) {
-      const t = Store.tarefa(id);
-      if (!t) return;
-      const op = t.oportunidadeId ? Store.oportunidade(t.oportunidadeId) : null;
-      U.formulario('Editar tarefa', [
-        { id: 'titulo', rotulo: 'O que é', padrao: t.titulo },
-        { id: 'tipo', rotulo: 'Canal', tipo: 'select', padrao: t.tipo,
-          opcoes: Store.nomesDoCatalogo('tiposTarefa').map(function (n) { return { valor: n, rotulo: n }; }) },
-        { id: 'decisaoAlvo', rotulo: 'Decisão que pretende provocar', tipo: 'select', padrao: t.decisaoAlvo || '',
-          opcoes: [{ valor: '', rotulo: '— nenhuma —' }].concat(P.DIMENSOES.map(function (d) {
-            return { valor: d.id, rotulo: d.nome };
-          })) },
-        { id: 'vencimento', rotulo: 'Vencimento', tipo: 'date', padrao: t.vencimento },
-        { id: 'hora', rotulo: 'Hora (opcional)', tipo: 'time', padrao: t.hora || '' },
-        { id: 'contatoId', rotulo: 'Com quem', tipo: 'select', padrao: t.contatoId || '',
-          opcoes: [{ valor: '', rotulo: '— ninguém em especial —' }].concat(
-            (op ? Store.contatosDaConta(op.contaId) : []).map(function (c) {
-              return { valor: c.id, rotulo: c.nome + (c.cargo ? ' — ' + c.cargo : '') };
-            })) },
-        { id: 'descricao', rotulo: 'Descrição', tipo: 'textarea', padrao: t.descricao || '' }
-      ], {}, function (d) {
-        if (!d.titulo) return;
-        /* O vencimento sai por adiarTarefa quando muda, e não por atualização
-           direta: é ele que conta o adiamento. Uma tarefa adiada três vezes é
-           um dado sobre o negócio, e apagá-lo esconderia o que mais importa. */
-        if (d.vencimento && d.vencimento !== t.vencimento) {
-          Store.adiarTarefa(id, d.vencimento, 'Ajustado ao editar a tarefa');
-        }
-        Store.atualizarTarefa(id, {
-          titulo: d.titulo, tipo: d.tipo, decisaoAlvo: d.decisaoAlvo,
-          hora: d.hora || '', contatoId: d.contatoId || null, descricao: d.descricao || ''
-        });
-        render();
-      });
-    },
-
     /* Reabrir existe porque "concluída" é um fato sobre o mundo, e às vezes o
        fato está errado — clicou no quadro errado, a reunião foi desmarcada
        depois de marcada como feita. Sem reabrir, a saída é excluir, que apaga
@@ -2280,6 +2244,7 @@
         return String(a.nome).localeCompare(String(b.nome));
       });
       const contaAtual = atual ? atual.contaId : (contas[0] ? contas[0].id : '');
+      const aberta = t.status === 'aberta';
 
       U.formulario('Editar tarefa', [
         /* Mudar a tarefa de negociação é mudar de conta: as duas perguntas
@@ -2301,7 +2266,17 @@
         { id: 'contatoEmail', rotulo: 'E-mail', largura: 'metade' },
         { id: 'contatoTelefone', rotulo: 'Telefone / WhatsApp', largura: 'metade' },
 
+        /* A situação estava só na lista, nunca no formulário. Quem abria a
+           tarefa por dentro de uma decisão — o "+ Tarefa" de "O que falta" —
+           não tinha como saber se ela estava aberta nem como concluí-la, e o
+           mesmo objeto tinha duas telas diferentes conforme a porta de
+           entrada. Agora a porta é uma só. */
         { tipo: 'secao', rotulo: 'A tarefa' },
+        { tipo: 'aviso', rotulo: aberta
+          ? 'Situação: a fazer. Para registrar o que aconteceu e deixar a IA reler as oito decisões, ' +
+            'use Concluir, no rodapé.'
+          : 'Situação: concluída em ' + U.data(t.concluidaEm || t.vencimento) +
+            '. Use Reabrir, no rodapé, se ela foi encerrada por engano.' },
         { id: 'titulo', rotulo: 'Assunto da tarefa', padrao: t.titulo },
         { id: 'descricao', rotulo: 'Descrição', tipo: 'textarea', padrao: t.descricao || '' },
         { id: 'tipo', rotulo: 'Como (canal)', tipo: 'select', largura: 'metade',
@@ -2343,6 +2318,24 @@
         const comQuem = dlg.querySelector('[name="contatoId"]');
         if (comQuem && t.contatoId) comQuem.value = t.contatoId;
       }, null, [
+        /* Concluir sai daqui pelo mesmo caminho de todo lugar: o relato, a IA
+           lendo, as oito relidas. Ter uma segunda forma de encerrar tarefa
+           seria ter uma segunda forma de pontuar, e aí as notas passam a
+           depender de por onde a pessoa entrou. */
+        (aberta
+          ? { rotulo: 'Concluir', classe: 'alt', acao: function (dlg) {
+              if (!t.oportunidadeId) {
+                alert('Esta tarefa não está ligada a nenhuma negociação. Escolha a negociação e salve antes de concluir.');
+                return false;
+              }
+              /* Fecha esta janela antes de abrir a do relato. Empilhar dois
+                 modais deixa o de baixo capturando teclado e foco, e o Esc
+                 fecha o errado. */
+              dlg.close();
+              setTimeout(function () { App.concluirComRelato(t.oportunidadeId, id); }, 0);
+              return false;
+            } }
+          : { rotulo: 'Reabrir', classe: 'ghost', acao: function () { App.reabrirTarefa(id); } }),
         { rotulo: 'Excluir', classe: 'ghost', acao: function () {
           if (!U.confirmar('Excluir esta tarefa?')) return false;
           Store.excluirTarefa(id);
