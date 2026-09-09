@@ -19,6 +19,28 @@
 const PROVEDOR = (Deno.env.get('IA_PROVEDOR') || 'groq').toLowerCase();
 const CHAVE = Deno.env.get('IA_CHAVE') || '';
 const MODELO = Deno.env.get('IA_MODELO') || '';
+
+/* ---------- por que existem dois modelos ----------
+
+   Os pedidos desta função não são do mesmo tipo de trabalho, e tratá-los como
+   se fossem obriga a escolher errado num dos dois lados.
+
+   Classificar segmento é volume: vinte leads, quatro chamadas, texto curto por
+   lead, resposta em lista fechada. O que importa é caber no limite de tokens
+   por minuto do provedor — foi exatamente isso que estourou com o lote de
+   vinte. Um modelo pequeno e rápido faz bem e faz barato.
+
+   Ler uma ata de reunião e propor as oito notas é o oposto: um pedido por vez,
+   texto longo, e a resposta tem de apontar o trecho literal onde o cliente
+   disse cada coisa. Modelo pequeno erra isso — e errar aqui não aparece como
+   erro na tela, aparece como IAD baixo, que o vendedor lê como "o cliente não
+   avançou". É o pior tipo de defeito que este sistema pode ter.
+
+   Então: IA_MODELO é o modelo bom, usado para ler reunião, notas, plano e
+   desenvolvimento. IA_MODELO_RAPIDO é opcional e serve só a classificação de
+   segmentos. Sem o segundo, tudo usa o primeiro, que é o comportamento de
+   sempre. */
+const MODELO_RAPIDO = Deno.env.get('IA_MODELO_RAPIDO') || '';
 const URL_SUPABASE = Deno.env.get('SUPABASE_URL') || '';
 /* Formatos de chave novo e antigo, na mesma ordem do convite: o projeto pode
    estar em qualquer um dos dois, e IAD_CHAVE_PUBLICA é a única saída manual —
@@ -716,7 +738,9 @@ function tetoDeSaida(tipo: string): number {
   return 2500;
 }
 
-async function chamarIA(sistema: string, usuario: string, teto: number): Promise<string> {
+async function chamarIA(sistema: string, usuario: string, teto: number, rapido = false): Promise<string> {
+  const escolhido = (rapido && MODELO_RAPIDO) ? MODELO_RAPIDO : MODELO;
+
   if (PROVEDOR === 'anthropic') {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -728,19 +752,19 @@ async function chamarIA(sistema: string, usuario: string, teto: number): Promise
       body: JSON.stringify({
         /* Haiku porque a tarefa é extração curta e o custo por preenchimento
            fica na casa de um centavo. Trocável por IA_MODELO. */
-        model: MODELO || 'claude-haiku-4-5',
+        model: escolhido || 'claude-haiku-4-5',
         max_tokens: teto,
         system: sistema,
         messages: [{ role: 'user', content: usuario }]
       })
     });
-    if (!r.ok) throw new Error(await explicarRecusa(r, MODELO || 'claude-haiku-4-5'));
+    if (!r.ok) throw new Error(await explicarRecusa(r, escolhido || 'claude-haiku-4-5'));
     const j = await r.json();
     return (j?.content || []).map((b: { text?: string }) => b.text || '').join('');
   }
 
   /* Groq — API compatível com o formato OpenAI. */
-  const modelo = MODELO || 'llama-3.3-70b-versatile';
+  const modelo = escolhido || 'llama-3.3-70b-versatile';
 
   const pedir = (comJson: boolean) => {
     const corpo: Record<string, unknown> = {
@@ -1807,7 +1831,11 @@ Deno.serve(async (req: Request) => {
       entrada = texto + sites.join('');
     }
 
-    let bruto = await chamarIA(promptDe(tipo, ctx), entrada, tetoDeSaida(tipo));
+    /* Só a classificação de segmentos vai no modelo rápido. Reunião, notas,
+       plano e desenvolvimento continuam no modelo bom, sempre. */
+    const usaRapido = tipo === 'segmentos';
+
+    let bruto = await chamarIA(promptDe(tipo, ctx), entrada, tetoDeSaida(tipo), usaRapido);
     let json = lerJSON(bruto);
 
     /* Segunda passada para empresa, e só quando a primeira achou de quem se
@@ -1824,7 +1852,7 @@ Deno.serve(async (req: Request) => {
       if (nome) {
         const comBusca = await enriquecerConta(entrada, site, nome);
         if (comBusca !== entrada) {
-          const brutoDois = await chamarIA(promptDe(tipo, ctx), comBusca, tetoDeSaida(tipo));
+          const brutoDois = await chamarIA(promptDe(tipo, ctx), comBusca, tetoDeSaida(tipo), usaRapido);
           const jsonDois = lerJSON(brutoDois);
           /* O que a segunda achou vence onde a primeira estava vazia, e vence
              também no que é dado oficial — razão social, CNPJ e endereço saem

@@ -48,8 +48,30 @@ Ainda em **Edge Functions**, abra **Secrets** e adicione:
 | --- | --- |
 | `IA_CHAVE` | a chave que você copiou do Groq |
 
-Opcionais, só se um dia quiser trocar de provedor ou de modelo:
-`IA_PROVEDOR` (`groq` ou `anthropic`) e `IA_MODELO`.
+Opcionais: `IA_PROVEDOR` (`groq` ou `anthropic`), `IA_MODELO` e
+`IA_MODELO_RAPIDO`.
+
+**Sobre os dois modelos.** Os pedidos não são do mesmo tipo de trabalho.
+
+`IA_MODELO` é o modelo bom. Ele lê ata de reunião, propõe as oito notas,
+escreve o plano da semana. A resposta tem de apontar o trecho literal onde o
+cliente disse cada coisa, e modelo pequeno erra isso. Errar aqui não aparece
+como erro na tela: aparece como IAD baixo, que o vendedor lê como "o cliente
+não avançou".
+
+`IA_MODELO_RAPIDO` serve só à classificação de segmentos na importação do
+Linked Helper. Ali o trabalho é volume — vinte leads, texto curto por lead,
+resposta em lista fechada — e o que importa é caber no limite de tokens por
+minuto do provedor. Modelo pequeno faz bem e faz barato.
+
+Sem `IA_MODELO_RAPIDO`, tudo usa `IA_MODELO`.
+
+No Groq, uma combinação que funciona:
+
+| Nome | Valor |
+| --- | --- |
+| `IA_MODELO` | `llama-3.3-70b-versatile` |
+| `IA_MODELO_RAPIDO` | `llama-3.1-8b-instant` |
 
 `SUPABASE_URL` e `SUPABASE_ANON_KEY` já existem no ambiente — não crie.
 
