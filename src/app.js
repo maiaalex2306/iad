@@ -743,6 +743,7 @@
     const comEmpresa = lista.filter(function (l) { return l.empresa; });
     if (!comEmpresa.length) {
       espera.close(); espera.remove();
+      marcarContasCandidatas(lista);
       return App.revisarImportacao(lista, 'Nenhum lead veio com empresa identificada — não há o que classificar.');
     }
     espera.querySelector('h2').textContent = 'Classificando os segmentos…';
@@ -786,12 +787,22 @@
           if (achado.insight) l.insight = achado.insight;
         });
         espera.close(); espera.remove();
+        marcarContasCandidatas(lista);
         App.revisarImportacao(lista, r.motivo);
     }).catch(function (e) {
       espera.close(); espera.remove();
       alert(e.message);
     });
   }
+
+  /* Expostos só para os testes que dirigem o app de verdade. Reimplementar
+     estas regras no teste seria testar a cópia, não o app. */
+  const paraTestes = {
+    __contaCandidata: function (lead) { return contaCandidata(lead); },
+    __contaJaExistente: function (lead) { return contaJaExistente(lead); },
+    __oportunidadeJaExistente: function (contaId, lead) { return oportunidadeJaExistente(contaId, lead); },
+    __mesmoNomeDeEmpresa: function (a, b) { return mesmoNomeDeEmpresa(a, b); }
+  };
 
   const App = {
     ir: function (hash) { location.hash = hash; },
@@ -4138,23 +4149,52 @@
       .replace(/\/.*$/, '').trim().toLowerCase();
   }
 
+  /* Palavras que não distinguem empresa nenhuma. "Envu" e "Envu Brasil Ltda"
+     são a mesma; "Alfa" e "Alfa Seguros" podem não ser, porque "Seguros" diz
+     o que a empresa faz. A lista é curta de propósito: só entra o que é
+     invólucro jurídico ou geográfico, nunca o que descreve o negócio. */
+  const SUFIXOS_DE_EMPRESA = {
+    ltda: 1, sa: 1, s: 1, a: 1, me: 1, epp: 1, eireli: 1, mei: 1, cia: 1,
+    brasil: 1, brazil: 1, br: 1, do: 1, da: 1, de: 1, e: 1,
+    holding: 1, participacoes: 1, group: 1, grupo: 1, inc: 1, llc: 1, ltd: 1, corp: 1
+  };
+
+  function soSufixos(palavras) {
+    return palavras.length > 0 && palavras.every(function (p) { return SUFIXOS_DE_EMPRESA[p]; });
+  }
+
   function mesmoNomeDeEmpresa(a, b) {
     if (!a || !b) return false;
     if (a === b) return true;
-    /* Uma palavra só de cada lado já foi tratada acima pela igualdade. Daqui
-       para baixo, só vale se o nome mais curto tiver duas palavras ou mais. */
     const curto = a.length <= b.length ? a : b;
     const longo = curto === a ? b : a;
-    if (curto.indexOf(' ') === -1) return false;
-    return longo.indexOf(curto + ' ') === 0;
+    /* O espaço no fim do prefixo é o que impede "Vale" de casar com
+       "Valentina Alimentos": sem ele, todo nome que começa igual casaria. */
+    if (longo.indexOf(curto + ' ') !== 0) return false;
+    if (curto.indexOf(' ') !== -1) return true;
+
+    /* Nome curto de uma palavra só. Antes isto era recusado sempre, e "Envu"
+       nunca encontrava "Envu Brasil Ltda" — duplicata garantida em toda
+       empresa cujo LinkedIn traz a razão social e o site traz a marca. Agora
+       vale, desde que o que sobra do nome longo não diga nada sobre o
+       negócio: só invólucro. */
+    return soSufixos(longo.slice(curto.length + 1).split(' ').filter(Boolean));
   }
 
-  function contaJaExistente(lead) {
+  /* Qual conta este lead reconhece, e POR QUÊ.
+
+     O motivo importa tanto quanto a conta: é ele que aparece na tela de
+     revisão, ao lado da caixa que o vendedor pode desmarcar. Fundir empresa
+     em silêncio é o tipo de acerto que ninguém agradece e o tipo de erro que
+     ninguém descobre — uma holding com várias marcas no mesmo site viraria
+     uma conta só, e o vendedor só perceberia meses depois. */
+  function contaCandidata(lead) {
     const contas = Store.dados().contas;
+
     const dominio = dominioDe(lead.empresaDominio || lead.empresaSite);
     if (dominio) {
       const porSite = contas.filter(function (c) { return dominioDe(c.site) === dominio; })[0];
-      if (porSite) return porSite;
+      if (porSite) return { conta: porSite, porque: 'mesmo site: ' + dominio };
     }
 
     /* Lead sem empresa: a conta nasce com o nome da pessoa. Sem isto, a
@@ -4166,28 +4206,59 @@
       const dono = Store.dados().contatos.filter(function (c) {
         return perfilLinkedin(c.linkedin) === perfil;
       })[0];
-      return dono ? (Store.conta(dono.contaId) || null) : null;
+      const conta = dono ? Store.conta(dono.contaId) : null;
+      return conta ? { conta: conta, porque: 'esta mesma pessoa já está nesta conta' } : null;
     }
 
     const alvo = achatarNome(lead.empresa);
     if (!alvo) return null;
     const porNome = contas.filter(function (c) {
       return mesmoNomeDeEmpresa(alvo, achatarNome(c.nome));
-    })[0];
-    if (porNome) return porNome;
+    });
+    /* Duas contas com nome compatível é ambiguidade, não achado. Escolher a
+       primeira seria escolher pela ordem de cadastro, que não quer dizer
+       nada. Melhor nascer uma conta a mais do que fundir com a errada:
+       juntar depois é um clique, separar é reescrever histórico. */
+    if (porNome.length === 1) return { conta: porNome[0], porque: 'mesmo nome' };
+    if (porNome.length > 1) return null;
 
     /* Por último a IA, e só por último. Domínio e nome são verificáveis: ou
        batem ou não batem, e amanhã dão a mesma resposta. O modelo é o que
-       resolve o que sobra — "Envu" contra "Envu Brasil Ltda" sem site em
-       nenhum dos dois —, e é por isso que ele vem depois e não no lugar.
-
-       O vendedor viu esta sugestão na tela da importação, com o motivo
-       escrito, e pôde desmarcá-la antes de chegar aqui. */
-    if (lead.contaSugerida && lead.usarContaSugerida !== false) {
-      const daIA = Store.conta(lead.contaSugerida);
-      if (daIA) return daIA;
+       resolve o que sobra — nomes que nem o site nem a grafia aproximam. */
+    if (lead.contaSugeridaIA) {
+      const daIA = Store.conta(lead.contaSugeridaIA);
+      if (daIA) return { conta: daIA, porque: lead.porqueContaIA || 'reconhecida pelo assistente' };
     }
     return null;
+  }
+
+  /* A caixa da tela de revisão manda em TODOS os casamentos, não só no da IA.
+
+     Antes ela só governava a sugestão do modelo: quem desmarcasse "entra na
+     empresa que já existe" via o lead ser fundido assim mesmo, se o site ou o
+     nome batessem. A tela prometia uma escolha que o import não cumpria. */
+  function contaJaExistente(lead) {
+    if (lead.usarContaSugerida === false) return null;
+    const achado = contaCandidata(lead);
+    return achado ? achado.conta : null;
+  }
+
+  /* Roda antes da tela de revisão e escreve no lead qual conta ele vai
+     encontrar. Assim a tela mostra a decisão real — a mesma que o import vai
+     tomar — em vez de mostrar só o palpite da IA. */
+  function marcarContasCandidatas(lista) {
+    lista.forEach(function (l) {
+      /* A sugestão do modelo fica guardada à parte: contaCandidata a consulta
+         por último, e sobrescrever o campo antes disso apagaria a entrada
+         dela na própria conta. */
+      if (l.contaSugerida && !l.contaSugeridaIA) {
+        l.contaSugeridaIA = l.contaSugerida;
+        l.porqueContaIA = l.porqueConta || '';
+      }
+      const achado = contaCandidata(l);
+      l.contaSugerida = achado ? achado.conta.id : '';
+      l.porqueConta = achado ? achado.porque : '';
+    });
   }
 
   /* Uma oportunidade por empresa e campanha, enquanto ela estiver aberta.
@@ -4199,7 +4270,26 @@
     const abertas = Store.dados().oportunidades.filter(function (o) {
       return o.contaId === contaId && !o.desfecho && o.origem === 'Linked Helper';
     });
-    if (!abertas.length) return null;
+
+    /* Nenhuma negociação de LH nesta conta não quer dizer nenhuma negociação.
+
+       O vendedor cadastrou a empresa à mão, trabalhou nela, e semanas depois
+       o prospect responde a uma campanha. O app abria uma SEGUNDA negociação
+       da mesma conta, e as duas seguiam vivas em paralelo: a evidência do
+       LinkedIn de um lado, o trabalho de verdade do outro, e o índice
+       partido ao meio.
+
+       Uma só aberta é a mesma negociação, sem dúvida possível. Duas ou mais é
+       ambiguidade: qual delas essa resposta continua? Aí nasce uma nova, que
+       o vendedor funde à mão se quiser — errar para o lado de criar é
+       reversível, errar para o lado de anexar reescreve o histórico da
+       negociação errada. */
+    if (!abertas.length) {
+      const daConta = Store.dados().oportunidades.filter(function (o) {
+        return o.contaId === contaId && !o.desfecho;
+      });
+      return daConta.length === 1 ? daConta[0] : null;
+    }
 
     /* Boa parte dos registros do Linked Helper chega sem campanha: depende da
        ação e das opções de exportação. Tratar "sem campanha" como uma campanha
@@ -5476,6 +5566,7 @@
     URL.revokeObjectURL(a.href);
   }
 
+  Object.assign(App, paraTestes);
   global.App = App;
 
   window.addEventListener('beforeinstallprompt', function (e) {

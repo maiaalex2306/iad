@@ -3180,6 +3180,7 @@
     ['m-oito', 'As oito decisões'],
     ['m-regua', 'A régua: cinco degraus'],
     ['m-caminho', 'O caminho do vendedor, passo a passo'],
+    ['m-lh', 'A integração com o Linked Helper'],
     ['m-avanco', 'Como o IAD anda'],
     ['m-faixas', 'O que o número diz'],
     ['m-etapas', 'O que cada etapa pede'],
@@ -3421,6 +3422,153 @@
      onde começar na segunda-feira. Isto é a sequência, e ela termina nas
      quatro saídas, porque negócio que não termina em lugar nenhum é o que
      entope o funil. */
+  /* A integração com o Linked Helper, do começo ao fim.
+
+     É a parte do sistema com mais peças móveis fora do app — uma ponte no
+     Cloudflare, dois endereços que não se parecem, duas chaves com propósitos
+     opostos, um balde por empresa — e era a única sem página no manual. Cada
+     defeito que apareceu nela custou uma tarde a alguém que não tinha como
+     saber onde olhar. */
+  function manualDoLinkedHelper() {
+    const passo = function (n, titulo, texto) {
+      return '<div class="passo-manual"><div class="numero">' + n + '</div>' +
+        '<div><strong>' + esc(titulo) + '</strong>' +
+        '<p class="small" style="margin:4px 0 0">' + texto + '</p></div></div>';
+    };
+    const caso = function (titulo, oQueAcontece) {
+      return '<tr><td class="rotulo-manual"><strong>' + esc(titulo) + '</strong></td>' +
+        '<td class="small">' + oQueAcontece + '</td></tr>';
+    };
+
+    return '<div class="card" id="m-lh"><h2>A integração com o Linked Helper</h2>' +
+      '<p class="small muted">O Linked Helper prospecta no LinkedIn e o IAD mede decisão. ' +
+      'Entre os dois existe uma ponte, e quase todo problema que aparece aqui é de endereço, ' +
+      'não de dado. Esta página existe para você saber onde olhar.</p>' +
+
+      '<h3>Por que existe uma ponte no meio</h3>' +
+      '<p class="small">O Linked Helper entrega o que o prospect respondeu por <strong>webhook</strong>, e ' +
+      'webhook precisa de um endereço público para onde postar. O IAD roda dentro do seu navegador e não ' +
+      'tem endereço nenhum — ninguém consegue postar num navegador. A ponte fica no meio: ela recebe o ' +
+      'POST do Linked Helper, guarda por trinta dias, e entrega ao app quando ele vai buscar.</p>' +
+      '<p class="small">Ela é um Worker no Cloudflare, de graça na conta gratuita, e o código dela está no ' +
+      'repositório em <code>ponte/worker.js</code>.</p>' +
+
+      '<h3>Dois endereços, e eles não se parecem</h3>' +
+      '<p class="small">É aqui que mais gente erra, e o erro não avisa: tudo parece funcionar e os leads ' +
+      'simplesmente não aparecem.</p>' +
+      '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' +
+      caso('No Linked Helper', 'Endereço <strong>longo</strong>, no campo Webhook URL da campanha: ' +
+        '<code>https://sua-ponte.workers.dev/?k=CHAVE_ESCRITA&amp;e=IDENTIFICADOR_DA_EMPRESA</code>. ' +
+        'É longo porque o Linked Helper não sabe nada sobre você: tudo o que ele precisa dizer tem de estar na URL.') +
+      caso('No IAD', 'Endereço <strong>curto</strong>, em Configuração → Linked Helper, sem nada depois da barra: ' +
+        '<code>https://sua-ponte.workers.dev/</code>, mais a chave de leitura num campo separado. ' +
+        'É curto porque o app já sabe quem está logado — ele acrescenta o identificador da empresa sozinho.') +
+      '</tbody></table></div>' +
+
+      '<h3>Duas chaves, de propósito</h3>' +
+      '<p class="small">A <strong>chave de escrita</strong> vive dentro do Linked Helper, num endereço que ' +
+      'passa por várias mãos. A <strong>chave de leitura</strong> vive no app. São diferentes porque vazar ' +
+      'uma não pode expor a outra: quem descobrir a de escrita consegue mandar lixo para a ponte, mas não ' +
+      'consegue ler o que já chegou. As duas ficam no Cloudflare, e o app nunca guarda a de escrita — ' +
+      'por isso a janela do webhook pede que você a digite toda vez.</p>' +
+
+      '<h3>Um balde por empresa</h3>' +
+      '<p class="small">O IAD atende várias empresas e nenhuma pode ver a prospecção da outra. O ' +
+      'identificador no fim do endereço — o <code>e=</code> — decide em qual balde a entrega cai, e o app ' +
+      'só pede o balde da empresa de quem está logado.</p>' +
+      '<p class="small">Dois erros levam prospecção para o balde errado, e os dois acontecem no Linked ' +
+      'Helper: endereço <strong>sem</strong> o <code>e=</code>, que cai no balde antigo; e endereço com o ' +
+      '<code>e=</code> de <strong>outra empresa</strong>, que é o pior porque nada reclama. Nos dois casos ' +
+      'o remédio é o mesmo: <strong>Configuração → Resgatar de outro balde</strong>, que lê o balde que você ' +
+      'escolher e traz o conteúdo para a empresa escolhida agora.</p>' +
+      '<p class="tiny muted">Isto é isolamento operacional, não criptográfico: quem tiver a chave de leitura ' +
+      'e souber o identificador de outra empresa consegue ler o balde dela. O que ele elimina é o erro que ' +
+      'acontece sozinho — importar por engano a prospecção do vizinho.</p>' +
+
+      '<h3>O que acontece quando você clica em Buscar respostas</h3>' +
+      passo(1, 'O app pede o balde da empresa logada',
+        'Com o recorte em "Todas as empresas" ele recusa em vez de chutar — ler o balde errado devolveria ' +
+        'a prospecção de outra pessoa.') +
+      passo(2, 'Os descartados saem antes de tudo',
+        'Quem você excluiu antes naquela campanha nem chega à tela, e nem é lido pela IA. Com centenas de ' +
+        'leads isso é dinheiro e minutos que não se gastam.') +
+      passo(3, 'A IA lê o lote inteiro numa chamada só',
+        'Ela classifica o segmento de cada empresa, sugere o papel na compra de cada pessoa, tenta casar a ' +
+        'empresa com uma conta que já existe, e marca quem respondeu <strong>não</strong> — a recusa educada, ' +
+        'a que vem enrolada em elogio, a que não usa nenhuma palavra-chave.') +
+      passo(4, 'A tela de revisão mostra tudo, e você decide',
+        'Cada lead vem com o segmento sugerido e o motivo, a conta candidata a fundir, a conversa e o ' +
+        'histórico. Quem a IA leu como recusa vem <strong>desmarcado</strong>. Você marca, desmarca, corrige ' +
+        'o segmento, ou exclui de vez.') +
+      passo(5, 'O que você marcou vira empresa, contato e negociação',
+        'E o que você excluiu some da ponte e não volta mais naquela campanha — nem quando o Linked Helper ' +
+        'reentregar a mesma pessoa com identificação nova.') +
+
+      '<h3>Como o app evita duplicar</h3>' +
+      '<p class="small">Três perguntas, nesta ordem, e cada uma independente da anterior. ' +
+      'Toda fusão de empresa aparece na tela de revisão com o motivo escrito — "mesmo site", "mesmo nome", ' +
+      '"esta mesma pessoa já está nesta conta" — e a caixa ao lado desmarca. Desmarcar vale sempre: ' +
+      'o import respeita a sua decisão mesmo quando o site bate.</p>' +
+      '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' +
+      caso('A empresa já existe?', 'Domínio do site igual · nome igual depois de ignorar acento, pontuação e ' +
+        'maiúscula · se o lead veio sem empresa, o perfil do LinkedIn da pessoa contra os contatos que já ' +
+        'existem · e por último a sugestão da IA, que você viu na tela e pôde desmarcar. A primeira que bater vence.') +
+      caso('O contato já existe nessa empresa?', 'Perfil do LinkedIn, depois e-mail, depois nome. No nome ' +
+        'vale prefixo: "Marcos" e "Marcos Silva" na mesma conta são a mesma pessoa.') +
+      caso('Já existe negociação aberta dessa empresa vinda do LH?', 'Se sim e a campanha for a mesma, a ' +
+        'interação entra nela. <strong>Campanha diferente abre negociação nova</strong> — campanha é ' +
+        'abordagem diferente, com outra promessa e outro ciclo, e misturar duas na mesma negociação ' +
+        'destruiria a comparação entre elas. Se não houver nenhuma de LH mas houver <strong>uma só</strong> ' +
+        'negociação aberta na conta, é nela que a resposta entra: quem cadastrou a empresa à mão e depois ' +
+        'recebe a resposta do LinkedIn não pode acabar com o índice partido em dois cartões.') +
+      '</tbody></table></div>' +
+
+      '<h3>O que acontece em cada situação</h3>' +
+      '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' +
+      caso('Empresa e contato novos', 'Cria os dois, mais a negociação em Conexão e a tarefa ' +
+        '"Empresa Importada do LH - Fazer Contato".') +
+      caso('Mesma empresa, contato diferente, mesma campanha', 'A empresa é reaproveitada. O contato novo ' +
+        'nasce e entra no grupo comprador da negociação que já existe. Nenhuma negociação nova. A tarefa é ' +
+        '"Nova interação no LH - Responder".') +
+      caso('Campanha diferente, empresa já existe', 'Empresa e contato reaproveitados. Negociação nova, ' +
+        'porque a abordagem é outra.') +
+      caso('Dois contatos da mesma empresa nova, no mesmo lote', 'O segundo já encontra a empresa que o ' +
+        'primeiro acabou de criar.') +
+      caso('Lead sem empresa nenhuma', 'A conta nasce com o nome da pessoa. Se ela voltar depois, é ' +
+        'reconhecida pelo perfil do LinkedIn e não vira uma segunda conta homônima.') +
+      caso('Lead sem campanha', 'Entra na negociação de LH que já estiver aberta, em vez de abrir uma ' +
+        'paralela rotulada com nada.') +
+      caso('A mesma conversa reenviada', 'O Linked Helper reenvia o histórico inteiro a cada interação. ' +
+        'Só as mensagens novas viram evidência — senão a mesma frase do cliente subiria o índice três vezes.') +
+      caso('Negociação da empresa já encerrada', 'Não recebe interação nova: abre uma nova. O desfecho ' +
+        'congelou a foto da decisão, e mexer nele reescreveria um resultado já apurado.') +
+      caso('Empresa cadastrada à mão, resposta chega pelo LH depois', 'A resposta entra na negociação que ' +
+        'já existe, desde que ela seja a única aberta na conta.') +
+      '</tbody></table></div>' +
+
+      '<h3>Os negativos não somem, viram auditoria</h3>' +
+      '<p class="small">Toda resposta lida como recusa fica registrada em ' +
+      '<strong>Configuração → Não conformidades das campanhas</strong>, agrupada por campanha e fora do ' +
+      'pipeline. Não é para perseguir aquelas pessoas: é para consertar a campanha, que é o que de fato ' +
+      'muda o resultado da próxima. E os que você excluiu à mão ficam em ' +
+      '<strong>Leads descartados</strong>, com um botão para voltar a mostrar.</p>' +
+
+      '<h3>O que esta integração ainda não faz</h3>' +
+      '<ul class="small">' +
+      '<li><strong>Nome parecido demais continua não casando.</strong> "Alfa" não encontra "Alfa Seguros", ' +
+      'porque "Seguros" diz o que a empresa faz e pode ser outra. Já "Envu" encontra "Envu Brasil Ltda", ' +
+      'porque o que sobra é só invólucro jurídico e geográfico.</li>' +
+      '<li><strong>Ambiguidade não vira palpite.</strong> Se duas contas casarem com o mesmo nome, nenhuma ' +
+      'é escolhida e nasce uma conta nova. Juntar duas contas depois é um clique; separar uma conta que ' +
+      'fundiu errado é reescrever histórico.</li>' +
+      '<li><strong>Duas negociações abertas na mesma conta.</strong> Aí o app não sabe qual delas a ' +
+      'resposta continua, e abre uma nova em vez de anexar à errada.</li>' +
+      '</ul>' +
+      '<p class="small">A ponte guarda cada entrega por <strong>trinta dias</strong>. O que ninguém importar ' +
+      'nesse prazo se apaga sozinho.</p>' +
+      '</div>';
+  }
+
   function manualDoCaminho() {
     const passo = function (n, titulo, texto, onde) {
       return '<div class="passo-manual"><div class="numero">' + n + '</div>' +
@@ -4054,6 +4202,7 @@
 
       manualDasOito() +
       manualDoCaminho() +
+      manualDoLinkedHelper() +
       manualDaRegua() +
       manualDoAvanco() +
       manualDasFaixas() +
