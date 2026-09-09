@@ -281,7 +281,22 @@
        nada — e quem clicava concluía que o botão estava quebrado. */
     const existentes = {};
     (estado.tenants || []).forEach(function (t) { existentes[t.id] = true; });
-    const semCasa = function (r) { return !r.tenantId || !existentes[r.tenantId]; };
+
+    /* Mas "empresa que não existe aqui" não é o mesmo que "empresa que não
+       existe". A empresa do servidor tem id UUID; a que este app inventa para
+       registro órfão tem a forma `ten_xxx` e nunca existiu em servidor nenhum.
+
+       Um UUID ausente da lista deste aparelho é carteira de outra empresa que
+       este navegador ainda não conhece — recarimbar aquilo é mudar a
+       prospecção de dono. Só o carimbo inventado, e o vazio, viram da empresa
+       de quem está trabalhando. */
+    const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const semCasa = function (r) {
+      const dele = String(r.tenantId || '');
+      if (!dele) return true;
+      if (existentes[dele]) return false;
+      return !UUID.test(dele);
+    };
 
     ['contas', 'contatos', 'segmentos', 'tiposTarefa', 'produtos'].forEach(function (colecao) {
       (estado[colecao] || []).forEach(function (r) { if (semCasa(r)) r.tenantId = alvo; });
