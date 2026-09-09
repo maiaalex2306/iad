@@ -778,8 +778,12 @@
     const extra = String(textoExtra || '').trim();
     if (extra) retrato += '\n\nREUNIÃO QUE O VENDEDOR ACABOU DE COLAR:\n' + extra;
 
+    /* A releitura das oito precisa da mesma régua da leitura. Sem ela, os dois
+       caminhos pontuavam com critérios diferentes — e o vendedor via a nota
+       mudar sozinha conforme por onde a IA tinha passado. */
     const pedido = Nuvem.chamarFuncao('assistente', {
-      tipo: 'notas', texto: retrato, contexto: { hoje: global.IADStore.hoje() }
+      tipo: 'notas', texto: retrato,
+      contexto: { hoje: global.IADStore.hoje(), escada: esbocoDaEscada() }
     });
     const prazo = new Promise(function (resolve) {
       setTimeout(function () { resolve({ estourou: true }); }, PRAZO_REUNIAO);
@@ -903,8 +907,40 @@
     return ctx;
   }
 
+  /* A régua inteira vai junto do pedido.
+
+     O servidor tinha a própria cópia das oito decisões, com uma linha de
+     descrição em cada. A escada de cinco degraus ele conhecia genericamente —
+     "2 é o cliente disse, 3 é alguém conferiu" — e era só isso. Mas o rigor
+     não é igual nas oito, e é justamente aí que mora a diferença entre medir e
+     iludir: em Processo de compra, "o cliente descreveu as etapas" é 2, e o 3
+     exige saber quem assina cada uma e QUANTO TEMPO cada uma leva. Sem essa
+     frase, o modelo lia "ele explicou o processo de aprovação" e dava 3.
+
+     Mandar a régua do app resolve os dois problemas de uma vez: o modelo passa
+     a pontuar pelo critério escrito, e a régua deixa de existir em duas
+     cópias que envelhecem separadas. Quem manda é sempre o playbook. */
+  function esbocoDaEscada() {
+    const P = global.IADPlaybook;
+    return {
+      notaMaxima: P.NOTA_MAXIMA,
+      iadMaximo: P.IAD_MAXIMO,
+      iadMaduro: P.IAD_MADURO,
+      forcaMinimaDoDegrau: P.FORCA_MINIMA_DO_DEGRAU,
+      ordem: global.IADEngine.ORDEM_DECISAO,
+      degraus: P.NIVEIS_DA_ESCADA.map(function (n) {
+        return { n: n.n, rotulo: n.rotulo, desc: n.desc };
+      }),
+      forcas: P.FORCAS.map(function (f) { return { id: f.id, peso: f.peso, desc: f.desc }; }),
+      decisoes: P.DIMENSOES.map(function (d) {
+        return { id: d.id, nome: d.nome, pergunta: d.pergunta, niveis: d.niveis };
+      })
+    };
+  }
+
   function contextoDaOportunidade(op) {
     const ctx = contextoDaConta(op ? op.contaId : null);
+    ctx.escada = esbocoDaEscada();
     /* As etapas do funil vão junto para o servidor poder dizer qual delas o
        material comprova — e para nunca inventar uma coluna que não existe. */
     ctx.etapas = global.IADPlaybook.ETAPAS;

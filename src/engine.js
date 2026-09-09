@@ -1034,6 +1034,6 @@
     porMes, porSegmento, porEtapa, matrizDecisoes, distribuicaoEvidencia,
     autoria, compromisso, mobilizadores, bloqueadores, tempoNaEtapa, medianaEtapaGanhos, deltaSemana, curva, historico, lacunas,
     evolucao, rendimentoPorTipoDeTarefa, semanasAte, INDICADORES,
-    stakeholdersDaOp, diasEntre, indiceEtapa, depoisDaProposta
+    stakeholdersDaOp, diasEntre, indiceEtapa, depoisDaProposta, ORDEM_DECISAO
   };
 })(window);

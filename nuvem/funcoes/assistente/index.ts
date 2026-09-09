@@ -266,6 +266,58 @@ Regras absolutas:
    é do cliente, o modelo faz o seguro e não pontua — e o vendedor lê "problema
    não reconhecido" depois de uma reunião em que o cliente descreveu o problema
    três vezes. */
+/* A régua, escrita por decisão.
+
+   O servidor conhecia as oito por uma linha de descrição cada, e a escada de
+   cinco degraus só no genérico: "2 é o cliente disse, 3 é alguém conferiu".
+   Só que o rigor não é igual nas oito, e é exatamente aí que está a diferença
+   entre medir e iludir. Em Processo de compra, "o cliente descreveu as etapas
+   de aprovação" é 2; o 3 exige saber quem assina cada uma e quanto tempo cada
+   uma leva, confirmado com quem participa. Sem essa frase na frente, o modelo
+   lia "ele explicou o fluxo" e dava 3 — progresso que ninguém verificou, que é
+   o erro que esta régua inteira existe para impedir.
+
+   O app manda a régua dele junto do pedido. Assim o modelo pontua pelo
+   critério escrito, e a régua deixa de existir em duas cópias que envelhecem
+   separadas. */
+function reguaDetalhada(ctx: Record<string, unknown>): string {
+  const e = ctx.escada as Record<string, unknown> | undefined;
+  if (!e || !Array.isArray(e.decisoes)) return '';
+
+  const linhas: string[] = [];
+  const degraus = Array.isArray(e.degraus) ? e.degraus : [];
+  linhas.push('A RÉGUA, DECISÃO POR DECISÃO — pontue por ESTES textos, não pelo degrau genérico.');
+  linhas.push('Quando o material couber em dois degraus, use o MENOR. Nota inflada vira previsão falsa.');
+  linhas.push('');
+  for (const d of e.decisoes as Array<Record<string, unknown>>) {
+    linhas.push(`${d.nome} (${d.id}) — ${d.pergunta}`);
+    const niveis = Array.isArray(d.niveis) ? d.niveis : [];
+    niveis.forEach((texto, n) => linhas.push(`  ${n}: ${texto}`));
+    linhas.push('');
+  }
+
+  const min = (e.forcaMinimaDoDegrau || {}) as Record<string, number>;
+  const forcas = Array.isArray(e.forcas) ? e.forcas as Array<Record<string, unknown>> : [];
+  const nomeDoPeso = (peso: number) => (forcas.find((f) => Number(f.peso) >= peso) || {}).id || '';
+  const exigencias = Object.keys(min).map((degrau) =>
+    `degrau ${degrau} exige evidência com força ${nomeDoPeso(min[degrau])} ou mais forte`);
+  if (exigencias.length) {
+    linhas.push('PROVA EXIGIDA: ' + exigencias.join('; ') + '. ' +
+      'Os degraus 1 e 2 não pedem prova, porque falam de ONDE a informação veio — nós achamos, ou o ' +
+      'cliente disse — e não de quanto ela resistiu. Se você propuser 3 ou 4 sem uma evidência dessa ' +
+      'força no material, o app desce a nota sozinho: proponha o degrau que a prova sustenta.');
+  }
+  if (Array.isArray(e.ordem)) {
+    linhas.push('ORDEM DE TRABALHO das oito (decisão tem pré-requisito; ninguém prioriza o que não ' +
+      'reconhece como problema): ' + (e.ordem as string[]).join(' → ') + '.');
+  }
+  if (degraus.length) {
+    linhas.push('ESCALA: soma das oito de 0 a ' + (e.iadMaximo || 32) +
+      '; a partir de ' + (e.iadMaduro || 24) + ' a decisão é madura.');
+  }
+  return linhas.join('\n');
+}
+
 function quemEQuem(ctx: Record<string, unknown>): string {
   const nos = String(ctx.nossaEmpresa || '').trim();
   const vendedor = String(ctx.nossoVendedor || '').trim();
@@ -292,6 +344,7 @@ function promptDe(tipo: string, ctx: Record<string, unknown>): string {
   const contatos = listaCurta(ctx.contatos);
   const segmentos = listaCurta(ctx.segmentos);
   const lados = quemEQuem(ctx);
+  const regua = reguaDetalhada(ctx);
 
   if (tipo === 'evidencia') {
     return `${BASE}
@@ -435,6 +488,7 @@ Cada item de "contatos" é uma pessoa do lado do cliente que apareceu no documen
 
 "decisoes" são as OITO decisões relidas: [{"dimensao":"problema","nota":0,"porque":"...","trecho":"..."}, ...], as oito, sempre. Leia-as considerando TUDO — o retrato da oportunidade que veio no início do texto (as evidências já registradas antes) MAIS o material novo que o vendedor acabou de mandar.
 
+${regua ? regua + '\n' : ''}
 Os CINCO degraus, iguais para todas. O que decide o degrau NÃO é o quanto se sabe: é DE ONDE a informação veio.
   0 — desconhecido: nada no material toca esta decisão.
   1 — suposto: quem afirma isso somos nós. O cliente não disse. Dedução a partir do setor, do porte, do cargo ou do bom senso.
@@ -500,6 +554,7 @@ Tarefa: você recebe o retrato de UMA oportunidade — as evidências que o clie
 
 Devolva {"decisoes":[{"dimensao":"problema","nota":0,"porque":"...","trecho":"..."} , ...]} com as oito, na ordem acima.
 
+${regua ? regua + '\n' : ''}
 Os CINCO degraus, iguais para todas. O que decide o degrau NÃO é o quanto se sabe: é DE ONDE a informação veio.
   0 — desconhecido: nada no material toca esta decisão.
   1 — suposto: quem afirma isso somos nós. O cliente não disse. Dedução a partir do setor, do porte, do cargo ou do bom senso.
