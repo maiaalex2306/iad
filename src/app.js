@@ -2494,25 +2494,106 @@
       render();
     },
 
+    /* Encerrar tem três saídas, e a distinção entre duas delas é o que faz o
+       Aprendizado servir para alguma coisa.
+
+       Perda: o cliente DECIDIU e a escolha não foi a nossa. Houve disputa e
+       existe um vencedor — a pergunta útil é por que perdemos a comparação.
+       Desistência: ninguém decidiu nada, o projeto parou de existir dentro do
+       cliente. Aqui não houve comparação nenhuma, e insistir em analisar
+       "por que perdemos" é analisar uma disputa que não aconteceu.
+
+       Parada não está aqui: conta que ainda não amadureceu vai para nutrição,
+       que é outro botão e outro estado. */
     encerrar: function (opId) {
       const op = Store.oportunidade(opId);
       if (!op) return;
       const r = E.resumo(op);
+
+      const listaDe = function (tipo) {
+        if (tipo === 'perda') return P.MOTIVOS_PERDA;
+        if (tipo === 'desistencia') return P.MOTIVOS_DESISTENCIA;
+        return [];
+      };
+
       U.formulario('Encerrar negócio', [
-        { id: 'tipo', rotulo: 'Desfecho', tipo: 'select', opcoes: P.DESFECHOS.map(function (d) { return { valor: d.id, rotulo: d.rotulo + ' — ' + d.pergunta }; }) },
-        { id: 'data', rotulo: 'Data do fechamento', tipo: 'date', padrao: Store.hoje() },
-        { id: 'valorFinal', rotulo: 'Valor final (R$)', tipo: 'number', padrao: op.valor },
-        { id: 'concorrente', rotulo: 'Concorrente (se houver)' },
-        { id: 'motivo', rotulo: 'Por que terminou assim', tipo: 'textarea', voz: true }
+        { id: 'tipo', rotulo: 'Desfecho', tipo: 'select',
+          opcoes: P.DESFECHOS.map(function (d) { return { valor: d.id, rotulo: d.rotulo + ' — ' + d.pergunta }; }) },
+        { tipo: 'slot', slot: 'motivos' },
+        { id: 'data', rotulo: 'Data do fechamento', tipo: 'date', padrao: Store.hoje(), largura: 'metade' },
+        { id: 'valorFinal', rotulo: 'Valor final (R$)', tipo: 'number', padrao: op.valor, largura: 'metade' },
+        { id: 'concorrente', rotulo: 'Quem ganhou (se houve concorrente)' },
+        { id: 'motivo', rotulo: 'O que aconteceu, em uma ou duas linhas', tipo: 'textarea', voz: true }
       ], {}, function (d) {
+        const escolhido = listaDe(d.tipo).filter(function (m) { return m.id === d.motivoId; })[0];
+        if (d.tipo !== 'ganho' && !escolhido) {
+          alert('Escolha o motivo. É ele que faz o Aprendizado do painel valer alguma coisa — ' +
+            'texto livre vira dez versões da mesma frase e nenhuma conclusão.');
+          return;
+        }
         Store.fecharOportunidade(opId, Object.assign({}, d, {
+          motivoId: escolhido ? escolhido.id : '',
+          motivoRotulo: escolhido ? escolhido.rotulo : '',
           iadFinal: r.iad,
           coverageFinal: r.coverage.percentual,
           evidenceAgeFinal: r.evidenceAge,
           diasEmAberto: E.diasEntre(op.criadoEm)
         }));
         render();
+      }, function (dlg) {
+        /* A lista de motivos muda com o desfecho: perder uma disputa e o
+           cliente parar de decidir não têm um motivo em comum. */
+        const tipo = dlg.querySelector('[name="tipo"]');
+        const alvo = dlg.querySelector('[data-motivos]');
+        const pintar = function () {
+          const lista = listaDe(tipo.value);
+          if (!lista.length) { alvo.innerHTML = ''; return; }
+          alvo.innerHTML = '<label class="campo"><span>Motivo</span><select name="motivoId">' +
+            '<option value="">— escolha —</option>' +
+            lista.map(function (m) {
+              return '<option value="' + m.id + '">' + U.esc(m.rotulo) + '</option>';
+            }).join('') + '</select></label>';
+        };
+        tipo.addEventListener('change', pintar);
+        pintar();
       });
+    },
+
+    /* ---------- nutrição ---------- */
+    /* A quarta saída, e a única que não fecha nada. "O processo parou" quase
+       nunca quer dizer que o negócio morreu: quer dizer que a conta ainda não
+       chegou no momento dela. Encerrar por desistência aqui seria mentir no
+       relatório e, pior, apagar a conta da agenda de todo mundo. */
+    colocarEmNutricao: function (opId) {
+      const op = Store.oportunidade(opId);
+      if (!op) return;
+      U.formulario('Colocar em nutrição', [
+        { tipo: 'aviso', rotulo: 'O negócio continua aberto e sai da previsão. Volta sozinho ' +
+          'quando o cliente produzir qualquer evidência nova — é esse o sinal que a nutrição espera.' },
+        { id: 'motivo', rotulo: 'O que precisa acontecer para esta conta ficar pronta', tipo: 'select',
+          opcoes: P.MOTIVOS_NUTRICAO.map(function (m) { return { valor: m.id, rotulo: m.rotulo }; }) },
+        { id: 'prazo', rotulo: 'Quando voltar a olhar', tipo: 'select',
+          opcoes: P.PRAZOS_NUTRICAO.map(function (p) { return { valor: String(p.dias), rotulo: p.rotulo }; }) },
+        { id: 'motivoTexto', rotulo: 'Detalhe (opcional)', tipo: 'textarea', voz: true,
+          placeholder: 'Ex.: contrato com o concorrente vence em março; o Fábio pediu para voltar depois da safra.' }
+      ], { prazo: '90' }, function (d) {
+        const m = P.MOTIVOS_NUTRICAO.filter(function (x) { return x.id === d.motivo; })[0];
+        Store.colocarEmNutricao(opId, {
+          motivo: m ? m.rotulo : '',
+          motivoTexto: d.motivoTexto || '',
+          revisarEm: Store.daquiADias(Number(d.prazo) || 90)
+        });
+        render();
+      });
+    },
+
+    retomarNutricao: function (opId) {
+      const op = Store.oportunidade(opId);
+      if (!op || !op.nutricao) return;
+      if (!U.confirmar('Tirar da nutrição e devolver à carteira ativa?\n\n' +
+        'Ela volta para o grupo que a decisão do cliente indicar.')) return;
+      Store.retomarNutricao(opId, 'Retomada à mão');
+      render();
     },
 
     reabrir: function (opId) {

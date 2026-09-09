@@ -361,11 +361,87 @@
 
   /* O desfecho que mais importa não é a perda para o concorrente: é o cliente
      que não decidiu nada. Sem separar os dois, o modelo nunca aprende. */
+  /* Três formas de um negócio acabar, e uma quarta que não é acabar.
+
+     A diferença entre perda e desistência não é de humor, é de fato: na perda
+     o cliente DECIDIU e a decisão não foi nossa — houve escolha, e existe um
+     vencedor. Na desistência ninguém decidiu nada; o projeto parou de existir
+     dentro do cliente. Guardar as duas com o mesmo rótulo apaga a única
+     pergunta que importa depois: perdemos a disputa, ou nem houve disputa?
+
+     Parada não entra aqui de propósito. Conta que ainda não está pronta não é
+     negócio encerrado — é negócio cedo demais, e encerrar é a forma mais cara
+     de esquecer dela. Ela vai para nutrição, que é um estado, não um desfecho. */
   const DESFECHOS = [
     { id: 'ganho', rotulo: 'Ganho', classe: 'ok', pergunta: 'O cliente comprou.' },
-    { id: 'perdido_concorrente', rotulo: 'Perdido para concorrente', classe: 'dead', pergunta: 'O cliente decidiu, e escolheu outro.' },
-    { id: 'perdido_inacao', rotulo: 'Perdido por inação', classe: 'dead', pergunta: 'O cliente não decidiu nada e o projeto morreu.' },
-    { id: 'adiado', rotulo: 'Adiado', classe: 'warn', pergunta: 'Ficou para outro ciclo, com data conhecida ou não.' }
+    { id: 'perda', rotulo: 'Perda', classe: 'dead',
+      pergunta: 'O cliente decidiu e a escolha não foi a nossa.' },
+    { id: 'desistencia', rotulo: 'Desistência', classe: 'dead',
+      pergunta: 'Ninguém decidiu. O projeto parou de existir dentro do cliente.' }
+  ];
+
+  /* Desfechos antigos, para o que já está gravado continuar legível. */
+  const DESFECHOS_RENOMEADOS = {
+    perdido_concorrente: 'perda',
+    perdido_inacao: 'desistencia',
+    adiado: 'desistencia'
+  };
+
+  /* Os motivos.
+
+     São listas fechadas porque motivo digitado à mão não vira aprendizado:
+     "preço" e "achou caro" e "valor alto" viram três linhas diferentes no
+     relatório e nenhuma conclusão. Cada lista tem "Outro", com espaço para
+     escrever — o que não cabe na lista é justamente o que vale investigar. */
+  const MOTIVOS_PERDA = [
+    { id: 'preco', rotulo: 'Preço acima do orçamento do cliente' },
+    { id: 'concorrente_melhor', rotulo: 'Concorrente ofereceu solução melhor avaliada' },
+    { id: 'concorrente_relacionamento', rotulo: 'Concorrente tinha relacionamento com quem decide' },
+    { id: 'incumbente', rotulo: 'Manteve o fornecedor atual' },
+    { id: 'tecnico', rotulo: 'Nossa solução não atendia a um requisito técnico' },
+    { id: 'prazo', rotulo: 'Prazo de entrega ou implantação incompatível' },
+    { id: 'comercial', rotulo: 'Condições comerciais: pagamento, contrato ou garantias' },
+    { id: 'referencias', rotulo: 'Falta de referências ou de confiança na nossa entrega' },
+    { id: 'compliance', rotulo: 'Barrado por jurídico, compras ou compliance' },
+    { id: 'politica', rotulo: 'Decisão política interna, alheia à comparação técnica' },
+    { id: 'escopo', rotulo: 'Compraram só parte do escopo, com outro fornecedor' },
+    { id: 'outro', rotulo: 'Outro motivo (descreva abaixo)' }
+  ];
+
+  const MOTIVOS_DESISTENCIA = [
+    { id: 'prioridade', rotulo: 'Mudou a prioridade dentro da empresa' },
+    { id: 'orcamento', rotulo: 'Orçamento cortado ou congelado' },
+    { id: 'patrocinador', rotulo: 'Quem defendia o projeto saiu ou mudou de área' },
+    { id: 'interno', rotulo: 'Resolveram internamente, sem fornecedor' },
+    { id: 'nao_fazer', rotulo: 'Decidiram não fazer nada' },
+    { id: 'sem_consenso', rotulo: 'Não houve consenso entre as áreas' },
+    { id: 'reestruturacao', rotulo: 'Fusão, aquisição ou reestruturação' },
+    { id: 'crise', rotulo: 'Crise no setor ou na empresa do cliente' },
+    { id: 'sem_resposta', rotulo: 'Parou de responder e não retomou' },
+    { id: 'outro', rotulo: 'Outro motivo (descreva abaixo)' }
+  ];
+
+  /* Nutrição. O motivo aqui não é por que perdemos: é o que precisa acontecer
+     no mundo para a conta ficar pronta. Por isso quase todos têm data. */
+  const MOTIVOS_NUTRICAO = [
+    { id: 'ciclo_orcamentario', rotulo: 'Sem orçamento neste ciclo; volta no próximo' },
+    { id: 'contrato_vigente', rotulo: 'Contrato vigente com outro fornecedor até a data abaixo' },
+    { id: 'outro_projeto', rotulo: 'Esperando outro projeto interno terminar' },
+    { id: 'sazonalidade', rotulo: 'Momento errado do ano para esta operação' },
+    { id: 'obra', rotulo: 'Obra, expansão ou mudança de planta ainda em curso' },
+    { id: 'problema_pequeno', rotulo: 'O problema existe, mas ainda não no tamanho que justifica' },
+    { id: 'sem_decisor', rotulo: 'Falta nomear quem decide' },
+    { id: 'reorganizacao', rotulo: 'Empresa em reorganização; retomar depois' },
+    { id: 'outro', rotulo: 'Outro motivo (descreva abaixo)' }
+  ];
+
+  /* Quando voltar a olhar. Nutrição sem data é esquecimento com nome bonito. */
+  const PRAZOS_NUTRICAO = [
+    { dias: 30, rotulo: 'Em 30 dias' },
+    { dias: 60, rotulo: 'Em 60 dias' },
+    { dias: 90, rotulo: 'Em 90 dias' },
+    { dias: 180, rotulo: 'Em 6 meses' },
+    { dias: 365, rotulo: 'Em 1 ano' }
   ];
 
   const FAIXAS_EVIDENCIA = [
@@ -377,6 +453,7 @@
 
   global.IADPlaybook = {
     DIMENSOES, ETAPAS, GATES_PROPOSTA, PAPEIS, PAPEIS_CRITICOS, DESFECHOS,
+    DESFECHOS_RENOMEADOS, MOTIVOS_PERDA, MOTIVOS_DESISTENCIA, MOTIVOS_NUTRICAO, PRAZOS_NUTRICAO,
     NIVEIS_DA_ESCADA, NOTA_MAXIMA, IAD_MAXIMO, IAD_MADURO,
     FORCAS, FORCA_MINIMA_DO_DEGRAU, TIPOS_TAREFA, TIPOS_TAREFA_RENOMEADOS, CATEGORIAS_ARQUIVO,
     PERFIS, PERFIS_MOBILIZADORES, ESTADOS_INSIGHT,

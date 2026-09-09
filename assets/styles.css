@@ -1221,6 +1221,17 @@ td.subiu { color: var(--ok); font-weight: 600; }
    explicação quebra; o nome não. Sem isto a coluna do nome vira uma tira
    estreita com uma palavra por linha, que foi exatamente o que aconteceu na
    tabela de tarefas antes de ganhar largura mínima. */
+/* Os passos do caminho do vendedor. Número à esquerda, texto à direita: a
+   numeração precisa ser lida de relance, porque a pergunta que traz a pessoa
+   aqui é "em que ponto eu estou". */
+.passo-manual { display: flex; gap: 12px; align-items: flex-start; padding: 12px 0; border-top: 1px solid var(--line); }
+.passo-manual:first-of-type { border-top: 0; }
+.passo-manual .numero {
+  flex: 0 0 28px; height: 28px; border-radius: 999px;
+  background: var(--navy); color: #fff; font-weight: 700; font-size: 13px;
+  display: flex; align-items: center; justify-content: center;
+}
+
 .tabela-manual td { vertical-align: top; padding-top: 12px; padding-bottom: 12px; }
 .tabela-manual td.rotulo-manual { min-width: 150px; width: 200px; }
 .tabela-manual td.onde-manual { min-width: 140px; width: 190px; }

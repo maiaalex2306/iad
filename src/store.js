@@ -90,6 +90,7 @@
     dados.usuarios = dados.usuarios || [];
     dados.recusas = dados.recusas || [];
     migrarParaCincoDegraus(dados);
+    migrarDesfechos(dados);
 
     /* Multiempresa: o que já existia passa a pertencer a uma primeira empresa,
        criada aqui, para nada ficar órfão e invisível depois do login. */
@@ -731,6 +732,21 @@
     const novo = Object.assign({ id: uid('evt'), data: hoje(), tipo: 'decision' }, evento);
     op.eventos.unshift(novo);
 
+    /* Evidência do cliente acorda a nutrição sozinha.
+
+       Nutrição existe porque a conta não estava pronta. Evidência nova é
+       exatamente o sinal de que ficou — e exigir que alguém lembre de clicar
+       em "Retomar" é apostar contra a memória de quem já tem trinta contas.
+       A nutrição encerrada fica no histórico: quantas vezes uma conta entrou
+       e saiu de nutrição é dado sobre ela, não ruído. */
+    if (op.nutricao) {
+      op.historicoNutricao = (op.historicoNutricao || []).concat([
+        Object.assign({}, op.nutricao, { retomadaEm: hoje(),
+          porque: 'Evidência nova do cliente: ' + (novo.titulo || 'sem título') })
+      ]);
+      op.nutricao = null;
+    }
+
     /* O compromisso combinado na evidência passa a ser o compromisso da oportunidade. */
     if (novo.compromisso && novo.compromisso.data) {
       op.proximoCompromisso = Object.assign({ registradoEm: novo.data }, novo.compromisso);
@@ -968,6 +984,56 @@
 
   /* Fechar o ciclo: o desfecho congela a foto da decisão no dia do fechamento.
      É essa foto que, somada a muitos negócios, valida ou derruba o modelo. */
+  /* Perdido para concorrente virou perda; perdido por inação e adiado viraram
+     desistência. O motivo antigo era texto livre e continua onde está — o que
+     muda é só o tipo, para os relatórios pararem de contar três coisas que
+     agora são duas. */
+  function migrarDesfechos(dados) {
+    const de = (global.IADPlaybook && global.IADPlaybook.DESFECHOS_RENOMEADOS) || {};
+    (dados.oportunidades || []).forEach(function (op) {
+      if (op.desfecho && de[op.desfecho.tipo]) {
+        op.desfecho.tipoAntigo = op.desfecho.tipo;
+        op.desfecho.tipo = de[op.desfecho.tipo];
+      }
+    });
+  }
+
+  /* ---------- nutrição ----------
+
+     Conta que ainda não está pronta não é negócio encerrado: é negócio cedo
+     demais. Encerrar seria a forma mais cara de esquecer dela — sai da
+     previsão e sai da cabeça de todo mundo. Nutrição tira da previsão e
+     mantém na agenda, com data para voltar a olhar.
+
+     Não é desfecho: op.desfecho continua vazio. Uma evidência nova do cliente
+     acorda o negócio sozinha, porque o cliente ter se movido é exatamente o
+     sinal que a nutrição estava esperando. */
+  function colocarEmNutricao(id, dados) {
+    const op = oportunidade(id);
+    if (!op) return null;
+    op.nutricao = {
+      desde: hoje(),
+      motivo: dados.motivo || '',
+      motivoTexto: dados.motivoTexto || '',
+      revisarEm: dados.revisarEm || '',
+      porQuem: (contexto().usuario || {}).id || null
+    };
+    op.proximoCompromisso = null;
+    salvar();
+    return op;
+  }
+
+  function retomarNutricao(id, porque) {
+    const op = oportunidade(id);
+    if (!op || !op.nutricao) return null;
+    op.historicoNutricao = (op.historicoNutricao || []).concat([
+      Object.assign({}, op.nutricao, { retomadaEm: hoje(), porque: porque || '' })
+    ]);
+    op.nutricao = null;
+    salvar();
+    return op;
+  }
+
   function fecharOportunidade(id, dados) {
     const op = oportunidade(id);
     if (!op) return null;
@@ -976,6 +1042,8 @@
       data: dados.data || hoje(),
       motivo: dados.motivo || '',
       concorrente: dados.concorrente || '',
+      motivoId: dados.motivoId || '',
+      motivoRotulo: dados.motivoRotulo || '',
       valorFinal: dados.valorFinal != null ? dados.valorFinal : op.valor,
       iadFinal: dados.iadFinal,
       dimsFinal: Object.assign({}, op.dims),
@@ -984,6 +1052,7 @@
       diasEmAberto: dados.diasEmAberto
     };
     if (dados.tipo === 'ganho') op.etapa = 'Venda';
+    op.nutricao = null;   /* encerrar vence nutrição: são estados excludentes */
     op.proximoCompromisso = null;
     salvar();
     return op;
@@ -1035,6 +1104,7 @@
     catalogo, catalogoAtivos, nomesDoCatalogo, criarNoCatalogo, atualizarNoCatalogo,
     removerDoCatalogo, produto,
     fecharOportunidade, reabrirOportunidade, excluirOportunidade,
+    colocarEmNutricao, retomarNutricao,
     exportar, importar, limpar
   };
 })(window);

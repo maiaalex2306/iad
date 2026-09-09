@@ -128,6 +128,16 @@
     const pontos = iad(op);
     const idade = evidenceAge(op);
     const cob = coverage(op);
+    /* Nutrição antes de tudo, inclusive de Zumbi.
+
+       Um negócio em nutrição fica meses sem evidência por definição — é o
+       combinado. Deixá-lo virar Zumbi seria o app cobrando silêncio que ele
+       mesmo autorizou, e a fila de requalificação encheria de conta que não
+       tem nada de errado. */
+    if (op.nutricao) {
+      return { id: 'nutricao', rotulo: 'Em nutrição',
+        desc: 'A conta ainda não está pronta. Fora da previsão, na agenda.' };
+    }
     if (idade > 30) return { id: 'zumbi', rotulo: 'Zumbi', desc: 'Sem evidência nova do comprador há mais de 30 dias.' };
     /* Etapa adiantada não é avanço: sem maturidade, sem gate ou sem decisor econômico, é falso avanço. */
     if (depoisDaProposta(op) && (pontos < P.IAD_MADURO || !gates(op).liberado || !cob.temEconomicBuyer)) {
@@ -138,6 +148,14 @@
       return { id: 'real', rotulo: 'Negócio real', desc: 'Decisão madura, movimento recente e consenso em construção.' };
     }
     return { id: 'construcao', rotulo: 'Em construção', desc: 'Decisão ainda sendo formada.' };
+  }
+
+  /* Nutrição vencida: passou a data de voltar a olhar. É o que a fila de
+     Revisão precisa mostrar — nutrição sem cobrança é esquecimento com nome
+     bonito. */
+  function nutricaoVencida(op) {
+    if (!op.nutricao || !op.nutricao.revisarEm) return false;
+    return op.nutricao.revisarEm <= global.IADStore.hoje();
   }
 
   /* Next Best Decision: qual decisão precisa ocorrer DENTRO do cliente agora.
@@ -1034,6 +1052,6 @@
     porMes, porSegmento, porEtapa, matrizDecisoes, distribuicaoEvidencia,
     autoria, compromisso, mobilizadores, bloqueadores, tempoNaEtapa, medianaEtapaGanhos, deltaSemana, curva, historico, lacunas,
     evolucao, rendimentoPorTipoDeTarefa, semanasAte, INDICADORES,
-    stakeholdersDaOp, diasEntre, indiceEtapa, depoisDaProposta, ORDEM_DECISAO
+    stakeholdersDaOp, diasEntre, indiceEtapa, depoisDaProposta, ORDEM_DECISAO, nutricaoVencida
   };
 })(window);

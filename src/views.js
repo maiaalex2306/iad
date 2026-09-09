@@ -752,8 +752,8 @@
      primeiro grupo que servir. Por isso Zumbi ganha de todos. */
   const FILTROS = [
     ['todos', 'Todos', {
-      oQue: 'Toda a carteira aberta. Os cinco grupos abaixo são exclusivos.',
-      entra: 'O app testa as regras nesta ordem e o negócio fica na primeira que servir: Zumbi, Falso avançado, Oculto promissor, Negócio real, Em construção.',
+      oQue: 'Toda a carteira aberta. Os grupos abaixo são exclusivos.',
+      entra: 'O app testa as regras nesta ordem e o negócio fica na primeira que servir: Em nutrição, Zumbi, Falso avançado, Oculto promissor, Negócio real, Em construção.',
       sai: 'Nada muda de grupo por decisão sua: muda quando a decisão do cliente, o tempo sem evidência ou a etapa mudam.',
       faca: 'Comece pelos vermelhos: Falso avançado e Zumbi são os que distorcem a previsão.'
     }],
@@ -781,6 +781,12 @@
       sai: 'Resolvendo as três condições — ou voltando a etapa para onde a decisão realmente está.',
       faca: 'Pare de empurrar a proposta e volte a comprovar. Insistir aqui gasta o negócio.'
     }],
+    ['nutricao', 'Em nutrição', {
+      oQue: 'A conta ainda não está pronta para decidir. Fora da previsão, mas não esquecida — com data para voltar a olhar.',
+      entra: 'Você marca "Colocar em nutrição" no cockpit e diz o que precisa acontecer no mundo para ela ficar pronta.',
+      sai: 'Qualquer evidência nova do cliente tira o negócio da nutrição sozinha — foi exatamente o sinal que a nutrição estava esperando. Ou você retoma à mão.',
+      faca: 'Nada, até a data de revisão. Aí a Revisão cobra: retome com uma tentativa clara, adie de novo com nova data, ou encerre por desistência.'
+    }],
     ['zumbi', 'Zumbi', {
       oQue: 'Mais de 30 dias sem nenhuma evidência do comprador. Ocupa lugar na previsão e na sua cabeça.',
       entra: 'Mais de 30 dias sem evidência do cliente — não importa o IAD nem a etapa. Esta regra vence todas as outras.',
@@ -788,7 +794,7 @@
       faca: 'Requalifique com uma tentativa clara, ou encerre como perdido por inação.'
     }],
     ['fechados', 'Encerrados', {
-      oQue: 'Negócios com desfecho registrado: ganho, perdido para concorrente, perdido por inação ou adiado.',
+      oQue: 'Negócios com desfecho registrado: ganho, perda ou desistência. Nutrição não está aqui — negócio em nutrição continua aberto.',
       entra: 'Ao clicar em Encerrar no cockpit. O retrato das oito decisões fica congelado naquele momento.',
       sai: 'Reabrir no cockpit devolve o negócio à carteira ativa.',
       faca: 'É daqui que sai o Aprendizado do painel: quais decisões estavam fracas nos negócios perdidos.'
@@ -971,7 +977,15 @@
     return ordenarPipeline(
       est.oportunidades.map(E.resumo)
         .filter(function (r) { return passaNoFiltroPipeline(r, f); })
-        .filter(function (r) { return filtroGrupo === 'todos' || r.classe.id === filtroGrupo; }),
+        /* "Todos" não inclui nutrição, de propósito. Nutrição é o que saiu da
+           previsão: deixá-la no total faria o contador e a soma em reais
+           prometerem receita que ninguém está perseguindo — que é exatamente
+           o vício que este app existe para tirar do funil. Ela tem chip
+           próprio, e é lá que se olha. */
+        .filter(function (r) {
+          if (filtroGrupo === 'todos') return r.classe.id !== 'nutricao';
+          return r.classe.id === filtroGrupo;
+        }),
       f.ordem);
   }
 
@@ -1394,7 +1408,12 @@
 
     return '<div class="row"><button class="btn ghost mini" onclick="App.ir(\'#/pipeline\')">← Pipeline</button>' +
       '<span class="espaco"></span><button class="btn ghost mini" onclick="App.editarOportunidade(\'' + op.id + '\')" data-ajuda-titulo="Editar" data-ajuda="Muda título, valor, etapa, tipo, previsão e concorrentes. Não mexe nas decisões.">Editar</button>' +
-      (op.desfecho ? '' : '<button class="btn ghost mini" onclick="App.encerrar(\'' + op.id + '\')" data-ajuda-titulo="Encerrar" data-ajuda="Registra o desfecho e congela o retrato das oito decisões. É daqui que sai o Aprendizado do painel.">Encerrar</button>') + '</div>' +
+      (op.desfecho ? ''
+        : (op.nutricao
+            ? '<button class="btn ghost mini" onclick="App.retomarNutricao(\'' + op.id + '\')" data-ajuda-titulo="Retomar" data-ajuda="Tira da nutrição e devolve à carteira ativa. Uma evidência nova do cliente já faz isso sozinha.">Retomar da nutrição</button>'
+            : '<button class="btn ghost mini" onclick="App.colocarEmNutricao(\'' + op.id + '\')" data-ajuda-titulo="Nutrição" data-ajuda="O processo parou porque a conta ainda não está pronta. Sai da previsão, continua na agenda, e volta sozinha quando o cliente se mexer.">Colocar em nutrição</button>') +
+          '<button class="btn ghost mini" onclick="App.encerrar(\'' + op.id + '\')" data-ajuda-titulo="Encerrar" data-ajuda="Registra o desfecho — ganho, perda ou desistência — e congela o retrato das oito decisões. É daqui que sai o Aprendizado do painel.">Encerrar</button>') + '</div>' +
+      (op.nutricao ? faixaDeNutricao(op) : '') +
       banner +
       '<h1 style="margin-top:10px">' + esc(op.titulo) + '</h1>' +
       '<p class="muted small">' + esc((conta && conta.nome) || 'Sem conta') + ' · ' + U.moeda(op.valor) + ' · ' + esc(op.tipo || 'Novo negócio') +
@@ -2584,14 +2603,52 @@
   }
 
   /* ---------------- Revisão semanal ---------------- */
+  /* Nutrição visível no cockpit. Sem isto, o negócio some da previsão e nada
+     na tela dele explica por quê — e daqui a dois meses ninguém lembra do
+     combinado. */
+  function faixaDeNutricao(op) {
+    const n = op.nutricao;
+    const vencida = E.nutricaoVencida(op);
+    return '<div class="aviso' + (vencida ? ' faixa-aviso' : '') + '" style="margin-top:10px">' +
+      '<strong>Em nutrição desde ' + U.data(n.desde) + '.</strong> ' + esc(n.motivo) +
+      (n.motivoTexto ? ' — ' + esc(n.motivoTexto) : '') +
+      (n.revisarEm
+        ? ' Voltar a olhar em <strong>' + U.data(n.revisarEm) + '</strong>' +
+          (vencida ? ' — <strong>essa data já passou.</strong>' : '') + '.'
+        : ' Sem data para voltar a olhar, o que é o mesmo que esquecer.') +
+      '</div>';
+  }
+
   function revisao() {
     const est = Store.dados();
-    const resumos = est.oportunidades
-      .filter(function (o) { return !o.desfecho; })
+    const abertas = est.oportunidades.filter(function (o) { return !o.desfecho; });
+
+    /* Nutrição vencida entra na Revisão, e entra primeiro. Nutrição sem
+       cobrança é esquecimento com nome bonito: a conta sai da previsão, a
+       data combinada passa, e ninguém volta nela nunca. */
+    const vencidas = abertas.filter(function (o) { return E.nutricaoVencida(o); }).map(E.resumo);
+    const resumos = abertas
+      .filter(function (o) { return !o.nutricao; })
       .map(E.resumo)
       .sort(function (a, b) { return b.evidenceAge - a.evidenceAge; });
 
-    if (!resumos.length) return '<h1>Revisão semanal</h1><div class="vazio">Sem oportunidades abertas.</div>';
+    const filaNutricao = vencidas.length
+      ? '<div class="card"><h2>Nutrição vencida <span class="pill">' + vencidas.length + '</span></h2>' +
+        '<p class="small muted">A data que você combinou de voltar a olhar já passou. Três saídas: ' +
+        'retomar com uma tentativa clara, adiar de novo com data nova, ou encerrar por desistência.</p>' +
+        vencidas.map(function (r) {
+          return '<div class="row" style="margin-top:10px;align-items:flex-start">' +
+            '<div class="cresce"><strong>' + esc(r.op.titulo) + '</strong>' +
+            '<div class="small muted">' + esc((r.conta && r.conta.nome) || '') + ' · em nutrição desde ' +
+            U.data(r.op.nutricao.desde) + ' · ' + esc(r.op.nutricao.motivo) + '</div></div>' +
+            '<button class="btn mini" onclick="App.retomarNutricao(\'' + r.op.id + '\')">Retomar</button>' +
+            '<button class="btn ghost mini" onclick="App.colocarEmNutricao(\'' + r.op.id + '\')">Nova data</button>' +
+            '<button class="btn ghost mini" onclick="App.encerrar(\'' + r.op.id + '\')">Encerrar</button></div>';
+        }).join('') + '</div>'
+      : '';
+
+    if (!resumos.length && !vencidas.length) return '<h1>Revisão semanal</h1><div class="vazio">Sem oportunidades abertas.</div>';
+    if (!resumos.length) return '<h1>Revisão semanal</h1>' + filaNutricao;
 
     const cards = resumos.map(function (r) {
       const d = r.delta;
@@ -2615,7 +2672,7 @@
         '<button class="btn ghost mini" onclick="App.abrir(\'' + r.op.id + '\')" data-ajuda-titulo="Abrir cockpit" data-ajuda="A tela completa do negócio: as oito decisões, lacunas, grupo comprador, gate e histórico.">Abrir cockpit</button></div></div>';
     }).join('');
 
-    return '<h1>Revisão semanal</h1>' +
+    return '<h1>Revisão semanal</h1>' + filaNutricao +
       '<p class="muted small">Uma pergunta só, por negócio. Respostas que começam com “nós” não valem.</p>' + cards;
   }
 
@@ -3105,6 +3162,7 @@
     ['m-regra', 'A regra'],
     ['m-oito', 'As oito decisões'],
     ['m-regua', 'A régua: cinco degraus'],
+    ['m-caminho', 'O caminho do vendedor, passo a passo'],
     ['m-avanco', 'Como o IAD anda'],
     ['m-faixas', 'O que o número diz'],
     ['m-etapas', 'O que cada etapa pede'],
@@ -3339,6 +3397,133 @@
      A seção mais importante do manual, e a que precisa existir por escrito:
      mudamos a escala e ninguém aprende régua nova por osmose. Ela é gerada
      dos degraus e das dimensões, então descreve o que o app realmente faz. */
+  /* O caminho inteiro, do primeiro contato ao desfecho.
+
+     O manual explicava cada peça — a régua, os grupos, as tarefas — e nenhuma
+     página dizia a ORDEM. Vendedor novo lia tudo e continuava sem saber por
+     onde começar na segunda-feira. Isto é a sequência, e ela termina nas
+     quatro saídas, porque negócio que não termina em lugar nenhum é o que
+     entope o funil. */
+  function manualDoCaminho() {
+    const passo = function (n, titulo, texto, onde) {
+      return '<div class="passo-manual"><div class="numero">' + n + '</div>' +
+        '<div><strong>' + esc(titulo) + '</strong>' +
+        '<p class="small" style="margin:4px 0 0">' + texto + '</p>' +
+        (onde ? '<p class="tiny muted" style="margin:4px 0 0">Onde: ' + esc(onde) + '</p>' : '') +
+        '</div></div>';
+    };
+
+    const saida = function (rotulo, classe, quando, oQueFazer, motivos) {
+      return '<tr><td class="rotulo-manual"><span class="pill ' + classe + '">' + esc(rotulo) + '</span></td>' +
+        '<td><strong>' + esc(quando) + '</strong><p class="small" style="margin:4px 0 0">' + oQueFazer + '</p>' +
+        (motivos ? '<p class="tiny muted" style="margin:6px 0 0">' + motivos + '</p>' : '') + '</td></tr>';
+    };
+
+    const listar = function (lista) {
+      return lista.filter(function (m) { return m.id !== 'outro'; })
+        .map(function (m) { return esc(m.rotulo); }).join(' · ');
+    };
+
+    return '<div class="card" id="m-caminho"><h2>O caminho do vendedor, do primeiro contato ao desfecho</h2>' +
+      '<p class="small muted">A ordem em que as coisas acontecem no sistema. Cada passo tem uma tela, e ' +
+      'nenhum deles é opcional — pular um faz o seguinte trabalhar com informação que não existe.</p>' +
+
+      '<h3>Entrando: de onde vem a conta</h3>' +
+      passo(1, 'A conta entra, por uma de três portas',
+        'Do <strong>Linked Helper</strong>, em Configuração → Buscar respostas: quem respondeu no LinkedIn vira ' +
+        'empresa, contato e negociação com um clique, e o app não deixa duplicar quem já está aqui. ' +
+        'Do <strong>cadastro à mão</strong>, em Cadastros → Empresas, quando o contato veio por indicação, evento ou telefone. ' +
+        'De uma <strong>planilha</strong>, em Configuração → Importar, para trazer carteira que já existia.',
+        'Configuração → Buscar respostas · Cadastros → Empresas') +
+      passo(2, 'A negociação nasce com nome e valor',
+        'Nome curto que diga o que está sendo vendido, não o nome da empresa. Valor é o que o cliente pagaria ' +
+        'em doze meses — na dúvida, uma estimativa sua, que se corrige depois. Toda negociação nasce com data ' +
+        'prevista de fechamento: é o relógio começando a andar.',
+        'Pipeline → + Oportunidade') +
+      passo(3, 'As oito começam todas em zero',
+        'Zero não é ruim: é honesto. Ninguém sabe nada sobre a decisão de um cliente com quem nunca se falou. ' +
+        'O cartão <em>Próximos passos</em> já aponta a primeira lacuna, na ordem em que o método trabalha.',
+        'Cockpit da oportunidade') +
+
+      '<h3>Trabalhando: como o índice anda</h3>' +
+      passo(4, 'Você marca uma tarefa e diz qual decisão quer provocar',
+        'Reunião, visita, telefonema, WhatsApp ou e-mail. O campo <em>decisão que pretende provocar</em> é o que ' +
+        'transforma agenda em método: sem ele você marca reuniões, com ele você marca reuniões <em>para alguma coisa</em>.',
+        '+ Tarefa, em qualquer tela') +
+      passo(5, 'A tarefa acontece',
+        'E é aqui que mora a única regra que não tem exceção: o que <strong>nós</strong> fazemos não move nada. ' +
+        'Apresentar, propor, cobrar retorno, mover etapa — é trabalho, e trabalho não é avanço.',
+        'Fora do sistema') +
+      passo(6, 'Você conclui a tarefa contando o que aconteceu',
+        'Quatro modos, do mais completo ao mais rápido: colar a ata ou anexar os documentos, responder as quatro ' +
+        'perguntas fechadas, registrar uma evidência direta, ou marcar que nada aconteceu. ' +
+        'Fechar sem contar fecha a tarefa e não move o índice — não é punição, é que sem relato não existe evidência para ler.',
+        'Tarefas → Concluir, ou Concluir dentro da própria tarefa') +
+      passo(7, 'A IA separa o que o CLIENTE fez e relê as oito',
+        'Ela propõe uma evidência por decisão afetada, com a força de cada uma, e reavalia os oito degraus com ' +
+        'tudo o que já estava registrado mais o material novo. Ela nunca rebaixa nota: corrigir para baixo é sempre humano.',
+        'Automático ao concluir') +
+      passo(8, 'Você confere e ajusta',
+        'A tela do resumo mostra o que entrou e o que subiu. Se discordar, ajuste — as oito ficam abertas para edição. ' +
+        'Os degraus 3 e 4 continuam exigindo prova: sem evidência confirmada ou documentada, o motor desce a nota e diz por quê.',
+        'Cockpit → as oito decisões') +
+
+      '<h3>Avançando: quando mover a etapa</h3>' +
+      passo(9, 'Mova a etapa quando o cliente andar, não quando você trabalhar',
+        'Etapa é onde você anotou; decisão é onde o cliente está. O app deixa arrastar para qualquer lugar, e é de ' +
+        'propósito — a única trava do sistema é a da Proposta, e mesmo ela não bloqueia: ela denuncia, marcando o ' +
+        'negócio como <strong>Falso avançado</strong>.',
+        'Pipeline, em lista ou kanban') +
+      passo(10, 'Antes da proposta, confira o portão',
+        'Seis condições: Problema em 3, e Prioridade, Impacto, Critérios, Stakeholders e Processo de compra em 2 ou mais. ' +
+        'A proposta é consequência da qualificação, não ferramenta de descoberta.',
+        'Cockpit → Prontidão') +
+      passo(11, 'Depois da proposta, três coisas fazem o app gritar',
+        'IAD abaixo de ' + P.IAD_MADURO + ', portão não liberado, ou nenhum decisor econômico mapeado. Qualquer uma ' +
+        'marca o negócio como Falso avançado, que é o maior destruidor de previsão de vendas.',
+        'Pipeline → Falso avançado') +
+      passo(12, 'Toda semana, a Revisão',
+        'Uma pergunta por negócio: o que mudou na decisão do cliente nos últimos sete dias? Respostas que começam ' +
+        'com “nós” não valem. É onde aparece o que está sem próximo passo, sem papel crítico e com evidência velha.',
+        'Revisão') +
+
+      '<h3>Terminando: as quatro saídas</h3>' +
+      '<p class="small">Negócio que não termina em lugar nenhum é o que entope o funil e envenena a previsão. ' +
+      'São quatro saídas, e escolher a certa é o que faz o Aprendizado do painel valer alguma coisa depois.</p>' +
+      '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' +
+      saida('Ganho', 'ok', 'O cliente comprou.',
+        'Registre o valor final. A etapa vai para Venda e o retrato das oito congela — é ele que vai dizer, ' +
+        'daqui a um ano, quais decisões estavam maduras nos negócios que você ganhou.') +
+      saida('Perda', 'dead', 'O cliente DECIDIU, e a escolha não foi a nossa.',
+        'Houve disputa e existe um vencedor. Registre quem ganhou e o motivo, da lista fechada. ' +
+        'A pergunta que este desfecho responde é: por que perdemos a comparação?',
+        '<strong>Motivos:</strong> ' + listar(P.MOTIVOS_PERDA)) +
+      saida('Desistência', 'dead', 'Ninguém decidiu. O projeto parou de existir dentro do cliente.',
+        'Não houve comparação nenhuma, e é por isso que não pode ser guardado junto com a perda: analisar ' +
+        '“por que perdemos” aqui é analisar uma disputa que não aconteceu.',
+        '<strong>Motivos:</strong> ' + listar(P.MOTIVOS_DESISTENCIA)) +
+      saida('Em nutrição', 'warn', 'O processo parou porque a conta ainda não está pronta.',
+        '<strong>Esta não encerra nada.</strong> O negócio continua aberto, sai da previsão e fica na agenda com ' +
+        'data para voltar. Encerrar uma conta que só chegou cedo demais é a forma mais cara de esquecer dela.',
+        '<strong>Motivos:</strong> ' + listar(P.MOTIVOS_NUTRICAO)) +
+      '</tbody></table></div>' +
+
+      '<h3>Como funciona a nutrição</h3>' +
+      '<p class="small">É um estado, não um desfecho. Três coisas acontecem quando você coloca um negócio nela:</p>' +
+      '<ul class="small">' +
+      '<li><strong>Sai do total do pipeline.</strong> O contador e a soma em reais deixam de incluí-lo, porque ' +
+      'ninguém está perseguindo aquela receita. Ele tem chip próprio, <em>Em nutrição</em>, e é lá que se olha.</li>' +
+      '<li><strong>Para de envelhecer.</strong> Não vira Zumbi por silêncio — o silêncio foi combinado. Seria o ' +
+      'app cobrando por uma pausa que ele mesmo autorizou.</li>' +
+      '<li><strong>Volta sozinho.</strong> Qualquer evidência nova do cliente tira o negócio da nutrição na hora, ' +
+      'porque é exatamente esse o sinal que ela estava esperando. Você não precisa lembrar de nada.</li>' +
+      '</ul>' +
+      '<p class="small">E a data não é decoração: quando ela chega, o negócio aparece no alto da <strong>Revisão</strong>, ' +
+      'com três saídas — retomar com uma tentativa clara, adiar de novo com data nova, ou encerrar por desistência. ' +
+      'Nutrição sem cobrança é esquecimento com nome bonito.</p>' +
+      '</div>';
+  }
+
   function manualDaRegua() {
     /* A régua por decisão, com o rigor de cada uma. O que é estrito e o que é
        flexível não é opinião solta: sai do texto do degrau 3 e 4 de cada
@@ -3851,6 +4036,7 @@
       '<p class="small muted">Não conta como avanço:</p><div class="row">' + naoContam + '</div></div>' +
 
       manualDasOito() +
+      manualDoCaminho() +
       manualDaRegua() +
       manualDoAvanco() +
       manualDasFaixas() +
