@@ -269,12 +269,26 @@
       if (!jaTem) estado.tenants.push(novoTenant);
       alvo = novoTenant.id;
     }
+    /* Carimbo que aponta para empresa inexistente vale menos que carimbo
+       nenhum: o registro entra, ocupa espaço e não aparece para ninguém.
+
+       Era o que acontecia com a demonstração e com todo backup importado. O
+       migrador, ao ver registros sem empresa, inventava uma "Minha empresa" e
+       carimbava tudo com ela; logo abaixo, substituir() descartava essa
+       empresa recém-criada para preservar a lista de acessos deste aparelho.
+       Os registros ficavam apontando para um id que não existia mais em lugar
+       nenhum. Clicar em "Carregar demonstração" gravava tudo e não mostrava
+       nada — e quem clicava concluía que o botão estava quebrado. */
+    const existentes = {};
+    (estado.tenants || []).forEach(function (t) { existentes[t.id] = true; });
+    const semCasa = function (r) { return !r.tenantId || !existentes[r.tenantId]; };
+
     ['contas', 'contatos', 'segmentos', 'tiposTarefa', 'produtos'].forEach(function (colecao) {
-      (estado[colecao] || []).forEach(function (r) { if (!r.tenantId) r.tenantId = alvo; });
+      (estado[colecao] || []).forEach(function (r) { if (semCasa(r)) r.tenantId = alvo; });
     });
     ['oportunidades', 'tarefas'].forEach(function (colecao) {
       (estado[colecao] || []).forEach(function (r) {
-        if (!r.tenantId) r.tenantId = alvo;
+        if (semCasa(r)) r.tenantId = alvo;
         if (!r.donoId && ctx.usuario) r.donoId = ctx.usuario.id;
       });
     });
