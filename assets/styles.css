@@ -844,6 +844,16 @@ td .tiny { display: block; }
   white-space: pre-wrap; word-break: break-word; color: var(--muted);
 }
 
+/* O endereço da ponte, para copiar. Quebra em qualquer ponto porque URL com
+   chave e identificador não cabe numa linha e cortar esconde justamente o fim,
+   que é a parte que muda de empresa para empresa. */
+.endereco-ponte {
+  margin: 0; padding: 10px 12px;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+  font: inherit; font-size: .78rem; line-height: 1.5;
+  white-space: pre-wrap; word-break: break-all; user-select: all;
+}
+
 /* ---------- O que falta ---------- */
 ol.lacunas { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .lacuna { display: flex; gap: 11px; padding: 11px 0; border-top: 1px solid var(--line); }

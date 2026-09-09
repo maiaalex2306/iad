@@ -2594,6 +2594,69 @@
     /* A consulta que responde "onde foram parar", para colar no SQL Editor.
        Curta de propósito: um arquivo de noventa linhas é um convite a deixar
        para depois. */
+    /* ---------- a ponte de cada empresa ----------
+
+       Cada empresa que usa o sistema precisa do endereço DELA para colar no
+       Linked Helper. É o mesmo worker para todas — mas o endereço carrega o
+       identificador da empresa, e é ele que separa os baldes. Sem isso, a
+       primeira que mandasse buscar levava a prospecção de todas.
+
+       A chave de escrita não fica guardada em lugar nenhum do app, e é por
+       isso que ela é digitada aqui a cada vez: são duas chaves de propósito, a
+       de escrita vive no Cloudflare e a de leitura no navegador. Guardar as
+       duas no mesmo lugar seria desfazer a separação que as criou. */
+    webhookDaEmpresa: function (tenantId) {
+      const I = global.IADIntegracoes;
+      const c = I.config();
+      const empresa = (Store.dados().tenants || []).filter(function (t) { return t.id === tenantId; })[0];
+      const nome = empresa ? empresa.nome : 'esta empresa';
+
+      if (!c.url) {
+        alert('Configure primeiro o endereço da ponte em Configuração → Linked Helper.\n\n' +
+          'É o mesmo endereço para todas as empresas: o que muda é o identificador no fim.');
+        return;
+      }
+
+      U.formulario('Webhook do Linked Helper — ' + nome, [
+        { tipo: 'aviso', rotulo: 'A chave de escrita não fica guardada em lugar nenhum: ' +
+          'serve só para montar o endereço agora. Ela vive no Cloudflare.' },
+        { id: 'chave', rotulo: 'Chave de escrita da ponte',
+          placeholder: 'a que você definiu em CHAVE_ESCRITA no Cloudflare' }
+      ], {}, function () { /* nada a salvar: a janela existe para copiar */ }, function (dlg) {
+        /* O endereço se remonta a cada tecla: quem cola a chave vê o resultado
+           na hora, em vez de confirmar no escuro e descobrir depois. */
+        const campo = dlg.querySelector('[name="chave"]');
+        const caixa = document.createElement('div');
+        caixa.style.marginTop = '10px';
+        campo.closest('.campo').parentNode.appendChild(caixa);
+
+        const pintar = function () {
+          const url = I.enderecoDeEntrada(campo.value.trim(), tenantId);
+          caixa.innerHTML =
+            '<p class="tiny muted" style="margin:0 0 6px">Cole isto no campo <strong>Webhook URL</strong> ' +
+            'do Linked Helper, na campanha desta empresa:</p>' +
+            '<pre class="endereco-ponte">' + U.esc(url) + '</pre>' +
+            '<div class="row" style="margin-top:8px">' +
+            '<button type="button" class="btn mini" data-copiar>Copiar endereço</button>' +
+            '<span class="tiny muted" data-aviso></span></div>' +
+            '<p class="tiny muted" style="margin:10px 0 0">O identificador no fim (<code>e=</code>) é o que ' +
+            'separa esta empresa das outras. Cada uma tem o seu, e um não lê o balde do outro.</p>';
+
+          caixa.querySelector('[data-copiar]').addEventListener('click', function () {
+            const aviso = caixa.querySelector('[data-aviso]');
+            const feito = function () { aviso.textContent = 'copiado'; };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(url).then(feito, function () { prompt('Copie:', url); });
+            } else {
+              prompt('Copie:', url);
+            }
+          });
+        };
+        campo.addEventListener('input', pintar);
+        pintar();
+      });
+    },
+
     copiarConsultaDeOnde: function () {
       const texto = [
         '-- Onde estão as contas e as oportunidades, por empresa.',

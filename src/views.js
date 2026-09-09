@@ -3009,6 +3009,13 @@
         '<td class="right" style="white-space:nowrap">' +
         '<button class="btn ghost mini" onclick="App.editarEmpresaNuvem(\'' + t.id + '\')"' +
         ' data-ajuda="Corrige o nome e o CNPJ desta empresa.">Editar</button> ' +
+        /* Cada empresa tem a sua ponte: mesmo worker, endereço próprio. Sem
+           isso as duas dividiriam o balde e a primeira a buscar levaria a
+           prospecção da outra. */
+        '<button class="btn ghost mini" onclick="App.webhookDaEmpresa(\'' + t.id + '\')"' +
+        ' data-ajuda-titulo="Webhook do Linked Helper"' +
+        ' data-ajuda="Monta o endereço desta empresa para colar no campo Webhook URL do Linked Helper.' +
+        ' O identificador no fim é o que separa a prospecção dela da das outras.">Webhook</button> ' +
         '<button class="btn ' + (bloqueada ? 'alt' : 'ghost') + ' mini"' +
         ' onclick="App.bloquearEmpresa(\'' + t.id + '\', ' + (bloqueada ? 'true' : 'false') + ')"' +
         ' data-ajuda-titulo="' + (bloqueada ? 'Desbloquear empresa' : 'Bloquear empresa') + '"' +

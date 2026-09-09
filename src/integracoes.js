@@ -232,11 +232,40 @@
     };
   }
 
+  /* ---------- de qual empresa é esta prospecção ----------
+
+     O IAD é multiempresa e a ponte não sabia disso: guardava tudo num balde só,
+     e a primeira empresa que mandasse buscar levava os leads de todas. Agora o
+     identificador da empresa vai na URL, e o app pede sempre o da empresa de
+     quem está logado — não há campo para digitar, justamente para não haver
+     como digitar o da empresa errada. */
+  function empresaAtual() {
+    const Store = global.IADStore;
+    return (Store && Store.tenantDeTrabalho && Store.tenantDeTrabalho()) || '';
+  }
+
+  /* O endereço que a SDR cola no Linked Helper. Precisa da chave de escrita,
+     que NÃO é a que fica no app: são duas de propósito, e vazar uma não expõe
+     a outra. Por isso a chave de escrita entra aqui como parâmetro — ela vive
+     no Cloudflare e na cabeça de quem administra, nunca guardada no navegador. */
+  function enderecoDeEntrada(chaveDeEscrita, empresaId) {
+    const c = config();
+    if (!c.url) return '';
+    const base = c.url.replace(/[?#].*$/, '');
+    const partes = [];
+    if (chaveDeEscrita) partes.push('k=' + encodeURIComponent(chaveDeEscrita));
+    if (empresaId) partes.push('e=' + encodeURIComponent(empresaId));
+    return base + (partes.length ? '?' + partes.join('&') : '');
+  }
+
   function requisitar(metodo, corpo) {
     const c = config();
     if (!c.url) return Promise.reject(new Error('Configure o endereço da ponte em Configuração → Linked Helper.'));
     const separador = c.url.indexOf('?') === -1 ? '?' : '&';
-    const endereco = c.url + (c.token ? separador + 'token=' + encodeURIComponent(c.token) : '');
+    const empresa = empresaAtual();
+    const endereco = c.url +
+      (c.token ? separador + 'token=' + encodeURIComponent(c.token) : '') +
+      (empresa ? (c.token ? '&' : separador) + 'e=' + encodeURIComponent(empresa) : '');
 
     return fetch(endereco, {
       method: metodo,
@@ -263,5 +292,6 @@
     });
   }
 
-  global.IADIntegracoes = { config, salvarConfig, configurada, buscar, marcarProcessados, normalizar };
+  global.IADIntegracoes = { config, salvarConfig, configurada, buscar, marcarProcessados,
+    normalizar, empresaAtual, enderecoDeEntrada };
 })(window);

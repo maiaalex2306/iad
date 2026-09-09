@@ -17,12 +17,50 @@
                               npx wrangler secret put CHAVE_LEITURA
      5. npx wrangler deploy
 
+   ---------- uma empresa não vê a prospecção da outra ----------
+
+   O IAD é multiempresa: cada uma tem carteira separada e ninguém de uma
+   enxerga a da outra. A ponte não sabia disso — guardava tudo num balde só,
+   e a primeira empresa que mandasse buscar levava os leads de todas.
+
+   Agora o endereço carrega o identificador da empresa no parâmetro "e", e as
+   entregas ficam guardadas embaixo dele. Ler exige o mesmo identificador, e o
+   app só pede o da empresa de quem está logado.
+
+   Isso é isolamento operacional, não criptográfico: quem tiver a chave de
+   leitura E souber o identificador de outra empresa consegue ler o balde dela.
+   Como o identificador é um UUID que só aparece para quem administra, e a
+   chave de leitura já é de dentro do sistema, o risco real que isto elimina é
+   o que acontece sozinho — importar por engano a prospecção do vizinho.
+
    No Linked Helper, no campo Webhook URL:
-     https://ponte-iad.SEU-SUBDOMINIO.workers.dev/?k=CHAVE_ESCRITA
+     https://ponte-iad.SEU-SUBDOMINIO.workers.dev/?k=CHAVE_ESCRITA&e=IDENTIFICADOR_DA_EMPRESA
    No IAD CRM, em ⚙︎ Dados → Linked Helper:
      endereço  https://ponte-iad.SEU-SUBDOMINIO.workers.dev/
      chave     CHAVE_LEITURA
+   (o identificador da empresa o app preenche sozinho)
 */
+
+/* O identificador vem da URL, que é lugar de dado público e de dado inventado.
+   Sanear aqui é o que impede alguém de escrever "../" ou um nome de mil
+   caracteres e bagunçar as chaves do KV. Vazio quer dizer o balde antigo, o
+   que mantém funcionando quem já publicou a ponte antes desta mudança. */
+function balde(url) {
+  const bruto = String(url.searchParams.get('e') || '').trim();
+  const limpo = bruto.replace(/[^a-zA-Z0-9-]/g, '').slice(0, 64);
+  return limpo;
+}
+
+/* Chaves separadas por balde. O prefixo diferente — "e:" contra "lead:" — é
+   de propósito: assim a listagem antiga não enxerga as novas, e uma ponte
+   recém-atualizada não entrega a uma empresa o que ainda não é dela. */
+function chaveDoLead(bucket, id) {
+  return bucket ? 'e:' + bucket + ':lead:' + id : 'lead:' + id;
+}
+
+function prefixoDoBalde(bucket) {
+  return bucket ? 'e:' + bucket + ':lead:' : 'lead:';
+}
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -55,10 +93,11 @@ export default {
       const lista = Array.isArray(corpo) ? corpo : (corpo.data || corpo.items || [corpo]);
       if (!lista.length) return json({ ok: true, recebidos: 0 });
 
+      const bucket = balde(url);
       await Promise.all(lista.map((item) => {
         const id = crypto.randomUUID();
         return ambiente.LEADS.put(
-          'lead:' + id,
+          chaveDoLead(bucket, id),
           JSON.stringify({ id, recebidoEm: new Date().toISOString(), dados: item }),
           { expirationTtl: 60 * 60 * 24 * 30 }
         );
@@ -78,10 +117,11 @@ export default {
          mais leads do que cabe numa página some do app sem erro nenhum —
          ninguém descobre que faltou, porque a resposta é 200 e a lista
          parece completa. Teto de 500 para a resposta não ficar gigante. */
+      const prefixo = prefixoDoBalde(balde(url));
       const chaves = [];
       let cursor;
       do {
-        const pagina = await ambiente.LEADS.list({ prefix: 'lead:', limit: 1000, cursor });
+        const pagina = await ambiente.LEADS.list({ prefix: prefixo, limit: 1000, cursor });
         chaves.push(...pagina.keys);
         cursor = pagina.list_complete ? null : pagina.cursor;
       } while (cursor && chaves.length < 500);
@@ -97,7 +137,8 @@ export default {
     if (requisicao.method === 'POST') {
       const corpo = await requisicao.json().catch(() => ({}));
       const ids = Array.isArray(corpo.marcar) ? corpo.marcar : [];
-      await Promise.all(ids.map((id) => ambiente.LEADS.delete('lead:' + id)));
+      const bucket = balde(url);
+      await Promise.all(ids.map((id) => ambiente.LEADS.delete(chaveDoLead(bucket, id))));
       return json({ ok: true, removidos: ids.length });
     }
 
