@@ -2608,7 +2608,12 @@
     webhookDaEmpresa: function (tenantId) {
       const I = global.IADIntegracoes;
       const c = I.config();
-      const empresa = (Store.dados().tenants || []).filter(function (t) { return t.id === tenantId; })[0];
+      /* A lista da tela de administração vem do servidor e vive em
+         empresasNuvem — não em estado.tenants, que é a cópia local de quem
+         está logado. Procurar no lugar errado fazia o título dizer "esta
+         empresa" justamente na tela onde há várias. */
+      const empresa = (empresasNuvem || []).filter(function (t) { return t.id === tenantId; })[0] ||
+        (Store.dados().tenants || []).filter(function (t) { return t.id === tenantId; })[0];
       const nome = empresa ? empresa.nome : 'esta empresa';
 
       if (!c.url) {
@@ -2617,11 +2622,19 @@
         return;
       }
 
+      /* A primeira versão desta janela pedia só "a chave de escrita" e mostrava
+         a URL de exemplo logo acima. Quem abriu colou a URL inteira no campo da
+         chave — e o endereço saiu com a URL dentro de si, codificada. O erro
+         foi meu: pedi uma coisa mostrando outra ao lado.
+
+         Agora o campo diz o que É uma chave (uma palavra, não um endereço), o
+         endereço da ponte aparece separado e só de leitura, e colar algo que
+         parece URL avisa em vez de montar lixo. */
       U.formulario('Webhook do Linked Helper — ' + nome, [
-        { tipo: 'aviso', rotulo: 'A chave de escrita não fica guardada em lugar nenhum: ' +
-          'serve só para montar o endereço agora. Ela vive no Cloudflare.' },
-        { id: 'chave', rotulo: 'Chave de escrita da ponte',
-          placeholder: 'a que você definiu em CHAVE_ESCRITA no Cloudflare' }
+        { tipo: 'aviso', rotulo: 'Este é o endereço que a SDR cola no Linked Helper, nas campanhas desta empresa. ' +
+          'A chave de escrita não fica guardada: serve só para montar o endereço agora.' },
+        { id: 'chave', rotulo: 'Chave de escrita (CHAVE_ESCRITA do Cloudflare)',
+          placeholder: 'uma palavra, não um endereço. Ex.: escrita-rio-claro-2648' }
       ], {}, function () { /* nada a salvar: a janela existe para copiar */ }, function (dlg) {
         /* O endereço se remonta a cada tecla: quem cola a chave vê o resultado
            na hora, em vez de confirmar no escuro e descobrir depois. */
@@ -2631,16 +2644,29 @@
         campo.closest('.campo').parentNode.appendChild(caixa);
 
         const pintar = function () {
-          const url = I.enderecoDeEntrada(campo.value.trim(), tenantId);
+          const chave = campo.value.trim();
+          /* Chave com "://" ou "?" é URL colada no campo errado. Montar o
+             endereço assim mesmo produziria algo que parece certo e nunca
+             funciona — o pior tipo de erro para descobrir depois. */
+          const pareceUrl = /:\/\/|\?|workers\.dev/i.test(chave);
+          const url = I.enderecoDeEntrada(pareceUrl ? '' : chave, tenantId);
+
           caixa.innerHTML =
-            '<p class="tiny muted" style="margin:0 0 6px">Cole isto no campo <strong>Webhook URL</strong> ' +
-            'do Linked Helper, na campanha desta empresa:</p>' +
+            (pareceUrl
+              ? '<div class="aviso">Isso é um endereço, não uma chave. A chave de escrita é a palavra que você ' +
+                'definiu no Cloudflare em <code>CHAVE_ESCRITA</code> — algo como ' +
+                '<code>escrita-rio-claro-2648</code>. O endereço da ponte o app já sabe.</div>'
+              : '') +
+            '<p class="tiny muted" style="margin:0 0 6px"><strong>Endereço desta empresa</strong> — cole no campo ' +
+            '<strong>Webhook URL</strong> do Linked Helper:</p>' +
             '<pre class="endereco-ponte">' + U.esc(url) + '</pre>' +
             '<div class="row" style="margin-top:8px">' +
             '<button type="button" class="btn mini" data-copiar>Copiar endereço</button>' +
             '<span class="tiny muted" data-aviso></span></div>' +
-            '<p class="tiny muted" style="margin:10px 0 0">O identificador no fim (<code>e=</code>) é o que ' +
-            'separa esta empresa das outras. Cada uma tem o seu, e um não lê o balde do outro.</p>';
+            '<p class="tiny muted" style="margin:10px 0 0">Três partes: o <strong>endereço da ponte</strong> (o app ' +
+            'já sabe, veio de Configuração → Linked Helper), a <strong>chave de escrita</strong> em <code>k=</code>, ' +
+            'e o <strong>identificador desta empresa</strong> em <code>e=</code> — é ele que separa a prospecção ' +
+            'dela da das outras.</p>';
 
           caixa.querySelector('[data-copiar]').addEventListener('click', function () {
             const aviso = caixa.querySelector('[data-aviso]');
