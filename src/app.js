@@ -3073,7 +3073,14 @@
         leads = lista;
         if (!lista.length) {
           espera.close(); espera.remove();
-          alert('Nenhuma resposta nova na ponte.');
+          /* Dizer de QUEM é o balde que voltou vazio. Sem isso, "nenhuma
+             resposta nova" some com a única pergunta útil: será que o Linked
+             Helper está postando no endereço desta empresa? */
+          const quem = global.IADIntegracoes.nomeDaEmpresaAtual();
+          alert('Nenhuma resposta nova na ponte' + (quem ? ' de ' + quem : '') + '.\n\n' +
+            'Se você esperava leads aqui, confira o endereço que está no Linked Helper: ' +
+            'o identificador no fim dele (e=) tem de ser o desta empresa. ' +
+            'Cada empresa tem o próprio balde, e o que chega pelo endereço de uma não aparece na outra.');
           return;
         }
 

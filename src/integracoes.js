@@ -239,9 +239,37 @@
      identificador da empresa vai na URL, e o app pede sempre o da empresa de
      quem está logado — não há campo para digitar, justamente para não haver
      como digitar o da empresa errada. */
+  /* Qual empresa está lendo a ponte — e a resposta tem de ser inequívoca.
+
+     tenantDeTrabalho() serve para decidir onde um registro NOVO nasce, e para
+     isso ele tem um palpite razoável: se o administrador está vendo "Todas as
+     empresas", usa a primeira da lista. Aqui esse palpite é veneno. Ler a
+     ponte com a empresa errada devolve o balde de outra pessoa — ou, como
+     aconteceu, o balde de uma empresa morta, e o app diz "nenhuma resposta
+     nova" com toda a convicção enquanto os leads estão ali do lado.
+
+     Então: administrador em "Todas" não tem empresa definida, e a leitura
+     recusa em vez de chutar. */
   function empresaAtual() {
     const Store = global.IADStore;
-    return (Store && Store.tenantDeTrabalho && Store.tenantDeTrabalho()) || '';
+    if (!Store || !Store.contexto) return '';
+    const ctx = Store.contexto();
+    if (!ctx.usuario) return '';
+    if (ctx.admin) {
+      const escolhida = ctx.filtros && ctx.filtros.tenant;
+      return (escolhida && escolhida !== 'todas') ? escolhida : '';
+    }
+    return ctx.tenantId || '';
+  }
+
+  /* O nome da empresa que está lendo, para as mensagens dizerem de quem é o
+     balde. "Nenhuma resposta nova" sem dizer de quem é a metade da informação. */
+  function nomeDaEmpresaAtual() {
+    const Store = global.IADStore;
+    const id = empresaAtual();
+    if (!id || !Store) return '';
+    const t = (Store.obter().tenants || []).filter(function (x) { return x.id === id; })[0];
+    return (t && t.nome) || id;
   }
 
   /* O endereço que a SDR cola no Linked Helper. Precisa da chave de escrita,
@@ -261,6 +289,11 @@
   function requisitar(metodo, corpo) {
     const c = config();
     if (!c.url) return Promise.reject(new Error('Configure o endereço da ponte em Configuração → Linked Helper.'));
+    if (!empresaAtual()) {
+      return Promise.reject(new Error('Escolha uma empresa antes de buscar. Cada empresa tem o próprio ' +
+        'balde na ponte, e com o recorte em "Todas as empresas" eu não sei qual ler — ' +
+        'ler o balde errado devolveria a prospecção de outra pessoa.'));
+    }
     const separador = c.url.indexOf('?') === -1 ? '?' : '&';
     const empresa = empresaAtual();
     const endereco = c.url +
@@ -293,5 +326,5 @@
   }
 
   global.IADIntegracoes = { config, salvarConfig, configurada, buscar, marcarProcessados,
-    normalizar, empresaAtual, enderecoDeEntrada };
+    normalizar, empresaAtual, nomeDaEmpresaAtual, enderecoDeEntrada };
 })(window);
