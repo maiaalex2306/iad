@@ -712,7 +712,12 @@ async function explicarRecusa(r: Response, modelo: string): Promise<string> {
   const curto = corpo.replace(/\s+/g, ' ').slice(0, 200);
 
   if (r.status === 404) {
-    const nomes = PROVEDOR === 'anthropic' ? [] : await modelosDoGroq();
+    if (PROVEDOR === 'anthropic') {
+      return 'O modelo "' + modelo + '" não existe na Anthropic. ' +
+        'Use claude-opus-5, claude-sonnet-5 ou claude-haiku-4-5 no segredo IA_MODELO ' +
+        'e publique a função de novo.';
+    }
+    const nomes = await modelosDoGroq();
     return 'O modelo "' + modelo + '" não existe mais no provedor. ' +
       (nomes.length
         ? 'Os que conversam agora: ' + nomes.slice(0, 20).join(', ') + '. ' +
@@ -720,7 +725,19 @@ async function explicarRecusa(r: Response, modelo: string): Promise<string> {
         : 'Veja a lista no painel do provedor e ponha um nome válido no segredo IA_MODELO.');
   }
   if (r.status === 401 || r.status === 403) {
-    return 'O provedor recusou a chave da IA (' + r.status + '). Confira o segredo IA_CHAVE.';
+    return 'O provedor recusou a chave da IA (' + r.status + '). Confira o segredo IA_CHAVE.' +
+      (PROVEDOR === 'anthropic'
+        ? ' Chave da Anthropic começa com "sk-ant-".'
+        : ' Chave da Groq começa com "gsk_".');
+  }
+
+  /* 529 é "sobrecarregado" na Anthropic: não é limite da sua conta, é o
+     provedor pedindo para voltar depois. Do ponto de vista de quem espera, é
+     a mesma coisa que o 429 — e o app já sabe esperar e tentar de novo, desde
+     que a mensagem venha no formato que ele lê. */
+  if (r.status === 529) {
+    return 'O provedor está sobrecarregado no momento. [esperar:20]' +
+      (curto ? '\n\n' + curto : '');
   }
   if (r.status === 429) {
     /* O provedor diz QUAL limite estourou — tokens por minuto, requisições

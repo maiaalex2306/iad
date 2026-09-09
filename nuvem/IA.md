@@ -73,6 +73,41 @@ No Groq, uma combinação que funciona:
 | `IA_MODELO` | `openai/gpt-oss-120b` |
 | `IA_MODELO_RAPIDO` | `openai/gpt-oss-20b` |
 
+### Anthropic, o caminho pago
+
+A conta gratuita da Groq tem teto de 8000 tokens por minuto. Isso é apertado
+para classificar vinte leads com conversa, catálogo de segmentos e contas
+candidatas — e foi a causa de todas as importações que voltaram pela metade.
+Passado esse ponto, o conserto deixa de ser código.
+
+Quatro segredos, nenhuma mudança de código:
+
+| Nome | Valor |
+| --- | --- |
+| `IA_PROVEDOR` | `anthropic` |
+| `IA_CHAVE` | a chave da Anthropic (começa com `sk-ant-`) |
+| `IA_MODELO` | `claude-sonnet-5` |
+| `IA_MODELO_RAPIDO` | `claude-haiku-4-5` |
+
+Ordem de grandeza do custo, medida nos pedidos que este app faz — uma
+importação de vinte leads gasta cerca de 30 mil tokens de entrada e 5 mil de
+saída; uma ata de reunião, 15 mil e 3 mil:
+
+| Modelo | Importação de 20 | Uma ata |
+| --- | --- | --- |
+| `claude-haiku-4-5` | US$ 0,055 | US$ 0,03 |
+| `claude-sonnet-5` | US$ 0,11 | US$ 0,06 |
+| `claude-opus-5` | US$ 0,28 | US$ 0,15 |
+
+O Sonnet lê ata e propõe as oito notas: essa tarefa exige apontar o trecho
+literal onde o cliente disse cada coisa, e é onde modelo pequeno falha. O
+Haiku classifica segmento em lote, que é extração curta contra lista fechada.
+
+Um efeito colateral bem-vindo: a Anthropic não tem "modo JSON", então o erro
+`json_validate_failed` — que derrubou lotes inteiros na Groq — deixa de
+existir. A instrução do prompt já pede JSON e o validador da função descarta
+o que vier torto.
+
 **Nomes de modelo morrem.** O Groq aposenta nomes sem aviso, e o nome fica
 escrito num segredo que alguém definiu meses atrás — a função inteira para
 por causa de uma string. Por isso ela não desiste: ao receber 404, pergunta
