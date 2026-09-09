@@ -2946,6 +2946,7 @@
     ['m-tarefas', 'A tela de Tarefas'],
     ['m-aprendizado', 'Aprendizado e plano'],
     ['m-config', 'Configuração'],
+    ['m-ia-vendedor', 'A IA no seu dia'],
     ['m-ia', 'As tarefas da IA'],
     ['m-limites', 'O que a IA não faz'],
     ['m-perfis', 'Quem move por dentro'],
@@ -3388,6 +3389,133 @@
       '</div>';
   }
 
+  /* ---------------- A IA vista de quem vende ----------------
+
+     Já existe a seção técnica com os onze pedidos e o que cada um é proibido
+     de fazer. Esta é outra pergunta: em que MOMENTO do dia a IA aparece, o
+     que ela tira das costas de quem vende, e o que continua sendo dele.
+
+     A ordem aqui é a do dia de trabalho, não a da arquitetura. */
+
+  function manualDaIAParaOVendedor() {
+    const momento = function (quando, gatilho, faz, seu, ganho) {
+      return '<tr><td class="rotulo-manual"><strong>' + esc(quando) + '</strong>' +
+        '<span class="tiny muted">' + esc(gatilho) + '</span></td>' +
+        '<td><span class="faz-ia">' + faz + '</span>' +
+        '<span class="tiny muted seu-lado"><strong>Seu:</strong> ' + esc(seu) + '</span></td>' +
+        '<td class="nowrap tiny muted">' + esc(ganho) + '</td></tr>';
+    };
+
+    const linhas = [
+      momento('Chega um lead do LinkedIn',
+        'Configuração → Buscar respostas',
+        'Cria a <strong>empresa</strong>, o <strong>contato</strong> com papel na compra, a ' +
+        '<strong>oportunidade</strong> e a <strong>tarefa</strong> de fazer contato. Classifica o segmento, ' +
+        'guarda a conversa com a SDR no histórico e escreve um rascunho de reenquadramento.',
+        'conferir o segmento e o papel na tela de importação, e marcar quem entra.',
+        '4 cadastros por lead'),
+
+      momento('Você vai criar um negócio',
+        'Pipeline → + Oportunidade, colando o que tem',
+        'Lê a ata, a proposta ou o e-mail e <strong>monta o negócio, a ficha da empresa e as pessoas</strong>. ' +
+        'Se o material for grande, ainda separa as evidências e propõe as oito notas — o negócio nasce com ' +
+        'histórico em vez de zerado.',
+        'valor, etapa e data de fechamento. A IA não mexe nesses três.',
+        'a digitação inteira'),
+
+      momento('Você está preenchendo qualquer ficha',
+        'a caixa ✨ no alto do formulário',
+        'Preenche os campos a partir de um texto colado, de um documento carregado ou do que você ditar. ' +
+        'Deduz o <strong>papel na compra pelo cargo</strong> e marca cada campo que sugeriu.',
+        'conferir e clicar em Salvar. Nada é gravado antes disso.',
+        'o preenchimento'),
+
+      momento('Você acabou uma reunião',
+        'Tarefas → Concluir, colando a ata',
+        'Este é o momento que mais rende. Ela <strong>separa o que o CLIENTE fez do que você fez</strong>, ' +
+        'transforma a parte dele em evidências com dimensão, força, pessoa, canal e data, relê as oito ' +
+        'decisões, completa a ficha da empresa e das pessoas com o que apareceu, e atualiza valor, etapa, ' +
+        'previsão e concorrentes quando o material comprova.',
+        'contar o que aconteceu. Uma ata colada, quatro perguntas respondidas ou duas linhas escritas.',
+        'a leitura e o lançamento'),
+
+      momento('Você está com pressa, no carro',
+        'Tarefas → Concluir → as quatro perguntas',
+        'Cada "sim" nas quatro perguntas vira evidência sem você digitar, e as oito são relidas em seguida.',
+        'quatro toques.',
+        'o relato escrito'),
+
+      momento('Você abriu um negócio e não sabe o que fazer',
+        'cockpit → Próximos passos',
+        'Lê o retrato inteiro e devolve <strong>até 4 passos na ordem</strong>, cada um com a decisão que ' +
+        'pretende mover, a ação começando por verbo, <strong>uma pergunta pronta para fazer ao cliente</strong> ' +
+        'e o porquê citando o que ele disse. Mais até 3 alertas de risco de perder.',
+        'escolher o passo e fazer. Virar tarefa é um clique.',
+        'o planejamento da conta'),
+
+      momento('Você precisa de um ângulo para a conversa',
+        'campo de insight do negócio',
+        'Escreve um rascunho do reenquadramento — a verdade sobre o negócio dele que ele não enxerga ' +
+        'sozinho, na linguagem do setor.',
+        'editar. É rascunho, e o cliente vai ouvir na sua voz.',
+        'a página em branco'),
+
+      momento('Fim de semana, olhando a carteira',
+        'Painel → Gerar o plano da semana',
+        'Lê a série das últimas semanas e o rendimento por tipo de tarefa, e diz o que melhorou, o que ' +
+        'piorou e <strong>até três mudanças</strong> no jeito de trabalhar — cada uma com o número que a ' +
+        'justifica e o indicador que vai dizer se deu certo.',
+        'decidir se muda.',
+        'a análise')
+    ].join('');
+
+    return '<div class="card" id="m-ia-vendedor"><h2>A IA no seu dia — o que ela tira das suas costas</h2>' +
+
+      '<p class="small">A seção seguinte lista os onze pedidos por dentro. Esta responde outra pergunta: ' +
+      '<strong>em que momento do dia ela aparece, o que ela faz por você, e o que continua sendo seu</strong>.</p>' +
+
+      '<div class="tabela-rolagem"><table class="tabela-manual"><thead><tr>' +
+      '<th>Quando</th><th>O que ela faz — e o que fica com você</th><th>Poupa</th>' +
+      '</tr></thead><tbody>' + linhas + '</tbody></table></div>' +
+
+      '<h3>A regra que resume as oito linhas acima</h3>' +
+      '<div class="aviso"><strong>Ela lê e propõe. Você conta o que aconteceu. O motor calcula. ' +
+      'E só o que o CLIENTE fez move a nota.</strong></div>' +
+
+      '<h3>Então o que é fundamental que VOCÊ faça</h3>' +
+      '<p class="small">Se for para guardar quatro coisas deste manual inteiro, são estas — e as quatro ' +
+      'são justamente o que a IA <em>não</em> pode fazer no seu lugar:</p>' +
+
+      '<div class="escada-manual">' +
+      '<div><span class="nota-manual n2">1</span><div><strong>Contar o que aconteceu, sempre</strong>' +
+      '<span class="tiny muted">É o combustível de tudo. Sem relato não há evidência, sem evidência não há ' +
+      'nota, sem nota o índice não anda e a conta parece parada mesmo tendo andado. Tarefa fechada sem ' +
+      'relato move o funil e não move nenhuma das oito — e o app marca isso.</span></div></div>' +
+
+      '<div><span class="nota-manual n2">2</span><div><strong>Fazer o cliente produzir prova</strong>' +
+      '<span class="tiny muted">Nota 2 exige evidência confirmada ou documentada. Isso não se consegue ' +
+      'falando: consegue-se pedindo. "Você me manda esse número por e-mail?" vale mais para o índice do ' +
+      'que uma hora de conversa boa. A IA lê o que existe; quem faz existir é você.</span></div></div>' +
+
+      '<div><span class="nota-manual n2">3</span><div><strong>Trazer gente nova para a conversa</strong>' +
+      '<span class="tiny muted">A IA reconhece quem aparece no material, mas não faz ninguém aparecer. ' +
+      'Venda que depende de uma pessoa só é o maior risco silencioso do funil, e cobertura do grupo é uma ' +
+      'das três condições de Negócio real.</span></div></div>' +
+
+      '<div><span class="nota-manual n2">4</span><div><strong>Discordar quando ela errar</strong>' +
+      '<span class="tiny muted">A IA propõe nota; quem esteve na reunião é você. O relatório da leitura ' +
+      'tem o botão <strong>Ajustar as oito</strong>, e cada mudança fica gravada com data no histórico. ' +
+      'Nota inflada vira previsão falsa no painel do dono da empresa, e ninguém descobre a tempo.</span></div></div>' +
+      '</div>' +
+
+      '<h3>E o que ela não faz, por mais que pareça</h3>' +
+      '<p class="small">Ela não classifica o pipeline — Zumbi, Falso avançado e os outros saem de regra ' +
+      'fixa. Ela não pontua sozinha em definitivo: propõe, e a nota 2 continua exigindo prova. Ela nunca ' +
+      '<strong>rebaixa</strong> uma nota — corrigir para baixo é sempre humano. E, com o assistente fora ' +
+      'do ar, o sistema inteiro continua de pé: some o atalho, não o método.</p>' +
+      '</div>';
+  }
+
   function playbook() {
     const dims = P.DIMENSOES.map(function (d) {
       const canais = P.CANAIS.map(function (c) {
@@ -3477,6 +3605,7 @@
       manualDasTarefas() +
       manualDoAprendizado() +
       manualDaConfiguracao() +
+      manualDaIAParaOVendedor() +
       manualDaIA() +
       manualDosLimites() +
       '<div class="card" id="m-perfis"><h2>Quem move a decisão por dentro</h2>' +

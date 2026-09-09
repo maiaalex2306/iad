@@ -1207,3 +1207,14 @@ td.subiu { color: var(--ok); font-weight: 600; }
 .faixa-iad.f1 { color: var(--warn); }
 .faixa-iad.f2 { color: var(--ok); }
 .faixa-iad.f3 { color: var(--navy-2); }
+
+
+/* ---------- Manual: a IA no dia de quem vende ----------
+   Duas vozes na mesma célula, e elas precisam se distinguir sem cor: o que a
+   IA faz vem primeiro, em corpo normal; o que fica com o vendedor vem depois,
+   recuado, atrás de um traço. Quem lê em diagonal vê só a primeira. */
+.faz-ia { display: block; margin-bottom: 6px; }
+.seu-lado {
+  display: block; padding-left: 10px;
+  border-left: 2px solid var(--orange);
+}
