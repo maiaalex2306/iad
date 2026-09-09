@@ -438,12 +438,16 @@
       return /rate limit|limite de uso|429|tokens per minute|too many requests/i.test(String(erro || ''));
     };
 
-    const quantoEsperar = function (erro) {
+    const quantoEsperar = function (erro, tentativa) {
       const m = /\[esperar:(\d+)\]/.exec(String(erro || ''));
       const pedido = m ? Number(m[1]) : 0;
-      /* Um segundo a mais que o pedido, e teto de 70: acima disso não é limite
-         por minuto, é limite por dia, e esperar não resolve. */
-      return Math.min(Math.max(pedido + 1, 15), 70) * 1000;
+
+      /* Na primeira vez vale o número do provedor. Na segunda, não: se o
+         pedido dele não bastou, é porque a janela é móvel — os tokens do
+         bloco anterior só saem da conta sessenta segundos depois de entrarem,
+         e voltar antes disso é gastar tentativa. Aí espera-se a janela toda. */
+      const segundos = tentativa >= 2 ? 65 : Math.max(pedido + 2, 15);
+      return Math.min(segundos, 70) * 1000;
     };
 
     /* Quatro chamadas em série, e uma delas podendo esperar 20 segundos pelo
@@ -485,7 +489,7 @@
 
       return Promise.race([pedido, prazo]).then(function (r) {
         if (r && r.erro && limiteDeUso(r.erro) && tentativa < TENTATIVAS) {
-          const ms = quantoEsperar(r.erro);
+          const ms = quantoEsperar(r.erro, tentativa);
           dizer('O provedor pediu para esperar ' + Math.round(ms / 1000) + 's. ' +
             'Tentativa ' + (tentativa + 1) + ' de ' + TENTATIVAS + '…');
           return esperar(ms).then(function () { return pedirBloco(bloco, tentativa + 1); });

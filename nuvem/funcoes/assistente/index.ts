@@ -208,15 +208,25 @@ function segmentosDoTenant(ctx: Record<string, unknown>): Array<Record<string, s
   return saida;
 }
 
-function descreverSegmentos(ctx: Record<string, unknown>): string {
+/* O catálogo vai inteiro para quem lê reunião, e enxuto para quem classifica
+   segmento em lote. A pergunta ali é uma só — o que esta empresa faz aparece
+   nesta lista? — e quem responde isso é "inclui:". "O que se vende ali" e
+   "com quem se fala" são sobre a NOSSA venda, não sobre a empresa do lead:
+   ocupam o pedido e não decidem nada.
+
+   Isso não é economia por economia. Com teto de oito mil tokens por minuto,
+   cada linha que se repete a cada bloco é um lead a menos classificado. */
+function descreverSegmentos(ctx: Record<string, unknown>, enxuto = false): string {
   const lista = segmentosDoTenant(ctx);
   if (!lista.length) return '- (nenhum segmento cadastrado)';
   return lista.map((s) => {
-    const detalhe = [
-      s.subsegmentos ? 'inclui: ' + s.subsegmentos : '',
-      s.oportunidades ? 'o que se vende ali: ' + s.oportunidades : '',
-      s.personas ? 'com quem se fala: ' + s.personas : ''
-    ].filter(Boolean).join(' | ');
+    const detalhe = enxuto
+      ? (s.subsegmentos ? 'inclui: ' + s.subsegmentos : '')
+      : [
+        s.subsegmentos ? 'inclui: ' + s.subsegmentos : '',
+        s.oportunidades ? 'o que se vende ali: ' + s.oportunidades : '',
+        s.personas ? 'com quem se fala: ' + s.personas : ''
+      ].filter(Boolean).join(' | ');
     return '- ' + s.nome + (detalhe ? '\n    ' + detalhe : '');
   }).join('\n');
 }
@@ -547,7 +557,7 @@ Errar para o lado de "" é barato: nasce uma conta a mais, que se funde depois. 
     return `Você prepara, para uma equipe de vendas B2B brasileira, os leads que acabaram de chegar do LinkedIn. Para cada um: classifica a empresa no segmento mais próximo, diz que papel a pessoa tende a ter na compra, escreve o reenquadramento comercial${contas.length ? ', e diz se a empresa já está cadastrada' : ''}.
 
 SEGMENTOS DESTA EQUIPE — o que cada um cobre:
-${descreverSegmentos(ctx)}
+${descreverSegmentos(ctx, true)}
 
 Como escolher o segmento — faça nesta ordem, para cada lead:
 1. Leia o que a empresa faz. E comece pelo NOME DELA: em português o nome quase sempre entrega o setor — "Vita Ambiental Engenharia" é meio ambiente, "Laticínios São Jorge" é alimentos, "Metalúrgica Pilar" é metalurgia, "Transportadora Aliança" é logística. Só depois vão a descrição, o site, o cargo da pessoa e a conversa. Muito lead do LinkedIn vem sem descrição nenhuma, e desistir por causa disso é jogar fora o sinal mais forte que existe na linha.
@@ -773,12 +783,27 @@ function recusouPorTamanho(status: number, corpo: string): boolean {
 
    Extração de ficha continua barata e curta; quem lê documento inteiro
    precisa de espaço para responder. */
-function tetoDeSaida(tipo: string): number {
+/* ---------- por que o teto de saída derrubava o lote ----------
+
+   max_tokens não é só o tamanho máximo da resposta: o provedor RESERVA esse
+   número do orçamento do minuto no instante do pedido, antes de saber o quanto
+   o modelo vai escrever de fato.
+
+   Com teto fixo de 8000 e limite de 8000 tokens por minuto nesta conta, um
+   único pedido de quatro leads reservava o minuto inteiro. O bloco seguinte
+   era recusado sem ter mandado nada, e o erro parecia falar do tamanho da
+   entrada — que era pequena. Quatro dos vinte lidos, dezesseis em branco.
+
+   Agora o teto acompanha o tamanho do bloco: quatro leads escrevem quatro
+   itens, não vinte. O piso de 700 existe porque JSON truncado é pior do que
+   JSON nenhum — o lote inteiro cai em "Outros" sem explicação —, e o topo de
+   4000 cobre o lote grande de quem não usa blocos. */
+function tetoDeSaida(tipo: string, quantos = 0): number {
   if (tipo === 'reuniao' || tipo === 'notas') return 8000;
-  /* Um lote de vinte leads devolve vinte itens com porquê e insight cada.
-     Não cabia em 2500 e mal cabia em 4000 — e quando não cabe, o JSON chega
-     truncado e o lote inteiro cai em "Outros" sem explicação. */
-  if (tipo === 'segmentos') return 8000;
+  if (tipo === 'segmentos') {
+    if (!quantos) return 4000;
+    return Math.min(Math.max(quantos * 260, 700), 4000);
+  }
   if (tipo === 'plano' || tipo === 'desenvolvimento') return 4000;
   return 2500;
 }
@@ -1909,7 +1934,14 @@ Deno.serve(async (req: Request) => {
        plano e desenvolvimento continuam no modelo bom, sempre. */
     const usaRapido = tipo === 'segmentos';
 
-    let bruto = await chamarIA(promptDe(tipo, ctx), entrada, tetoDeSaida(tipo), usaRapido);
+    /* Quantos leads vieram neste bloco. Sai da própria entrada — cada lead
+       começa numa linha "1. ", "2. " —, e não de um campo que o app manda:
+       assim o teto acompanha o que realmente foi pedido. */
+    const quantosLeads = tipo === 'segmentos'
+      ? (entrada.match(/^\d+\. /gm) || []).length
+      : 0;
+
+    let bruto = await chamarIA(promptDe(tipo, ctx), entrada, tetoDeSaida(tipo, quantosLeads), usaRapido);
     let json = lerJSON(bruto);
 
     /* Segunda passada para empresa, e só quando a primeira achou de quem se
@@ -1926,7 +1958,7 @@ Deno.serve(async (req: Request) => {
       if (nome) {
         const comBusca = await enriquecerConta(entrada, site, nome);
         if (comBusca !== entrada) {
-          const brutoDois = await chamarIA(promptDe(tipo, ctx), comBusca, tetoDeSaida(tipo), usaRapido);
+          const brutoDois = await chamarIA(promptDe(tipo, ctx), comBusca, tetoDeSaida(tipo, quantosLeads), usaRapido);
           const jsonDois = lerJSON(brutoDois);
           /* O que a segunda achou vence onde a primeira estava vazia, e vence
              também no que é dado oficial — razão social, CNPJ e endereço saem
