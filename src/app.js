@@ -2096,6 +2096,77 @@
       });
     },
 
+    /* ---------- ações de uma tarefa só, no cockpit ----------
+
+       A lista tinha duas ações: concluir e excluir. Faltava tudo o que se faz
+       com tarefa de verdade — adiar quando o cliente pediu, corrigir o que
+       ficou errado, e reabrir a que foi fechada por engano. Sem isso, a única
+       forma de consertar era excluir e criar de novo, o que apaga o histórico
+       e mente sobre o que aconteceu. */
+    adiarUmaTarefa: function (id) {
+      const t = Store.tarefa(id);
+      if (!t) return;
+      U.formulario('Adiar: ' + t.titulo, [
+        { id: 'data', rotulo: 'Nova data', tipo: 'date', padrao: t.vencimento },
+        { id: 'motivo', rotulo: 'Por que adiou (opcional)',
+          placeholder: 'O cliente pediu, faltou material, agenda cheia…' }
+      ], {}, function (d) {
+        if (!d.data) return;
+        Store.adiarTarefa(id, d.data, d.motivo);
+        render();
+      });
+    },
+
+    editarTarefa: function (id) {
+      const t = Store.tarefa(id);
+      if (!t) return;
+      const op = t.oportunidadeId ? Store.oportunidade(t.oportunidadeId) : null;
+      U.formulario('Editar tarefa', [
+        { id: 'titulo', rotulo: 'O que é', padrao: t.titulo },
+        { id: 'tipo', rotulo: 'Canal', tipo: 'select', padrao: t.tipo,
+          opcoes: Store.nomesDoCatalogo('tiposTarefa').map(function (n) { return { valor: n, rotulo: n }; }) },
+        { id: 'decisaoAlvo', rotulo: 'Decisão que pretende provocar', tipo: 'select', padrao: t.decisaoAlvo || '',
+          opcoes: [{ valor: '', rotulo: '— nenhuma —' }].concat(P.DIMENSOES.map(function (d) {
+            return { valor: d.id, rotulo: d.nome };
+          })) },
+        { id: 'vencimento', rotulo: 'Vencimento', tipo: 'date', padrao: t.vencimento },
+        { id: 'hora', rotulo: 'Hora (opcional)', tipo: 'time', padrao: t.hora || '' },
+        { id: 'contatoId', rotulo: 'Com quem', tipo: 'select', padrao: t.contatoId || '',
+          opcoes: [{ valor: '', rotulo: '— ninguém em especial —' }].concat(
+            (op ? Store.contatosDaConta(op.contaId) : []).map(function (c) {
+              return { valor: c.id, rotulo: c.nome + (c.cargo ? ' — ' + c.cargo : '') };
+            })) },
+        { id: 'descricao', rotulo: 'Descrição', tipo: 'textarea', padrao: t.descricao || '' }
+      ], {}, function (d) {
+        if (!d.titulo) return;
+        /* O vencimento sai por adiarTarefa quando muda, e não por atualização
+           direta: é ele que conta o adiamento. Uma tarefa adiada três vezes é
+           um dado sobre o negócio, e apagá-lo esconderia o que mais importa. */
+        if (d.vencimento && d.vencimento !== t.vencimento) {
+          Store.adiarTarefa(id, d.vencimento, 'Ajustado ao editar a tarefa');
+        }
+        Store.atualizarTarefa(id, {
+          titulo: d.titulo, tipo: d.tipo, decisaoAlvo: d.decisaoAlvo,
+          hora: d.hora || '', contatoId: d.contatoId || null, descricao: d.descricao || ''
+        });
+        render();
+      });
+    },
+
+    /* Reabrir existe porque "concluída" é um fato sobre o mundo, e às vezes o
+       fato está errado — clicou no quadro errado, a reunião foi desmarcada
+       depois de marcada como feita. Sem reabrir, a saída é excluir, que apaga
+       a tarefa em vez de corrigi-la. */
+    reabrirTarefa: function (id) {
+      const t = Store.tarefa(id);
+      if (!t || t.status === 'aberta') return;
+      if (!U.confirmar('Reabrir "' + t.titulo + '"?\n\n' +
+        'Ela volta para a lista de abertas. As evidências que ela já registrou continuam onde estão — ' +
+        'reabrir a tarefa não desfaz o que o cliente disse.')) return;
+      Store.atualizarTarefa(id, { status: 'aberta', concluidaEm: null, semRegistro: false });
+      render();
+    },
+
     tarefasAtribuir: function () {
       const ids = V.tarefasSelecionadas();
       if (!ids.length) return;

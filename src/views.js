@@ -1405,16 +1405,20 @@
       detalhe('As 8 decisões', 'pontue aqui', blocoDimensoes(op)) +
       detalhe('Proposal Gate', r.gates.prontidao + '% de prontidão', blocoGate(op, r)) +
       detalhe('Buying group', r.coverage.mapeados + ' pessoa(s) · ' + r.coverage.percentual + '% dos papéis críticos', blocoGrupo(op, r)) +
-      detalhe('Tarefas', contarTarefas(op), blocoTarefas(op)) +
       detalhe('Arquivos', 'anexos por decisão', blocoArquivos(op)) +
       detalhe('Evolução da decisão', 'a curva do IAD', curvaIAD(op)) +
       detalhe('Histórico', 'tudo o que aconteceu', blocoHistorico(op));
   }
 
-  function contarTarefas(op) {
-    const abertas = Store.tarefasDaOportunidade(op.id).filter(function (t) { return t.status === 'aberta'; });
-    return abertas.length ? abertas.length + ' aberta(s)' : 'nenhuma aberta';
-  }
+  /* A mesma tela tinha DOIS cards de tarefa: o painel completo no topo, com
+     filtros, e uma seção recolhida mais abaixo que só listava as abertas. Duas
+     listas da mesma coisa, dizendo coisas diferentes — uma mostrando "nenhuma
+     aberta" enquanto a outra mostrava a concluída da semana.
+
+     Ficou uma. Toda a pesquisa de interface de CRM converge nisso: uma linha
+     do tempo única, com as ações mudando conforme o estado do item, em vez de
+     várias listas parciais. A segunda foi removida e o painel de cima passou a
+     fazer o que ela não fazia. */
 
   /* Seções de detalhe ficam recolhidas: o topo responde, o resto aprofunda. */
   function detalhe(titulo, resumo, conteudo) {
@@ -1904,9 +1908,13 @@
   let filtroTarefas = 'abertas';
   let periodoTarefas = 'tudo';
 
+  /* "Sem relato" é uma situação, não um detalhe: a tarefa foi fechada e nada
+     do cliente foi registrado. Ela conta no funil e não conta no método, e é a
+     dívida que explica um IAD parado com a agenda cheia. Sem um filtro
+     próprio, ela só aparecia para quem lesse linha por linha. */
   const SITUACOES_TAREFA = [
     ['abertas', 'Abertas'], ['atrasadas', 'Atrasadas'],
-    ['concluidas', 'Concluídas'], ['todas', 'Todas']
+    ['concluidas', 'Concluídas'], ['sem-relato', 'Sem relato'], ['todas', 'Todas']
   ];
   const PERIODOS_TAREFA = [
     ['semana', 'Semana'], ['mes', 'Mês'], ['ano', 'Ano'], ['tudo', 'Tudo']
@@ -1940,6 +1948,7 @@
     const abertas = todas.filter(function (t) { return t.status === 'aberta'; });
     const atrasadas = abertas.filter(function (t) { return t.vencimento < hoje; });
     const concluidas = todas.filter(function (t) { return t.status !== 'aberta'; });
+    const semRelato = concluidas.filter(function (t) { return t.semRegistro; });
 
     const visiveis = todas.filter(function (t) {
       /* Para a tarefa feita, o que situa no tempo é quando foi feita, não
@@ -1949,6 +1958,7 @@
       if (filtroTarefas === 'abertas') return t.status === 'aberta';
       if (filtroTarefas === 'atrasadas') return t.status === 'aberta' && t.vencimento < hoje;
       if (filtroTarefas === 'concluidas') return t.status !== 'aberta';
+      if (filtroTarefas === 'sem-relato') return t.status !== 'aberta' && t.semRegistro;
       return true;
     });
 
@@ -1978,10 +1988,37 @@
         (feita && t.semRegistro ? ' <span class="tiny atrasado" title="Fechada sem contar o que aconteceu: não moveu nenhuma das oito decisões">· sem relato</span>' : '') + '</span>' +
         '<span class="espaco"></span>' +
         '<span class="tiny ' + (atrasada ? 'atrasado' : 'muted') + '">' +
-        (feita ? 'feita ' + U.data(t.concluidaEm || t.vencimento) : U.data(t.vencimento)) + '</span>' +
-        (feita ? '' : '<button class="btn ghost mini" onclick="App.concluirComRelato(\'' + op.id + '\',\'' + t.id + '\')"' +
-          ' data-ajuda-titulo="Concluir com o que aconteceu" data-ajuda="Cole ou anexe o que aconteceu. O assistente separa as evidências, relê as oito decisões e registra o próximo passo — tudo no mesmo gesto de concluir a tarefa.">Concluir</button>') +
-        '<button class="btn ghost mini" onclick="App.excluirTarefa(\'' + t.id + '\')">\u2715</button></div>';
+        (feita ? 'feita ' + U.data(t.concluidaEm || t.vencimento) : U.data(t.vencimento)) +
+        (t.adiamentos ? ' <span title="Adiada ' + t.adiamentos + ' vez(es)">· ' + t.adiamentos + '\u21bb</span>' : '') +
+        '</span>' +
+
+        /* As ações mudam com o estado, que é o padrão que a pesquisa de
+           interface de CRM aponta: a linha oferece o que faz sentido AGORA
+           para aquele item, em vez de um menu igual para tudo.
+
+           Aberta: concluir contando o que aconteceu, adiar, editar.
+           Feita: reabrir, porque "concluída" às vezes é um fato errado e
+           excluir apaga a tarefa em vez de corrigi-la. */
+        (feita
+          ? '<button class="btn ghost mini" onclick="App.reabrirTarefa(\'' + t.id + '\')"' +
+            ' data-ajuda-titulo="Reabrir" data-ajuda="Volta para as abertas. As evidências que ela registrou continuam onde estão: reabrir a tarefa não desfaz o que o cliente disse.">Reabrir</button>'
+          : '<button class="btn ghost mini" onclick="App.concluirComRelato(\'' + op.id + '\',\'' + t.id + '\')"' +
+            ' data-ajuda-titulo="Concluir com o que aconteceu" data-ajuda="Cole ou anexe o que aconteceu. O assistente separa as evidências, relê as oito decisões e registra o próximo passo — tudo no mesmo gesto de concluir a tarefa.">Concluir</button>' +
+            '<button class="btn ghost mini" onclick="App.adiarUmaTarefa(\'' + t.id + '\')"' +
+            ' data-ajuda-titulo="Adiar" data-ajuda="Nova data e o motivo. O número de adiamentos fica na linha: negócio adiado três vezes é um dado sobre o negócio.">Adiar</button>') +
+        '<button class="btn ghost mini" onclick="App.editarTarefa(\'' + t.id + '\')"' +
+        ' data-ajuda-titulo="Editar" data-ajuda="Corrige o que ficou errado: título, canal, decisão-alvo, com quem, data e descrição.">Editar</button>' +
+        '<button class="btn ghost mini" onclick="App.excluirTarefa(\'' + t.id + '\')" title="Excluir">\u2715</button>' +
+        '</div>' +
+
+        /* A descrição da tarefa some depois que ela é criada, e é justamente
+           ela que diz o que era para fazer — a conversa do LinkedIn na tarefa
+           importada, o roteiro que alguém escreveu. Fica recolhida: quem só
+           quer varrer a lista não lê, quem precisa abre. */
+        (t.descricao
+          ? '<details class="detalhe-tarefa"><summary>ver o que estava combinado</summary>' +
+            '<pre>' + esc(t.descricao) + '</pre></details>'
+          : '');
     }).join('');
 
     /* Um botão só. Reunião não é um gesto à parte: é um tipo de tarefa, e a
@@ -1996,7 +2033,10 @@
       '<p class="small muted" style="margin:8px 0 0">' +
       abertas.length + ' aberta(s) \u00b7 ' +
       '<span class="' + (atrasadas.length ? 'atrasado' : '') + '">' + atrasadas.length + ' atrasada(s)</span> \u00b7 ' +
-      concluidas.length + ' concluída(s)</p>' +
+      concluidas.length + ' concluída(s)' +
+      (semRelato.length
+        ? ' \u00b7 <span class="atrasado">' + semRelato.length + ' sem relato</span>'
+        : '') + '</p>' +
 
       '<div class="row filtros-pipeline" style="margin:10px 0 4px">' +
       SITUACOES_TAREFA.map(function (f) {
@@ -2010,27 +2050,6 @@
 
       (linhas || '<div class="vazio small">Nenhuma tarefa neste filtro.</div>') +
       '</div>';
-  }
-
-  function blocoTarefas(op) {
-    const tarefas = Store.tarefasDaOportunidade(op.id)
-      .sort(function (a, b) { return a.vencimento.localeCompare(b.vencimento); });
-    const abertas = tarefas.filter(function (t) { return t.status === 'aberta'; });
-
-    const linhas = abertas.map(function (t) {
-      const d = P.DIMENSOES.find(function (x) { return x.id === t.decisaoAlvo; });
-      const atrasada = t.vencimento < Store.hoje();
-      return '<div class="tarefa-linha"><button class="quadro" onclick="App.concluirTarefa(\'' + t.id + '\')" title="Concluir"></button>' +
-        '<span class="small">' + esc(t.titulo) + (d ? ' <span class="tiny muted">→ ' + esc(d.nome) + '</span>' : '') + '</span>' +
-        '<span class="espaco"></span>' +
-        '<span class="tiny ' + (atrasada ? 'atrasado' : 'muted') + '">' + U.data(t.vencimento) + '</span>' +
-        '<button class="btn ghost mini" onclick="App.excluirTarefa(\'' + t.id + '\')">✕</button></div>';
-    }).join('') || '<div class="vazio small">Nenhuma tarefa aberta.</div>';
-
-    return '<div class="card"><div class="row"><h2 style="margin:0">Tarefas</h2><span class="espaco"></span>' +
-      '<button class="btn ghost mini" onclick="App.novaTarefa(\'' + op.id + '\')">+ Tarefa</button></div>' +
-      '<p class="tiny muted" style="margin:6px 0 10px">Toda tarefa aponta para a decisão que pretende provocar. Tarefa sem decisão-alvo é agenda, não venda.</p>' +
-      '<div class="tarefas">' + linhas + '</div></div>';
   }
 
   function blocoArquivos(op) {
