@@ -729,7 +729,7 @@
         ? (top ? '<p class="small">Maior diferença até aqui: <strong>' + esc(top.nome) + '</strong>.</p>' : '')
         : '<div class="aviso" style="margin-bottom:10px">Amostra pequena (' + a.ganhos + ' ganhos, ' + (a.perdidosConcorrente + a.perdidosInacao) + ' perdas). Leia como indício, não como conclusão — a partir de cerca de cinco de cada lado os números começam a significar algo.</div>') +
       '<div class="tabela-rolagem"><table><thead><tr><th>Decisão</th><th class="right">Ganhos</th><th class="right">Perdidos</th><th class="right">Diferença</th></tr></thead><tbody>' + linhas + '</tbody></table></div>' +
-      '<p class="tiny muted" style="margin-top:8px">Nota média (0 a 2) de cada dimensão no dia em que o negócio foi encerrado.</p></div>';
+      '<p class="tiny muted" style="margin-top:8px">Nota média (0 a ' + P.NOTA_MAXIMA + ') de cada dimensão no dia em que o negócio foi encerrado.</p></div>';
   }
 
   function boasVindas() {
@@ -3463,13 +3463,20 @@
       return !P.GATES_PROPOSTA.some(function (g) { return g.dim === d.id; });
     }).map(function (d) { return d.nome; });
 
+    /* O teto de cada força sai da mesma tabela que o motor usa para travar.
+       Escrever "sustenta nota 2" à mão foi o que deixou o manual ensinando a
+       régua de três degraus meses depois de ela ter virado cinco. */
+    const tetoDaForca = function (peso) {
+      let teto = P.NOTA_MAXIMA;
+      while (teto > 0 && (P.FORCA_MINIMA_DO_DEGRAU[teto] || 0) > peso) teto--;
+      return teto;
+    };
     const forcas = P.FORCAS.map(function (f) {
-      const comprova = f.peso >= P.FORCA_MINIMA_PARA_COMPROVAR;
+      const teto = tetoDaForca(f.peso);
       return '<tr><td class="rotulo-manual"><strong>' + esc(f.rotulo) + '</strong></td>' +
         '<td>' + esc(f.desc) + '</td>' +
-        '<td class="nowrap">' + (comprova
-          ? '<span class="pill ok">sustenta nota 2</span>'
-          : '<span class="pill">teto: nota 1</span>') + '</td></tr>';
+        '<td class="nowrap"><span class="pill' + (teto >= P.NOTA_MAXIMA ? ' ok' : '') +
+        '">sustenta até o degrau ' + teto + '</span></td></tr>';
     }).join('');
 
     const evid = P.FAIXAS_EVIDENCIA.map(function (f, i) {
@@ -3513,8 +3520,10 @@
 
       '<h3>A força da evidência — e a única trava que o app não deixa você furar</h3>' +
       '<p class="small">Toda evidência entra com uma força. Ela decide até onde a nota pode ir: ' +
-      '<strong>nota 2 exige evidência confirmada ou documentada</strong>. Se você marcar 2 com só relatos, ' +
-      'o motor trava em 1 e diz por quê — vale para você e vale para a IA, sem exceção.</p>' +
+      '<strong>o degrau 3 exige evidência confirmada e o degrau 4 exige evidência documentada</strong>. ' +
+      'Os degraus 1 e 2 não pedem prova, porque falam de onde a informação veio — nós achamos, ou o ' +
+      'cliente disse —, e não de quanto ela resistiu. Se você marcar 3 com só relatos, o motor desce ' +
+      'para o degrau que a prova sustenta e diz por quê — vale para você e vale para a IA, sem exceção.</p>' +
       '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' + forcas + '</tbody></table></div>' +
 
       '<h3>A ordem em que as oito devem ser trabalhadas</h3>' +
@@ -3780,7 +3789,7 @@
 
       '<h3>E o que ela não faz, por mais que pareça</h3>' +
       '<p class="small">Ela não classifica o pipeline — Zumbi, Falso avançado e os outros saem de regra ' +
-      'fixa. Ela não pontua sozinha em definitivo: propõe, e a nota 2 continua exigindo prova. Ela nunca ' +
+      'fixa. Ela não pontua sozinha em definitivo: propõe, e os degraus 3 e 4 continuam exigindo prova. Ela nunca ' +
       '<strong>rebaixa</strong> uma nota — corrigir para baixo é sempre humano. E, com o assistente fora ' +
       'do ar, o sistema inteiro continua de pé: some o atalho, não o método.</p>' +
       '</div>';
@@ -4493,7 +4502,7 @@
       (guardado ? 'Analisar de novo' : 'Analisar com IA') + '</button></div>' +
       (guardado
         ? planoDaIA(op, guardado)
-        : '<p class="small muted" style="margin:10px 0 0">O assistente lê as evidências deste negócio e propõe o que fazer agora. As notas ele já grava sozinho ao concluir uma tarefa — só sobe, e nota 2 continua exigindo evidência confirmada ou documentada.</p>') +
+        : '<p class="small muted" style="margin:10px 0 0">O assistente lê as evidências deste negócio e propõe o que fazer agora. As notas ele já grava sozinho ao concluir uma tarefa — só sobem, e os degraus 3 e 4 continuam exigindo evidência confirmada ou documentada.</p>') +
       '</div>';
   }
 
@@ -4638,7 +4647,7 @@
           'na ordem em que o método trabalha:</p><ul class="achados">' + oQueFalta + '</ul>'
         : '<p class="small" style="margin-top:14px">Nenhuma das oito está em aberto. O que falta neste ' +
           'negócio não é decisão — é prazo, alçada ou assinatura.</p>') +
-      '<p class="tiny muted">Nota só sobe sozinha, e nota 2 continua exigindo evidência confirmada ou documentada. ' +
+      '<p class="tiny muted">Nota só sobe sozinha, e os degraus 3 e 4 continuam exigindo evidência confirmada ou documentada. ' +
       'Se discordar de alguma, ajuste — as oito ficam abertas para edição.</p>' +
       '</div><div class="rodape">' +
       (erroDaReleitura

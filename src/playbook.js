@@ -317,7 +317,16 @@
     { id: 'confirmado', rotulo: 'Confirmado', peso: 2, desc: 'O cliente fez, e nós presenciamos.' },
     { id: 'documentado', rotulo: 'Documentado', peso: 3, desc: 'Está por escrito: e-mail, ata, documento ou sistema.' }
   ];
-  const FORCA_MINIMA_PARA_COMPROVAR = 2;
+  /* Que força cada degrau exige. Degraus 0, 1 e 2 não aparecem aqui de
+     propósito: eles falam da ORIGEM da informação — ninguém disse, nós
+     achamos, o cliente disse — e origem não se prova com força de evidência.
+     Do 3 para cima é que a prova entra: testado pede algo que o cliente
+     confirmou, documentado pede papel dele.
+
+     Isto morava no motor. Trouxe para cá porque o manual também precisa
+     dizer isto ao vendedor, e duas cópias da mesma regra é como a tela
+     acabou explicando a régua velha depois que o motor já usava a nova. */
+  const FORCA_MINIMA_DO_DEGRAU = { 3: 2, 4: 3 };
 
   /* Tipo de tarefa é, antes de tudo, o canal por onde se falou com o cliente:
      é isso que permite comparar o que funciona — reunião presencial move mais
@@ -369,7 +378,7 @@
   global.IADPlaybook = {
     DIMENSOES, ETAPAS, GATES_PROPOSTA, PAPEIS, PAPEIS_CRITICOS, DESFECHOS,
     NIVEIS_DA_ESCADA, NOTA_MAXIMA, IAD_MAXIMO, IAD_MADURO,
-    FORCAS, FORCA_MINIMA_PARA_COMPROVAR, TIPOS_TAREFA, TIPOS_TAREFA_RENOMEADOS, CATEGORIAS_ARQUIVO,
+    FORCAS, FORCA_MINIMA_DO_DEGRAU, TIPOS_TAREFA, TIPOS_TAREFA_RENOMEADOS, CATEGORIAS_ARQUIVO,
     PERFIS, PERFIS_MOBILIZADORES, ESTADOS_INSIGHT,
     RELACOES_CONTA, TIPOS_OPORTUNIDADE, FECHAMENTO_REUNIAO,
     CANAIS, FAIXAS_EVIDENCIA, ATIVIDADES_QUE_NAO_CONTAM

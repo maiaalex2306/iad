@@ -455,14 +455,26 @@
 
      Na régua de três degraus isto era uma regra à parte, presa ao número 2.
      Agora é a própria escada: o mínimo de força sobe com o degrau. */
-  const FORCA_MINIMA_DO_DEGRAU = { 3: 2, 4: 3 };
 
   function podeComprovar(op, dimensao, degrau) {
-    const exigido = FORCA_MINIMA_DO_DEGRAU[degrau || 3] || 0;
+    const exigido = P.FORCA_MINIMA_DO_DEGRAU[degrau || 3] || 0;
     if (!exigido) return true;
     return evidenciasDaDimensao(op, dimensao).some(function (e) {
       return pesoForca(e.forca) >= exigido;
     });
+  }
+
+  /* Até onde esta decisão pode subir hoje, com a prova que existe.
+
+     Antes cada tela fazia essa conta sozinha, e todas faziam a conta da
+     régua velha: "se pediu 2 e não comprova, cai para 1". Com cinco degraus
+     isso passou a errar dos dois lados — barrava o 2, que é só o cliente ter
+     dito, e deixava passar 3 e 4 sem prova nenhuma. A conta é uma só e mora
+     aqui: desce degrau a degrau até achar um que a evidência sustente. */
+  function degrauPermitido(op, dimensao, pedida) {
+    let n = Math.max(0, Math.min(P.NOTA_MAXIMA, Number(pedida) || 0));
+    while (n > 0 && !podeComprovar(op, dimensao, n)) n--;
+    return n;
   }
 
   /* Quem produziu as evidências. Se vier tudo da mesma pessoa, a conta
@@ -1017,7 +1029,7 @@
   global.IADEngine = {
     iad, evidenceAge, faixaEvidencia, decisionVelocity, coverage, gates,
     saude, classificar, nextBestDecision, alertas, resumo, carteira,
-    focoDoDia, aprendizado, sugerirDimensao, podeComprovar, evidenciasDaDimensao,
+    focoDoDia, aprendizado, sugerirDimensao, podeComprovar, degrauPermitido, evidenciasDaDimensao,
     filtrar, mesesDisponiveis, segmentosDisponiveis, rotuloMes, segmentoDe, faixaSaude,
     porMes, porSegmento, porEtapa, matrizDecisoes, distribuicaoEvidencia,
     autoria, compromisso, mobilizadores, bloqueadores, tempoNaEtapa, medianaEtapaGanhos, deltaSemana, curva, historico, lacunas,

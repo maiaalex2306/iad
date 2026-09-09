@@ -273,7 +273,7 @@
         empresa: (r.empresa && typeof r.empresa === 'object') ? r.empresa : {},
         negocio: (r.negocio && typeof r.negocio === 'object') ? r.negocio : {},
         decisoes: (Array.isArray(r.decisoes) ? r.decisoes : []).filter(function (d) {
-          return d && dimensoes.indexOf(d.dimensao) !== -1 && d.nota >= 0 && d.nota <= P.NOTA_MAXIMA;
+          return d && dimensoes.indexOf(d.dimensao) !== -1 && d.nota >= 0 && d.nota <= global.IADPlaybook.NOTA_MAXIMA;
         })
       };
     }).catch(function (e) {
@@ -592,7 +592,7 @@
       ((r.conta && r.conta.porte) ? ' · porte ' + r.conta.porte : ''));
     linhas.push('OPORTUNIDADE: ' + op.titulo + ' · etapa ' + op.etapa +
       ' há ' + r.tempoNaEtapa + ' dias · tipo ' + (op.tipo || 'Novo negócio'));
-    linhas.push('IAD: ' + r.iad + ' de 16 · classificação ' + r.classe.rotulo +
+    linhas.push('IAD: ' + r.iad + ' de ' + P.IAD_MAXIMO + ' · classificação ' + r.classe.rotulo +
       ' · sem evidência nova do cliente há ' + r.evidenceAge + ' dias');
     if (op.concorrentes) linhas.push('CONCORRENTES DECLARADOS: ' + op.concorrentes);
     if (op.insight && op.insight.texto) {
@@ -798,7 +798,7 @@
       }
       const dimensoes = global.IADPlaybook.DIMENSOES.map(function (d) { return d.id; });
       return { decisoes: resp.decisoes.filter(function (d) {
-        return d && dimensoes.indexOf(d.dimensao) !== -1 && d.nota >= 0 && d.nota <= P.NOTA_MAXIMA;
+        return d && dimensoes.indexOf(d.dimensao) !== -1 && d.nota >= 0 && d.nota <= global.IADPlaybook.NOTA_MAXIMA;
       }) };
     }).catch(function (e) {
       return { erro: (e && e.message) || 'O servidor recusou a releitura.' };

@@ -937,11 +937,10 @@
             if (!campo || campo.value === 'manter') return;
             const alvo = Store.oportunidade(opId);
             const pedida = Number(campo.value);
-            /* A mesma regra de sempre, aplicada aqui também: 2 é "comprovado",
-               e só relato não comprova. Vale para a IA como vale para todo mundo. */
-            const permitida = (pedida === 2 && !E.podeComprovar(alvo, d.id))
-              ? Math.max(1, alvo.dims[d.id] || 0)
-              : pedida;
+            /* A mesma regra de sempre, aplicada aqui também: o degrau que a
+               prova sustenta, não o que a IA pediu. Vale para ela como vale
+               para todo mundo. */
+            const permitida = Math.max(E.degrauPermitido(alvo, d.id, pedida), 0);
             if (permitida !== (alvo.dims[d.id] || 0)) {
               Store.pontuar(opId, d.id, permitida, 'Lido pelo assistente e confirmado');
               mudadas++;
@@ -952,7 +951,8 @@
           alert(mudadas
             ? mudadas + (mudadas === 1 ? ' decisão gravada' : ' decisões gravadas') +
               '. IAD agora: ' + depois + '/' + P.IAD_MAXIMO + '.' +
-              (rebaixadas ? '\n\n' + rebaixadas + ' ficou em 1: para 2 é preciso evidência confirmada ou documentada.' : '')
+              (rebaixadas ? '\n\n' + (rebaixadas === 1 ? '1 ficou abaixo do pedido' : rebaixadas + ' ficaram abaixo do pedido') +
+                ': o degrau 3 exige evidência confirmada e o 4, documentada.' : '')
             : 'Nada mudou.');
           render();
         }
@@ -1276,13 +1276,19 @@
       });
     },
 
-    /* Nota 2 significa comprovado. Sem evidência confirmada, o app explica e recusa. */
+    /* Os degraus altos são sobre a ORIGEM da informação, não sobre quanto se
+       sabe: 3 é o que resistiu a uma conferência com o cliente, 4 é o que está
+       por escrito em documento dele. Quem clica sem ter isso registrado recebe
+       a explicação e a porta para registrar. Até 2 — o cliente disse — é livre:
+       exigir prova para "ele falou" era o que a régua velha fazia de errado. */
     pontuar: function (opId, dim, valor) {
       const op = Store.oportunidade(opId);
       if (!op) return;
-      if (valor === 2 && !E.podeComprovar(op, dim)) {
+      if (valor >= 3 && !E.podeComprovar(op, dim, valor)) {
         const nome = P.DIMENSOES.find(function (d) { return d.id === dim; }).nome;
-        if (U.confirmar(nome + ' só chega a 2 com uma evidência confirmada ou documentada do cliente.\n\nRegistrar essa evidência agora?')) {
+        const exigida = valor === 4 ? 'documentada' : 'confirmada ou documentada';
+        if (U.confirmar(nome + ' só chega a ' + valor + ' com uma evidência ' + exigida +
+            ' do cliente.\n\nRegistrar essa evidência agora?')) {
           App.novaEvidencia(opId, null, dim);
         }
         return;
@@ -4281,7 +4287,7 @@
           U.esc(d.canais[chave]) + ' <em>(cadência de ' + U.esc(nomeCanal) + ')</em></p>' : '') +
         '<p class="conta"><strong>Conta como evidência:</strong> ' +
         U.esc(d.evidencias.slice(0, 3).join(' · ')) + '</p>' +
-        '<p class="tiny muted">Para a nota 2 a evidência precisa ser confirmada ou documentada. ' +
+        '<p class="tiny muted">Para o degrau 3 a evidência precisa ser confirmada; para o 4, documentada. ' +
         'O que nós fizemos — apresentar, propor, cobrar — não conta.</p>' +
         '</div>';
     };
@@ -4655,8 +4661,8 @@
   }
 
   /* Aplica as notas propostas. Duas travas, e as duas são do motor, não da
-     tela: nota 2 sem evidência confirmada ou documentada cai para 1; e nota
-     nunca desce sozinha — a IA relê o mesmo retrato a cada tarefa e propor 0
+     tela: o degrau cai até onde a evidência sustenta — 3 pede confirmada, 4
+     pede documentada —; e nota nunca desce sozinha — a IA relê o mesmo retrato a cada tarefa e propor 0
      para uma decisão que alguém pontuou à mão apagaria esse trabalho sem
      ninguém ver. Devolve o que mudou, para o relatório. */
   /* Qual tarefa está sendo concluída agora. A releitura das oito acontece duas
@@ -4674,10 +4680,13 @@
       const alvo = Store.oportunidade(opId);
       const atual = alvo.dims[d.id] || 0;
       const pedida = Number(proposta.nota);
-      if (!(pedida >= 0 && pedida <= 2)) return;
+      if (!(pedida >= 0 && pedida <= P.NOTA_MAXIMA)) return;
 
-      const travada = (pedida === 2 && !E.podeComprovar(alvo, d.id));
-      const permitida = travada ? Math.max(1, atual) : pedida;
+      /* O teto era 2 — a nota máxima da régua velha —, então toda proposta de
+         3 ou 4 vinha do servidor e era jogada fora aqui, em silêncio. A tela
+         mostrava "8 em branco" depois de uma leitura que tinha funcionado. */
+      const permitida = E.degrauPermitido(alvo, d.id, pedida);
+      const travada = permitida < pedida;
       if (permitida <= atual) return;                        /* só sobe */
 
       Store.pontuar(opId, d.id, permitida, 'Lido pelo assistente na conclusão da tarefa', tarefaEmCurso);
