@@ -401,26 +401,31 @@ Cada item de "contatos" é uma pessoa do lado do cliente que apareceu no documen
 
 "decisoes" são as OITO decisões relidas: [{"dimensao":"problema","nota":0,"porque":"...","trecho":"..."}, ...], as oito, sempre. Leia-as considerando TUDO — o retrato da oportunidade que veio no início do texto (as evidências já registradas antes) MAIS o material novo que o vendedor acabou de mandar.
 
-Os três níveis, iguais para todas:
-  0 — não sabemos: nada do lado do cliente sustenta esta decisão.
-  1 — parcial: há sinal, mas vago, indireto ou dito por uma pessoa só.
-  2 — comprovado pelo cliente: ele descreveu, mostrou, mandou ou fez.
+Os CINCO degraus, iguais para todas. O que decide o degrau NÃO é o quanto se sabe: é DE ONDE a informação veio.
+  0 — desconhecido: nada no material toca esta decisão.
+  1 — suposto: quem afirma isso somos nós. O cliente não disse. Dedução a partir do setor, do porte, do cargo ou do bom senso.
+  2 — declarado: o cliente disse, com palavras dele. Ainda não foi conferido por ninguém.
+  3 — testado: alguém verificou o que ele disse — com dado, com outra pessoa, com um segundo encontro — e continuou de pé.
+  4 — documentado: está por escrito num documento DO CLIENTE. Ata, indicador, meta, política, e-mail dele.
+
+A fronteira que mais importa é entre 2 e 3, e é a razão desta escada existir. "O cliente disse que tem prazo até dezembro" é 2. Vira 3 quando alguém conferiu que o prazo se mantém, ou quando uma segunda pessoa do cliente confirmou. Um diagnóstico prometido e ainda não entregue MANTÉM a decisão em 2 — ele pode voltar mostrando que nem servimos ao caso. Antecipar para 3 é inventar progresso que ninguém verificou.
 
 Regras das notas, e são o ponto todo:
 - A nota vem SÓ do que o CLIENTE disse ou fez. O que nós mandamos, apresentamos ou propusemos não conta e nunca sobe nota. Uma proposta enviada não é impacto aceito; um material apresentado não é problema reconhecido.
 - Mas atenção a um caso que não é exceção à regra, é aplicação dela: um documento NOSSO — proposta, diagnóstico, levantamento — costuma conter dados que o CLIENTE forneceu ou confirmou. Trechos marcados como "dados confirmados", "informado pelo cliente", "levantamento na unidade", ou números da operação dele (consumo, volumes, quantidade de pontos, equipamentos, rotina atual) são evidência DELE, com força "documentado", ainda que apareçam num material que nós escrevemos. Quem produziu o dado é o cliente; nós só o organizamos. O que não conta é a nossa recomendação, a nossa solução e o nosso preço.
-- "trecho" tem de ser um pedaço LITERAL do que você recebeu — copiado, não parafraseado. Nota 2 sem trecho literal cai para 1 automaticamente, então copie a frase exata quando ela existir: é ela que sustenta o 2.
-- Nota 0 é para quando NÃO HÁ SINAL NENHUM daquela decisão no material. Não use 0 para "o cliente falou disso mas não provou" — isso é 1. Zerar uma decisão sobre a qual o cliente falou é o erro mais caro que você pode cometer aqui: o vendedor abre a tela e vê "Não sabemos" sobre o assunto que ocupou vinte minutos da reunião dele.
-- Na dúvida entre dois níveis, use o menor. Nota inflada vira pipeline falso no painel do dono da empresa.
+- "trecho" tem de ser um pedaço LITERAL do que você recebeu — copiado, não parafraseado. Nota 2 ou mais sem trecho literal cai para 1 automaticamente: sem a frase do cliente o que existe é suposição nossa, e suposição é o degrau 1.
+- Nota 0 é para quando NÃO HÁ SINAL NENHUM daquela decisão no material. Não use 0 para "o cliente falou disso mas não provou" — isso é 2. Zerar uma decisão sobre a qual o cliente falou é o erro mais caro que você pode cometer aqui: o vendedor abre a tela e vê "Não sabemos" sobre o assunto que ocupou vinte minutos da reunião dele.
+- 4 é raro numa ata: só use quando o próprio material FOR o documento do cliente, ou citar um documento dele com nome. Ata que nós escrevemos sobre o que ele falou não é documento dele.
+- Na dúvida entre dois degraus, use o menor. E aqui a dúvida tem um lado certo: entre 2 e 3, é 2, a menos que o material diga explicitamente que alguém conferiu. Nota inflada vira pipeline falso no painel do dono da empresa.
 - "porque" em uma linha, dizendo o que sustenta — ou, quando for 0, o que faltaria para subir.
 
 
 O QUE A SUA LEITURA PROVOCA NO SISTEMA. Você não classifica o negócio — isso é regra fixa do app, e é assim de propósito: se um modelo decidisse a cor do cartão, ela mudaria entre duas visitas sem nada ter acontecido. Mas as notas que você propõe ALIMENTAM essa regra, e saber disso muda o cuidado que cada nota merece. As regras são testadas nesta ordem, e o negócio fica na PRIMEIRA que servir:
 
 1. ZUMBI — mais de 30 dias sem nenhuma evidência do cliente. Esta regra vence todas as outras: um negócio com índice alto e quarenta dias de silêncio é zumbi, não é real. Por isso a DATA que você põe em cada evidência importa tanto quanto a nota: datar errado ressuscita ou mata um negócio.
-2. FALSO AVANÇADO — etapa em Proposta ou adiante e pelo menos um destes: soma abaixo de 11, o portão da proposta não liberado, ou nenhum decisor econômico mapeado. É o maior destruidor de previsão de vendas. Uma nota inflada aqui esconde exatamente o negócio que ia estourar no fim do mês.
-3. OCULTO PROMISSOR — soma 11 ou mais com a etapa ainda antes de Proposta. É o achado mais valioso do funil: o cliente decidiu mais do que a etapa mostra. Uma nota que você deixou baixa demais por excesso de zelo esconde este caso.
-4. NEGÓCIO REAL — soma 11 ou mais, até 14 dias sem evidência, e metade ou mais dos papéis críticos mapeados. É o que a previsão pode contar.
+2. FALSO AVANÇADO — etapa em Proposta ou adiante e pelo menos um destes: soma abaixo de 24 (de 32), o portão da proposta não liberado, ou nenhum decisor econômico mapeado. É o maior destruidor de previsão de vendas. Uma nota inflada aqui esconde exatamente o negócio que ia estourar no fim do mês.
+3. OCULTO PROMISSOR — soma 24 ou mais (de 32) com a etapa ainda antes de Proposta. É o achado mais valioso do funil: o cliente decidiu mais do que a etapa mostra. Uma nota que você deixou baixa demais por excesso de zelo esconde este caso.
+4. NEGÓCIO REAL — soma 24 ou mais (de 32), até 14 dias sem evidência, e metade ou mais dos papéis críticos mapeados. É o que a previsão pode contar.
 5. EM CONSTRUÇÃO — o que sobra.
 
 Três consequências disso para o seu trabalho, e elas puxam em direções opostas de propósito:
@@ -436,7 +441,9 @@ COMO RECONHECER CADA UMA NUM DOCUMENTO DE REUNIÃO. Esta parte existe porque as 
 
 - prioridade: sinal de que aquilo entrou na fila DELE. Meta corporativa com número ou prazo ("reduzir 15% até 2030", "compromisso oficial"), alguém designado para tocar o assunto, a palavra urgente/mandatório/crítico dita pelo cliente, ou um projeto já aberto internamente. Meta publicada da empresa vale: ela custou aprovação interna.
 
-- impacto: a CONSEQUÊNCIA que o cliente assumiu como dele. Raramente vem em reais, e não precisa vir: litígio ou disputa com fornecedor ou órgão, multa, autuação, tarifa penalizada, impossibilidade de continuar como está ("não podemos mais destinar", "o fornecedor não aceita mais"), risco regulatório, perda de produto, parada de linha. Tudo isso é impacto declarado pelo cliente. O que NÃO é impacto: economia que NÓS projetamos, ROI que NÓS calculamos, caso de outro cliente que NÓS contamos. Se o cliente citou uma consequência concreta que recai sobre ele, dê 1 no mínimo; se ele dimensionou (valor, prazo, volume, órgão), dê 2.
+- impacto: a CONSEQUÊNCIA que o cliente assumiu como dele. Raramente vem em reais, e não precisa vir: litígio ou disputa com fornecedor ou órgão, multa, autuação, tarifa penalizada, impossibilidade de continuar como está ("não podemos mais destinar", "o fornecedor não aceita mais"), risco regulatório, perda de produto, parada de linha. Tudo isso é impacto declarado pelo cliente. O que NÃO é impacto: economia que NÓS projetamos, ROI que NÓS calculamos, caso de outro cliente que NÓS contamos. Se o cliente citou uma consequência concreta que recai sobre ele, dê 2; se ele dimensionou com número próprio e alguém conferiu, dê 3; se está num documento dele, 4.
+
+- processo: a régua mais dura das oito, por um motivo prático — descobrir tarde que a diretoria do cliente decide devagar já custou o trimestre de muita gente. Etapas descritas pelo cliente é 2. Só vale 3 quando o material trouxer as TRÊS coisas juntas: quais são as etapas, QUEM assina cada uma, e QUANTO TEMPO cada uma leva, vindo de quem participa delas. Faltando o prazo, é 2, por mais completo que esteja o resto.
 
 - criterios: exigência de comparação, especificação, teste ou prova pedida por ele.
 - stakeholders: gente nova entrando, área nova citada, alçada mencionada.
@@ -459,15 +466,19 @@ Tarefa: você recebe o retrato de UMA oportunidade — as evidências que o clie
 
 Devolva {"decisoes":[{"dimensao":"problema","nota":0,"porque":"...","trecho":"..."} , ...]} com as oito, na ordem acima.
 
-Os três níveis, iguais para todas:
-  0 — não sabemos: nada do lado do cliente sustenta esta decisão.
-  1 — parcial: há sinal, mas vago, indireto ou dito por uma pessoa só.
-  2 — comprovado pelo cliente: ele descreveu, mostrou, mandou ou fez.
+Os CINCO degraus, iguais para todas. O que decide o degrau NÃO é o quanto se sabe: é DE ONDE a informação veio.
+  0 — desconhecido: nada no material toca esta decisão.
+  1 — suposto: quem afirma isso somos nós. O cliente não disse. Dedução a partir do setor, do porte, do cargo ou do bom senso.
+  2 — declarado: o cliente disse, com palavras dele. Ainda não foi conferido por ninguém.
+  3 — testado: alguém verificou o que ele disse — com dado, com outra pessoa, com um segundo encontro — e continuou de pé.
+  4 — documentado: está por escrito num documento DO CLIENTE. Ata, indicador, meta, política, e-mail dele.
+
+A fronteira que mais importa é entre 2 e 3, e é a razão desta escada existir. "O cliente disse que tem prazo até dezembro" é 2. Vira 3 quando alguém conferiu que o prazo se mantém, ou quando uma segunda pessoa do cliente confirmou. Um diagnóstico prometido e ainda não entregue MANTÉM a decisão em 2 — ele pode voltar mostrando que nem servimos ao caso. Antecipar para 3 é inventar progresso que ninguém verificou.
 
 Regras desta tarefa, e são o ponto todo:
 - A nota vem SÓ do que o CLIENTE disse ou fez. O que nós mandamos, apresentamos ou propusemos não conta e nunca sobe nota. Uma proposta enviada não é impacto aceito; um material apresentado não é problema reconhecido.
-- "trecho" tem de ser um pedaço LITERAL do que você recebeu — copiado, não parafraseado. Nota 2 sem trecho literal cai para 1 automaticamente, então copie a frase exata quando ela existir: é ela que sustenta o 2.
-- Nota 0 é para quando NÃO HÁ SINAL NENHUM daquela decisão no material. Não use 0 para "o cliente falou disso mas não provou" — isso é 1. Zerar uma decisão sobre a qual o cliente falou é o erro mais caro que você pode cometer aqui: o vendedor abre a tela e vê "Não sabemos" sobre o assunto que ocupou vinte minutos da reunião dele.
+- "trecho" tem de ser um pedaço LITERAL do que você recebeu — copiado, não parafraseado. Nota 2 ou mais sem trecho literal cai para 1 automaticamente: sem a frase do cliente o que existe é suposição nossa, e suposição é o degrau 1.
+- Nota 0 é para quando NÃO HÁ SINAL NENHUM daquela decisão no material. Não use 0 para "o cliente falou disso mas não provou" — isso é 2. Zerar uma decisão sobre a qual o cliente falou é o erro mais caro que você pode cometer aqui: o vendedor abre a tela e vê "Não sabemos" sobre o assunto que ocupou vinte minutos da reunião dele.
 - Na dúvida entre dois níveis, use o menor. Uma nota inflada vira pipeline falso no painel do dono da empresa, e ninguém descobre a tempo.
 - "porque" em uma linha, dizendo o que sustenta — ou, quando for 0, o que faltaria para subir.
 
@@ -475,9 +486,9 @@ Regras desta tarefa, e são o ponto todo:
 O QUE A SUA LEITURA PROVOCA NO SISTEMA. Você não classifica o negócio — isso é regra fixa do app, e é assim de propósito: se um modelo decidisse a cor do cartão, ela mudaria entre duas visitas sem nada ter acontecido. Mas as notas que você propõe ALIMENTAM essa regra, e saber disso muda o cuidado que cada nota merece. As regras são testadas nesta ordem, e o negócio fica na PRIMEIRA que servir:
 
 1. ZUMBI — mais de 30 dias sem nenhuma evidência do cliente. Esta regra vence todas as outras: um negócio com índice alto e quarenta dias de silêncio é zumbi, não é real. Por isso a DATA que você põe em cada evidência importa tanto quanto a nota: datar errado ressuscita ou mata um negócio.
-2. FALSO AVANÇADO — etapa em Proposta ou adiante e pelo menos um destes: soma abaixo de 11, o portão da proposta não liberado, ou nenhum decisor econômico mapeado. É o maior destruidor de previsão de vendas. Uma nota inflada aqui esconde exatamente o negócio que ia estourar no fim do mês.
-3. OCULTO PROMISSOR — soma 11 ou mais com a etapa ainda antes de Proposta. É o achado mais valioso do funil: o cliente decidiu mais do que a etapa mostra. Uma nota que você deixou baixa demais por excesso de zelo esconde este caso.
-4. NEGÓCIO REAL — soma 11 ou mais, até 14 dias sem evidência, e metade ou mais dos papéis críticos mapeados. É o que a previsão pode contar.
+2. FALSO AVANÇADO — etapa em Proposta ou adiante e pelo menos um destes: soma abaixo de 24 (de 32), o portão da proposta não liberado, ou nenhum decisor econômico mapeado. É o maior destruidor de previsão de vendas. Uma nota inflada aqui esconde exatamente o negócio que ia estourar no fim do mês.
+3. OCULTO PROMISSOR — soma 24 ou mais (de 32) com a etapa ainda antes de Proposta. É o achado mais valioso do funil: o cliente decidiu mais do que a etapa mostra. Uma nota que você deixou baixa demais por excesso de zelo esconde este caso.
+4. NEGÓCIO REAL — soma 24 ou mais (de 32), até 14 dias sem evidência, e metade ou mais dos papéis críticos mapeados. É o que a previsão pode contar.
 5. EM CONSTRUÇÃO — o que sobra.
 
 Três consequências disso para o seu trabalho, e elas puxam em direções opostas de propósito:
@@ -493,7 +504,9 @@ COMO RECONHECER CADA UMA NUM DOCUMENTO DE REUNIÃO. Esta parte existe porque as 
 
 - prioridade: sinal de que aquilo entrou na fila DELE. Meta corporativa com número ou prazo ("reduzir 15% até 2030", "compromisso oficial"), alguém designado para tocar o assunto, a palavra urgente/mandatório/crítico dita pelo cliente, ou um projeto já aberto internamente. Meta publicada da empresa vale: ela custou aprovação interna.
 
-- impacto: a CONSEQUÊNCIA que o cliente assumiu como dele. Raramente vem em reais, e não precisa vir: litígio ou disputa com fornecedor ou órgão, multa, autuação, tarifa penalizada, impossibilidade de continuar como está ("não podemos mais destinar", "o fornecedor não aceita mais"), risco regulatório, perda de produto, parada de linha. Tudo isso é impacto declarado pelo cliente. O que NÃO é impacto: economia que NÓS projetamos, ROI que NÓS calculamos, caso de outro cliente que NÓS contamos. Se o cliente citou uma consequência concreta que recai sobre ele, dê 1 no mínimo; se ele dimensionou (valor, prazo, volume, órgão), dê 2.
+- impacto: a CONSEQUÊNCIA que o cliente assumiu como dele. Raramente vem em reais, e não precisa vir: litígio ou disputa com fornecedor ou órgão, multa, autuação, tarifa penalizada, impossibilidade de continuar como está ("não podemos mais destinar", "o fornecedor não aceita mais"), risco regulatório, perda de produto, parada de linha. Tudo isso é impacto declarado pelo cliente. O que NÃO é impacto: economia que NÓS projetamos, ROI que NÓS calculamos, caso de outro cliente que NÓS contamos. Se o cliente citou uma consequência concreta que recai sobre ele, dê 2; se ele dimensionou com número próprio e alguém conferiu, dê 3; se está num documento dele, 4.
+
+- processo: a régua mais dura das oito, por um motivo prático — descobrir tarde que a diretoria do cliente decide devagar já custou o trimestre de muita gente. Etapas descritas pelo cliente é 2. Só vale 3 quando o material trouxer as TRÊS coisas juntas: quais são as etapas, QUEM assina cada uma, e QUANTO TEMPO cada uma leva, vindo de quem participa delas. Faltando o prazo, é 2, por mais completo que esteja o resto.
 
 - criterios: exigência de comparação, especificação, teste ou prova pedida por ele.
 - stakeholders: gente nova entrando, área nova citada, alçada mencionada.
@@ -1493,7 +1506,7 @@ function validarNotas(bruto: Record<string, unknown>, textoOriginal: string) {
     if (!dimensao || vistas.has(dimensao)) continue;
 
     let nota = Number(o.nota);
-    if (!isFinite(nota) || nota < 0 || nota > 2) continue;
+    if (!isFinite(nota) || nota < 0 || nota > 4) continue;
     nota = Math.floor(nota);
 
     const trecho = limparTexto(o.trecho, 240);
@@ -1508,8 +1521,9 @@ function validarNotas(bruto: Record<string, unknown>, textoOriginal: string) {
        documento onde o problema estava escrito com todas as letras.
 
        Um sinal que o modelo leu e não consegue apontar com o dedo é
-       exatamente a definição da nota 1 do método: "há sinal, mas vago,
-       indireto". Então vira 1. A nota 2 continua exigindo citação literal
+       exatamente a definição do degrau 1 da escada: quem afirma somos nós,
+       não o cliente. Então vira 1. Do degrau 2 para cima continua exigindo
+       citação literal
        AQUI e, no app, evidência confirmada ou documentada — duas travas
        independentes, que é onde o rigor tem de estar. */
     if (nota > 1 && !citaDeVerdade) nota = 1;

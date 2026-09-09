@@ -114,7 +114,7 @@
     const cob = coverage(op);
     const g = gates(op);
 
-    let score = (pontos / 16) * 45;
+    let score = (pontos / P.IAD_MAXIMO) * 45;
     score += Math.max(0, 25 - idade) / 25 * 20;
     score += (cob.percentual / 100) * 20;
     score += (g.prontidao / 100) * 15;
@@ -130,11 +130,11 @@
     const cob = coverage(op);
     if (idade > 30) return { id: 'zumbi', rotulo: 'Zumbi', desc: 'Sem evidência nova do comprador há mais de 30 dias.' };
     /* Etapa adiantada não é avanço: sem maturidade, sem gate ou sem decisor econômico, é falso avanço. */
-    if (depoisDaProposta(op) && (pontos < 11 || !gates(op).liberado || !cob.temEconomicBuyer)) {
+    if (depoisDaProposta(op) && (pontos < P.IAD_MADURO || !gates(op).liberado || !cob.temEconomicBuyer)) {
       return { id: 'falso', rotulo: 'Falso avançado', desc: 'Etapa adiantada, decisão imatura.' };
     }
-    if (!depoisDaProposta(op) && pontos >= 11) return { id: 'oculto', rotulo: 'Oculto promissor', desc: 'Decisão madura antes da etapa indicar.' };
-    if (pontos >= 11 && idade <= 14 && cob.percentual >= 50) {
+    if (!depoisDaProposta(op) && pontos >= P.IAD_MADURO) return { id: 'oculto', rotulo: 'Oculto promissor', desc: 'Decisão madura antes da etapa indicar.' };
+    if (pontos >= P.IAD_MADURO && idade <= 14 && cob.percentual >= 50) {
       return { id: 'real', rotulo: 'Negócio real', desc: 'Decisão madura, movimento recente e consenso em construção.' };
     }
     return { id: 'construcao', rotulo: 'Em construção', desc: 'Decisão ainda sendo formada.' };
@@ -234,8 +234,11 @@
       lista.push({ tipo: 'autoria', nivel: 'medio', texto: 'Todas as evidências vieram de ' + aut.principal.nome + '.' });
     }
     P.DIMENSOES.forEach(function (d) {
-      if ((op.dims[d.id] || 0) === 2 && !podeComprovar(op, d.id)) {
-        lista.push({ tipo: 'comprovacao', nivel: 'medio', texto: d.nome + ' está como comprovado sem evidência confirmada.' });
+      const nota = op.dims[d.id] || 0;
+      if (nota >= 3 && !podeComprovar(op, d.id, nota)) {
+        lista.push({ tipo: 'comprovacao', nivel: 'medio',
+          texto: d.nome + ' está em ' + nota + ' (' + (nota === 4 ? 'documentado' : 'testado') +
+            ') sem evidência do cliente com essa força.' });
       }
     });
     return lista;
@@ -373,7 +376,7 @@
             return {
               dimensao: d.nome,
               nota: nota,
-              semProva: nota === 2 && !podeComprovar(r.op, d.id)
+              semProva: nota >= 3 && !podeComprovar(r.op, d.id, nota)
             };
           })
         };
@@ -445,11 +448,20 @@
     return eventosDeDecisao(op).filter(function (e) { return e.dimensao === dimensao; });
   }
 
-  /* Nota 2 significa "comprovado". Sem uma evidência ao menos confirmada,
-     não é comprovação: é opinião do vendedor sobre o cliente. */
-  function podeComprovar(op, dimensao) {
+  /* Os degraus 3 e 4 são "testado" e "documentado". Nenhum dos dois é opinião
+     do vendedor: os dois exigem que exista uma evidência do cliente com força
+     à altura. Sem isso, a nota é o que o vendedor acha, e o que o vendedor
+     acha mora no degrau 1.
+
+     Na régua de três degraus isto era uma regra à parte, presa ao número 2.
+     Agora é a própria escada: o mínimo de força sobe com o degrau. */
+  const FORCA_MINIMA_DO_DEGRAU = { 3: 2, 4: 3 };
+
+  function podeComprovar(op, dimensao, degrau) {
+    const exigido = FORCA_MINIMA_DO_DEGRAU[degrau || 3] || 0;
+    if (!exigido) return true;
     return evidenciasDaDimensao(op, dimensao).some(function (e) {
-      return pesoForca(e.forca) >= P.FORCA_MINIMA_PARA_COMPROVAR;
+      return pesoForca(e.forca) >= exigido;
     });
   }
 
@@ -573,15 +585,17 @@
       const nota = op.dims[id] || 0;
       const provas = evidenciasDaDimensao(op, id);
 
-      /* Nota 2 sem evidência confirmada também é lacuna: falta a prova, não a nota. */
-      if (nota === 2) {
-        if (podeComprovar(op, id)) return;
+      /* Degrau alto sem evidência à altura é lacuna de PROVA, não de nota: a
+         decisão está marcada como testada ou documentada e nada no histórico
+         do cliente sustenta isso. */
+      if (nota >= 3 && !podeComprovar(op, id, nota)) {
         lista.push({
           tipo: 'comprovacao',
           dimensao: d,
           nota: nota,
           titulo: d.nome,
-          falta: 'Está como comprovado, mas nenhuma evidência confirmada sustenta isso.',
+          falta: 'Está em ' + nota + ', ' + (nota === 4 ? 'documentado' : 'testado') +
+            ', e nenhuma evidência do cliente com essa força sustenta isso.',
           comoProvar: d.evidencias[0],
           evidencias: d.evidencias,
           registradas: provas.length,
@@ -590,13 +604,17 @@
         });
         return;
       }
-      /* Com nota 0 o texto era a própria pergunta da decisão, o que se lia como
-         afirmação: "O cliente reconheceu o problema" logo abaixo de "não
-         sabemos". Agora descreve o estado — que já está escrito em niveis[0] —
-         e a pergunta vai à parte, rotulada como pergunta. */
+      if (nota >= P.NOTA_MAXIMA) return;
+
+      /* O que falta é sempre o PRÓXIMO degrau, escrito por extenso. Dizer
+         "falta comprovar" era vago em três degraus e seria inútil em cinco:
+         de 1 para 2 falta o cliente dizer, de 2 para 3 falta conferir, de 3
+         para 4 falta o papel. São três trabalhos diferentes. */
+      const proximo = nota + 1;
       const falta = nota === 0
         ? d.niveis[0]
-        : 'Falta comprovar: hoje é ' + d.niveis[1].toLowerCase().replace(/\.$/, '') + '.';
+        : 'Hoje é ' + d.niveis[nota].toLowerCase().replace(/\.$/, '') +
+          '. Para chegar a ' + proximo + ': ' + d.niveis[proximo].toLowerCase();
 
       lista.push({
         tipo: 'dimensao',
@@ -609,7 +627,7 @@
         evidencias: d.evidencias,
         registradas: provas.length,
         canal: nota === 0 ? d.canais.whatsapp : d.canais.email,
-        pontos: 2 - nota
+        pontos: P.NOTA_MAXIMA - nota
       });
     });
 

@@ -150,8 +150,13 @@
 
     const corpo = linhas.map(function (l) {
       const celulas = l.celulas.map(function (c) {
-        const classe = c.semProva ? 'm2 sem-prova' : 'm' + c.nota;
-        const estado = c.semProva ? 'comprovado sem prova' : ['não sabemos', 'parcial', 'comprovado'][c.nota];
+        const classe = 'm' + c.nota + (c.semProva ? ' sem-prova' : '');
+        const rotulos = (global.IADPlaybook.NIVEIS_DA_ESCADA || []).map(function (n) {
+          return n.rotulo.toLowerCase();
+        });
+        const estado = c.semProva
+          ? rotulos[c.nota] + ' sem evidência com essa força'
+          : rotulos[c.nota];
         return '<span class="cel ' + classe + '" title="' + esc(c.dimensao + ': ' + estado) + '"></span>';
       }).join('');
       return '<button class="matriz-linha" onclick="App.abrir(\'' + l.resumo.op.id + '\')">' +

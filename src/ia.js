@@ -273,7 +273,7 @@
         empresa: (r.empresa && typeof r.empresa === 'object') ? r.empresa : {},
         negocio: (r.negocio && typeof r.negocio === 'object') ? r.negocio : {},
         decisoes: (Array.isArray(r.decisoes) ? r.decisoes : []).filter(function (d) {
-          return d && dimensoes.indexOf(d.dimensao) !== -1 && d.nota >= 0 && d.nota <= 2;
+          return d && dimensoes.indexOf(d.dimensao) !== -1 && d.nota >= 0 && d.nota <= P.NOTA_MAXIMA;
         })
       };
     }).catch(function (e) {
@@ -606,7 +606,7 @@
       const provas = E.evidenciasDaDimensao(op, d.id).slice(-2).map(function (ev) {
         return '     · ' + (ev.data || '') + ' [' + (ev.forca || 'relato') + '] ' + ev.titulo;
       });
-      linhas.push('  ' + d.nome + ': ' + nota + '/2 — ' + d.niveis[nota]);
+      linhas.push('  ' + d.nome + ': ' + nota + '/' + P.NOTA_MAXIMA + ' — ' + d.niveis[nota]);
       if (provas.length) linhas.push(provas.join('\n'));
     });
 
@@ -767,7 +767,7 @@
 
      Isto não fere a regra de que a IA não pontua: ela PROPÕE, o vendedor
      confere as oito de uma vez e confirma, e a trava do motor continua de pé —
-     nota 2 sem evidência confirmada cai para 1, venha de onde vier. O que
+     degrau 3 ou 4 sem evidência com a força correspondente cai, venha de onde vier. O que
      muda é o custo: oito formulários viram uma tela. */
   function sugerirNotas(op, r, textoExtra) {
     if (!disponivel()) {
@@ -798,7 +798,7 @@
       }
       const dimensoes = global.IADPlaybook.DIMENSOES.map(function (d) { return d.id; });
       return { decisoes: resp.decisoes.filter(function (d) {
-        return d && dimensoes.indexOf(d.dimensao) !== -1 && d.nota >= 0 && d.nota <= 2;
+        return d && dimensoes.indexOf(d.dimensao) !== -1 && d.nota >= 0 && d.nota <= P.NOTA_MAXIMA;
       }) };
     }).catch(function (e) {
       return { erro: (e && e.message) || 'O servidor recusou a releitura.' };

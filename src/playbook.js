@@ -9,8 +9,10 @@
       pergunta: 'O cliente reconheceu, com palavras dele, que existe algo que precisa ser resolvido?',
       niveis: [
         'Ninguém do lado do cliente admitiu o problema.',
-        'Um contato reconhece o problema, mas de forma vaga.',
-        'O cliente descreveu o problema e as consequências dele.'
+        'Nós supomos que existe o problema — o cliente ainda não disse.',
+        'O cliente disse, com palavras dele, que o problema existe.',
+        'O cliente descreveu a consequência com número próprio, e o número resistiu quando conferimos.',
+        'A consequência está por escrito num documento do cliente: relatório, indicador, ata ou e-mail dele.'
       ],
       evidencias: [
         'Cliente descreveu o problema com dados próprios',
@@ -33,8 +35,10 @@
       pergunta: 'Resolver isso virou prioridade agora, com prazo e dono?',
       niveis: [
         'Problema existe, mas sem urgência declarada.',
-        'Há intenção de tratar, sem prazo firme.',
-        'Existe prazo, evento crítico ou meta ligada à solução.'
+        'Achamos que é urgente — o cliente não disse isso.',
+        'O cliente declarou intenção de tratar, sem prazo firme.',
+        'Existe prazo ou evento crítico com data, e conferimos que a data se mantém.',
+        'O prazo está num plano, meta ou orçamento escrito do cliente, com dono nomeado.'
       ],
       evidencias: [
         'Prioridade ganhou prazo declarado pelo cliente',
@@ -55,8 +59,10 @@
       pergunta: 'O ganho ou a perda foi quantificado e aceito pelo cliente?',
       niveis: [
         'Nenhum número na mesa.',
-        'Estimativa nossa, ainda não validada pelo cliente.',
-        'Cliente validou os números do business case.'
+        'Estimativa nossa, ainda não mostrada ao cliente.',
+        'Mostramos o cálculo e o cliente disse que faz sentido.',
+        'O cliente corrigiu as premissas com dados dele e o número refeito ficou de pé.',
+        'O business case está escrito e circulou internamente do lado do cliente.'
       ],
       evidencias: [
         'Cliente enviou dados para o cálculo',
@@ -77,8 +83,10 @@
       pergunta: 'Sabemos como a solução será julgada e quem definiu esses critérios?',
       niveis: [
         'Não sabemos como vão comparar.',
-        'Conhecemos parte dos critérios, sem pesos.',
-        'Critérios e pesos conhecidos, e influenciamos ao menos um deles.'
+        'Deduzimos os critérios pelo que costuma pesar no setor.',
+        'O cliente disse quais critérios importam.',
+        'Conhecemos os pesos, sabemos quem definiu, e influenciamos ao menos um deles.',
+        'Os critérios estão num documento de avaliação, RFP ou matriz que o cliente compartilhou.'
       ],
       evidencias: [
         'Critérios de avaliação foram compartilhados',
@@ -99,8 +107,10 @@
       pergunta: 'Quem decide, quem influencia, quem paga e quem pode bloquear?',
       niveis: [
         'Um único contato conhecido.',
-        'Mapa parcial do grupo comprador.',
-        'Grupo mapeado e com relacionamento em mais de uma área.'
+        'Sabemos os nomes pelo organograma, sem falar com eles.',
+        'Mapa do grupo comprador declarado pelo próprio cliente.',
+        'Falamos diretamente com mais de uma área, incluindo quem decide o dinheiro.',
+        'O grupo está confirmado por escrito: convite de reunião, lista de aprovadores ou organograma do projeto.'
       ],
       evidencias: [
         'Novo decisor entrou na conversa',
@@ -121,8 +131,10 @@
       pergunta: 'As pessoas envolvidas concordam entre si sobre mudar?',
       niveis: [
         'Não há alinhamento visível.',
-        'Champion apoia, outras áreas ainda não se posicionaram.',
-        'Houve alinhamento interno registrado entre as áreas.'
+        'O champion apoia; supomos que as outras áreas acompanham.',
+        'O champion diz que as outras áreas concordam.',
+        'Vimos as áreas concordarem entre si, numa reunião com todas presentes.',
+        'O alinhamento está registrado: ata, aprovação interna ou e-mail entre as áreas do cliente.'
       ],
       evidencias: [
         'Cliente realizou reunião interna sobre o tema',
@@ -145,8 +157,10 @@
       pergunta: 'O medo de avançar diminuiu — inclusive o risco pessoal de quem assina?',
       niveis: [
         'Riscos percebidos não tratados.',
-        'Riscos citados, tratados parcialmente.',
-        'Riscos endereçados com prova: piloto, referência, SLA ou garantia.'
+        'Sabemos quais riscos existem, mas ninguém falou deles em voz alta.',
+        'O cliente citou os riscos que o preocupam.',
+        'Tratamos os riscos e o cliente disse que estão resolvidos — inclusive o risco pessoal de quem assina.',
+        'A resposta ao risco está escrita: piloto aprovado, referência formal, SLA ou garantia aceita.'
       ],
       evidencias: [
         'Cliente pediu referência ou visita técnica',
@@ -169,8 +183,10 @@
       pergunta: 'Sabemos como esta compra é aprovada, assinada e paga?',
       niveis: [
         'Processo desconhecido.',
-        'Sabemos parte do caminho de aprovação.',
-        'Caminho completo mapeado, com prazos e responsáveis.'
+        'Supomos o caminho pelo que costuma acontecer em empresa desse porte.',
+        'O cliente descreveu as etapas de aprovação.',
+        'Sabemos as etapas, quem assina cada uma e QUANTO TEMPO cada uma leva, confirmado com quem participa delas.',
+        'O caminho está por escrito: política de alçada, fluxo de compras ou calendário de comitê do cliente.'
       ],
       evidencias: [
         'Cliente explicou o fluxo de aprovação',
@@ -207,14 +223,47 @@
     'Venda'
   ];
 
-  /* Gates: a proposta é consequência da qualificação, não ferramenta de descoberta. */
+  /* ---------- a escada de cinco degraus ----------
+
+     A escala tinha três degraus e dois eixos: a nota (0 a 2) dizia quanto se
+     sabia, e a força da evidência (relato, confirmado, documentado) dizia de
+     onde aquilo tinha vindo. Os dois brigavam, e a briga foi remendada com uma
+     regra à parte — "nota 2 exige uma evidência confirmada".
+
+     Em cinco degraus a origem É a escada, e o remendo some. É a régua para que
+     o mercado convergiu em MEDDPICC, e ela é melhor por um motivo específico:
+     o degrau 1 nomeia a suposição do vendedor e a pontua quase em zero. Antes,
+     quem "achava" marcava 1 e o painel mostrava progresso que não existia.
+
+     E o degrau 3 é o que separa "o cliente disse" de "conferimos e continua de
+     pé". É onde mora o caso do diagnóstico que ainda não foi entregue: pode
+     revelar que não atendemos, e até revelar, a decisão para no 2. */
+  const NIVEIS_DA_ESCADA = [
+    { n: 0, rotulo: 'Desconhecido', desc: 'Ninguém falou sobre isso.' },
+    { n: 1, rotulo: 'Suposto', desc: 'Nós achamos. O cliente não disse.' },
+    { n: 2, rotulo: 'Declarado', desc: 'O cliente disse, com palavras dele.' },
+    { n: 3, rotulo: 'Testado', desc: 'Conferimos com o cliente e resistiu.' },
+    { n: 4, rotulo: 'Documentado', desc: 'Está por escrito, em documento do cliente.' }
+  ];
+  const NOTA_MAXIMA = 4;
+  const IAD_MAXIMO = 32;
+
+  /* Média 3 nas oito: tudo testado com o cliente, nada apenas declarado.
+     É mais duro do que os 11 de 16 anteriores, e de propósito: a régua antiga
+     deixava passar negócio inteiro construído em cima do que o cliente disse
+     numa reunião e ninguém nunca conferiu. */
+  const IAD_MADURO = 24;
+
+  /* Gates: a proposta é consequência da qualificação, não ferramenta de
+     descoberta. Os mínimos subiram junto com a escada — o "1" de antes era
+     "reconhece de forma vaga", que na régua nova é 2, declarado. */
   const GATES_PROPOSTA = [
-    { dim: 'problema', min: 2 },
-    { dim: 'prioridade', min: 1 },
-    { dim: 'impacto', min: 1 },
-    { dim: 'criterios', min: 1 },
-    { dim: 'stakeholders', min: 1 },
-    { dim: 'processo', min: 1 }
+    { dim: 'problema', min: 3 },
+    { dim: 'prioridade', min: 2 },
+    { dim: 'impacto', min: 2 },
+    { dim: 'criterios', min: 2 },
+    { dim: 'stakeholders', min: 2 },
+    { dim: 'processo', min: 2 }
   ];
 
   const PAPEIS = [
@@ -319,6 +368,7 @@
 
   global.IADPlaybook = {
     DIMENSOES, ETAPAS, GATES_PROPOSTA, PAPEIS, PAPEIS_CRITICOS, DESFECHOS,
+    NIVEIS_DA_ESCADA, NOTA_MAXIMA, IAD_MAXIMO, IAD_MADURO,
     FORCAS, FORCA_MINIMA_PARA_COMPROVAR, TIPOS_TAREFA, TIPOS_TAREFA_RENOMEADOS, CATEGORIAS_ARQUIVO,
     PERFIS, PERFIS_MOBILIZADORES, ESTADOS_INSIGHT,
     RELACOES_CONTA, TIPOS_OPORTUNIDADE, FECHAMENTO_REUNIAO,

@@ -89,6 +89,7 @@
     dados.tenants = dados.tenants || [];
     dados.usuarios = dados.usuarios || [];
     dados.recusas = dados.recusas || [];
+    migrarParaCincoDegraus(dados);
 
     /* Multiempresa: o que já existia passa a pertencer a uma primeira empresa,
        criada aqui, para nada ficar órfão e invisível depois do login. */
@@ -338,6 +339,70 @@
     return marca;
   }
 
+  /* ---------- da régua de três degraus para a de cinco ----------
+
+     A escala era 0, 1 e 2, com a força da evidência (relato, confirmado,
+     documentado) num eixo separado. Passa a ser 0 a 4, com a origem da
+     informação sendo a própria escada.
+
+     Ninguém precisa repontuar nada, porque a informação necessária já está
+     gravada: a força da evidência mais forte de cada decisão. É ela que diz se
+     um 2 antigo era "o cliente confirmou" ou "está no papel".
+
+     - 0 continua 0.
+     - 1 vira 2. O antigo 1 era "reconhece, mas de forma vaga", que na régua
+       nova é exatamente "declarado pelo cliente".
+     - 2 vira 3 ou 4, conforme a evidência mais forte já registrada: confirmada
+       vira 3 (testado), documentada vira 4. Um 2 sem nenhuma evidência forte
+       vira 2 — era o caso que a regra antiga chamava de "comprovado sem prova",
+       e a régua nova simplesmente não deixa ele subir.
+
+     Roda uma vez e se marca como feita: sem a marca, a segunda carga
+     promoveria de novo o que já subiu, e a carteira inteira iria para 4. */
+  const PESO_DA_FORCA = { relato: 1, confirmado: 2, documentado: 3 };
+
+  function migrarParaCincoDegraus(dados) {
+    if (dados.escalaDeCincoDegraus) return;
+    dados.escalaDeCincoDegraus = true;
+
+    (dados.oportunidades || []).forEach(function (op) {
+      if (!op.dims) return;
+      const maisForte = {};
+      (op.eventos || []).forEach(function (e) {
+        if (e.tipo !== 'decision' || !e.dimensao) return;
+        const peso = PESO_DA_FORCA[e.forca] || 0;
+        if (peso > (maisForte[e.dimensao] || 0)) maisForte[e.dimensao] = peso;
+      });
+
+      Object.keys(op.dims).forEach(function (dim) {
+        const antiga = op.dims[dim] || 0;
+        if (antiga === 0) { op.dims[dim] = 0; return; }
+        if (antiga === 1) { op.dims[dim] = 2; return; }
+        if (antiga !== 2) return;                    /* já migrado ou fora da faixa */
+        const forca = maisForte[dim] || 0;
+        op.dims[dim] = forca >= 3 ? 4 : (forca >= 2 ? 3 : 2);
+      });
+
+      /* O histórico da curva do IAD também precisa mudar de escala, senão o
+         gráfico mostra uma queda que nunca aconteceu no dia da migração. */
+      (op.snapshots || []).forEach(function (m) {
+        if (!m.dims) return;
+        Object.keys(m.dims).forEach(function (dim) {
+          const v = m.dims[dim] || 0;
+          m.dims[dim] = v === 1 ? 2 : (v === 2 ? 3 : v);
+        });
+        m.iad = Object.keys(m.dims).reduce(function (t, k) { return t + m.dims[k]; }, 0);
+        if (m.de === 1) m.de = 2; else if (m.de === 2) m.de = 3;
+        if (m.para === 1) m.para = 2; else if (m.para === 2) m.para = 3;
+      });
+
+      if (op.desfecho && typeof op.desfecho.iadFinal === 'number') {
+        op.desfecho.iadFinal = Object.keys(op.dims)
+          .reduce(function (t, k) { return t + (op.dims[k] || 0); }, 0);
+      }
+    });
+  }
+
   /* Registro sem empresa não aparece para ninguém: o filtro por empresa o
      esconde, e para quem cadastrou parece que o salvar não funcionou. Aconteceu
      de verdade com as contas, que nasciam sem carimbo. Corrigida a origem, isto
@@ -511,6 +576,8 @@
     const op = oportunidade(id);
     if (!op) return null;
     const anterior = op.dims[dimensao] || 0;
+    const limite = (global.IADPlaybook && global.IADPlaybook.NOTA_MAXIMA) || 4;
+    if (!(valor >= 0 && valor <= limite)) return op;
     if (anterior === valor) return op;
 
     op.dims[dimensao] = valor;

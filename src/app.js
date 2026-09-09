@@ -857,7 +857,7 @@
       const dlg = document.createElement('dialog');
       dlg.className = 'revisao-ia';
       dlg.innerHTML = '<div class="corpo"><h2>Lendo este negócio…</h2>' +
-        '<p class="small muted">' + U.esc(op.titulo) + ' · IAD ' + r.iad + '/16' +
+        '<p class="small muted">' + U.esc(op.titulo) + ' · IAD ' + r.iad + '/' + P.IAD_MAXIMO +
         (etapaNova ? ' · agora em ' + U.esc(etapaNova) : '') + '</p></div>';
       document.body.appendChild(dlg);
       dlg.showModal();
@@ -894,7 +894,7 @@
 
        Isto não quebra a regra de que a IA não pontua. Ela propõe, o vendedor
        confere as oito numa tela e confirma — e a trava do motor continua de
-       pé: nota 2 sem evidência confirmada cai para 1, venha de onde vier.
+       pé: degrau 3 ou 4 sem evidência com a força correspondente cai, venha de onde vier.
        O que muda é o custo. Oito formulários é o motivo de ninguém pontuar. */
     lerDecisoes: function (opId) {
       const op = Store.oportunidade(opId);
@@ -951,7 +951,7 @@
           const depois = E.iad(Store.oportunidade(opId));
           alert(mudadas
             ? mudadas + (mudadas === 1 ? ' decisão gravada' : ' decisões gravadas') +
-              '. IAD agora: ' + depois + '/16.' +
+              '. IAD agora: ' + depois + '/' + P.IAD_MAXIMO + '.' +
               (rebaixadas ? '\n\n' + rebaixadas + ' ficou em 1: para 2 é preciso evidência confirmada ou documentada.' : '')
             : 'Nada mudou.');
           render();
@@ -1379,12 +1379,11 @@
         /* Registrar a evidência e pontuar eram dois gestos, e o segundo não era
            pedido em lugar nenhum: a pessoa lançava a evidência e o mapa continuava
            zerado, como se nada tivesse acontecido. Agora é a mesma janela. */
-        { id: 'nota', rotulo: 'Como fica esta decisão', tipo: 'select', padrao: '2', opcoes: [
-          { valor: 'manter', rotulo: 'Manter como está' },
-          { valor: '0', rotulo: '0 — Não sabemos' },
-          { valor: '1', rotulo: '1 — Parcial' },
-          { valor: '2', rotulo: '2 — Comprovado pelo cliente' }
-        ] },
+        { id: 'nota', rotulo: 'Como fica esta decisão', tipo: 'select', padrao: '2',
+          opcoes: [{ valor: 'manter', rotulo: 'Manter como está' }].concat(
+            P.NIVEIS_DA_ESCADA.map(function (n) {
+              return { valor: String(n.n), rotulo: n.n + ' — ' + n.rotulo + ': ' + n.desc };
+            })) },
         { id: 'sugestao', rotulo: 'Ou escolha uma evidência típica', tipo: 'select', opcoes: [{ valor: '', rotulo: '— descrever acima —' }].concat(sugestoes) }
       );
       if (pessoas.length) {
@@ -1422,13 +1421,15 @@
             : null
         });
 
-        /* A evidência entra primeiro: é ela que autoriza o 2. */
+        /* A evidência entra primeiro: é ela que autoriza os degraus altos. */
         if (d.nota !== 'manter') {
           const nota = Number(d.nota);
           const atual = Store.oportunidade(alvo);
-          if (nota === 2 && !E.podeComprovar(atual, dimensao)) {
-            alert('Evidência registrada. A nota ficou em 1: só relato não comprova — para 2 é preciso uma evidência confirmada ou documentada.');
-            Store.pontuar(alvo, dimensao, Math.max(1, atual.dims[dimensao] || 0));
+          if (nota >= 3 && !E.podeComprovar(atual, dimensao, nota)) {
+            alert('Evidência registrada. O degrau ' + nota + ' exige evidência ' +
+              (nota === 4 ? 'documentada' : 'confirmada ou documentada') +
+              ' — a nota ficou em 2, declarado pelo cliente.');
+            Store.pontuar(alvo, dimensao, Math.max(2, atual.dims[dimensao] || 0));
           } else {
             Store.pontuar(alvo, dimensao, nota);
           }
@@ -1448,25 +1449,34 @@
         };
         opSelecionada = opDoFormulario();
 
-        /* O 2 vale "comprovado", e relato não comprova. Em vez de aceitar e
-           recusar depois, a opção fica indisponível enquanto não puder valer. */
+        /* Cada degrau alto exige uma força de evidência. Em vez de aceitar e
+           recusar depois, o que não pode valer fica indisponível na hora — e o
+           degrau que a força escolhida permite já vem sugerido.
+
+           O de-para é direto: relato é o cliente dizendo, e dizer é o degrau
+           2; confirmado é ter sido verificado, degrau 3; documentado é o
+           papel, degrau 4. */
+        const DEGRAU_DA_FORCA = { relato: 2, confirmado: 3, documentado: 4 };
+
         const ajustarNota = function () {
           const alvo = opDoFormulario();
           const atual = (alvo && alvo.dims[select.value]) || 0;
-          const podeDois = forca.value !== 'relato';
-          const opcaoDois = nota.querySelector('option[value="2"]');
+          const teto = DEGRAU_DA_FORCA[forca.value] || 2;
 
-          opcaoDois.disabled = !podeDois;
-          opcaoDois.textContent = podeDois
-            ? '2 — Comprovado pelo cliente'
-            : '2 — Comprovado (exige evidência confirmada)';
+          P.NIVEIS_DA_ESCADA.forEach(function (nivel) {
+            const opcao = nota.querySelector('option[value="' + nivel.n + '"]');
+            if (!opcao) return;
+            const bloqueado = nivel.n > teto;
+            opcao.disabled = bloqueado;
+            opcao.textContent = nivel.n + ' — ' + nivel.rotulo + ': ' + nivel.desc +
+              (bloqueado ? ' (exige evidência mais forte)' : '');
+          });
 
           if (notaTocada) {
-            if (!podeDois && nota.value === '2') nota.value = '1';
+            if (Number(nota.value) > teto) nota.value = String(teto);
             return;
           }
-          const sugerida = podeDois ? 2 : 1;
-          nota.value = String(Math.max(atual, sugerida));
+          nota.value = String(Math.min(P.NOTA_MAXIMA, Math.max(atual, teto)));
         };
 
         nota.addEventListener('change', function () { notaTocada = true; });

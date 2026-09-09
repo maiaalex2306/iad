@@ -211,13 +211,35 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--navy-2); ou
   border-radius: 0 6px 6px 0; line-height: 1.5;
 }
 .notas { display: flex; gap: 6px; }
+/* Cinco botões em vez de três: mais estreitos, para caber no celular sem
+   empurrar o nome da decisão para a linha de baixo. */
 .notas button {
-  width: 38px; height: 34px; border-radius: 9px; border: 1px solid var(--line);
+  width: 30px; height: 32px; border-radius: 8px; border: 1px solid var(--line);
   background: var(--bg); cursor: pointer; font-weight: 700; color: var(--muted);
 }
+/* A cor conta a mesma história da escada: vermelho é não saber, âmbar é
+   suposição nossa, e só o que veio do cliente fica verde — cada vez mais
+   forte conforme a origem melhora. */
 .notas button.on0 { background: var(--dead); border-color: var(--dead); color: #fff; }
 .notas button.on1 { background: var(--warn); border-color: var(--warn); color: #fff; }
-.notas button.on2 { background: var(--ok); border-color: var(--ok); color: #fff; }
+.notas button.on2 { background: color-mix(in srgb, var(--ok) 55%, var(--warn)); border-color: transparent; color: #fff; }
+.notas button.on3 { background: var(--ok); border-color: var(--ok); color: #fff; }
+.notas button.on4 { background: var(--navy); border-color: var(--navy); color: #fff; }
+
+/* A escada de cinco degraus, sempre visível sob a decisão. O degrau atual
+   marcado, os anteriores esmaecidos: a pessoa vê onde está e o que vem. */
+.dim .escada { margin-top: 8px; }
+.dim .escada .degrau {
+  display: flex; gap: 8px; align-items: baseline;
+  font-size: .74rem; line-height: 1.4; color: var(--muted); padding: 2px 0;
+}
+.dim .escada .degrau .n {
+  flex: none; width: 18px; text-align: center; border-radius: 4px;
+  font-weight: 700; background: var(--line); color: var(--muted);
+}
+.dim .escada .degrau.feito .n { background: color-mix(in srgb, var(--ok) 22%, transparent); color: var(--ok); }
+.dim .escada .degrau.aqui { color: var(--text); }
+.dim .escada .degrau.aqui .n { background: var(--navy); color: #fff; }
 
 .mapa { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
 .pessoa { border: 1px solid var(--line); border-radius: 12px; padding: 10px; background: var(--surface); }
@@ -559,8 +581,12 @@ td .tiny { display: block; }
 .matriz-linha .fim { font-size: .76rem; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
 .cel { display: block; height: 20px; border-radius: 4px; background: var(--line); }
 .cel.m1 { background: var(--warn); }
-.cel.m2 { background: var(--ok); }
-.cel.m2.sem-prova { background: var(--risk); }
+/* Declarado é meio caminho: cor entre o âmbar da suposição e o verde do que
+   foi verificado. 3 e 4 são o que veio do cliente e resistiu. */
+.cel.m2 { background: color-mix(in srgb, var(--ok) 55%, var(--warn)); }
+.cel.m3 { background: var(--ok); }
+.cel.m4 { background: var(--navy); }
+.cel.sem-prova { background: var(--risk); }
 .item-legenda i.cel { height: 11px; }
 .matriz-rolagem { overflow-x: auto; }
 
@@ -608,9 +634,13 @@ td .tiny { display: block; }
 .celula.q0 { border-style: dashed; opacity: .8; }
 .celula.q1 { border-color: var(--warn); background: rgba(184,134,11,.09); }
 .celula.q1 .marca { color: var(--warn); }
-.celula.q2 { border-color: var(--ok); background: rgba(26,127,75,.11); }
-.celula.q2 .marca { color: var(--ok); }
-.celula.q2.sem-prova { border-color: var(--risk); background: rgba(212,118,26,.1); border-style: dashed; }
+.celula.q2 { border-color: color-mix(in srgb, var(--ok) 55%, var(--warn)); background: color-mix(in srgb, var(--ok) 8%, transparent); }
+.celula.q2 .marca { color: color-mix(in srgb, var(--ok) 55%, var(--warn)); }
+.celula.q3 { border-color: var(--ok); background: rgba(26,127,75,.11); }
+.celula.q3 .marca { color: var(--ok); }
+.celula.q4 { border-color: var(--navy); background: color-mix(in srgb, var(--navy) 10%, transparent); }
+.celula.q4 .marca { color: var(--navy); }
+.celula.sem-prova { border-color: var(--risk); background: rgba(212,118,26,.1); border-style: dashed; }
 
 /* Campo de senha com o olho: revela o que foi digitado sem guardar nada. */
 .campo-senha { position: relative; display: block; }
@@ -784,14 +814,16 @@ td .tiny { display: block; }
 @media (prefers-reduced-motion: reduce) {
   .tem-ajuda .ajuda { transition: none; }
 }
-.celula.q2.sem-prova .marca { color: var(--risk); }
+.celula.sem-prova .marca { color: var(--risk); }
 
 /* A mesma leitura, do tamanho de uma linha, para comparar negócios na lista. */
 .tira { display: inline-flex; gap: 3px; }
 .tira i { width: 15px; height: 6px; border-radius: 2px; background: var(--line); }
 .tira i.t1 { background: var(--warn); }
-.tira i.t2 { background: var(--ok); }
-.tira i.t2.sem-prova { background: var(--risk); }
+.tira i.t2 { background: color-mix(in srgb, var(--ok) 55%, var(--warn)); }
+.tira i.t3 { background: var(--ok); }
+.tira i.t4 { background: var(--navy); }
+.tira i.sem-prova { background: var(--risk); }
 
 /* ---------- O que falta ---------- */
 ol.lacunas { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }

@@ -49,8 +49,10 @@
     const passos = [
       ['Oito decisões, não oito etapas',
        'Antes de comprar, o cliente toma oito decisões dentro da empresa dele. Elas são o negócio; a etapa do funil é só onde você anotou.'],
-      ['De 0 a 16',
-       'Cada decisão vale 0 (não sabemos), 1 (parcial) ou 2 (comprovado pelo cliente). A soma é o IAD. Acima de 11, decisão madura.'],
+      ['De 0 a ' + P.IAD_MAXIMO,
+       'Cada decisão vale de 0 a ' + P.NOTA_MAXIMA + ', e o que decide o degrau é de onde a informação veio: ' +
+       P.NIVEIS_DA_ESCADA.map(function (n) { return n.n + ' ' + n.rotulo.toLowerCase(); }).join(', ') +
+       '. A soma é o IAD. Com ' + P.IAD_MADURO + ' ou mais, decisão madura.'],
       ['Só o cliente move o índice',
        'Proposta enviada, follow-up feito, reunião marcada por você: nada disso conta. Conta o que ele fez — mandou o dado, apresentou ao financeiro, marcou a reunião interna.'],
       ['O app diz o que falta',
@@ -386,7 +388,7 @@
       '<div class="small muted">' + esc((r.conta && r.conta.nome) || '') + ' · ' + esc(r.op.etapa) + '</div>' +
 
       '<div class="linha-avanco">' + tiraDecisao(r.op) +
-        '<span class="iad">' + r.iad + '<span class="de">/16</span></span>' +
+        '<span class="iad">' + r.iad + '<span class="de">/' + P.IAD_MAXIMO + '</span></span>' +
         '<span class="espaco"></span>' +
         '<span class="pill ' + r.faixa.classe + '">' + r.evidenceAge + 'd</span>' +
         '<span class="pill">grupo ' + r.coverage.percentual + '%</span>' +
@@ -478,7 +480,7 @@
       '</div>' +
       '<div class="card"><h2>Composição do pipeline</h2>' + composicao +
         '<div class="grid k4" style="margin-top:14px">' +
-          kpi('IAD médio', U.numero(c.iadMedio, 1) + '<span class="small muted">/16</span>', 'maturidade da decisão') +
+          kpi('IAD médio', U.numero(c.iadMedio, 1) + '<span class="small muted">/' + P.IAD_MAXIMO + '</span>', 'maturidade da decisão') +
           kpi('Evidence Age médio', U.numero(c.evidenceAgeMedio, 1) + '<span class="small muted">d</span>', 'sem movimento do cliente') +
           kpi('Coverage', Math.round(c.coverageMedio) + '%', 'papéis críticos cobertos') +
           kpi('Prontidão', Math.round(c.prontidaoMedia) + '%', 'para emitir proposta') +
@@ -535,7 +537,7 @@
           '<div class="row"><span class="tit">' + esc(x.r.op.titulo) + '</span><span class="espaco"></span>' +
           '<span class="pill navy">' + U.compacto(x.r.op.valor) + '</span></div>' +
           '<div class="small muted">' + esc((x.r.conta && x.r.conta.nome) || '') + ' · ' + esc(x.r.op.etapa) + '</div>' +
-          '<div class="row" style="margin-top:7px;gap:8px">' + tiraDecisao(x.r.op) + '<span class="tiny muted">' + x.r.iad + '/16</span></div>' +
+          '<div class="row" style="margin-top:7px;gap:8px">' + tiraDecisao(x.r.op) + '<span class="tiny muted">' + x.r.iad + '/' + P.IAD_MAXIMO + '</span></div>' +
           '<div class="small" style="margin-top:6px">⚠ ' + esc(x.altos[0].texto) + '</div></button>';
       }).join('');
 
@@ -757,25 +759,25 @@
     }],
     ['real', 'Negócio real', {
       oQue: 'Decisão madura, movimento recente e consenso em construção. É o que a previsão pode contar.',
-      entra: 'IAD 11 ou mais · até 14 dias sem evidência do cliente · metade ou mais dos papéis críticos mapeados.',
+      entra: 'IAD ' + P.IAD_MADURO + ' ou mais · até 14 dias sem evidência do cliente · metade ou mais dos papéis críticos mapeados.',
       sai: 'Passar de 14 dias sem evidência devolve para Em construção; passar de 30 vira Zumbi.',
       faca: 'Mantenha o ritmo e proteja a data. Aqui o risco é achar que está ganho.'
     }],
     ['oculto', 'Oculto promissor', {
       oQue: 'A decisão amadureceu mais rápido do que a etapa do funil indica. A previsão está subestimando este negócio.',
-      entra: 'IAD 11 ou mais, com a etapa ainda antes de Proposta.',
+      entra: 'IAD ' + P.IAD_MADURO + ' ou mais, com a etapa ainda antes de Proposta.',
       sai: 'Ao mover para Proposta: vira Negócio real se o gate estiver liberado e houver decisor econômico; senão cai em Falso avançado.',
       faca: 'Acelere. Leve à proposta antes que o interesse esfrie.'
     }],
     ['construcao', 'Em construção', {
       oQue: 'A decisão ainda está sendo formada. É onde o negócio fica quando nenhuma outra regra serve.',
-      entra: 'Nenhuma das outras condições se aplica — normalmente IAD abaixo de 11.',
-      sai: 'Chegar a IAD 11 com evidência dos últimos 14 dias e metade dos papéis críticos leva a Negócio real.',
+      entra: 'Nenhuma das outras condições se aplica — normalmente IAD abaixo de ' + P.IAD_MADURO + '.',
+      sai: 'Chegar a IAD ' + P.IAD_MADURO + ' com evidência dos últimos 14 dias e metade dos papéis críticos leva a Negócio real.',
       faca: 'Ataque a lacuna que o cockpit aponta como primeira. Resolver uma costuma destravar as seguintes.'
     }],
     ['falso', 'Falso avançado', {
       oQue: 'Etapa adiantada com decisão imatura. É o maior destruidor de previsão de vendas.',
-      entra: 'Etapa em Proposta ou adiante e ao menos um destes: IAD abaixo de 11, Proposal Gate não liberado, ou nenhum decisor econômico mapeado.',
+      entra: 'Etapa em Proposta ou adiante e ao menos um destes: IAD abaixo de ' + P.IAD_MADURO + ', Proposal Gate não liberado, ou nenhum decisor econômico mapeado.',
       sai: 'Resolvendo as três condições — ou voltando a etapa para onde a decisão realmente está.',
       faca: 'Pare de empurrar a proposta e volte a comprovar. Insistir aqui gasta o negócio.'
     }],
@@ -1020,7 +1022,7 @@
     if (f.esfriando) c.push(chip('Esfriando', 'esfriando'));
     if (f.gateAberto) c.push(chip('Proposta sem gate', 'gateAberto'));
     if (f.iadMin !== '' || f.iadMax !== '') {
-      c.push(chip('IAD ' + (f.iadMin || 0) + '–' + (f.iadMax || 16), 'iad'));
+      c.push(chip('IAD ' + (f.iadMin || 0) + '–' + (f.iadMax || P.IAD_MAXIMO), 'iad'));
     }
     if (f.valorMin !== '' || f.valorMax !== '') {
       c.push(chip('Valor ' + (f.valorMin ? U.compacto(f.valorMin) : '0') + '–' +
@@ -1144,7 +1146,7 @@
 
       '<div class="secao-form"><span>Faixas</span>' +
       '<em>Deixe em branco o lado que não importa.</em></div>' +
-      faixa('iadMin', 'iadMax', 'IAD (0 a 16)', 'number', ['0', '16']) +
+      faixa('iadMin', 'iadMax', 'IAD (0 a ' + P.IAD_MAXIMO + ')', 'number', ['0', String(P.IAD_MAXIMO)]) +
       faixa('valorMin', 'valorMax', 'Valor (R$)', 'number', ['0', 'sem teto']) +
       '<label class="campo mini"><span>Sem evidência do cliente há mais de</span>' +
       '<input type="number" value="' + esc(f.semEvidenciaDias) + '" placeholder="dias"' +
@@ -1266,7 +1268,7 @@
         '<span class="espaco"></span>' +
         '<span class="pill ' + d.classe + '">' + esc(d.rotulo) + '</span></div>' +
         '<div class="small muted">' + esc((conta && conta.nome) || '') + ' · ' + U.compacto(op.desfecho.valorFinal) + ' · encerrado em ' + U.data(op.desfecho.data) + '</div>' +
-        '<div class="tiny muted" style="margin-top:6px">IAD no fechamento: ' + op.desfecho.iadFinal + '/16 · grupo comprador ' + (op.desfecho.coverageFinal || 0) + '%' +
+        '<div class="tiny muted" style="margin-top:6px">IAD no fechamento: ' + op.desfecho.iadFinal + '/' + P.IAD_MAXIMO + ' · grupo comprador ' + (op.desfecho.coverageFinal || 0) + '%' +
         (op.desfecho.motivo ? ' · ' + esc(op.desfecho.motivo) : '') + '</div></button>';
     }).join('') || '<div class="vazio">Nenhum negócio encerrado ainda.</div>';
 
@@ -1277,8 +1279,8 @@
   function tiraDecisao(op) {
     return '<span class="tira" aria-hidden="true">' + P.DIMENSOES.map(function (d) {
       const n = op.dims[d.id] || 0;
-      const provado = n === 2 && E.podeComprovar(op, d.id);
-      return '<i class="' + (n === 2 ? (provado ? 't2' : 't2 sem-prova') : 't' + n) + '" title="' + esc(d.nome) + '"></i>';
+      const provado = n < 3 || E.podeComprovar(op, d.id, n);
+      return '<i class="t' + n + (provado ? '' : ' sem-prova') + '" title="' + esc(d.nome) + '"></i>';
     }).join('') + '</span>';
   }
 
@@ -1289,14 +1291,14 @@
       '<span class="pill navy">' + U.compacto(r.op.valor) + '</span></div>' +
       '<div class="small muted" style="margin:2px 0 8px">' + esc((r.conta && r.conta.nome) || 'Sem conta') + ' · ' + esc(r.op.etapa) + ' · ' + r.tempoNaEtapa + 'd nesta etapa</div>' +
       '<div class="row tiny">' +
-        '<span class="pill">IAD ' + r.iad + '/16</span>' +
+        '<span class="pill">IAD ' + r.iad + '/' + P.IAD_MAXIMO + '</span>' +
         '<span class="pill ' + r.faixa.classe + '">' + r.evidenceAge + 'd sem evidência</span>' +
         '<span class="pill">Grupo ' + r.coverage.percentual + '%</span>' +
         (comp && comp.vencido ? '<span class="pill dead">compromisso vencido</span>' : '') +
         ((r.op.adiamentos || 0) >= 2 ? '<span class="pill warn">' + r.op.adiamentos + ' adiamentos</span>' : '') +
       '</div>' +
       '<div class="row" style="margin-top:9px;gap:8px">' + tiraDecisao(r.op) +
-      '<span class="tiny muted">' + r.iad + '/16</span></div>' +
+      '<span class="tiny muted">' + r.iad + '/' + P.IAD_MAXIMO + '</span></div>' +
       '<div class="tiny muted" style="margin-top:6px">Falta: ' +
       esc(r.lacunas.length ? r.lacunas.slice(0, 2).map(function (l) { return l.titulo; }).join(', ') +
         (r.lacunas.length > 2 ? ' e mais ' + (r.lacunas.length - 2) : '') : 'nada — resta formalizar') + '</div>' +
@@ -1316,7 +1318,7 @@
     const datas = pontos.map(function (p) { return new Date(p.data + 'T00:00:00').getTime(); });
     const min = Math.min.apply(null, datas), max = Math.max.apply(null, datas);
     const px = function (t) { return max === min ? x1 : x0 + ((t - min) / (max - min)) * (x1 - x0); };
-    const py = function (v) { return y1 - (Math.max(0, Math.min(16, v)) / 16) * (y1 - y0); };
+    const py = function (v) { return y1 - (Math.max(0, Math.min(P.IAD_MAXIMO, v)) / P.IAD_MAXIMO) * (y1 - y0); };
 
     let d = '';
     pontos.forEach(function (p, i) {
@@ -1325,7 +1327,7 @@
       else d += ' H' + X.toFixed(1) + ' V' + Y.toFixed(1);
     });
 
-    const grade = [0, 8, 16].map(function (v) {
+    const grade = [0, P.IAD_MAXIMO / 2, P.IAD_MAXIMO].map(function (v) {
       return '<line x1="' + x0 + '" y1="' + py(v) + '" x2="' + x1 + '" y2="' + py(v) + '" stroke="var(--line)" stroke-width="1" fill="none"/>' +
         '<text x="' + (x0 - 8) + '" y="' + (py(v) + 4) + '" text-anchor="end" font-size="10" fill="var(--muted)">' + v + '</text>';
     }).join('');
@@ -1364,7 +1366,7 @@
     const desf = op.desfecho ? P.DESFECHOS.find(function (x) { return x.id === op.desfecho.tipo; }) : null;
     const banner = desf
       ? '<div class="card" style="margin-top:10px"><div class="row"><span class="pill ' + desf.classe + '">' + esc(desf.rotulo) + '</span>' +
-        '<span class="small muted">encerrado em ' + U.data(op.desfecho.data) + ' · IAD ' + op.desfecho.iadFinal + '/16 · ' + (op.desfecho.diasEmAberto || 0) + ' dias em aberto</span>' +
+        '<span class="small muted">encerrado em ' + U.data(op.desfecho.data) + ' · IAD ' + op.desfecho.iadFinal + '/' + P.IAD_MAXIMO + ' · ' + (op.desfecho.diasEmAberto || 0) + ' dias em aberto</span>' +
         '<span class="espaco"></span><button class="btn ghost mini" onclick="App.reabrir(\'' + op.id + '\')">Reabrir</button></div>' +
         (op.desfecho.motivo ? '<p class="small" style="margin:10px 0 0">' + esc(op.desfecho.motivo) + '</p>' : '') +
         (op.desfecho.concorrente ? '<p class="tiny muted" style="margin:6px 0 0">Concorrente: ' + esc(op.desfecho.concorrente) + '</p>' : '') + '</div>'
@@ -1436,14 +1438,16 @@
   }
 
   /* ---------------- Avanço: o mapa das 8 decisões ---------------- */
-  const ESTADOS = ['Não sabemos', 'Parcial', 'Comprovado'];
+  const ESTADOS = P.NIVEIS_DA_ESCADA.map(function (n) { return n.rotulo; });
 
   function mapaDecisao(op, clicavel) {
     return '<div class="mapa-decisao">' + P.DIMENSOES.map(function (d) {
       const n = op.dims[d.id] || 0;
-      const provado = n === 2 && E.podeComprovar(op, d.id);
-      const classe = n === 2 ? (provado ? 'q2' : 'q2 sem-prova') : 'q' + n;
-      const marca = n === 2 ? (provado ? '✓' : '!') : (n === 1 ? '◐' : '');
+      const provado = n < 3 || E.podeComprovar(op, d.id, n);
+      const classe = 'q' + n + (provado ? '' : ' sem-prova');
+      /* A marca conta a origem: nada quando não se sabe, meia-lua quando é
+         suposição nossa, visto quando veio do cliente, visto duplo no papel. */
+      const marca = !provado ? '!' : ['', '◐', '✓', '✓', '✓✓'][n];
       /* Tocar na decisão abre a tarefa já marcada como feita e já apontada
          para a evidência direta: dois cliques a menos que o formulário
          completo, e mesmo assim a evidência nasce com um canal atrás dela. */
@@ -1508,7 +1512,7 @@
       '<span class="pill">' + esc(r.classe.rotulo) + '</span></div>' +
 
       '<div class="medidor">' +
-        '<div class="numero">' + r.iad + '<span class="de">/16</span></div>' +
+        '<div class="numero">' + r.iad + '<span class="de">/' + P.IAD_MAXIMO + '</span></div>' +
         '<div class="trilho">' + U.barra((r.iad / 16) * 100) +
           '<div class="legenda tiny muted">' + provadas + ' comprovadas · ' + parciais + ' parciais · ' + zeros + ' em branco · faltam ' + faltam + ' pontos</div>' +
         '</div>' +
@@ -1756,16 +1760,36 @@
       '</div>';
   }
 
+  /* A escada inteira, com o critério objetivo de cada degrau nesta decisão.
+     É o que o vendedor precisa para saber o que fazer, e é o que impede o
+     otimismo: em "suposto" está escrito que somos nós que achamos. */
+  function escadaDaDimensao(d, atual) {
+    return '<div class="escada">' + P.NIVEIS_DA_ESCADA.map(function (nivel) {
+      const n = nivel.n;
+      return '<div class="degrau' + (n === atual ? ' aqui' : '') + (n < atual ? ' feito' : '') + '">' +
+        '<span class="n">' + n + '</span>' +
+        '<span class="txt"><strong>' + esc(nivel.rotulo) + ':</strong> ' + esc(d.niveis[n]) + '</span>' +
+        '</div>';
+    }).join('') + '</div>';
+  }
+
   function blocoDimensoes(op) {
     const dims = P.DIMENSOES.map(function (d) {
       const v = op.dims[d.id] || 0;
       const provas = E.evidenciasDaDimensao(op, d.id);
-      const pode = E.podeComprovar(op, d.id);
-      const notas = [0, 1, 2].map(function (n) {
-        const bloqueado = n === 2 && !pode;
+      const pode = E.podeComprovar(op, d.id, 3);
+      /* Cinco degraus, e o bloqueio agora acompanha o degrau: 3 exige evidência
+         confirmada, 4 exige documentada. O título do botão traz o critério
+         objetivo daquele degrau nesta decisão — é onde o vendedor lê o que
+         precisa acontecer, sem sair da tela. */
+      const notas = P.NIVEIS_DA_ESCADA.map(function (nivel) {
+        const n = nivel.n;
+        const bloqueado = n >= 3 && !E.podeComprovar(op, d.id, n);
         return '<button class="' + (v === n ? 'on' + n : '') + (bloqueado ? ' bloqueado' : '') + '" ' +
           'onclick="App.pontuar(\'' + op.id + '\',\'' + d.id + '\',' + n + ')" ' +
-          'title="' + esc(bloqueado ? 'Exige uma evidência confirmada ou documentada' : d.niveis[n]) + '">' + n + '</button>';
+          'title="' + esc(nivel.rotulo + ' — ' + d.niveis[n] +
+            (bloqueado ? ' (exige evidência ' + (n === 4 ? 'documentada' : 'confirmada ou documentada') + ')' : '')) +
+          '">' + n + '</button>';
       }).join('');
 
       /* Da mais recente para a mais antiga: é a última fala do cliente que
@@ -1792,12 +1816,16 @@
         '<div class="small muted" style="margin-top:4px">' + esc(d.pergunta) + '</div>' +
         '<div class="tiny muted" style="margin-top:3px">' + esc(d.niveis[v]) +
         ' · ' + provas.length + ' evidência(s)' + (pode ? ', ao menos uma confirmada' : ', nenhuma confirmada') + '</div>' +
+        escadaDaDimensao(d, v) +
         detalhe + '</div>';
     }).join('');
 
     return '<div class="card"><h2>As 8 decisões</h2>' +
-      '<p class="tiny muted">0 = desconhecido · 1 = parcial · 2 = comprovado pelo cliente. ' +
-      'A nota 2 exige evidência confirmada ou documentada. Abra cada decisão para ver o que o cliente disse e de onde veio.</p>' +
+      '<p class="tiny muted">' +
+      P.NIVEIS_DA_ESCADA.map(function (n) { return n.n + ' = ' + n.rotulo.toLowerCase(); }).join(' · ') +
+      '. O que decide o degrau é DE ONDE a informação veio, não o quanto sabemos. ' +
+      'Os degraus 3 e 4 exigem evidência do cliente com essa força. ' +
+      'Abra cada decisão para ver o que já foi provado e o que falta.</p>' +
       dims + '</div>';
   }
 
@@ -2531,7 +2559,7 @@
       const comp = r.compromisso;
       return '<div class="card"><div class="row"><h3 style="margin:0">' + esc(r.op.titulo) + '</h3><span class="espaco"></span>' +
         '<span class="pill ' + r.faixa.classe + '">' + r.evidenceAge + 'd</span></div>' +
-        '<div class="small muted">' + esc((r.conta && r.conta.nome) || '') + ' · ' + esc(r.op.etapa) + ' · ' + U.compacto(r.op.valor) + ' · IAD ' + r.iad + '/16</div>' +
+        '<div class="small muted">' + esc((r.conta && r.conta.nome) || '') + ' · ' + esc(r.op.etapa) + ' · ' + U.compacto(r.op.valor) + ' · IAD ' + r.iad + '/' + P.IAD_MAXIMO + '</div>' +
         '<p class="small" style="margin-top:10px"><strong>O que mudou na decisão do cliente nos últimos 7 dias?</strong></p>' +
         (d.evidencias || d.mudancas.length
           ? '<ul class="small" style="margin:0 0 8px 18px">' +
@@ -2718,7 +2746,7 @@
         '<td>' + esc((conta && conta.nome) || '—') + '</td>' +
         '<td>' + (o.desfecho ? '<span class="pill">encerrada</span>' : esc(o.etapa)) + '</td>' +
         '<td class="right">' + U.compacto(o.valor) + '</td>' +
-        '<td class="right">' + r.iad + '/16</td>' +
+        '<td class="right">' + r.iad + '/' + P.IAD_MAXIMO + '</td>' +
         '<td class="right" style="white-space:nowrap">' +
           '<button class="btn ghost mini" onclick="App.abrir(\'' + o.id + '\')">Abrir</button> ' +
           '<button class="btn ghost mini" onclick="App.editarOportunidade(\'' + o.id + '\')">Editar</button></td></tr>';
@@ -3240,8 +3268,8 @@
     }).join('');
     return '<div class="card" id="m-oito"><h2>As oito decisões, e a régua</h2>' +
       '<p class="small">Uma venda B2B não avança porque você mandou proposta. Avança quando oito decisões acontecem ' +
-      '<strong>dentro do cliente</strong>. Cada uma vale de 0 a 2, e a soma é o <strong>IAD</strong>, de 0 a 16. ' +
-      'Acima de 11, decisão madura.</p>' +
+      '<strong>dentro do cliente</strong>. Cada uma vale de 0 a ' + P.NOTA_MAXIMA + ', e a soma é o <strong>IAD</strong>, de 0 a ' + P.IAD_MAXIMO + '. ' +
+      'Com ' + P.IAD_MADURO + ' ou mais, decisão madura.</p>' +
       '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' + linhas + '</tbody></table></div>' +
       '<div class="escada-manual">' +
       '<div><span class="nota-manual n0">0</span><div><strong>Não sabemos</strong><span class="tiny muted">Nada do lado do cliente sustenta esta decisão.</span></div></div>' +
@@ -3316,7 +3344,7 @@
 
     return '<div class="card" id="m-avanco"><h2>Como o IAD anda</h2>' +
 
-      '<p class="small">O IAD é a soma das oito notas: de <strong>0 a 16</strong>. Ele não sobe porque ' +
+      '<p class="small">O IAD é a soma das oito notas: de <strong>0 a ' + P.IAD_MAXIMO + '</strong>. Ele não sobe porque ' +
       'você trabalhou. Sobe quando uma das oito decisões amadurece <strong>dentro do cliente</strong>, ' +
       'e isso acontece de um jeito só: uma evidência nova do cliente entra, e a nota daquela decisão sobe.</p>' +
 
@@ -3419,7 +3447,7 @@
       '<p class="small">Estando em Proposta ou adiante, qualquer uma destas marca o negócio como ' +
       '<strong>Falso avançado</strong> — que é o maior destruidor de previsão de vendas:</p>' +
       '<ul class="limpa-manual">' +
-      '<li>IAD abaixo de <strong>11</strong>;</li>' +
+      '<li>IAD abaixo de <strong>' + P.IAD_MADURO + '</strong>;</li>' +
       '<li>o portão acima <strong>não liberado</strong>;</li>' +
       '<li>nenhum <strong>decisor econômico</strong> mapeado no grupo comprador.</li>' +
       '</ul>' +
@@ -3442,31 +3470,32 @@
 
     return '<div class="card" id="m-faixas"><h2>O que o número do IAD diz</h2>' +
 
-      '<p class="small">De 0 a 16. E o sistema tem <strong>um único limiar</strong>, não uma escala de ' +
-      'cores: <strong>11</strong>. Abaixo dele a decisão está sendo formada; a partir dele ela está ' +
-      'madura. Tudo o mais que o app classifica cruza esse 11 com outras duas coisas — há quanto tempo ' +
+      '<p class="small">De 0 a ' + P.IAD_MAXIMO + '. E o sistema tem <strong>um único limiar</strong>, não uma escala de ' +
+      'cores: <strong>' + P.IAD_MADURO + '</strong>. Abaixo dele a decisão está sendo formada; a partir dele ela está ' +
+      'madura. Tudo o mais que o app classifica cruza esse número com outras duas coisas — há quanto tempo ' +
       'o cliente não se move, e quanto do grupo comprador você tem mapeado.</p>' +
 
       '<div class="escada-manual escada-iad">' +
-      '<div><span class="faixa-iad f0">0–5</span><div><strong>Você ainda não sabe se existe negócio</strong>' +
-      '<span class="tiny muted">Uma ou duas decisões com sinal fraco. Aqui o trabalho é diagnóstico: descobrir ' +
-      'se o cliente reconhece um problema. Um valor grande com IAD 3 não é pipeline, é esperança.</span></div></div>' +
-      '<div><span class="faixa-iad f1">6–10</span><div><strong>Decisão em construção</strong>' +
-      '<span class="tiny muted">O problema está reconhecido e algo mais andou. É a faixa mais comum e a mais ' +
-      'traiçoeira: parece que está caminhando, e falta o que decide. Olhe qual é a primeira lacuna e ataque só ela.</span></div></div>' +
-      '<div><span class="faixa-iad f2">11–13</span><div><strong>Decisão madura — dá para contar no forecast</strong>' +
-      '<span class="tiny muted">É o limiar do sistema. A partir daqui, se o cliente se moveu nos últimos 14 dias e ' +
-      'metade dos papéis críticos está mapeada, o app chama de <strong>Negócio real</strong>. Antes da proposta, ' +
-      'chama de <strong>Oculto promissor</strong> — e esse é o achado mais valioso do pipeline: está mais maduro ' +
-      'do que a etapa mostra, acelere.</span></div></div>' +
-      '<div><span class="faixa-iad f3">14–16</span><div><strong>Comprovado quase por inteiro</strong>' +
+      '<div><span class="faixa-iad f0">0–11</span><div><strong>Você ainda não sabe se existe negócio</strong>' +
+      '<span class="tiny muted">Média abaixo de 1,5 por decisão: o que existe é suposição nossa e alguma coisa ' +
+      'declarada. Aqui o trabalho é diagnóstico. Um valor grande com IAD 6 não é pipeline, é esperança.</span></div></div>' +
+      '<div><span class="faixa-iad f1">12–19</span><div><strong>O cliente falou, ninguém conferiu</strong>' +
+      '<span class="tiny muted">É a faixa do que o cliente DISSE. A mais comum e a mais traiçoeira, porque parece ' +
+      'pronta: cada frase daquelas ainda pode cair quando alguém for verificar. O trabalho aqui não é descobrir ' +
+      'mais, é testar o que já se sabe.</span></div></div>' +
+      '<div><span class="faixa-iad f2">' + P.IAD_MADURO + '–27</span><div><strong>Decisão madura — dá para contar no forecast</strong>' +
+      '<span class="tiny muted">É o limiar do sistema: média 3, ou seja, a maioria das oito foi testada com o ' +
+      'cliente e resistiu. A partir daqui, se o cliente se moveu nos últimos 14 dias e metade dos papéis críticos ' +
+      'está mapeada, o app chama de <strong>Negócio real</strong>. Antes da proposta, chama de ' +
+      '<strong>Oculto promissor</strong> — o achado mais valioso do pipeline.</span></div></div>' +
+      '<div><span class="faixa-iad f3">28–' + P.IAD_MAXIMO + '</span><div><strong>Documentado quase por inteiro</strong>' +
       '<span class="tiny muted">Raro, e quando acontece o que falta costuma não ser decisão: é prazo, alçada ou ' +
-      'assinatura. Se um negócio está em 15 há semanas, o problema não está nas oito — está no Processo, ' +
+      'assinatura. Se um negócio está em 30 há semanas, o problema não está nas oito — está no Processo, ' +
       'ou em alguém que ninguém mapeou.</span></div></div>' +
       '</div>' +
 
       '<div class="aviso" style="margin-top:14px"><strong>O número sozinho não classifica nada.</strong> ' +
-      'Um negócio com IAD 14 e quarenta dias de silêncio é <strong>Zumbi</strong>, não é real — a regra do ' +
+      'Um negócio com IAD 28 e quarenta dias de silêncio é <strong>Zumbi</strong>, não é real — a regra do ' +
       'tempo vence todas as outras. É por isso que a tela mostra sempre os três juntos: o índice, os dias ' +
       'sem evidência e a cobertura do grupo.</div>' +
 
@@ -4439,7 +4468,7 @@
       (mudancas.length
         ? '<p class="small"><strong>' + mudancas.length +
           (mudancas.length === 1 ? ' decisão subiu' : ' decisões subiram') +
-          '.</strong> IAD agora: <strong>' + r.iad + '/16</strong>.</p>' +
+          '.</strong> IAD agora: <strong>' + r.iad + '/' + P.IAD_MAXIMO + '</strong>.</p>' +
           '<ul class="achados">' + linhas + '</ul>'
         : erroDaReleitura
           /* Releitura que falhou não é "nada subiu": é uma pergunta sem
