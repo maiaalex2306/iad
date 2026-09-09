@@ -3983,6 +3983,13 @@
     const nadaDeTrabalho = !conta('contas') && !conta('oportunidades') &&
       (conta('segmentos') || conta('tiposTarefa'));
 
+    /* Carteira de outra empresa neste aparelho. Separa "vazio porque é novo"
+       de "vazio porque está carimbado errado" — duas telas idênticas com
+       correções opostas. */
+    const temOutraEmpresa = Object.keys(d.registrosPorEmpresa || {}).some(function (id) {
+      return id !== d.meuTenantId && d.registrosPorEmpresa[id] > 0;
+    });
+
     return '<div class="card"><h2>Diagnóstico dos dados</h2>' +
       '<p class="small muted">Se a tela estiver vazia, a resposta está aqui. Guardados é o que existe ' +
       'neste aparelho; visíveis é o que as suas permissões e a sua empresa deixam ver.</p>' +
@@ -3994,12 +4001,22 @@
         : '') +
 
       (nadaDeTrabalho
-        ? '<div class="aviso">As listas de configuração vieram do servidor e as de trabalho não: ' +
-          'zero empresas e zero oportunidades. Não há nada escondido aqui — <strong>o servidor respondeu ' +
-          'que esta conta não tem nenhuma</strong>. As duas causas possíveis estão no banco: os registros ' +
-          'estão carimbados com outra empresa, ou a correção que dá ao gestor a visão da empresa inteira ' +
-          '(<code>nuvem/correcao-05-gestor.sql</code>) ainda não foi aplicada. ' +
-          'O arquivo <code>nuvem/diagnostico.sql</code> responde qual das duas em uma consulta.</div>'
+        ? (temOutraEmpresa
+            /* Há carteira aqui, mas de outra empresa. Aí a hipótese do carimbo
+               é a explicação, e é a única que sobra. */
+            ? '<div class="aviso">Zero empresas e zero oportunidades nesta conta, mas este aparelho tem ' +
+              'registros de outra empresa. Eles estão <strong>carimbados com uma empresa que não é a sua</strong>: ' +
+              'é o caso da mesma empresa cadastrada duas vezes, cada uma com identificador próprio. ' +
+              'Use <strong>Juntar duplicadas</strong>, logo abaixo.</div>'
+            /* Nada aqui e nada lá. Não é defeito: é empresa que ainda não
+               começou. Acusar o banco aqui — que era o que este aviso fazia —
+               manda a pessoa caçar problema de permissão que não existe, e faz
+               ela desconfiar do sistema no primeiro dia de uso. */
+            : '<div class="aviso">Esta empresa ainda não tem nenhuma conta nem oportunidade, nem aqui nem no ' +
+              'servidor. Só as listas de configuração, que é o esperado em empresa nova. ' +
+              '<strong>Não há nada errado</strong>: comece cadastrando em Cadastros e depois sincronize. ' +
+              'Se você esperava encontrar carteira aqui, use <strong>Perguntar ao servidor por quê</strong> ' +
+              'abaixo — ele diz se o servidor está recusando a leitura ou se não tem mesmo nada.</div>')
         : '') +
 
       '<div class="tabela-rolagem"><table><thead><tr><th>Coleção</th>' +
