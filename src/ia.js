@@ -344,7 +344,7 @@
     });
   }
 
-  function classificarSegmentos(empresas) {
+  function classificarSegmentos(empresas, avisar) {
     const Store = global.IADStore;
     const P = global.IADPlaybook;
     /* O catálogo vai com o mapa que cada segmento carrega — subsegmentos,
@@ -380,12 +380,12 @@
     /* A conversa vai junto. Sem ela o modelo tinha só o nome da empresa para
        trabalhar — dava para escolher o segmento e mais nada. O reenquadramento
        nasce do que a pessoa respondeu à SDR; era isso que estava faltando. */
-    const linhas = empresas.map(function (e, i) {
+    const linhaDoLead = function (e, n) {
       const conversa = (e.conversa || []).map(function (m) {
         return '     ' + (m.nosso ? 'SDR' : (e.contato || 'ele')) + ': ' + m.texto;
       }).join('\n');
       return [
-        (i + 1) + '. ' + (e.contato || 'sem nome') + (e.cargo ? ' — ' + e.cargo : ''),
+        n + '. ' + (e.contato || 'sem nome') + (e.cargo ? ' — ' + e.cargo : ''),
         (e.headline && e.headline !== e.cargo) ? '   perfil dele: ' + e.headline : '',
         '   empresa: ' + (e.nome || 'sem nome'),
         (e.dominio || e.site) ? '   site: ' + (e.dominio || e.site) : '',
@@ -395,62 +395,146 @@
         e.oQueFazLa ? '   o contato faz lá: ' + e.oQueFazLa : '',
         conversa ? '   conversa:\n' + conversa : '   sem conversa registrada'
       ].filter(Boolean).join('\n');
-    }).join('\n\n');
+    };
 
-    const pedido = Nuvem.chamarFuncao('assistente', {
-      tipo: 'segmentos',
-      texto: linhas,
-      contexto: {
-        segmentos: catalogo,
-        papeis: P.PAPEIS,
-        /* As contas que já existem e que PODEM ser a mesma empresa. Só as
-           candidatas: mandar a carteira inteira estoura o pedido em quem tem
-           trezentas contas, e as outras 290 não ajudam a decidir nada.
-           "Envu" contra "Envu Brasil Ltda" é o caso que nenhuma regra de
-           texto resolve sem também juntar "Alpha Engenharia" com "Alpha
-           Alimentos" — decidir qual das duas é o mesmo negócio depende de
-           saber o que cada empresa faz, e isso quem sabe é o modelo. */
-        contas: contasCandidatas(empresas),
-        /* Alinhado por posição com os leads, e com o site como reserva: o
-           Linked Helper entrega organization_website_1 muito mais vezes do
-           que organization_domain_1, e sem um dos dois o servidor não tinha
-           o que ler para desempatar entre dois segmentos parecidos. */
-        dominios: empresas.map(function (e) { return e.dominio || e.site || ''; })
-      }
-    });
-    const prazo = new Promise(function (resolve) {
-      setTimeout(function () { resolve({ estourou: true }); }, PRAZO_REUNIAO);
-    });
+    /* ---------- por que o lote vai partido ----------
 
-    return Promise.race([pedido, prazo]).then(function (r) {
-      if (!r || r.estourou) {
-        return { mapa: {}, motivo: 'O assistente demorou mais de ' +
-          Math.round(PRAZO_REUNIAO / 1000) + ' segundos para classificar os segmentos. Escolha à mão abaixo.' };
-      }
-      if (r.erro) return { mapa: {}, motivo: 'O assistente recusou: ' + r.erro };
-      if (!Array.isArray(r.itens)) {
-        return { mapa: {}, motivo: 'O assistente respondeu num formato que não deu para ler.' };
-      }
-      const mapa = {};
-      r.itens.forEach(function (it) {
-        const i = Number(it.n) - 1;
-        if (!empresas[i]) return;
-        mapa[i] = {
-          segmento: it.segmento || '', confianca: it.confianca || '', porque: it.porque || '',
-          maisProximo: it.maisProximo || '', papel: it.papel || '', insight: it.insight || '',
-          contaExistente: it.contaExistente || '', porqueConta: it.porqueConta || ''
-        };
+       A primeira versão mandava a importação inteira numa chamada só, e isso
+       era o certo enquanto o lote era pequeno. Com vinte leads deixou de ser:
+       cada lead leva a conversa toda, o catálogo de segmentos vai junto, as
+       contas candidatas vão junto e o servidor ainda cola o texto do site de
+       até doze domínios. O pedido passou do teto de tokens por minuto do
+       provedor e a resposta foi "Rate limit reached" — nenhum lead
+       classificado, os vinte em branco.
+
+       Uma chamada por lead seria o outro extremo: vinte chamadas para uma
+       importação, cada uma repetindo o catálogo inteiro. Em blocos, o
+       catálogo se repete poucas vezes e cada pedido cabe no limite.
+
+       E blocos separados falham separado, que é o ganho maior: antes, um
+       tropeço no décimo lead levava os outros dezenove junto. */
+    const POR_BLOCO = 5;
+    const ESPERA_ENTRE_BLOCOS = 1200;
+
+    const blocos = [];
+    for (let inicio = 0; inicio < empresas.length; inicio += POR_BLOCO) {
+      blocos.push({ inicio: inicio, itens: empresas.slice(inicio, inicio + POR_BLOCO) });
+    }
+
+    const esperar = function (ms) {
+      return new Promise(function (r) { setTimeout(r, ms); });
+    };
+
+    /* "Rate limit" quase sempre é por minuto e quase sempre passa sozinho.
+       Uma repetição só, depois de esperar: duas viraria uma importação que
+       fica dois minutos parada sem dizer por quê. */
+    const limiteDeUso = function (erro) {
+      return /rate limit|limite de uso|429|tokens per minute|too many requests/i.test(String(erro || ''));
+    };
+
+    /* Quatro chamadas em série, e uma delas podendo esperar 20 segundos pelo
+       limite do provedor: sem dizer nada, a janela fica parada tempo demais
+       na mesma frase e a pessoa acha que travou. */
+    const dizer = function (t) { if (typeof avisar === 'function') avisar(t); };
+
+    const pedirBloco = function (bloco, jaTentou) {
+      const texto = bloco.itens.map(function (e, k) {
+        return linhaDoLead(e, k + 1);          /* numeração local do bloco */
+      }).join('\n\n');
+
+      const pedido = Nuvem.chamarFuncao('assistente', {
+        tipo: 'segmentos',
+        texto: texto,
+        contexto: {
+          segmentos: catalogo,
+          papeis: P.PAPEIS,
+          /* As contas que já existem e que PODEM ser a mesma empresa. Só as
+             candidatas: mandar a carteira inteira estoura o pedido em quem
+             tem trezentas contas, e as outras 290 não ajudam a decidir nada.
+             "Envu" contra "Envu Brasil Ltda" é o caso que nenhuma regra de
+             texto resolve sem também juntar "Alpha Engenharia" com "Alpha
+             Alimentos" — decidir qual das duas é o mesmo negócio depende de
+             saber o que cada empresa faz, e isso quem sabe é o modelo. */
+          contas: contasCandidatas(bloco.itens),
+          /* Alinhado por posição com os leads DESTE bloco, e com o site como
+             reserva: o Linked Helper entrega organization_website_1 muito
+             mais vezes do que organization_domain_1. */
+          dominios: bloco.itens.map(function (e) { return e.dominio || e.site || ''; })
+        }
       });
-      const classificadas = Object.keys(mapa).filter(function (k) { return mapa[k].segmento && mapa[k].segmento !== 'Outros'; }).length;
+      const prazo = new Promise(function (resolve) {
+        setTimeout(function () { resolve({ estourou: true }); }, PRAZO_REUNIAO);
+      });
+
+      return Promise.race([pedido, prazo]).then(function (r) {
+        if (r && r.erro && limiteDeUso(r.erro) && !jaTentou) {
+          dizer('O provedor pediu para esperar. Tentando de novo em 20 segundos…');
+          return esperar(20000).then(function () { return pedirBloco(bloco, true); });
+        }
+        return r;
+      }).catch(function (e) {
+        return { erro: e && e.message ? e.message : String(e) };
+      });
+    };
+
+    /* Em série, não em paralelo. Paralelo seria mais rápido e é exatamente o
+       que estoura o limite por minuto: cinco pedidos no mesmo segundo somam
+       tokens no mesmo minuto do provedor. */
+    const mapa = {};
+    const problemas = [];
+    let corrente = Promise.resolve();
+
+    blocos.forEach(function (bloco, ordem) {
+      corrente = corrente.then(function () {
+        return (ordem ? esperar(ESPERA_ENTRE_BLOCOS) : Promise.resolve())
+          .then(function () {
+            dizer('Lendo ' + (bloco.inicio + 1) + '–' + (bloco.inicio + bloco.itens.length) +
+              ' de ' + empresas.length + '…');
+            return pedirBloco(bloco, false);
+          })
+          .then(function (r) {
+            if (!r || r.estourou) {
+              problemas.push('bloco ' + (ordem + 1) + ': o assistente não respondeu a tempo');
+              return;
+            }
+            if (r.erro) { problemas.push(r.erro); return; }
+            if (!Array.isArray(r.itens)) {
+              problemas.push('bloco ' + (ordem + 1) + ': resposta em formato ilegível');
+              return;
+            }
+            r.itens.forEach(function (it) {
+              /* O "n" que volta é local do bloco; o índice do lead é global. */
+              const i = bloco.inicio + Number(it.n) - 1;
+              if (!empresas[i]) return;
+              mapa[i] = {
+                segmento: it.segmento || '', confianca: it.confianca || '', porque: it.porque || '',
+                maisProximo: it.maisProximo || '', papel: it.papel || '', insight: it.insight || '',
+                contaExistente: it.contaExistente || '', porqueConta: it.porqueConta || ''
+              };
+            });
+          });
+      });
+    });
+
+    return corrente.then(function () {
+      const lidos = Object.keys(mapa).length;
+      const classificadas = Object.keys(mapa).filter(function (k) {
+        return mapa[k].segmento && mapa[k].segmento !== 'Outros';
+      }).length;
+
+      /* Falha parcial é o caso novo e precisa de aviso próprio: dizer "o
+         assistente recusou" quando quinze dos vinte foram lidos manda o
+         vendedor conferir vinte linhas em vez das cinco que ficaram vazias. */
+      if (problemas.length && lidos) {
+        return { mapa: mapa, motivo: 'Li ' + lidos + ' dos ' + empresas.length +
+          ' leads. Os outros ficaram sem segmento: ' + problemas[0] +
+          ' Escolha à mão nos que estiverem em branco.' };
+      }
+      if (problemas.length) {
+        return { mapa: {}, motivo: 'O assistente não classificou nenhum lead: ' + problemas[0] };
+      }
       if (classificadas) return { mapa: mapa, motivo: '' };
 
-      /* Lote inteiro em "Outros" tem duas causas muito diferentes, e o aviso
-         antigo servia para as duas — ou seja, não servia para nenhuma.
-
-         Se os segmentos estão só com o nome, o assistente tinha uma palavra e
-         nenhuma definição para trabalhar, e a correção está em Cadastros, não
-         aqui. Se estão descritos, o problema é outro e a saída é escolher à
-         mão. Mandar o vendedor para o lugar certo é metade do conserto. */
       const descritos = catalogo.filter(function (s) {
         return s.subsegmentos || s.oportunidades || s.personas;
       }).length;

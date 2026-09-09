@@ -73,8 +73,20 @@ export default {
 
     /* 2. Leitura: o app busca o que chegou e ainda não foi processado. */
     if (requisicao.method === 'GET') {
-      const chaves = await ambiente.LEADS.list({ prefix: 'lead:', limit: 100 });
-      const itens = await Promise.all(chaves.keys.map(async (k) => {
+      /* A listagem do KV vem em páginas de 1000 no máximo e devolve um
+         cursor quando sobra. Sem seguir o cursor, uma campanha que acumulou
+         mais leads do que cabe numa página some do app sem erro nenhum —
+         ninguém descobre que faltou, porque a resposta é 200 e a lista
+         parece completa. Teto de 500 para a resposta não ficar gigante. */
+      const chaves = [];
+      let cursor;
+      do {
+        const pagina = await ambiente.LEADS.list({ prefix: 'lead:', limit: 1000, cursor });
+        chaves.push(...pagina.keys);
+        cursor = pagina.list_complete ? null : pagina.cursor;
+      } while (cursor && chaves.length < 500);
+
+      const itens = await Promise.all(chaves.slice(0, 500).map(async (k) => {
         const bruto = await ambiente.LEADS.get(k.name);
         return bruto ? JSON.parse(bruto) : null;
       }));

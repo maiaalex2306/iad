@@ -3914,9 +3914,61 @@
      oportunidade — e um pipeline assim derruba o IAD médio e faz a
      classificação mentir. Então vem tudo marcado, menos o que tem problema:
      quem saiu da empresa e quem ainda não respondeu nada. */
+  /* Quem respondeu dizendo NÃO. É a resposta mais valiosa da lista e a que o
+     sistema tratava pior: "não tenho relação alguma com isso", "me retire da
+     lista", "não moro em condomínio" chegavam marcadas igual a "pode enviar",
+     e viravam empresa, contato, oportunidade e tarefa — pipeline nascido de
+     uma recusa, que é a definição de negócio zumbi.
+
+     A leitura é do texto do cliente, sem IA, porque tem de funcionar mesmo
+     com o assistente fora do ar — e porque é justamente no lote grande, que é
+     quando o assistente falha, que ninguém lê as vinte conversas.
+
+     Ela não descarta ninguém: desmarca e diz por quê. Recusa não é sempre
+     recusa, e quem decide isso é quem vende. */
+  const RECUSAS = [
+    { re: /\bn[ãa]o (tenho|possuo) (rela[çc][ãa]o|nada|interesse|v[íi]nculo)/i, diz: 'disse que não tem relação com o tema' },
+    { re: /\b(me )?(retir[ae]|remov[ae]|tir[ae])[^.]{0,20}(da lista|do mailing|das mensagens)/i, diz: 'pediu para sair da lista' },
+    { re: /\bn[ãa]o me envi/i, diz: 'pediu para não receber mensagens' },
+    { re: /\bn[ãa]o (moro|resido|trabalho)\b/i, diz: 'disse que não é o caso dele' },
+    { re: /\bn[ãa]o (tenho|temos) interesse/i, diz: 'disse que não tem interesse' },
+    { re: /\bmoro (em casa|na ro[çc]a|fora de condom[íi]nio)/i, diz: 'disse que não é o caso dele' }
+  ];
+
+  function recusaDoCliente(l) {
+    const dele = (l.conversa || []).filter(function (m) { return !m.nosso; });
+    const texto = dele.length ? dele.map(function (m) { return m.texto; }).join(' ') : (l.resposta || '');
+    if (!texto) return '';
+    const achada = RECUSAS.filter(function (r) { return r.re.test(texto); })[0];
+    return achada ? achada.diz : '';
+  }
+
+  /* O lead que já virou registro numa importação anterior. Ele não deveria
+     voltar — a ponte apaga o que foi importado —, mas volta quando o Linked
+     Helper reenvia a mesma pessoa com uma interação nova, que é o caso 02.
+
+     E aí ele NÃO vem desmarcado: pelas regras de reconciliação, trazer é o
+     certo, porque é isso que atualiza o negócio com a fala nova. O que muda é
+     o que a tela diz. Sem este aviso o vendedor lê "20 leads" como "20
+     negócios novos" e vai procurar no pipeline vinte cartões que não existem. */
+  function jaNoCRM(l) {
+    const perfil = /linkedin\.com\/in\/([^/?#]+)/i.exec(String(l.linkedin || ''));
+    if (!perfil) return '';
+    const chave = perfil[1].toLowerCase();
+    const contato = Store.dados().contatos.filter(function (c) {
+      const m = /linkedin\.com\/in\/([^/?#]+)/i.exec(String(c.linkedin || ''));
+      return m && m[1].toLowerCase() === chave;
+    })[0];
+    if (!contato) return '';
+    const conta = Store.conta(contato.contaId);
+    return conta ? conta.nome : '';
+  }
+
   function motivoDeDuvida(l) {
     if (l.saiuEm) return 'Saiu da ' + (l.empresa || 'empresa') + ' em ' + l.saiuEm;
     if (!l.resposta) return 'Ainda não respondeu — não há evidência do cliente';
+    const recusa = recusaDoCliente(l);
+    if (recusa) return 'Respondeu NÃO: ' + recusa + '. Trazer assim mesmo cria negócio a partir de uma recusa.';
     if (!l.empresa) return 'Sem empresa identificada';
     return '';
   }
@@ -4005,6 +4057,8 @@
         (l.cargo ? '<span class="tiny muted">' + esc(l.cargo) + '</span>' : '') +
         '<span class="espaco"></span>' +
         '<span class="pill' + (duvida ? '' : ' navy') + '">' + esc(l.empresa || 'sem empresa') + '</span>' +
+        '<button type="button" class="btn ghost mini" data-excluir="' + i + '" ' +
+        'title="Tira este lead da ponte para sempre. Ele não volta na próxima busca.">Excluir</button>' +
         '</label>' +
         '<div class="row escolhas">' +
           '<label class="campo mini"><span>Segmento' + rotuloDaSugestao(l) + '</span>' +
@@ -4015,6 +4069,10 @@
           '<label class="campo mini"><span>Papel na compra' + (l.papelSugerido ? ' \u00b7 sugerido' : '') + '</span>' +
           '<select data-papel="' + i + '">' + opcoesPapel(l.papelSugerido) + '</select></label>' +
         '</div>' +
+        (jaNoCRM(l)
+          ? '<p class="tiny" style="margin:6px 0 0"><b>Já está no CRM</b> em ' + esc(jaNoCRM(l)) +
+            ' — este lead ATUALIZA o que existe, não cria negócio novo.</p>'
+          : '') +
         '<p class="small muted" style="margin:6px 0 0">' +
           (l.operador ? 'SDR: <strong>' + esc(l.operador) + '</strong>' : 'SDR não identificado') +
           (l.campanha ? ' \u00b7 campanha: ' + esc(l.campanha) : '') +
@@ -4041,7 +4099,8 @@
       'com origem Linked Helper. A resposta entra como evid\u00eancia de for\u00e7a relato, na data em que ela aconteceu.</p>' +
       (comDuvida
         ? '<div class="aviso">' + comDuvida + (comDuvida === 1 ? ' lead veio desmarcado' : ' leads vieram desmarcados') +
-          ': quem saiu da empresa ou ainda n\u00e3o respondeu. Marque se quiser trazer assim mesmo.</div>'
+          ': quem respondeu que n\u00e3o, quem saiu da empresa ou quem ainda n\u00e3o respondeu. ' +
+          'Marque se quiser trazer assim mesmo.</div>'
         : '') +
       (avisoSegmento ? '<div class="aviso">' + esc(avisoSegmento) + '</div>' : '') +
       /* Com vinte leads na tela, decidir o que entra é vinte cliques — ou dois,
@@ -4053,6 +4112,11 @@
       '<div class="row barra-marcar">' +
         '<button type="button" class="btn ghost mini" data-marcar="todos">Marcar todos</button>' +
         '<button type="button" class="btn ghost mini" data-marcar="nenhum">Desmarcar todos</button>' +
+        /* O fluxo real de um lote de vinte: desmarca o lixo, importa o que
+           presta e apaga o resto num clique. Sem isto o lixo volta na busca
+           seguinte, e volta de novo na outra, até a lista ficar impossível
+           de ler — que é o que faz o vendedor parar de importar. */
+        '<button type="button" class="btn ghost mini" data-excluir-desmarcados>Excluir os desmarcados</button>' +
         '<span class="espaco"></span>' +
         '<span class="tiny muted" data-conta-marcados></span>' +
       '</div>' +

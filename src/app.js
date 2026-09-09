@@ -2726,7 +2726,10 @@
             contato: l.nome, cargo: l.cargo, headline: l.headline,
             conversa: l.conversa || []
           };
-        })).then(function (r) {
+        }), function (aviso) {
+          const linha = espera.querySelector('p');
+          if (linha) linha.textContent = aviso;
+        }).then(function (r) {
           comEmpresa.forEach(function (l, i) {
             const achado = r.mapa[i];
             if (!achado) return;
@@ -2772,13 +2775,15 @@
       dlg.className = 'revisao-ia';
       dlg.innerHTML = V.revisaoDaImportacao(lista, avisoSegmento);
       document.body.appendChild(dlg);
-      ligarMarcacaoEmLote(dlg);
+      ligarMarcacaoEmLote(dlg, lista);
 
       dlg.addEventListener('close', function () {
         if (dlg.returnValue === 'ok') {
           const escolhidos = lista.filter(function (l, i) {
             const marca = dlg.querySelector('[data-lead="' + i + '"]');
-            return marca && marca.checked;
+            /* O que foi excluído já saiu da ponte e está escondido: marcado
+               ou não, não entra. */
+            return marca && marca.checked && !marca.closest('.achado').hidden;
           });
           const feitos = escolhidos.map(function (l) {
             const i = lista.indexOf(l);
@@ -3423,23 +3428,71 @@
      fora da tela. Sem um número mudando, "Marcar todos" numa lista de vinte é
      um clique que não parece ter feito nada. Ele também acompanha os cliques
      avulsos, senão passaria a mentir no instante seguinte. */
-  function ligarMarcacaoEmLote(dlg) {
+  function ligarMarcacaoEmLote(dlg, lista) {
     const caixas = Array.prototype.slice.call(dlg.querySelectorAll('[data-lead]'));
     const conta = dlg.querySelector('[data-conta-marcados]');
     if (!caixas.length) return;
 
+    const vivas = function () {
+      return caixas.filter(function (c) { return !c.closest('.achado').hidden; });
+    };
     const pintar = function () {
       if (!conta) return;
-      const n = caixas.filter(function (c) { return c.checked; }).length;
-      conta.textContent = n + ' de ' + caixas.length + (n === 1 ? ' marcado' : ' marcados');
+      const restantes = vivas();
+      const n = restantes.filter(function (c) { return c.checked; }).length;
+      conta.textContent = n + ' de ' + restantes.length + (n === 1 ? ' marcado' : ' marcados');
     };
     dlg.querySelectorAll('[data-marcar]').forEach(function (b) {
       b.addEventListener('click', function () {
         const ligar = b.getAttribute('data-marcar') === 'todos';
-        caixas.forEach(function (c) { c.checked = ligar; });
+        vivas().forEach(function (c) { c.checked = ligar; });
         pintar();
       });
     });
+
+    /* Excluir tira da ponte, não do CRM: o lead nunca virou registro nenhum.
+       Some da lista e não volta na próxima busca — que é o ponto. Some da
+       tela na hora e a ponte é avisada em seguida, porque esperar a rede para
+       apagar uma linha faria a tela parecer travada. */
+    const sumir = function (i) {
+      const lead = lista[i];
+      const linha = caixas.filter(function (c) { return Number(c.getAttribute('data-lead')) === i; })[0];
+      if (!lead || !linha) return null;
+      linha.checked = false;
+      linha.closest('.achado').hidden = true;
+      return lead.id;
+    };
+
+    dlg.querySelectorAll('[data-excluir]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        const i = Number(b.getAttribute('data-excluir'));
+        const id = sumir(i);
+        if (!id) return;
+        global.IADIntegracoes.marcarProcessados([id]);
+        leads = (leads || []).filter(function (l) { return l.id !== id; });
+        pintar();
+      });
+    });
+
+    const emLote = dlg.querySelector('[data-excluir-desmarcados]');
+    if (emLote) {
+      emLote.addEventListener('click', function () {
+        const alvos = vivas().filter(function (c) { return !c.checked; })
+          .map(function (c) { return Number(c.getAttribute('data-lead')); });
+        if (!alvos.length) { alert('Não há lead desmarcado para excluir.'); return; }
+        /* Aqui a confirmação vale a interrupção: excluir um lead é um clique
+           reversível pela cabeça de quem clicou, excluir doze não é. */
+        if (!U.confirmar('Excluir ' + alvos.length +
+          (alvos.length === 1 ? ' lead desmarcado' : ' leads desmarcados') +
+          ' da ponte?\n\nEles não voltam na próxima busca. Nada é apagado do CRM — ' +
+          'estes leads nunca viraram registro.')) return;
+        const ids = alvos.map(sumir).filter(Boolean);
+        global.IADIntegracoes.marcarProcessados(ids);
+        leads = (leads || []).filter(function (l) { return ids.indexOf(l.id) === -1; });
+        pintar();
+      });
+    }
+
     caixas.forEach(function (c) { c.addEventListener('change', pintar); });
     pintar();
   }
