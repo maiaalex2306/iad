@@ -297,11 +297,13 @@
      Esta é a porta de resgate. Ela lê o balde sem identificador e traz para a
      empresa que está escolhida agora — o que é uma decisão de quem clica, não
      um palpite do app, e por isso ela mora num botão e não no caminho normal. */
-  function requisitarNoBaldeAntigo(metodo, corpo) {
+  function requisitarNoBaldeAntigo(metodo, corpo, balde) {
     const c = config();
     if (!c.url) return Promise.reject(new Error('Configure o endereço da ponte em Configuração → Linked Helper.'));
     const separador = c.url.indexOf('?') === -1 ? '?' : '&';
-    const endereco = c.url + (c.token ? separador + 'token=' + encodeURIComponent(c.token) : '');
+    const endereco = c.url +
+      (c.token ? separador + 'token=' + encodeURIComponent(c.token) : '') +
+      (balde ? (c.token ? '&' : separador) + 'e=' + encodeURIComponent(balde) : '');
     return fetch(endereco, {
       method: metodo,
       headers: corpo ? { 'content-type': 'application/json' } : undefined,
@@ -313,15 +315,19 @@
     });
   }
 
-  function buscarNoBaldeAntigo() {
-    return requisitarNoBaldeAntigo('GET').then(function (corpo) {
+  /* Balde vazio quer dizer o antigo, o de antes dos identificadores. Com um
+     identificador, lê o balde daquela empresa — que é o caso de quem digitou
+     o `e=` errado no Linked Helper e mandou meses de prospecção para o balde
+     do vizinho. */
+  function buscarNoBalde(balde) {
+    return requisitarNoBaldeAntigo('GET', null, balde).then(function (corpo) {
       return (corpo.itens || []).map(normalizar);
     });
   }
 
-  function marcarNoBaldeAntigo(ids) {
-    return requisitarNoBaldeAntigo('POST', { marcar: ids }).catch(function (e) {
-      console.warn('Não consegui dar baixa no balde antigo:', e);
+  function marcarNoBalde(ids, balde) {
+    return requisitarNoBaldeAntigo('POST', { marcar: ids }, balde).catch(function (e) {
+      console.warn('Não consegui dar baixa no balde:', e);
     });
   }
 
@@ -366,5 +372,5 @@
 
   global.IADIntegracoes = { config, salvarConfig, configurada, buscar, marcarProcessados,
     normalizar, empresaAtual, nomeDaEmpresaAtual, enderecoDeEntrada,
-    buscarNoBaldeAntigo, marcarNoBaldeAntigo };
+    buscarNoBalde, marcarNoBalde };
 })(window);

@@ -46,8 +46,10 @@
 
   let promptInstalacao = null;
   let leads = null;
-  /* Lote que veio do balde antigo: a baixa dele é noutro endereço. */
+  /* Lote resgatado de outro balde: a baixa tem de ir para o balde de onde ele
+     veio, senão as mesmas respostas voltam a cada busca, para sempre. */
   let vindosDoBaldeAntigo = false;
+  let baldeDeOrigem = '';
   /* Falha da última sincronização, para a tela poder dizer o que houve. */
   let avisoSincronizacao = '';
 
@@ -3149,26 +3151,47 @@
     resgatarBaldeAntigo: function () {
       const I = global.IADIntegracoes;
       const quem = I.nomeDaEmpresaAtual();
+      const meu = I.empresaAtual();
       if (!quem) {
         alert('Escolha uma empresa antes. As respostas resgatadas vão para a empresa escolhida, ' +
           'e com o recorte em "Todas as empresas" eu não sei para qual.');
         return;
       }
-      I.buscarNoBaldeAntigo().then(function (lista) {
-        if (!lista.length) {
-          alert('O balde antigo está vazio. Nada foi entregue sem identificador de empresa, ' +
-            'ou o que havia já foi resgatado.');
-          return;
-        }
-        if (!U.confirmar(lista.length + ' resposta(s) foram entregues sem identificador de empresa.\n\n' +
-          'Trazer todas para ' + quem + '?\n\n' +
-          'Confira se elas são mesmo desta empresa: o Linked Helper não disse de qual campanha vieram, ' +
-          'porque o endereço não trazia essa informação.')) return;
-        leads = lista;
-        vindosDoBaldeAntigo = true;
-        classificarEEntregar(lista, janelaDeEspera());
-      }, function (e) {
-        alert('Não consegui ler o balde antigo: ' + e.message);
+
+      /* De qual balde. Dois erros levam prospecção para o balde errado, e os
+         dois acontecem no Linked Helper, não aqui: endereço SEM o `e=`, que
+         cai no balde antigo; e endereço com o `e=` de OUTRA empresa, que é o
+         mais difícil de perceber, porque tudo parece funcionar — só que os
+         leads aparecem na carteira do vizinho, ou em carteira nenhuma. */
+      const outras = (Store.obter().tenants || [])
+        .filter(function (t) { return t.id !== meu; })
+        .map(function (t) { return { valor: t.id, rotulo: 'Balde de ' + t.nome }; });
+
+      U.formulario('Resgatar respostas de outro balde', [
+        { tipo: 'aviso', rotulo: 'Isto lê um balde da ponte e traz o que estiver lá para ' + quem +
+          '. Serve para quando o endereço no Linked Helper foi montado com o identificador errado, ' +
+          'ou sem identificador nenhum.' },
+        { id: 'balde', rotulo: 'De onde trazer', tipo: 'select',
+          opcoes: [{ valor: '', rotulo: 'Balde antigo — endereço sem identificador de empresa' }].concat(outras) }
+      ], {}, function (d) {
+        I.buscarNoBalde(d.balde).then(function (lista) {
+          const nome = d.balde
+            ? (outras.filter(function (o) { return o.valor === d.balde; })[0] || {}).rotulo
+            : 'O balde antigo';
+          if (!lista.length) {
+            alert(nome + ' está vazio. Nada foi entregue ali, ou o que havia já foi resgatado.');
+            return;
+          }
+          if (!U.confirmar(lista.length + ' resposta(s) estão em "' + nome + '".\n\n' +
+            'Trazer todas para ' + quem + '?\n\n' +
+            'Confira se são mesmo desta empresa antes de confirmar.')) return;
+          leads = lista;
+          baldeDeOrigem = d.balde;
+          vindosDoBaldeAntigo = true;
+          classificarEEntregar(lista, janelaDeEspera());
+        }, function (e) {
+          alert('Não consegui ler esse balde: ' + e.message);
+        });
       });
     },
 
@@ -3246,9 +3269,10 @@
             const ids = escolhidos.map(function (l) { return l.id; });
             /* Baixa no balde de onde vieram. Dar baixa no balde errado
                deixaria as respostas voltando a cada busca, para sempre. */
-            if (vindosDoBaldeAntigo) global.IADIntegracoes.marcarNoBaldeAntigo(ids);
+            if (vindosDoBaldeAntigo) global.IADIntegracoes.marcarNoBalde(ids, baldeDeOrigem);
             else global.IADIntegracoes.marcarProcessados(ids);
             vindosDoBaldeAntigo = false;
+            baldeDeOrigem = '';
             leads = (leads || []).filter(function (l) {
               return escolhidos.indexOf(l) === -1;
             });
