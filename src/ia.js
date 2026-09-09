@@ -305,6 +305,45 @@
      empresa já veio no payload do Linked Helper. Quando nada resolve, o
      resultado é "Outros", que é melhor que um segmento errado: o gráfico por
      segmento é lido pelo dono da empresa. */
+  /* Candidata é a conta que compartilha alguma palavra com o nome que chegou,
+     ou o domínio do site. Palavra de três letras ou menos não conta: "do",
+     "de" e "sa" fariam qualquer conta ser candidata de qualquer lead, que é o
+     mesmo que não filtrar nada. Teto de 40 porque o objetivo é caber no
+     pedido, e uma lista maior que isso já não é uma lista de candidatas. */
+  function contasCandidatas(empresas) {
+    const Store = global.IADStore;
+    const achatar = function (x) {
+      return String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    };
+    const dominio = function (x) {
+      return String(x || '').replace(/^https?:\/\//, '').replace(/^www\./, '')
+        .replace(/\/.*$/, '').trim().toLowerCase();
+    };
+
+    const palavrasDosLeads = {};
+    const dominiosDosLeads = {};
+    empresas.forEach(function (e) {
+      achatar(e.nome).split(' ').forEach(function (w) {
+        if (w.length > 3) palavrasDosLeads[w] = true;
+      });
+      const d = dominio(e.dominio || e.site);
+      if (d) dominiosDosLeads[d] = true;
+    });
+
+    return Store.dados().contas.filter(function (c) {
+      if (dominio(c.site) && dominiosDosLeads[dominio(c.site)]) return true;
+      return achatar(c.nome).split(' ').some(function (w) {
+        return w.length > 3 && palavrasDosLeads[w];
+      });
+    }).slice(0, 40).map(function (c) {
+      return {
+        id: c.id, nome: c.nome, site: c.site || '',
+        cidade: c.cidade || '', segmento: c.segmento || ''
+      };
+    });
+  }
+
   function classificarSegmentos(empresas) {
     const Store = global.IADStore;
     const P = global.IADPlaybook;
@@ -364,6 +403,14 @@
       contexto: {
         segmentos: catalogo,
         papeis: P.PAPEIS,
+        /* As contas que já existem e que PODEM ser a mesma empresa. Só as
+           candidatas: mandar a carteira inteira estoura o pedido em quem tem
+           trezentas contas, e as outras 290 não ajudam a decidir nada.
+           "Envu" contra "Envu Brasil Ltda" é o caso que nenhuma regra de
+           texto resolve sem também juntar "Alpha Engenharia" com "Alpha
+           Alimentos" — decidir qual das duas é o mesmo negócio depende de
+           saber o que cada empresa faz, e isso quem sabe é o modelo. */
+        contas: contasCandidatas(empresas),
         /* Alinhado por posição com os leads, e com o site como reserva: o
            Linked Helper entrega organization_website_1 muito mais vezes do
            que organization_domain_1, e sem um dos dois o servidor não tinha
@@ -390,7 +437,8 @@
         if (!empresas[i]) return;
         mapa[i] = {
           segmento: it.segmento || '', confianca: it.confianca || '', porque: it.porque || '',
-          maisProximo: it.maisProximo || '', papel: it.papel || '', insight: it.insight || ''
+          maisProximo: it.maisProximo || '', papel: it.papel || '', insight: it.insight || '',
+          contaExistente: it.contaExistente || '', porqueConta: it.porqueConta || ''
         };
       });
       const classificadas = Object.keys(mapa).filter(function (k) { return mapa[k].segmento && mapa[k].segmento !== 'Outros'; }).length;

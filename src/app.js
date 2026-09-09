@@ -2735,6 +2735,10 @@
             l.porqueSegmento = achado.porque || '';
             l.maisProximoSegmento = achado.maisProximo || '';
             if (achado.papel) l.papelSugerido = achado.papel;
+            /* A conta que a IA reconheceu como sendo a mesma empresa. Vem
+               como id, já conferido contra a carteira do lado do servidor. */
+            l.contaSugerida = achado.contaExistente || '';
+            l.porqueConta = achado.porqueConta || '';
             /* O insight da campanha é o mesmo texto para o lote inteiro; o da
                IA é sobre esta conversa. Quando existem os dois, vale o desta
                conversa — foi para isso que a conversa foi lida. */
@@ -2781,6 +2785,8 @@
             const escolha = dlg.querySelector('[data-segmento="' + i + '"]');
             const papel = dlg.querySelector('[data-papel="' + i + '"]');
             if (papel) l.papelSugerido = papel.value;
+            const juntar = dlg.querySelector('[data-conta="' + i + '"]');
+            if (juntar) l.usarContaSugerida = juntar.checked;
             return importarUmLead(l, escolha ? escolha.value : '');
           }).filter(Boolean);
           if (feitos.length) {
@@ -3545,9 +3551,23 @@
 
     const alvo = achatarNome(lead.empresa);
     if (!alvo) return null;
-    return contas.filter(function (c) {
+    const porNome = contas.filter(function (c) {
       return mesmoNomeDeEmpresa(alvo, achatarNome(c.nome));
-    })[0] || null;
+    })[0];
+    if (porNome) return porNome;
+
+    /* Por último a IA, e só por último. Domínio e nome são verificáveis: ou
+       batem ou não batem, e amanhã dão a mesma resposta. O modelo é o que
+       resolve o que sobra — "Envu" contra "Envu Brasil Ltda" sem site em
+       nenhum dos dois —, e é por isso que ele vem depois e não no lugar.
+
+       O vendedor viu esta sugestão na tela da importação, com o motivo
+       escrito, e pôde desmarcá-la antes de chegar aqui. */
+    if (lead.contaSugerida && lead.usarContaSugerida !== false) {
+      const daIA = Store.conta(lead.contaSugerida);
+      if (daIA) return daIA;
+    }
+    return null;
   }
 
   /* Uma oportunidade por empresa e campanha, enquanto ela estiver aberta.

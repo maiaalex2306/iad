@@ -503,7 +503,26 @@ Regras desta tarefa:
        palavra e não uma definição, e a régua de correspondência tem de ser
        outra. O modelo precisa saber em qual dos dois casos está. */
     const detalhados = nomes.some((s) => s.subsegmentos || s.oportunidades || s.personas);
-    return `Você prepara, para uma equipe de vendas B2B brasileira, os leads que acabaram de chegar do LinkedIn. Para cada um: classifica a empresa no segmento mais próximo, diz que papel a pessoa tende a ter na compra, e escreve o reenquadramento comercial.
+    const contas = contasDoTenant(ctx);
+    const blocoContas = contas.length
+      ? `
+
+EMPRESAS QUE A EQUIPE JÁ TEM CADASTRADAS — e que podem ser a mesma do lead:
+${descreverContas(ctx)}
+
+Para cada lead, diga em "contaExistente" se a empresa dele É UMA DESTAS, copiando o nome EXATAMENTE como está na lista. Se for empresa nova, devolva "".
+
+Esta pergunta existe porque nenhuma regra de texto a responde. "Envu" e "Envu Brasil Ltda" são a mesma empresa; "Alpha Engenharia" e "Alpha Alimentos" não são, e a diferença não está no nome — está no que cada uma faz. Você sabe o que elas fazem; a regra de texto não sabe.
+
+Como decidir:
+- Mesma empresa: variação de razão social e nome fantasia ("Envu", "Envu Brasil", "ENVU do Brasil Ltda"), sigla contra nome por extenso, com e sem a unidade ("Suzano" e "Suzano Papel e Celulose"), grafia diferente do mesmo nome.
+- Empresas diferentes: mesma palavra inicial e ramos diferentes; matriz e uma controlada que vende outra coisa; duas empresas de um mesmo grupo com CNPJ e operação separados. Na dúvida entre duas da lista, devolva "".
+- Domínio bate: é a mesma, sem discussão.
+- "porqueConta": até 10 palavras dizendo o que fez você juntar as duas. Só quando "contaExistente" não for vazio.
+
+Errar para o lado de "" é barato: nasce uma conta a mais, que se funde depois. Errar para o lado de juntar é caro: o contato de uma empresa entra no grupo comprador da outra, e ninguém confere um grupo comprador que já veio preenchido. Na dúvida, "".`
+      : '';
+    return `Você prepara, para uma equipe de vendas B2B brasileira, os leads que acabaram de chegar do LinkedIn. Para cada um: classifica a empresa no segmento mais próximo, diz que papel a pessoa tende a ter na compra, escreve o reenquadramento comercial${contas.length ? ', e diz se a empresa já está cadastrada' : ''}.
 
 SEGMENTOS DESTA EQUIPE — o que cada um cobre:
 ${descreverSegmentos(ctx)}
@@ -521,7 +540,7 @@ Papéis na compra, e SÓ estes:
 ${papeis.map((x) => '- ' + x).join('\n')}
 
 Regras absolutas:
-- Responda SOMENTE com um objeto JSON: {"itens":[{"n":1,"segmento":"...","confianca":"alta|media|baixa","porque":"...","maisProximo":"...","papel":"...","insight":"..."},...]}
+- Responda SOMENTE com um objeto JSON: {"itens":[{"n":1,"segmento":"...","confianca":"alta|media|baixa","porque":"...","maisProximo":"...","papel":"...","insight":"..."${contas.length ? ',"contaExistente":"...","porqueConta":"..."' : ''}},...]}
 - "segmento" tem de ser copiado EXATAMENTE de uma das linhas de SEGMENTOS acima, ou ser "Outros". Nada fora disso — nem um nome parecido, nem um subsegmento.
 - "confianca": "alta" quando o que a empresa faz está escrito na lista; "media" quando você chegou por proximidade; "baixa" quando é palpite.
 - "porque": no máximo 12 palavras, dizendo o que na empresa levou a esse segmento.
@@ -534,7 +553,7 @@ Regras absolutas:
 
 Um aviso sobre a pessoa física: quando o lead for alguém abordado como PESSOA e não como empresa — morador de condomínio, consultor autônomo, mentor, coach, investidor —, "Outros" é a resposta certa e não é derrota. Diga isso no "porque". O que não pode é uma empresa industrial com nome autoexplicativo cair em "Outros" por falta de descrição.
 
-A entrada traz, para cada lead: nome, cargo e perfil da pessoa, nome da empresa, site, cidade, o que a pessoa faz lá, a descrição da empresa quando disponível, o texto do site quando disponível, e a troca de mensagens entre a SDR e a pessoa.${nomes.length ? '' : '\n\nAtenção: a lista de segmentos veio vazia. Devolva "Outros" para todos.'}${detalhados ? '' : '\n\nOs segmentos desta equipe vieram SÓ COM O NOME, sem subsegmentos nem exemplos. Então trabalhe pelo significado do nome de cada um no mercado brasileiro, e seja mais generoso na aproximação: com a lista assim, exigir correspondência exata é o mesmo que mandar tudo para "Outros".'}`;
+A entrada traz, para cada lead: nome, cargo e perfil da pessoa, nome da empresa, site, cidade, o que a pessoa faz lá, a descrição da empresa quando disponível, o texto do site quando disponível, e a troca de mensagens entre a SDR e a pessoa.${blocoContas}${nomes.length ? '' : '\n\nAtenção: a lista de segmentos veio vazia. Devolva "Outros" para todos.'}${detalhados ? '' : '\n\nOs segmentos desta equipe vieram SÓ COM O NOME, sem subsegmentos nem exemplos. Então trabalhe pelo significado do nome de cada um no mercado brasileiro, e seja mais generoso na aproximação: com a lista assim, exigir correspondência exata é o mesmo que mandar tudo para "Outros".'}`;
   }
 
   if (tipo === 'desenvolvimento') {
@@ -1098,8 +1117,38 @@ function validarNegocio(bruto: unknown, ctx: Record<string, unknown>, hoje: stri
 
 /* Um lote de empresas classificadas. Segmento fora da lista do tenant vira
    "Outros" — nunca um nome novo, que quebraria o agrupamento do painel. */
+/* As contas que o app já tem e que podem ser a mesma empresa do lead. Vêm
+   filtradas de lá: só as que compartilham palavra ou domínio com algum lead
+   do lote, no máximo 40. Aqui a lista só é limpa e limitada de novo, porque
+   quem chama a função não é necessariamente o app. */
+function contasDoTenant(ctx: Record<string, unknown>): Array<Record<string, string>> {
+  const bruto = Array.isArray(ctx.contas) ? ctx.contas : [];
+  return bruto.slice(0, 40).map((x) => {
+    const o = (x && typeof x === 'object') ? x as Record<string, unknown> : {};
+    return {
+      id: limparTexto(o.id, 40),
+      nome: limparTexto(o.nome, 120),
+      site: limparTexto(o.site, 120),
+      cidade: limparTexto(o.cidade, 80),
+      segmento: limparTexto(o.segmento, 80)
+    };
+  }).filter((c) => c.id && c.nome);
+}
+
+function descreverContas(ctx: Record<string, unknown>): string {
+  return contasDoTenant(ctx).map((c) => {
+    const detalhe = [
+      c.site ? 'site: ' + c.site : '',
+      c.cidade,
+      c.segmento
+    ].filter(Boolean).join(' · ');
+    return '- ' + c.nome + (detalhe ? ' (' + detalhe + ')' : '');
+  }).join('\n');
+}
+
 function validarSegmentos(bruto: Record<string, unknown>, ctx: Record<string, unknown>) {
   const nomes = segmentosDoTenant(ctx).map((s) => s.nome);
+  const contas = contasDoTenant(ctx);
   const validos = nomes.concat(['Outros']);
   const papeis = (Array.isArray(ctx.papeis) ? ctx.papeis.map(String) : []);
   const confiancas = ['alta', 'media', 'baixa'];
@@ -1169,6 +1218,16 @@ function validarSegmentos(bruto: Record<string, unknown>, ctx: Record<string, un
        igualdade exata. Sem correspondência, o padrão neutro. */
     const papel = papeis.find((v) => v.toLowerCase() === limparTexto(o.papel, 60).toLowerCase()) || '';
 
+    /* Aqui a régua é a mais dura das três desta função, e de propósito: o
+       nome tem de bater EXATAMENTE depois de achatar. Nada de "um contém o
+       outro" nem de raiz de palavra — foi justamente o casamento frouxo que
+       juntou "Vale" com "Valentina Alimentos" do lado do app.
+
+       Juntar duas empresas erradas põe o contato de uma no grupo comprador da
+       outra, em silêncio. Não juntar cria uma conta a mais, que se funde
+       depois. Diante de dúvida, a resposta certa é não juntar. */
+    const contaCasada = contas.find((c) => achatar(c.nome) === achatar(limparTexto(o.contaExistente, 120)));
+
     itens.push({
       n: n,
       segmento: segmento,
@@ -1180,7 +1239,12 @@ function validarSegmentos(bruto: Record<string, unknown>, ctx: Record<string, un
       papel: papel,
       /* O insight é rascunho nosso, e curto de propósito: o que não cabe em
          três linhas o vendedor não fala numa ligação. */
-      insight: limparTexto(o.insight, 400)
+      insight: limparTexto(o.insight, 400),
+      /* Devolve o id, não o nome: é o id que o app usa para achar a conta, e
+         mandar o nome de volta obrigaria o app a casar por texto outra vez —
+         exatamente o problema que esta pergunta existe para resolver. */
+      contaExistente: contaCasada ? contaCasada.id : '',
+      porqueConta: contaCasada ? limparTexto(o.porqueConta, 100) : ''
     });
   }
   return { itens: itens };

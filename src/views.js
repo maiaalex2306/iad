@@ -3969,6 +3969,25 @@
     }).join('');
   }
 
+  /* A IA reconheceu que a empresa deste lead é uma que já está na carteira.
+     Vem marcado, porque na maioria das vezes está certo e desmarcado por
+     padrão viraria a caixa que ninguém marca. Mas vem VISÍVEL e com o motivo
+     escrito, porque juntar duas empresas erradas é o erro que não se desfaz:
+     o contato de uma entra no grupo comprador da outra e nunca mais sai.
+
+     A caixa de conferência da tela de importação é o único lugar onde isso
+     ainda custa um clique. Depois de importado, custa uma limpeza. */
+  function juntarNaConta(l, i) {
+    if (!l.contaSugerida) return '';
+    const conta = Store.conta(l.contaSugerida);
+    if (!conta) return '';
+    return '<label class="linha-achado" style="margin-top:6px">' +
+      '<input type="checkbox" data-conta="' + i + '" checked>' +
+      '<span class="tiny">Entra na empresa que já existe: <strong>' + esc(conta.nome) + '</strong>' +
+      (l.porqueConta ? ' <span class="muted">— ' + esc(l.porqueConta) + '</span>' : '') +
+      '</span></label>';
+  }
+
   function revisaoDaImportacao(leads, avisoSegmento) {
     const linhas = leads.map(function (l, i) {
       const duvida = motivoDeDuvida(l);
@@ -4006,6 +4025,7 @@
               return '<b>' + esc(m.nosso ? (l.operador || 'SDR') : (m.de || l.nome || 'Prospect')) + ':</b> ' + esc(m.texto);
             }).join('\n') + '</p>'
           : (l.resposta ? '<p class="origem">\u201c' + esc(l.resposta) + '\u201d</p>' : '')) +
+        juntarNaConta(l, i) +
         (l.insight
           ? '<p class="tiny muted" style="margin:6px 0 0"><b>Reenquadramento (rascunho):</b> ' + esc(l.insight) + '</p>'
           : '') +
