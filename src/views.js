@@ -4147,6 +4147,37 @@
         '<strong>' + esc(m.para) + '</strong><span class="espaco"></span></div></li>';
     }).join('');
 
+    /* O QUE AINDA FALTA.
+
+       O relatório mostrava só o que subiu. Quem acabou de contar uma reunião
+       inteira lia "3 decisões subiram" e não ficava sabendo que outras cinco
+       continuam em zero — nem o que precisaria acontecer para cada uma delas
+       andar. É a pergunta que a pessoa tem na cabeça naquele exato segundo, e
+       a resposta já estava calculada no motor, em lacunas(): a nota atual, o
+       que falta, a pergunta a fazer e o que serve de prova.
+
+       Três, e não todas. A lista já vem na ordem de trabalho do motor —
+       problema antes de impacto, stakeholders antes de consenso —, então as
+       três primeiras são as três que vêm agora. Oito lacunas numa tela de fim
+       de reunião é a mesma coisa que nenhuma. */
+    const pendentes = E.lacunas(op).filter(function (l) {
+      return l.tipo === 'dimensao' || l.tipo === 'comprovacao';
+    }).slice(0, 3);
+
+    const oQueFalta = pendentes.map(function (l) {
+      return '<li class="achado">' +
+        '<div class="row"><span class="pill ' + (l.nota === 0 ? 'dead' : 'warn') + '">' +
+          esc(l.titulo) + ' · ' + l.nota + '/2</span><span class="espaco"></span></div>' +
+        '<p class="small" style="margin:6px 0 0">' + esc(l.falta) + '</p>' +
+        (l.pergunta
+          ? '<p class="small" style="margin:4px 0 0"><strong>Pergunte:</strong> \u201c' + esc(l.pergunta) + '\u201d</p>'
+          : '') +
+        (l.comoProvar
+          ? '<p class="tiny muted" style="margin:4px 0 0">Serve de prova: ' + esc(l.comoProvar) + '</p>'
+          : '') +
+      '</li>';
+    }).join('');
+
     return '<form method="dialog"><div class="corpo">' +
       '<h2>Pronto — o assistente já registrou</h2>' +
       (doNegocio
@@ -4179,6 +4210,11 @@
               'proposta, apresentação e material nosso não são evidência de que o cliente decidiu. ' +
               'O que sobe as oito é o que <strong>ele</strong> fez: confirmou um número, apresentou alguém, marcou uma data.</div>'
             : '<div class="aviso">Nenhuma das oito subiu. O que entrou não sustenta uma nota maior — e isso é uma resposta, não uma falha: falta evidência do cliente.</div>') +
+      (oQueFalta
+        ? '<p class="small" style="margin-top:14px"><strong>O que ainda falta</strong> — as próximas ' +
+          'na ordem em que o método trabalha:</p><ul class="achados">' + oQueFalta + '</ul>'
+        : '<p class="small" style="margin-top:14px">Nenhuma das oito está em aberto. O que falta neste ' +
+          'negócio não é decisão — é prazo, alçada ou assinatura.</p>') +
       '<p class="tiny muted">Nota só sobe sozinha, e nota 2 continua exigindo evidência confirmada ou documentada. ' +
       'Se discordar de alguma, ajuste — as oito ficam abertas para edição.</p>' +
       '</div><div class="rodape">' +

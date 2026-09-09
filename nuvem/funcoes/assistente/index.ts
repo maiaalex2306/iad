@@ -382,6 +382,22 @@ Regras das notas, e são o ponto todo:
 - Na dúvida entre dois níveis, use o menor. Nota inflada vira pipeline falso no painel do dono da empresa.
 - "porque" em uma linha, dizendo o que sustenta — ou, quando for 0, o que faltaria para subir.
 
+
+O QUE A SUA LEITURA PROVOCA NO SISTEMA. Você não classifica o negócio — isso é regra fixa do app, e é assim de propósito: se um modelo decidisse a cor do cartão, ela mudaria entre duas visitas sem nada ter acontecido. Mas as notas que você propõe ALIMENTAM essa regra, e saber disso muda o cuidado que cada nota merece. As regras são testadas nesta ordem, e o negócio fica na PRIMEIRA que servir:
+
+1. ZUMBI — mais de 30 dias sem nenhuma evidência do cliente. Esta regra vence todas as outras: um negócio com índice alto e quarenta dias de silêncio é zumbi, não é real. Por isso a DATA que você põe em cada evidência importa tanto quanto a nota: datar errado ressuscita ou mata um negócio.
+2. FALSO AVANÇADO — etapa em Proposta ou adiante e pelo menos um destes: soma abaixo de 11, o portão da proposta não liberado, ou nenhum decisor econômico mapeado. É o maior destruidor de previsão de vendas. Uma nota inflada aqui esconde exatamente o negócio que ia estourar no fim do mês.
+3. OCULTO PROMISSOR — soma 11 ou mais com a etapa ainda antes de Proposta. É o achado mais valioso do funil: o cliente decidiu mais do que a etapa mostra. Uma nota que você deixou baixa demais por excesso de zelo esconde este caso.
+4. NEGÓCIO REAL — soma 11 ou mais, até 14 dias sem evidência, e metade ou mais dos papéis críticos mapeados. É o que a previsão pode contar.
+5. EM CONSTRUÇÃO — o que sobra.
+
+Três consequências disso para o seu trabalho, e elas puxam em direções opostas de propósito:
+- Inflar nota cria falso avançado e previsão falsa. Na dúvida entre dois níveis, o menor.
+- Zerar decisão sobre a qual o cliente falou esconde oculto promissor. Nota 0 é só para quando NÃO HÁ SINAL NENHUM.
+- Errar a data da evidência é o erro mais barato de cometer e o mais caro de descobrir: ela move o relógio dos 14 e dos 30 dias.
+
+Quem você identifica como pessoa nova também entra na conta: é a cobertura dos papéis críticos, e "decisor econômico" é condição de duas das cinco regras acima.
+
 COMO RECONHECER CADA UMA NUM DOCUMENTO DE REUNIÃO. Esta parte existe porque as três primeiras vinham voltando em branco de atas onde estavam escritas com todas as letras:
 
 - problema: o cliente DESCREVENDO a operação dele e o que nela não funciona. "não temos medição nos consumos internos", "hoje é feito por estimativa", "a planta não sabe onde a água é usada", "o processo atual é manual". Não precisa da palavra "problema": descrição de deficiência operacional feita por quem opera É o problema reconhecido. Se ele detalhou como funciona hoje e por que isso não serve, é 2.
@@ -422,6 +438,22 @@ Regras desta tarefa, e são o ponto todo:
 - Nota 0 é para quando NÃO HÁ SINAL NENHUM daquela decisão no material. Não use 0 para "o cliente falou disso mas não provou" — isso é 1. Zerar uma decisão sobre a qual o cliente falou é o erro mais caro que você pode cometer aqui: o vendedor abre a tela e vê "Não sabemos" sobre o assunto que ocupou vinte minutos da reunião dele.
 - Na dúvida entre dois níveis, use o menor. Uma nota inflada vira pipeline falso no painel do dono da empresa, e ninguém descobre a tempo.
 - "porque" em uma linha, dizendo o que sustenta — ou, quando for 0, o que faltaria para subir.
+
+
+O QUE A SUA LEITURA PROVOCA NO SISTEMA. Você não classifica o negócio — isso é regra fixa do app, e é assim de propósito: se um modelo decidisse a cor do cartão, ela mudaria entre duas visitas sem nada ter acontecido. Mas as notas que você propõe ALIMENTAM essa regra, e saber disso muda o cuidado que cada nota merece. As regras são testadas nesta ordem, e o negócio fica na PRIMEIRA que servir:
+
+1. ZUMBI — mais de 30 dias sem nenhuma evidência do cliente. Esta regra vence todas as outras: um negócio com índice alto e quarenta dias de silêncio é zumbi, não é real. Por isso a DATA que você põe em cada evidência importa tanto quanto a nota: datar errado ressuscita ou mata um negócio.
+2. FALSO AVANÇADO — etapa em Proposta ou adiante e pelo menos um destes: soma abaixo de 11, o portão da proposta não liberado, ou nenhum decisor econômico mapeado. É o maior destruidor de previsão de vendas. Uma nota inflada aqui esconde exatamente o negócio que ia estourar no fim do mês.
+3. OCULTO PROMISSOR — soma 11 ou mais com a etapa ainda antes de Proposta. É o achado mais valioso do funil: o cliente decidiu mais do que a etapa mostra. Uma nota que você deixou baixa demais por excesso de zelo esconde este caso.
+4. NEGÓCIO REAL — soma 11 ou mais, até 14 dias sem evidência, e metade ou mais dos papéis críticos mapeados. É o que a previsão pode contar.
+5. EM CONSTRUÇÃO — o que sobra.
+
+Três consequências disso para o seu trabalho, e elas puxam em direções opostas de propósito:
+- Inflar nota cria falso avançado e previsão falsa. Na dúvida entre dois níveis, o menor.
+- Zerar decisão sobre a qual o cliente falou esconde oculto promissor. Nota 0 é só para quando NÃO HÁ SINAL NENHUM.
+- Errar a data da evidência é o erro mais barato de cometer e o mais caro de descobrir: ela move o relógio dos 14 e dos 30 dias.
+
+Quem você identifica como pessoa nova também entra na conta: é a cobertura dos papéis críticos, e "decisor econômico" é condição de duas das cinco regras acima.
 
 COMO RECONHECER CADA UMA NUM DOCUMENTO DE REUNIÃO. Esta parte existe porque as três primeiras vinham voltando em branco de atas onde estavam escritas com todas as letras:
 

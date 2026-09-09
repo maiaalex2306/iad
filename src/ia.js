@@ -207,6 +207,23 @@
        evidência gravada e índice parado. Com o retrato aqui, o modelo tem o
        que precisa para as duas coisas de uma vez, e sem perder o histórico:
        ele lê as evidências antigas e o material novo lado a lado. */
+    /* A tarefa que originou o relato entra ANTES do material, com rótulo. Sem
+       ela o modelo lê uma ata solta; com ela sabe o canal, com quem foi e qual
+       decisão a pessoa estava tentando provocar — e é aí que ele para de
+       devolver "problema" para tudo. */
+    const daTarefa = (contexto && contexto.tarefa) || null;
+    if (daTarefa) {
+      t = [
+        'A TAREFA QUE PRODUZIU ESTE MATERIAL:',
+        '- o que era: ' + (daTarefa.titulo || 'sem título'),
+        daTarefa.descricao ? '- descrição: ' + daTarefa.descricao : '',
+        '- canal: ' + (daTarefa.tipoTarefa || 'não informado'),
+        daTarefa.contato ? '- com quem: ' + daTarefa.contato : '',
+        daTarefa.decisaoAlvo ? '- decisão que o vendedor pretendia provocar: ' + daTarefa.decisaoAlvo : '',
+        daTarefa.quando ? '- quando aconteceu: ' + daTarefa.quando : ''
+      ].filter(Boolean).join('\n') + '\n\n' + t;
+    }
+
     if (op && resumoOp) {
       /* O retrato entra com orçamento próprio e o material fica inteiro.
 

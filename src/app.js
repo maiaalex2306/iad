@@ -1521,7 +1521,9 @@
       document.body.appendChild(aviso);
       aviso.showModal();
 
-      IA.analisarReuniao(texto, IA.contextoDaOportunidade(op), op, E.resumo(op)).then(function (r) {
+      const ctx = IA.contextoDaOportunidade(op);
+      if (tarefaEmCurso) ctx.tarefa = tarefaEmCurso;
+      IA.analisarReuniao(texto, ctx, op, E.resumo(op)).then(function (r) {
         aviso.close();
         aviso.remove();
         /* O motivo vem do servidor e aparece como veio. A frase única de antes
@@ -3898,7 +3900,21 @@
     const temRelato = !!(d.relato && d.relato.length >= 60);
 
     Store.concluirTarefa(tarefaId, quando, temRelato);
-    tarefaEmCurso = { tarefaId: tarefaId, tipoTarefa: d.tipo || '' };
+    /* O contexto da tarefa viaja junto até a leitura. A IA lia a ata sem saber
+       que aquilo era "Visita com a Aline Prado mirando Impacto" — e essa é
+       exatamente a informação que separa uma leitura genérica de uma leitura
+       que sabe o que procurar. */
+    const oQueEra = Store.tarefa(tarefaId);
+    const comQuem = oQueEra && oQueEra.contatoId ? Store.contato(oQueEra.contatoId) : null;
+    tarefaEmCurso = {
+      tarefaId: tarefaId,
+      tipoTarefa: d.tipo || '',
+      titulo: oQueEra ? oQueEra.titulo : '',
+      descricao: oQueEra ? (oQueEra.descricao || '') : '',
+      decisaoAlvo: dimensaoAlvo || '',
+      contato: comQuem ? comQuem.nome + (comQuem.cargo ? ' — ' + comQuem.cargo : '') : '',
+      quando: quando
+    };
     const encerrar = function () {
       tarefaEmCurso = null;
       if (aoTerminar) aoTerminar();
