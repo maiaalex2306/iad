@@ -1215,7 +1215,9 @@ td.subiu { color: var(--ok); font-weight: 600; }
 .nota-manual { font-size: 1.3rem; font-weight: 700; line-height: 1.15; }
 .nota-manual.n0 { color: var(--muted); }
 .nota-manual.n1 { color: var(--warn); }
-.nota-manual.n2 { color: var(--ok); }
+.nota-manual.n2 { color: color-mix(in srgb, var(--ok) 55%, var(--warn)); }
+.nota-manual.n3 { color: var(--ok); }
+.nota-manual.n4 { color: var(--navy); }
 .escada-manual .tiny.muted { display: block; }
 
 

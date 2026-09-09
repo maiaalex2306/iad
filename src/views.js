@@ -3058,6 +3058,7 @@
   const SECOES_DO_MANUAL = [
     ['m-regra', 'A regra'],
     ['m-oito', 'As oito decisões'],
+    ['m-regua', 'A régua: cinco degraus'],
     ['m-avanco', 'Como o IAD anda'],
     ['m-faixas', 'O que o número diz'],
     ['m-etapas', 'O que cada etapa pede'],
@@ -3261,6 +3262,16 @@
       'move a nota.</div></div>';
   }
 
+  /* A escada, gerada dos degraus. Aparece em dois lugares do manual e não pode
+     divergir entre eles — nem do que a tela do negócio mostra. */
+  function escadaEmCards() {
+    return '<div class="escada-manual">' + P.NIVEIS_DA_ESCADA.map(function (n) {
+      return '<div><span class="nota-manual n' + n.n + '">' + n.n + '</span>' +
+        '<div><strong>' + esc(n.rotulo) + '</strong>' +
+        '<span class="tiny muted">' + esc(n.desc) + '</span></div></div>';
+    }).join('') + '</div>';
+  }
+
   function manualDasOito() {
     const linhas = P.DIMENSOES.map(function (d, i) {
       return '<tr><td class="rotulo-manual"><span class="tiny muted">' + (i + 1) + '</span> <strong>' + esc(d.nome) + '</strong></td>' +
@@ -3271,14 +3282,124 @@
       '<strong>dentro do cliente</strong>. Cada uma vale de 0 a ' + P.NOTA_MAXIMA + ', e a soma é o <strong>IAD</strong>, de 0 a ' + P.IAD_MAXIMO + '. ' +
       'Com ' + P.IAD_MADURO + ' ou mais, decisão madura.</p>' +
       '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' + linhas + '</tbody></table></div>' +
-      '<div class="escada-manual">' +
-      '<div><span class="nota-manual n0">0</span><div><strong>Não sabemos</strong><span class="tiny muted">Nada do lado do cliente sustenta esta decisão.</span></div></div>' +
-      '<div><span class="nota-manual n1">1</span><div><strong>Parcial</strong><span class="tiny muted">Há sinal, mas vago, indireto, ou dito por uma pessoa só.</span></div></div>' +
-      '<div><span class="nota-manual n2">2</span><div><strong>Comprovado pelo cliente</strong><span class="tiny muted">Ele descreveu, mostrou, mandou ou fez. Exige evidência confirmada ou documentada.</span></div></div>' +
-      '</div>' +
+      escadaEmCards() +
       '<p class="small" style="margin-top:10px">Dois números derivam daí. <strong>Evidence Age</strong> é há quantos ' +
       'dias o cliente não produz evidência — o relógio não para por atividade sua. <strong>Cobertura</strong> é quanto ' +
       'dos papéis críticos da compra você tem mapeado.</p></div>';
+  }
+
+  /* ---------------- A régua ----------------
+
+     A seção mais importante do manual, e a que precisa existir por escrito:
+     mudamos a escala e ninguém aprende régua nova por osmose. Ela é gerada
+     dos degraus e das dimensões, então descreve o que o app realmente faz. */
+  function manualDaRegua() {
+    /* A régua por decisão, com o rigor de cada uma. O que é estrito e o que é
+       flexível não é opinião solta: sai do texto do degrau 3 e 4 de cada
+       dimensão, que é o que o app usa para julgar. */
+    const porDecisao = P.DIMENSOES.map(function (d) {
+      return '<tr>' +
+        '<td class="rotulo-manual"><strong>' + esc(d.nome) + '</strong></td>' +
+        '<td><span class="nivel-linha"><b class="nota-manual n3">3</b> ' + esc(d.niveis[3]) + '</span>' +
+        '<span class="nivel-linha"><b class="nota-manual n4">4</b> ' + esc(d.niveis[4]) + '</span></td>' +
+        '</tr>';
+    }).join('');
+
+    return '<div class="card" id="m-regua"><h2>A régua: cinco degraus, e o que decide cada um</h2>' +
+
+      '<p class="small">Até agora cada decisão valia 0, 1 ou 2. Agora vale de 0 a ' + P.NOTA_MAXIMA + '. ' +
+      'A mudança não é de tamanho, é de critério — e é a parte que importa entender.</p>' +
+
+      '<p class="small"><strong>O que decide o degrau não é o quanto você sabe. É de onde a informação veio.</strong> ' +
+      'Duas pessoas podem saber exatamente a mesma coisa sobre um cliente e estar em degraus diferentes: ' +
+      'uma porque deduziu, outra porque ouviu do cliente e conferiu.</p>' +
+
+      escadaEmCards() +
+
+      '<h3 style="margin-top:18px">Por que isto é melhor do que a régua antiga</h3>' +
+
+      '<p class="small">A régua de três degraus tinha <strong>dois eixos brigando</strong>. A nota dizia quanto se ' +
+      'sabia; a força da evidência (relato, confirmado, documentado) dizia de onde tinha vindo. Como os dois não ' +
+      'conversavam, foi preciso uma regra à parte: "a nota 2 exige uma evidência confirmada". Remendo.</p>' +
+
+      '<p class="small">Nos cinco degraus a origem <strong>é</strong> a escada. Um eixo só, sem remendo. E dois ' +
+      'degraus resolvem problemas que a régua antiga não enxergava:</p>' +
+
+      '<div class="escada-manual" style="margin-top:10px">' +
+      '<div><span class="nota-manual n1">1</span><div><strong>O degrau que nomeia o otimismo</strong>' +
+      '<span class="tiny muted">"Suposto" quer dizer: quem afirma isso somos nós, o cliente não disse. ' +
+      'Na régua antiga quem achava marcava 1, e 1 de 2 é metade do caminho — o painel mostrava progresso que não ' +
+      'existia. Agora é 1 de 4, e o rótulo diz na cara que a fonte é você.</span></div></div>' +
+      '<div><span class="nota-manual n3">3</span><div><strong>O degrau que separa falar de verificar</strong>' +
+      '<span class="tiny muted">Entre 2 e 3 está a fronteira mais importante da régua. "O cliente disse que tem ' +
+      'prazo até dezembro" é 2. Vira 3 quando alguém conferiu que o prazo se mantém, ou quando uma segunda pessoa ' +
+      'do cliente confirmou.</span></div></div>' +
+      '</div>' +
+
+      '<div class="aviso" style="margin-top:14px"><strong>O caso que motivou a mudança.</strong> ' +
+      'Um diagnóstico prometido e ainda não entregue mantém a decisão em <strong>2</strong>. Ele pode voltar ' +
+      'mostrando que a solução não serve àquele caso. Antecipar para 3 é registrar um progresso que ninguém ' +
+      'verificou — e na régua antiga isso era 2 de 2, ou seja, parecia pronto.</div>' +
+
+      '<h3 style="margin-top:18px">Os degraus 3 e 4 exigem prova, não opinião</h3>' +
+
+      '<p class="small">Marcar 3 ou 4 não depende só da sua leitura: o app confere se existe evidência do cliente ' +
+      'com a força correspondente. Sem ela, o botão fica bloqueado.</p>' +
+
+      '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' +
+      '<tr><td class="rotulo-manual"><b class="nota-manual n3">3</b> <strong>Testado</strong></td>' +
+      '<td>Exige ao menos uma evidência <strong>confirmada</strong> ou documentada. Confirmado quer dizer: ' +
+      'o cliente fez, e nós presenciamos.</td></tr>' +
+      '<tr><td class="rotulo-manual"><b class="nota-manual n4">4</b> <strong>Documentado</strong></td>' +
+      '<td>Exige uma evidência <strong>documentada</strong>. E documento do cliente: ata dele, indicador dele, ' +
+      'meta dele, e-mail dele. Um material que nós escrevemos sobre o que ele falou não é documento dele.</td></tr>' +
+      '</tbody></table></div>' +
+
+      '<h3 style="margin-top:18px">O rigor muda conforme a decisão</h3>' +
+
+      '<p class="small">Nem toda decisão pede a mesma prova. Duas são propositalmente mais duras — ' +
+      '<strong>Processo de compra</strong> e <strong>Impacto</strong> — porque são as que mais destroem previsão ' +
+      'quando ficam frouxas. Descobrir tarde que a diretoria do cliente decide devagar já custou o trimestre de ' +
+      'muita gente; e economia que nós calculamos nunca foi impacto aceito.</p>' +
+
+      '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' + porDecisao + '</tbody></table></div>' +
+
+      '<h3 style="margin-top:18px">O que mudou nos números</h3>' +
+
+      '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' +
+      '<tr><td class="rotulo-manual">IAD</td><td>Era de 0 a 16. Agora é de <strong>0 a ' + P.IAD_MAXIMO + '</strong>.</td></tr>' +
+      '<tr><td class="rotulo-manual">Limiar de maduro</td><td>Era 11. Agora é <strong>' + P.IAD_MADURO + '</strong> — média ' +
+      (P.IAD_MADURO / P.DIMENSOES.length) + ' por decisão, ou seja, a maioria das oito testada com o cliente e não apenas declarada.</td></tr>' +
+      '<tr><td class="rotulo-manual">Portão da proposta</td><td>Os mínimos subiram junto com a escada: ' +
+      P.GATES_PROPOSTA.map(function (g) {
+        const d = P.DIMENSOES.filter(function (x) { return x.id === g.dim; })[0];
+        return esc(d ? d.nome : g.dim) + ' ' + g.min;
+      }).join(' · ') + '.</td></tr>' +
+      '</tbody></table></div>' +
+
+      '<h3 style="margin-top:18px">O que aconteceu com o que já estava pontuado</h3>' +
+
+      '<p class="small">Nada precisou ser repontuado, porque a informação necessária já estava gravada: a força da ' +
+      'evidência mais forte de cada decisão. A conversão foi automática, uma única vez:</p>' +
+
+      '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' +
+      '<tr><td class="rotulo-manual">0 antigo</td><td>continua <b class="nota-manual n0">0</b>.</td></tr>' +
+      '<tr><td class="rotulo-manual">1 antigo</td><td>virou <b class="nota-manual n2">2</b>. O antigo 1 era ' +
+      '"reconhece, mas de forma vaga" — que na régua nova é exatamente <em>declarado pelo cliente</em>.</td></tr>' +
+      '<tr><td class="rotulo-manual">2 antigo</td><td>virou <b class="nota-manual n4">4</b> se havia evidência ' +
+      'documentada, <b class="nota-manual n3">3</b> se havia confirmada, e <b class="nota-manual n2">2</b> se não ' +
+      'havia nenhuma das duas — que era justamente o caso que a régua antiga chamava de "comprovado sem prova".</td></tr>' +
+      '</tbody></table></div>' +
+
+      '<p class="small" style="margin-top:10px">A curva do IAD no histórico mudou de escala junto. Sem isso o ' +
+      'gráfico mostraria uma queda no dia da migração que nunca aconteceu na vida real.</p>' +
+
+      '<div class="aviso" style="margin-top:14px"><strong>O efeito prático a esperar.</strong> ' +
+      'Alguns negócios vão sair de "Negócio real" e voltar para "Em construção". Não é o app ficando pessimista: ' +
+      'é a régua deixando de aceitar como comprovado o que só tinha sido dito numa reunião. O trabalho que aparece ' +
+      'agora — conferir o que o cliente afirmou — sempre existiu; ele é que era invisível.</div>' +
+
+      '</div>';
   }
 
   /* ---------------- Como o IAD anda ----------------
@@ -3675,6 +3796,7 @@
       '<p class="small muted">Não conta como avanço:</p><div class="row">' + naoContam + '</div></div>' +
 
       manualDasOito() +
+      manualDaRegua() +
       manualDoAvanco() +
       manualDasFaixas() +
       manualDasEtapas() +
