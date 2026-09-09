@@ -256,14 +256,47 @@ Regras absolutas:
 - Além dos campos pedidos, inclua "frases": um objeto que liga cada campo preenchido ao trecho literal do texto que justificou o valor. Trechos curtos.
 - Nunca devolva nota, pontuação, valor financeiro, etapa do funil ou data de fechamento. Isso não é seu.`;
 
+/* Quem é quem, pelo nome.
+
+   A regra central deste assistente — "a nota vem só do que o CLIENTE disse" —
+   dependia de o modelo adivinhar qual dos lados é o cliente. Numa transcrição
+   em terceira pessoa, do tipo que o Meet e o Gemini geram, as duas frases têm
+   a mesma forma: "Rosa apresentou a solução de automação" e "Fábio mencionou
+   que a prospecção manual não se sustenta". Sem saber que Rosa é nossa e Fábio
+   é do cliente, o modelo faz o seguro e não pontua — e o vendedor lê "problema
+   não reconhecido" depois de uma reunião em que o cliente descreveu o problema
+   três vezes. */
+function quemEQuem(ctx: Record<string, unknown>): string {
+  const nos = String(ctx.nossaEmpresa || '').trim();
+  const vendedor = String(ctx.nossoVendedor || '').trim();
+  const cliente = String(ctx.clienteNome || '').trim();
+  if (!nos && !cliente && !vendedor) return '';
+
+  const linhas: string[] = ['QUEM É QUEM NESTE MATERIAL — leia isto antes de qualquer regra:'];
+  if (nos) linhas.push(`- NÓS somos ${nos}. Somos quem vende. Nada que nós dissermos, apresentarmos ou propusermos vira nota.`);
+  if (vendedor) linhas.push(`- Quem fala por nós é ${vendedor}. Tudo atribuído a essa pessoa é atividade nossa.`);
+  if (cliente) linhas.push(`- O CLIENTE é ${cliente}. É o lado comprador. O que qualquer pessoa desse lado disser é evidência dele.`);
+  linhas.push('- Quem não estiver nomeado acima: decida pelo papel na conversa. ' +
+    'Quem descreve a própria operação, o próprio problema, o próprio orçamento e o próprio processo de compra é do lado do cliente. ' +
+    'Quem apresenta solução, metodologia, ferramenta e preço é do nosso lado.');
+  linhas.push('- ATA EM TERCEIRA PESSOA: material gerado por Meet, Teams ou Gemini narra a reunião de fora — ' +
+    '"Fulano mencionou", "Fulano observou", "Fulano detalhou", "Fulano solicitou". ' +
+    'Quando o Fulano é do lado do cliente, isso É declaração do cliente e vale degrau 2, ' +
+    'com o trecho narrado servindo de trecho literal. Descartar essas frases por serem narração ' +
+    'é o erro mais caro deste assistente: zera uma reunião inteira que estava cheia de sinal.');
+  return linhas.join('\n');
+}
+
 function promptDe(tipo: string, ctx: Record<string, unknown>): string {
   const hoje = String(ctx.hoje || new Date().toISOString().slice(0, 10));
   const contatos = listaCurta(ctx.contatos);
   const segmentos = listaCurta(ctx.segmentos);
+  const lados = quemEQuem(ctx);
 
   if (tipo === 'evidencia') {
     return `${BASE}
 
+${lados ? '\n' + lados + '\n' : ''}
 Tarefa: o vendedor colou a ata ou contou o que aconteceu com o cliente. Extraia UMA evidência — algo que o CLIENTE fez ou disse. Atividade nossa (enviamos proposta, fizemos follow-up) não é evidência.
 
 Campos: titulo, dimensao, forca, contato, canal, data, compromissoTexto, compromissoData, compromissoDono.
@@ -369,6 +402,7 @@ Não devolva valor, etapa nem data de fechamento.`;
   if (tipo === 'reuniao') {
     const etapas = Array.isArray(ctx.etapas) ? ctx.etapas.map(String).join(' | ') : '';
     return `${BASE}
+${lados ? '\n' + lados + '\n' : ''}
 
 Tarefa: o vendedor enviou a transcrição de uma reunião, a ata ou as anotações dele. Separe TUDO que o cliente fez ou disse em evidências, uma para cada dimensão afetada. Um documento costuma render de duas a seis.
 

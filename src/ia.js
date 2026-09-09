@@ -874,8 +874,26 @@
     const Store = global.IADStore;
     const ctx = { hoje: Store.hoje(), segmentos: Store.nomesDoCatalogo('segmentos') };
     if (contaId) {
+      const conta = Store.conta(contaId);
+      /* Quem é o cliente, pelo nome.
+
+         Sem isto o servidor recebia a regra "a nota vem só do que o CLIENTE
+         disse" sem ter como saber quem é o cliente. Numa ata em terceira
+         pessoa — "Rosa apresentou a solução", "Fábio mencionou que a
+         prospecção manual não se sustenta" — as duas frases têm a mesma
+         forma, e adivinhar qual lado é o nosso é cara ou coroa. O modelo
+         então fazia o seguro: não pontuava. O vendedor via "problema não
+         reconhecido" depois de uma reunião em que o cliente descreveu o
+         problema três vezes. */
+      if (conta && conta.nome) ctx.clienteNome = conta.nome;
       ctx.contatos = Store.contatosDaConta(contaId).map(function (c) { return c.nome; });
     }
+    /* E quem somos nós, pelo nome da empresa de quem está logado. */
+    const meu = Store.tenantDeTrabalho && Store.tenantDeTrabalho();
+    const minha = meu && (Store.dados().tenants || []).filter(function (t) { return t.id === meu; })[0];
+    if (minha && minha.nome) ctx.nossaEmpresa = minha.nome;
+    const usuario = Store.contexto && Store.contexto().usuario;
+    if (usuario && usuario.nome) ctx.nossoVendedor = usuario.nome;
     /* Nosso próprio domínio, para o servidor não propor a nossa equipe como
        contato do cliente. Todo dossiê é assinado por nós, e sem isto a lista
        viria cheia de colegas do próprio vendedor. */

@@ -3999,7 +3999,11 @@
       '<p class="small" style="margin:10px 0 0"><strong>Empresas espelhadas neste aparelho:</strong> ' +
       (d.empresasEspelhadas.length
         ? d.empresasEspelhadas.map(function (t) { return esc(t.nome || t.id); }).join(' · ')
-        : '(nenhuma)') + '</p>' +
+        : '(nenhuma)') +
+      (d.empresasEspelhadas.length > 1
+        ? ' <button class="btn ghost mini" onclick="App.juntarEmpresas()" ' +
+          'data-ajuda-titulo="Juntar empresas duplicadas" data-ajuda="A mesma empresa cadastrada duas vezes tem dois identificadores, e cada registro aponta para um só. O que estiver carimbado com a errada fica invisível para quem entra pela certa.">Juntar duplicadas</button>'
+        : '') + '</p>' +
 
       '<div class="row" style="margin-top:12px">' +
       (global.IADNuvem.conectado()

@@ -2854,6 +2854,38 @@
       });
     },
 
+    /* Juntar duas empresas duplicadas deste aparelho.
+
+       A tela do diagnóstico já mostrava as empresas espelhadas e os registros
+       por empresa. Mostrar o problema sem dar o conserto obriga a pessoa a
+       cadastrar tudo de novo, que foi exatamente o que aconteceu. */
+    juntarEmpresas: function () {
+      const d = Store.diagnostico();
+      const lista = (d.empresasEspelhadas || []).map(function (t) {
+        const quantos = d.registrosPorEmpresa[t.id] || 0;
+        return { valor: t.id, rotulo: t.nome + ' — ' + quantos + ' registro(s)' };
+      });
+      if (lista.length < 2) { alert('Só há uma empresa neste aparelho. Não há o que juntar.'); return; }
+
+      U.formulario('Juntar empresas duplicadas', [
+        { tipo: 'aviso', rotulo: 'Muda o carimbo dos registros DESTE APARELHO. O servidor não é tocado: ' +
+          'depois de juntar, sincronize para mandar tudo com a empresa certa.' },
+        { id: 'de', rotulo: 'Mover os registros de', tipo: 'select', opcoes: lista },
+        { id: 'para', rotulo: 'Para', tipo: 'select', opcoes: lista }
+      ], {}, function (v) {
+        if (!v.de || !v.para || v.de === v.para) { alert('Escolha duas empresas diferentes.'); return; }
+        const nomeDe = (lista.filter(function (x) { return x.valor === v.de; })[0] || {}).rotulo;
+        const nomePara = (lista.filter(function (x) { return x.valor === v.para; })[0] || {}).rotulo;
+        if (!U.confirmar('Mover tudo de "' + nomeDe + '" para "' + nomePara + '"?')) return;
+        const n = Store.moverRegistros(v.de, v.para);
+        const sumiu = Store.esquecerEmpresa(v.de);
+        render();
+        alert(n + ' registro(s) movidos.' +
+          (sumiu ? ' A empresa vazia saiu da lista deste aparelho.' : '') +
+          '\n\nSincronize para mandar ao servidor.');
+      });
+    },
+
     /* O passo atrás. Existe porque baixar já apagou carteira de gente uma vez:
        o servidor devolveu vazio, o app gravou o vazio por cima, e não havia
        para onde voltar. */

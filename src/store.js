@@ -374,6 +374,42 @@
     };
   }
 
+  /* ---------- juntar empresas duplicadas ----------
+
+     A mesma empresa cadastrada quatro vezes — "acP", "AcP", "Advanced Channel
+     Partners", "AcP - Advanced Channel Partners" — não é bagunça de nome: cada
+     uma tem id próprio, e todo registro aponta para um só. Um registro
+     carimbado com a variante errada é invisível para quem entra pela certa, e
+     invisível sem erro nenhum na tela, que é a pior forma de sumir.
+
+     Isto muda o carimbo dos registros deste aparelho, de uma empresa para
+     outra, e apaga a empresa esvaziada. Não toca no servidor: lá a mesma
+     limpeza é uma consulta, e misturar as duas num clique só esconderia qual
+     das duas falhou. */
+  function moverRegistros(deId, paraId) {
+    if (!deId || !paraId || deId === paraId) return 0;
+    const colecoes = ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos'];
+    let mexidos = 0;
+    colecoes.forEach(function (nome) {
+      (estado[nome] || []).forEach(function (r) {
+        if (String(r.tenantId || '') === String(deId)) { r.tenantId = paraId; mexidos++; }
+      });
+    });
+    salvar();
+    return mexidos;
+  }
+
+  function esquecerEmpresa(id) {
+    const usada = ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos']
+      .some(function (nome) {
+        return (estado[nome] || []).some(function (r) { return String(r.tenantId || '') === String(id); });
+      });
+    if (usada) return false;   /* nunca some com empresa que ainda carimba algo */
+    estado.tenants = (estado.tenants || []).filter(function (t) { return t.id !== id; });
+    salvar();
+    return true;
+  }
+
   /* Mesma forma do estado, já filtrado. As telas leem daqui, nunca de obter(). */
   function dados() {
     const porTenant = function (lista) { return (lista || []).filter(function (r) { return visivel(r, false); }); };
@@ -958,6 +994,7 @@
   global.IADStore = {
     uid, hoje, carregar, salvar, inscrever, obter, substituir, estadoVazio,
     guardarCopiaDeSeguranca, copiaDeSeguranca, restaurarCopiaDeSeguranca, descartarCopiaDeSeguranca,
+    moverRegistros, esquecerEmpresa,
     conta, contato, oportunidade, tarefa, contatosDaConta, tarefasDaOportunidade,
     daquiADias, PRAZO_PADRAO_DE_FECHAMENTO,
     dados, contexto, tenantDeTrabalho, visivel, diagnostico,
