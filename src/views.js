@@ -1182,11 +1182,31 @@
           ? kanban(resumos)
           : '<div class="lista">' + resumos.map(cardOportunidade).join('') + '</div>')
       : '<div class="vazio">Nenhuma negociação com estes filtros.' +
+        foraDoRecorte() +
         (quantosNaGaveta() || pipelineFiltro.responsavel !== 'todos' || pipelineFiltro.busca
           ? ' <button class="link" onclick="App.pipelineLimpar(\'tudo\')">Limpar os filtros</button>'
           : '') + '</div>';
 
     return cabecalhoPipeline(filtros) + barraDoPipeline(resumos, total) + corpo;
+  }
+
+  /* O recorte do administrador não é um filtro da barra: mora no menu do
+     usuário, no canto oposto da tela, e o chip que o mostra fica ao lado do
+     contador. Quem escolheu uma empresa e voltou horas depois lê "nenhuma
+     negociação" e conclui que perdeu a carteira — foi o que aconteceu. Aqui a
+     tela diz quantas existem fora do recorte e leva de volta. */
+  function foraDoRecorte() {
+    const ctx = Store.contexto();
+    if (!ctx.admin || !ctx.filtros || ctx.filtros.tenant === 'todas') return '';
+    const todas = (Store.obter().oportunidades || []).filter(function (o) {
+      return pipelineFiltro.status !== 'abertas' || !o.desfecho;
+    }).length;
+    if (!todas) return '';
+    const empresa = (Store.obter().tenants || []).filter(function (t) { return t.id === ctx.filtros.tenant; })[0];
+    return '<p class="small" style="margin-top:8px">Você está vendo só <strong>' +
+      esc((empresa && empresa.nome) || 'uma empresa') + '</strong>. Há ' + todas +
+      ' negociação(ões) nas outras. ' +
+      '<button class="link" onclick="App.filtrarTenant(\'todas\')">Ver todas as empresas</button></p>';
   }
 
   function cabecalhoPipeline(filtros) {
