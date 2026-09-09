@@ -212,14 +212,25 @@
        mesmo vazio outra vez. O caminho útil é o contrário — mandar para cima o
        que está aqui — e, quando há uma cópia de antes, voltar para ela. */
     const copia = Store.copiaDeSeguranca();
+
+    /* Empresa nova não é defeito, e esta faixa tratava as duas iguais: dizia
+       "isso é permissão ou carimbo de empresa" para quem tinha acabado de
+       criar a empresa e ainda não cadastrou nada. Manda caçar problema no
+       banco no primeiro dia de uso, e faz a pessoa desconfiar do sistema
+       justamente quando ele está certo. A cópia de segurança é o que separa os
+       dois casos: se existe cópia, havia carteira aqui e ela sumiu; se não
+       existe, nunca houve. */
+    if (!copia) {
+      return '<div class="aviso faixa-aviso">Esta empresa ainda não tem nenhuma negociação, nem aqui nem ' +
+        'no servidor. Comece cadastrando em Cadastros e depois sincronize. ' +
+        '<button class="btn ghost mini" onclick="App.ir(\'#/dados\')">Ver o diagnóstico</button></div>';
+    }
+
     return '<div class="aviso faixa-aviso">O servidor respondeu e não devolveu nenhuma empresa nem oportunidade ' +
-      'para esta conta — só as listas de configuração. Isso é permissão ou carimbo de empresa, do lado ' +
-      'do servidor, e não um filtro daqui. ' +
-      (copia
-        ? 'Existe uma cópia deste aparelho de ' + U.esc(U.data(copia.em)) + ', com ' +
-          copia.contas + ' empresa(s) e ' + copia.oportunidades + ' negociação(ões). ' +
-          '<button class="btn mini" onclick="App.restaurarCopiaLocal()">Restaurar essa cópia</button>'
-        : '') +
+      'para esta conta — só as listas de configuração. ' +
+      'Existe uma cópia deste aparelho de ' + U.esc(U.data(copia.em)) + ', com ' +
+      copia.contas + ' empresa(s) e ' + copia.oportunidades + ' negociação(ões). ' +
+      '<button class="btn mini" onclick="App.restaurarCopiaLocal()">Restaurar essa cópia</button>' +
       '<button class="btn ghost mini" onclick="App.ir(\'#/dados\')">Ver o diagnóstico</button></div>';
   }
 
