@@ -92,6 +92,7 @@
     dados.usuarios = dados.usuarios || [];
     dados.recusas = dados.recusas || [];
     dados.descartes = dados.descartes || [];
+    migrarDescartesParaCampanha(dados);
     migrarParaCincoDegraus(dados);
     migrarDesfechos(dados);
 
@@ -879,19 +880,40 @@
      A chave é a pessoa, não a entrega: o perfil do LinkedIn quando existe,
      porque é o único identificador estável que o Linked Helper entrega; e
      nome+empresa achatados quando não existe. */
+  function achatarTexto(t) {
+    return String(t || '').toLowerCase().normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  }
+
   function chaveDoLead(lead) {
-    const achatar = function (t) {
-      return String(t || '').toLowerCase().normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
-    };
     const perfil = String(lead.linkedin || '').trim().toLowerCase()
       .replace(/^https?:\/\//, '').replace(/^www\./, '')
       .replace(/\?.*$/, '').replace(/\/+$/, '');
-    if (perfil) return 'in:' + perfil;
-    const nome = achatar(lead.nome);
-    const empresa = achatar(lead.empresa);
-    if (!nome && !empresa) return '';
-    return 'p:' + nome + '|' + empresa;
+    const pessoa = perfil
+      ? 'in:' + perfil
+      : (achatarTexto(lead.nome) || achatarTexto(lead.empresa))
+          ? 'p:' + achatarTexto(lead.nome) + '|' + achatarTexto(lead.empresa)
+          : '';
+    if (!pessoa) return '';
+    /* A campanha entra na chave.
+
+       Descartar é dizer "esta pessoa não serve para ISTO", não "esta pessoa
+       não presta". O advogado que não interessa na campanha de condomínios
+       pode ser exatamente o alvo da campanha de escritórios — e um descarte
+       que valesse para sempre e para tudo apagaria esse lead sem ninguém
+       perceber. Campanha vazia vira um balde próprio, o que é o certo: sem
+       saber de qual campanha veio, não dá para saber onde o descarte vale. */
+    return 'c:' + achatarTexto(lead.campanha) + '|' + pessoa;
+  }
+
+  /* Os descartes gravados antes de a campanha entrar na chave valiam para
+     todas as campanhas. Reconstruir a chave com a campanha que ficou gravada
+     no próprio registro os mantém valendo onde de fato foram feitos. */
+  function migrarDescartesParaCampanha(dados) {
+    (dados.descartes || []).forEach(function (d) {
+      if (!d.chave || d.chave.indexOf('c:') === 0) return;
+      d.chave = 'c:' + achatarTexto(d.campanha) + '|' + d.chave;
+    });
   }
 
   function descartarLead(lead, porque) {

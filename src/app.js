@@ -4020,8 +4020,9 @@
            reversível pela cabeça de quem clicou, excluir doze não é. */
         if (!U.confirmar('Excluir ' + alvos.length +
           (alvos.length === 1 ? ' lead desmarcado' : ' leads desmarcados') +
-          ' da ponte?\n\nEles não voltam na próxima busca, nem quando o Linked Helper ' +
-          'reentregar as mesmas pessoas. Nada é apagado do CRM — estes leads nunca viraram registro.')) return;
+          ' da ponte?\n\nEles não voltam na próxima busca desta campanha, nem quando o Linked Helper ' +
+          'reentregar as mesmas pessoas. Em outra campanha voltam a aparecer. ' +
+          'Nada é apagado do CRM — estes leads nunca viraram registro.')) return;
         alvos.forEach(function (i) { Store.descartarLead(lista[i], 'Excluído em lote na importação'); });
         const ids = alvos.map(sumir).filter(Boolean);
         darBaixa(ids);

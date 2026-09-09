@@ -4321,7 +4321,9 @@
     if (!lista.length) {
       return '<div class="card"><h2>Leads descartados</h2>' +
         '<p class="small muted">Quem você excluir na tela de importação fica aqui, e não volta a aparecer ' +
-        'nas buscas seguintes — nem quando o Linked Helper reentregar a mesma pessoa. Nenhum até agora.</p></div>';
+        'nas buscas seguintes — nem quando o Linked Helper reentregar a mesma pessoa. ' +
+        'O descarte vale por campanha: a mesma pessoa continua aparecendo em outra campanha, ' +
+        'onde ela pode ser exatamente o alvo certo. Nenhum até agora.</p></div>';
     }
     const linhas = lista.slice().sort(function (a, b) {
       return String(b.data).localeCompare(String(a.data));
@@ -4335,9 +4337,11 @@
     }).join('');
 
     return '<div class="card"><h2>Leads descartados <span class="pill">' + lista.length + '</span></h2>' +
-      '<p class="small muted">Estas pessoas não aparecem mais nas buscas do Linked Helper. ' +
-      'A identificação é pelo perfil do LinkedIn quando existe, senão por nome e empresa — ' +
-      'por isso o descarte sobrevive à reentrega, que traz a mesma pessoa com identificação nova.</p>' +
+      '<p class="small muted">Estas pessoas não aparecem mais nas buscas do Linked Helper, ' +
+      '<strong>na campanha indicada</strong>. Em outra campanha elas voltam a aparecer — descartar é dizer ' +
+      '"não serve para isto", não "não presta". A identificação é pelo perfil do LinkedIn quando existe, ' +
+      'senão por nome e empresa, e é por isso que o descarte sobrevive à reentrega, que traz a mesma ' +
+      'pessoa com identificação nova.</p>' +
       '<div class="tabela-rolagem"><table><thead><tr><th>Pessoa</th><th>Empresa</th>' +
       '<th>Campanha</th><th>Quando</th><th></th></tr></thead><tbody>' + linhas + '</tbody></table></div></div>';
   }
@@ -4734,7 +4738,7 @@
       (quantosDescartados
         ? '<p class="tiny muted">' + quantosDescartados +
           (quantosDescartados === 1 ? ' resposta não aparece aqui' : ' respostas não aparecem aqui') +
-          ' porque essas pessoas já tinham sido excluídas antes. Elas não voltam mais.</p>'
+          ' porque essas pessoas já tinham sido excluídas nesta campanha. Em outra campanha voltam.</p>'
         : '') +
       /* Com vinte leads na tela, decidir o que entra é vinte cliques — ou dois,
          se der para começar do extremo certo. Quem trouxe um lote quase todo
