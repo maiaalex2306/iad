@@ -1,5 +1,5 @@
 /* Service worker: cache-first do app shell. Offline no celular e no desktop. */
-const CACHE = 'iad-crm-v113';
+const CACHE = 'iad-crm-v114';
 const ARQUIVOS = [
   './', './index.html', './manifest.webmanifest',
   './assets/styles.css',

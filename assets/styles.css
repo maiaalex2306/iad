@@ -180,6 +180,36 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--navy-2); ou
 .dim:last-child { border-bottom: 0; }
 .dim .cab { display: flex; align-items: center; gap: 8px; }
 .dim .nome { font-weight: 700; flex: 1; }
+
+/* O que sustenta a nota. Fechado por padrão: oito listas abertas viram uma
+   página de rolagem em que não se acha nada. */
+.dim details.provas > summary {
+  cursor: pointer; list-style: none;
+  font-size: .78rem; color: var(--muted);
+  padding: 6px 0 0; user-select: none;
+}
+.dim details.provas > summary::-webkit-details-marker { display: none; }
+.dim details.provas > summary::before { content: '▸ '; }
+.dim details.provas[open] > summary::before { content: '▾ '; }
+.dim details.provas > ul { list-style: none; margin: 4px 0 0; padding: 0; }
+.dim li.prova {
+  border-left: 2px solid var(--line);
+  padding: 4px 0 4px 10px; margin: 6px 0;
+}
+/* A fala do cliente é o conteúdo; o resto é procedência. A citação some se
+   vier num tamanho de nota de rodapé, que é o que ela era antes. */
+.dim li.prova .fala { font-size: .85rem; line-height: 1.35; }
+
+.dim .ja-tem .rotulo, .dim .falta-dim { font-size: .78rem; }
+.dim .ja-tem .rotulo { color: var(--muted); margin-top: 6px; font-weight: 700; }
+/* O que falta é instrução para a próxima conversa, não registro do passado.
+   A cor e a borda separam as duas coisas sem precisar de um título extra. */
+.dim .falta-dim {
+  margin-top: 8px; padding: 8px 10px;
+  border-left: 2px solid var(--warn);
+  background: color-mix(in srgb, var(--warn) 7%, transparent);
+  border-radius: 0 6px 6px 0; line-height: 1.5;
+}
 .notas { display: flex; gap: 6px; }
 .notas button {
   width: 38px; height: 34px; border-radius: 9px; border: 1px solid var(--line);

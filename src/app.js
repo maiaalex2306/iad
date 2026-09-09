@@ -1414,6 +1414,9 @@
         Store.registrarEvento(alvo, {
           tipo: 'decision', titulo: titulo, dimensao: dimensao, forca: d.forca,
           contatoId: d.contatoId || null, canal: d.canal, data: d.data || Store.hoje(),
+          /* A tarefa que produziu esta evidência, quando ela veio de uma. */
+          tarefaId: tarefaEmCurso ? tarefaEmCurso.tarefaId : null,
+          origemTitulo: tarefaEmCurso ? (tarefaEmCurso.titulo || tarefaEmCurso.tipoTarefa || '') : '',
           compromisso: d.compromissoData
             ? { texto: d.compromissoTexto || 'Próximo passo combinado', data: d.compromissoData, dono: d.compromissoDono }
             : null
@@ -1571,12 +1574,20 @@
       const op = Store.oportunidade(opId);
       if (!op) return;
 
+      /* De onde esta leitura veio. Sem isso, o cockpit mostra a frase do
+         cliente e não mostra onde ela foi dita — e "o cliente disse que tem
+         prazo" sem a reunião de origem é uma afirmação que ninguém consegue
+         conferir três semanas depois. */
+      const daTarefa = tarefaEmCurso || null;
+
       let evidencias = 0, pessoas = 0;
       (resultado.evidencias || []).forEach(function (ev) {
         Store.registrarEvento(opId, {
           tipo: 'decision', titulo: ev.titulo, dimensao: ev.dimensao,
           forca: ev.forca || 'relato', contatoId: contatoPeloNome(op.contaId, ev.contato),
           canal: ev.canal || 'Reunião', data: ev.data || Store.hoje(),
+          tarefaId: daTarefa ? daTarefa.tarefaId : null,
+          origemTitulo: daTarefa ? (daTarefa.titulo || daTarefa.tipoTarefa || '') : '',
           compromisso: ev.compromissoData
             ? { texto: ev.compromissoTexto || 'Próximo passo combinado',
                 data: ev.compromissoData, dono: ev.compromissoDono || 'cliente' }
@@ -2246,7 +2257,8 @@
             if (d.enviadoPor === 'cliente') {
               Store.registrarEvento(opId, {
                 tipo: 'decision', titulo: 'Cliente enviou o documento: ' + arquivo.name,
-                dimensao: d.dimensao, forca: 'documentado', canal: 'Documento'
+                dimensao: d.dimensao, forca: 'documentado', canal: 'Documento',
+                origemTitulo: arquivo.name
               });
             }
             render();

@@ -1686,6 +1686,76 @@
     return html ? '<div class="card"><h2>Alertas</h2>' + html + '</div>' : '';
   }
 
+  /* ---------- o que sustenta cada nota ----------
+
+     O painel dizia "2 evidência(s), ao menos uma confirmada" e parava aí. O
+     número responde "quantas", que é a pergunta menos útil das três. As que
+     importam são "o que o cliente disse" e "onde ele disse" — e as duas
+     estavam guardadas no histórico, misturadas com as outras oito decisões,
+     onde ninguém procura.
+
+     Sem elas, a nota é uma afirmação que não se confere. Três semanas depois
+     ninguém lembra por que Prioridade está em 2, e o vendedor que herda a
+     conta não tem como saber se aquilo ainda vale.
+
+     Fica fechado por padrão: oito listas abertas viram uma página de rolagem
+     em que não se acha nada. Aberto, mostra a frase do cliente, quem falou,
+     por qual canal, com que força, quando, e de qual tarefa ou documento
+     aquilo veio. */
+  const FORCA_ROTULO = {};
+  P.FORCAS.forEach(function (f) { FORCA_ROTULO[f.id] = f.rotulo; });
+
+  function provaDaDimensao(op, e) {
+    const quem = e.contatoId ? Store.contato(e.contatoId) : null;
+    const ficha = [
+      quem ? quem.nome + (quem.cargo ? ' — ' + quem.cargo : '') : '',
+      e.canal || '',
+      FORCA_ROTULO[e.forca] || e.forca || '',
+      e.data ? U.data(e.data) : ''
+    ].filter(Boolean).join(' · ');
+
+    /* De onde veio. É o que separa "o cliente disse" de "alguém escreveu que
+       o cliente disse": quem quiser conferir sabe qual reunião reabrir. */
+    const origem = e.origemTitulo
+      ? '<div class="tiny muted">de: ' + esc(e.origemTitulo) + '</div>'
+      : '';
+
+    const combinado = (e.compromisso && e.compromisso.texto)
+      ? '<div class="tiny">Combinado: ' + esc(e.compromisso.texto) +
+        (e.compromisso.data ? ' · ' + U.data(e.compromisso.data) : '') + '</div>'
+      : '';
+
+    return '<li class="prova">' +
+      '<div class="fala">“' + esc(e.titulo || '(sem texto)') + '”</div>' +
+      '<div class="tiny muted">' + esc(ficha) + '</div>' +
+      origem + combinado +
+      '</li>';
+  }
+
+  /* O que falta, decisão por decisão. Vem do mesmo cálculo que alimenta "O
+     que ainda falta" da leitura da IA — não é um segundo texto escrito à mão
+     que amanhã diverge do primeiro.
+
+     E aparece em toda decisão abaixo de 2, não só nas vazias. Uma decisão em
+     1 é o caso mais comum e era o menos servido: a tela dizia o que já tinha
+     e nada sobre o que ainda faltava para fechar. */
+  function oQueFaltaNaDimensao(op, d) {
+    const lacuna = E.lacunas(op).filter(function (l) {
+      return l.dimensao && l.dimensao.id === d.id &&
+        (l.tipo === 'dimensao' || l.tipo === 'comprovacao');
+    })[0];
+    if (!lacuna) return '';
+
+    return '<div class="falta-dim">' +
+      '<div><strong>Falta:</strong> ' + esc(lacuna.falta) + '</div>' +
+      (lacuna.pergunta ? '<div><strong>Pergunte:</strong> ' + esc(lacuna.pergunta) + '</div>' : '') +
+      (lacuna.comoProvar ? '<div><strong>Conta como prova:</strong> ' + esc(lacuna.comoProvar) + '</div>' : '') +
+      /* O conselho do canal já vem escrito como frase pronta no playbook —
+         rotular de "no canal" fazia parecer que ali ia o nome do canal. */
+      (lacuna.canal ? '<div class="muted" style="margin-top:3px">Como abordar: ' + esc(lacuna.canal) + '</div>' : '') +
+      '</div>';
+  }
+
   function blocoDimensoes(op) {
     const dims = P.DIMENSOES.map(function (d) {
       const v = op.dims[d.id] || 0;
@@ -1697,14 +1767,38 @@
           'onclick="App.pontuar(\'' + op.id + '\',\'' + d.id + '\',' + n + ')" ' +
           'title="' + esc(bloqueado ? 'Exige uma evidência confirmada ou documentada' : d.niveis[n]) + '">' + n + '</button>';
       }).join('');
+
+      /* Da mais recente para a mais antiga: é a última fala do cliente que
+         diz se a nota ainda vale hoje. */
+      const emOrdem = provas.slice().sort(function (a, b) {
+        return String(b.data || '').localeCompare(String(a.data || ''));
+      });
+
+      /* As duas metades da mesma pergunta: o que as reuniões já produziram, e
+         o que ainda falta para a decisão fechar. Separadas, porque uma é
+         registro do passado e a outra é instrução para a próxima conversa. */
+      const jaTem = provas.length
+        ? '<div class="ja-tem"><div class="rotulo">O que as reuniões já provaram</div>' +
+          '<ul>' + emOrdem.map(function (e) { return provaDaDimensao(op, e); }).join('') + '</ul></div>'
+        : '<div class="ja-tem"><div class="rotulo">O que as reuniões já provaram</div>' +
+          '<p class="tiny muted" style="margin:4px 0 0">Nada ainda: nenhuma fala do cliente foi registrada nesta decisão.</p></div>';
+
+      const detalhe = '<details class="provas"><summary>' +
+        (provas.length ? provas.length + ' registro(s) · ' : '') +
+        (v < 2 ? 'ver o que falta' : 'ver de onde veio a nota') + '</summary>' +
+        jaTem + oQueFaltaNaDimensao(op, d) + '</details>';
+
       return '<div class="dim"><div class="cab"><span class="nome">' + esc(d.nome) + '</span><div class="notas">' + notas + '</div></div>' +
         '<div class="small muted" style="margin-top:4px">' + esc(d.pergunta) + '</div>' +
         '<div class="tiny muted" style="margin-top:3px">' + esc(d.niveis[v]) +
-        ' · ' + provas.length + ' evidência(s)' + (pode ? ', ao menos uma confirmada' : ', nenhuma confirmada') + '</div></div>';
+        ' · ' + provas.length + ' evidência(s)' + (pode ? ', ao menos uma confirmada' : ', nenhuma confirmada') + '</div>' +
+        detalhe + '</div>';
     }).join('');
 
     return '<div class="card"><h2>As 8 decisões</h2>' +
-      '<p class="tiny muted">0 = desconhecido · 1 = parcial · 2 = comprovado pelo cliente. A nota 2 exige evidência confirmada ou documentada.</p>' + dims + '</div>';
+      '<p class="tiny muted">0 = desconhecido · 1 = parcial · 2 = comprovado pelo cliente. ' +
+      'A nota 2 exige evidência confirmada ou documentada. Abra cada decisão para ver o que o cliente disse e de onde veio.</p>' +
+      dims + '</div>';
   }
 
   function blocoGate(op, r) {
