@@ -220,11 +220,15 @@
        justamente quando ele está certo. A cópia de segurança é o que separa os
        dois casos: se existe cópia, havia carteira aqui e ela sumiu; se não
        existe, nunca houve. */
-    if (!copia) {
-      return '<div class="aviso faixa-aviso">Esta empresa ainda não tem nenhuma negociação, nem aqui nem ' +
-        'no servidor. Comece cadastrando em Cadastros e depois sincronize. ' +
-        '<button class="btn ghost mini" onclick="App.ir(\'#/dados\')">Ver o diagnóstico</button></div>';
-    }
+    /* Empresa nova não ganha faixa nenhuma.
+
+       A cor laranja é a de problema, e a faixa fica fixa no alto de todas as
+       telas. Dizer "ainda não tem negociação" ali é anunciar como falha o
+       estado normal de quem acabou de começar — e quem lê isso todo dia até
+       cadastrar a primeira conta conclui que tem algo quebrado. O caminho já
+       está dito onde importa: o cartão de boas-vindas na tela Hoje tem os
+       botões, e o pipeline vazio se explica sozinho. */
+    if (!copia) return '';
 
     return '<div class="aviso faixa-aviso">O servidor respondeu e não devolveu nenhuma empresa nem oportunidade ' +
       'para esta conta — só as listas de configuração. ' +
