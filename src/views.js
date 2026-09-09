@@ -1081,8 +1081,25 @@
        da conta, no topo, junto do nome dela. Um controle por pergunta. */
     const doTenant = '';
 
+    /* Segmento subiu da gaveta para a barra.
+
+       A gaveta é para o que se usa uma vez por semana. Segmento não é isso
+       aqui: a prospecção do Linked Helper chega classificada por segmento, e
+       a primeira pergunta de quem abre o pipeline com sessenta contas novas é
+       "quais são de água industrial". Filtro que responde a pergunta do dia
+       não pode estar atrás de um botão.
+
+       Só aparece quando há mais de um segmento na carteira — um select com uma
+       opção só é ruído. */
+    const segmentos = E.segmentosDisponiveis(Store.dados().oportunidades);
+    const doSegmento = segmentos.length < 2 ? ''
+      : seletor('Segmento', 'App.pipelineCampo(\'segmento\', this.value)',
+          [{ valor: '', rotulo: 'Todos' }].concat(segmentos.map(function (x) {
+            return { valor: x, rotulo: x };
+          })), f.segmento);
+
     return '<div class="filtros-tarefa filtros-negocio">' +
-      doTenant + doResponsavel +
+      doTenant + doResponsavel + doSegmento +
       seletor('Status', 'App.pipelineCampo(\'status\', this.value)',
         STATUS_PIPELINE.map(function (x) { return { valor: x[0], rotulo: x[1] }; }), f.status) +
       seletor('Ordenar por', 'App.pipelineCampo(\'ordem\', this.value)',
