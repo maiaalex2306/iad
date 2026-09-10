@@ -36,11 +36,17 @@ const MODELO = Deno.env.get('IA_MODELO') || '';
    erro na tela, aparece como IAD baixo, que o vendedor lê como "o cliente não
    avançou". É o pior tipo de defeito que este sistema pode ter.
 
-   Então: IA_MODELO é o modelo bom, usado para ler reunião, notas, plano e
-   desenvolvimento. IA_MODELO_RAPIDO é opcional e serve só a classificação de
-   segmentos. Sem o segundo, tudo usa o primeiro, que é o comportamento de
-   sempre. */
+   Então: IA_MODELO é o modelo bom, usado para ler reunião, notas, o plano
+   pedido no cockpit e desenvolvimento. IA_MODELO_RAPIDO serve à classificação
+   de segmentos e ao plano que nasce de uma mudança de etapa — os dois casos em
+   que a espera custa mais do que a última gota de qualidade. Sem o segredo,
+   esses dois usam PADRAO_RAPIDO, logo abaixo. */
 const MODELO_RAPIDO = Deno.env.get('IA_MODELO_RAPIDO') || '';
+/* Sem o segredo, o rápido tem um padrão em vez de virar o modelo bom. Era o
+   que esvaziava a escolha: quem não sabia do segredo pedia rápido e recebia
+   lento, sem nada dizendo isso. Vale só para a Groq — na Anthropic o modelo é
+   o que estiver em IA_MODELO. */
+const PADRAO_RAPIDO = 'openai/gpt-oss-20b';
 const URL_SUPABASE = Deno.env.get('SUPABASE_URL') || '';
 /* Formatos de chave novo e antigo, na mesma ordem do convite: o projeto pode
    estar em qualquer um dos dois, e IAD_CHAVE_PUBLICA é a única saída manual —
@@ -937,7 +943,9 @@ function tetoDeSaida(tipo: string, quantos = 0): number {
 }
 
 async function chamarIA(sistema: string, usuario: string, teto: number, rapido = false): Promise<string> {
-  const escolhido = (rapido && MODELO_RAPIDO) ? MODELO_RAPIDO : MODELO;
+  const escolhido = rapido
+    ? (MODELO_RAPIDO || (PROVEDOR === 'anthropic' ? MODELO : PADRAO_RAPIDO))
+    : MODELO;
 
   if (PROVEDOR === 'anthropic') {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
@@ -2072,9 +2080,16 @@ Deno.serve(async (req: Request) => {
       entrada = texto + sites.join('');
     }
 
-    /* Só a classificação de segmentos vai no modelo rápido. Reunião, notas,
-       plano e desenvolvimento continuam no modelo bom, sempre. */
-    const usaRapido = tipo === 'segmentos';
+    /* Vão no modelo rápido: a classificação de segmentos e o plano que nasce
+       de uma mudança de etapa. Este segundo caso é o vendedor arrastando um
+       cartão — ele quer voltar ao trabalho, e uma resposta boa daqui a doze
+       segundos vale menos do que uma resposta razoável daqui a três.
+
+       O plano pedido pelo botão "Analisar com IA" do cockpit continua no
+       modelo bom: ali a pessoa parou para ler, e é a leitura que ela quer.
+       Reunião, notas e desenvolvimento também continuam no bom, sempre — é
+       deles que sai nota, e nota errada não aparece como erro na tela. */
+    const usaRapido = tipo === 'segmentos' || (tipo === 'plano' && !!ctx.etapaNova);
 
     /* Quantos leads vieram neste bloco. Sai da própria entrada — cada lead
        começa numa linha "1. ", "2. " —, e não de um campo que o app manda:
