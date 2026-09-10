@@ -5014,6 +5014,95 @@
     });
   }
 
+  /* ---------- Os contatos da empresa, de dentro do negócio ----------
+     Para falar com alguém era preciso sair do cockpit, ir a Cadastros, achar
+     a empresa no meio da carteira e voltar. O telefone da pessoa estava a
+     três telas de distância de onde a conversa acontece.
+
+     Mostra quem está no grupo comprador deste negócio e quem é da empresa mas
+     está de fora: a diferença entre os dois é o que a cobertura mede, e ver
+     essa diferença é metade do trabalho de mapear o grupo. */
+  App.contatosDaEmpresa = function (opId) {
+    const op = Store.oportunidade(opId);
+    if (!op) return;
+    const conta = Store.conta(op.contaId);
+    U.ficha('Contatos de ' + ((conta && conta.nome) || 'a empresa'),
+      listaDeContatos(op),
+      '<button class="btn ghost" type="button" onclick="App.novoContatoDoNegocio(\'' + op.id + '\')">+ Novo contato</button>' +
+      '<span class="espaco"></span>');
+  };
+
+  /* Sai da ficha antes de abrir o cadastro: dois modais empilhados deixam o
+     de baixo capturando teclado, e o Esc fecha o errado. */
+  App.novoContatoDoNegocio = function (opId) {
+    const op = Store.oportunidade(opId);
+    if (!op) return;
+    U.fecharDialogos();
+    setTimeout(function () { App.novoContato(op.contaId); }, 0);
+  };
+
+  App.verContato = function (id) {
+    const c = Store.contato(id);
+    if (!c) return;
+    U.fecharDialogos();
+    setTimeout(function () { U.ficha(c.nome, fichaDoContato(c)); }, 0);
+  };
+
+  App.editarContatoDoNegocio = function (id) {
+    U.fecharDialogos();
+    setTimeout(function () { App.editarContato(id); }, 0);
+  };
+
+  App.ligarAoGrupo = function (opId, contatoId) {
+    const op = Store.oportunidade(opId);
+    if (!op) return;
+    Store.vincularStakeholder(op, contatoId);
+    Store.salvar();
+    render();
+    U.fecharDialogos();
+    setTimeout(function () { App.contatosDaEmpresa(opId); }, 0);
+  };
+
+  function linhaDeContato(c, noGrupo, opId) {
+    const zap = paraWhatsapp(c.telefone);
+    const canais = [
+      c.linkedin ? '<a href="' + U.esc(enderecoDoPerfil(c.linkedin)) + '" target="_blank" rel="noopener">LinkedIn</a>' : '',
+      zap ? '<a href="https://wa.me/' + zap + '" target="_blank" rel="noopener">' + U.esc(c.telefone) + '</a>' : '',
+      c.email ? '<a href="mailto:' + U.esc(c.email) + '">' + U.esc(c.email) + '</a>' : ''
+    ].filter(Boolean).join(' · ');
+
+    return '<div class="contato-linha">' +
+      '<div class="topo"><strong>' + U.esc(c.nome) + '</strong>' +
+      (noGrupo ? '<span class="pill tiny navy">no grupo</span>' : '') + '</div>' +
+      '<div class="tiny muted">' + U.esc([c.cargo, c.papel].filter(Boolean).join(' · ')) + '</div>' +
+      (canais ? '<div class="tiny canais">' + canais + '</div>'
+              : '<div class="tiny muted">Sem LinkedIn, telefone ou e-mail cadastrados.</div>') +
+      '<div class="row" style="margin-top:6px;gap:6px">' +
+      '<button class="btn ghost mini" type="button" onclick="App.verContato(\'' + c.id + '\')">Ver ficha</button>' +
+      '<button class="btn ghost mini" type="button" onclick="App.editarContatoDoNegocio(\'' + c.id + '\')">Editar</button>' +
+      (noGrupo ? ''
+        : '<button class="btn ghost mini" type="button" onclick="App.ligarAoGrupo(\'' + opId + '\',\'' + c.id + '\')">Pôr no grupo</button>') +
+      '</div></div>';
+  }
+
+  function listaDeContatos(op) {
+    const todos = Store.contatosDaConta(op.contaId);
+    if (!todos.length) {
+      return '<p class="nota-form">Esta empresa ainda não tem contato cadastrado. ' +
+        'Use "+ Novo contato", aqui embaixo, ou o botão de achar contatos dentro de uma tarefa.</p>';
+    }
+    const noGrupo = op.stakeholders || [];
+    const dentro = todos.filter(function (c) { return noGrupo.indexOf(c.id) !== -1; });
+    const fora = todos.filter(function (c) { return noGrupo.indexOf(c.id) === -1; });
+    const bloco = function (titulo, lista, dentroDoGrupo) {
+      if (!lista.length) return '';
+      return '<div class="secao-form"><span>' + titulo + '</span></div>' +
+        lista.map(function (c) { return linhaDeContato(c, dentroDoGrupo, op.id); }).join('');
+    };
+    return bloco('No grupo comprador deste negócio', dentro, true) +
+      bloco('Da empresa, fora do grupo', fora, false);
+  }
+
   /* ---------- As pessoas que estão no texto e não estão no CRM ----------
      O caso é o da prospecção: manda-se mensagem no LinkedIn para cinco pessoas
      de uma empresa que ainda não tem contato nenhum cadastrado, e os nomes

@@ -676,6 +676,16 @@ td .tiny { display: block; }
   border-color: var(--orange); color: var(--orange); background: var(--orange-soft);
 }
 
+/* A lista de contatos da empresa, aberta de dentro do negócio. */
+.contato-linha { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.contato-linha:last-child { border-bottom: 0; }
+/* `topo`, e não `quem`: .quem já é a etiqueta de usuário do cabeçalho, com
+   text-align direita — o nome do contato saía alinhado à direita por herança
+   de um nome de classe repetido. */
+.contato-linha .topo { display: flex; align-items: center; gap: 8px; }
+.contato-linha .canais { margin-top: 3px; overflow-wrap: anywhere; }
+.contato-linha .canais a { color: var(--navy-2); font-weight: 600; }
+
 /* A lupa: um botão pequeno colado ao select, que abre a ficha do que está
    escolhido. Fica dentro do campo para ninguém confundir com uma ação do
    formulário — ela não muda nada, só mostra. */

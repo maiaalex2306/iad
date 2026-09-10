@@ -1444,7 +1444,12 @@
       : '';
 
     return '<div class="row"><button class="btn ghost mini" onclick="App.ir(\'#/pipeline\')">← Pipeline</button>' +
-      '<span class="espaco"></span><button class="btn ghost mini" onclick="App.editarOportunidade(\'' + op.id + '\')" data-ajuda-titulo="Editar" data-ajuda="Muda título, valor, etapa, tipo, previsão e concorrentes. Não mexe nas decisões.">Editar</button>' +
+      '<span class="espaco"></span>' +
+      /* As pessoas da empresa, de dentro do negócio. Antes, para achar o
+         telefone de alguém era preciso sair do cockpit, ir a Cadastros e
+         voltar — três telas de distância de onde a conversa acontece. */
+      '<button class="btn ghost mini" onclick="App.contatosDaEmpresa(\'' + op.id + '\')" data-ajuda-titulo="Contatos" data-ajuda="Quem é da empresa, com LinkedIn, telefone e e-mail para falar em um toque. Mostra separado quem está no grupo comprador deste negócio e quem está de fora.">Contatos</button>' +
+      '<button class="btn ghost mini" onclick="App.editarOportunidade(\'' + op.id + '\')" data-ajuda-titulo="Editar" data-ajuda="Muda título, valor, etapa, tipo, previsão e concorrentes. Não mexe nas decisões.">Editar</button>' +
       (op.desfecho ? ''
         : (op.nutricao
             ? '<button class="btn ghost mini" onclick="App.retomarNutricao(\'' + op.id + '\')" data-ajuda-titulo="Retomar" data-ajuda="Tira da nutrição e devolve à carteira ativa. Uma evidência nova do cliente já faz isso sozinha.">Retomar da nutrição</button>'
