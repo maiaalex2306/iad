@@ -711,7 +711,14 @@
      uma lista vinda de outro lugar, e duplicar isto seria duplicar a
      classificação de segmento, o casamento de contas e a leitura das
      recusas — três coisas que precisam ser iguais nos dois caminhos. */
-  function classificarEEntregar(listaCrua, espera) {
+  function classificarEEntregar(listaCruaComRepetidos, espera) {
+    /* Repetidos saem primeiro. A mesma pessoa chega mais de uma vez quando
+       responde de novo ou quando a campanha é lida duas vezes, e cada entrega
+       tem id próprio — a tela mostrava a mesma pessoa duas e três vezes, cada
+       cópia com segmento e reenquadramento diferentes, porque a IA lia cada
+       uma por conta própria. */
+    const listaCrua = juntarLeadsRepetidos(listaCruaComRepetidos);
+
     /* Os descartados saem antes de tudo — antes até de a IA ler, que com
        centenas de leads é dinheiro e minutos jogados fora numa lista que a
        pessoa já disse para não mostrar mais. */
@@ -721,9 +728,7 @@
     /* A baixa dos descartados vai junto: se a ponte reentregou alguém que já
        tinha sido descartado, apagar agora evita que ele volte na próxima. */
     if (descartados.length) {
-      const ids = descartados.map(function (l) { return l.id; });
-      if (vindosDoBaldeAntigo) global.IADIntegracoes.marcarNoBalde(ids, baldeDeOrigem);
-      else global.IADIntegracoes.marcarProcessados(ids);
+      darBaixa(idsDosLeads(descartados));
     }
 
     if (!lista.length) {
@@ -798,6 +803,8 @@
   /* Expostos só para os testes que dirigem o app de verdade. Reimplementar
      estas regras no teste seria testar a cópia, não o app. */
   const paraTestes = {
+    __juntarLeadsRepetidos: function (lista) { return juntarLeadsRepetidos(lista); },
+    __idsDosLeads: function (lista) { return idsDosLeads(lista); },
     __contaCandidata: function (lead) { return contaCandidata(lead); },
     __contaJaExistente: function (lead) { return contaJaExistente(lead); },
     __oportunidadeJaExistente: function (contaId, lead) { return oportunidadeJaExistente(contaId, lead); },
@@ -3267,10 +3274,11 @@
             return importarUmLead(l, escolha ? escolha.value : '');
           }).filter(Boolean);
           if (feitos.length) {
-            const ids = escolhidos.map(function (l) { return l.id; });
-            /* Baixa no balde de onde vieram. Dar baixa no balde errado
-               deixaria as respostas voltando a cada busca, para sempre. */
-            darBaixa(ids);
+            /* Baixa no balde de onde vieram, com os ids das entregas
+               repetidas que foram juntadas neste lead. Dar baixa no balde
+               errado, ou esquecer uma entrega, deixaria as respostas voltando
+               a cada busca, para sempre. */
+            darBaixa(idsDosLeads(escolhidos));
             vindosDoBaldeAntigo = false;
             baldeDeOrigem = '';
             leads = (leads || []).filter(function (l) {
@@ -3921,6 +3929,72 @@
      três lugares e dois deles usavam o balde da empresa logada — então
      excluir um lead resgatado de outro balde não apagava nada, e ele voltava
      na busca seguinte. */
+  /* Todo id de entrega que aquele lead carrega, inclusive os das cópias que
+     foram juntadas nele. Faltar um é a cópia voltar na próxima leitura. */
+  function idsDosLeads(lista) {
+    const ids = [];
+    (lista || []).forEach(function (l) {
+      if (l.id) ids.push(l.id);
+      (l.idsIrmaos || []).forEach(function (x) { if (x) ids.push(x); });
+    });
+    return ids;
+  }
+
+  /* Junta as entregas repetidas da mesma pessoa na mesma campanha — o mesmo
+     critério do descarte, porque é a mesma pergunta: "isto é a mesma pessoa
+     para este fim?".
+
+     Fica a entrega mais recente, completada com o que só as outras tinham. Os
+     ids das outras viajam junto em idsIrmaos para receberem baixa na ponte:
+     sem isso a cópia some da tela e volta na leitura seguinte, para sempre. */
+  function juntarLeadsRepetidos(lista) {
+    const porChave = {};
+    const saida = [];
+
+    const quando = function (l) {
+      const daConversa = (l.conversa || []).map(function (m) { return m.quando || ''; }).sort().pop();
+      return String(l.respostaEm || daConversa || '');
+    };
+
+    const completar = function (fica, vai) {
+      Object.keys(vai).forEach(function (k) {
+        if (k === 'id' || k === 'idsIrmaos') return;
+        const atual = fica[k];
+        const vazio = atual == null || atual === '' ||
+          (Array.isArray(atual) && !atual.length);
+        if (vazio) { fica[k] = vai[k]; return; }
+        /* A conversa mais longa vence: uma entrega pode ter chegado antes de
+           a pessoa responder de novo. */
+        if (k === 'conversa' && Array.isArray(vai.conversa) &&
+            vai.conversa.length > (fica.conversa || []).length) {
+          fica.conversa = vai.conversa;
+        }
+      });
+      fica.idsIrmaos = (fica.idsIrmaos || [])
+        .concat(vai.id || [], vai.idsIrmaos || [])
+        .filter(Boolean);
+    };
+
+    (lista || []).forEach(function (l) {
+      const chave = Store.chaveDoLead(l);
+      /* Sem nome, sem perfil e sem empresa não dá para dizer que é a mesma
+         pessoa. Passa direto: juntar no escuro é pior do que repetir. */
+      if (!chave) { saida.push(l); return; }
+
+      const antes = porChave[chave];
+      if (!antes) { porChave[chave] = l; saida.push(l); return; }
+
+      if (quando(l) > quando(antes)) {
+        completar(l, antes);
+        saida[saida.indexOf(antes)] = l;
+        porChave[chave] = l;
+      } else {
+        completar(antes, l);
+      }
+    });
+    return saida;
+  }
+
   function darBaixa(ids) {
     if (!ids || !ids.length) return;
     if (vindosDoBaldeAntigo) global.IADIntegracoes.marcarNoBalde(ids, baldeDeOrigem);
@@ -3972,7 +4046,7 @@
            e registrar a PESSOA como descartada. Sem a segunda, a próxima
            mensagem dela chega com id novo e reaparece na lista. */
         Store.descartarLead(lead, 'Excluído na tela de importação');
-        darBaixa([id]);
+        darBaixa(idsDosLeads([lead]));
         leads = (leads || []).filter(function (l) { return l.id !== id; });
         pintar();
       });
@@ -3991,9 +4065,10 @@
           ' da ponte?\n\nEles não voltam na próxima busca desta campanha, nem quando o Linked Helper ' +
           'reentregar as mesmas pessoas. Em outra campanha voltam a aparecer. ' +
           'Nada é apagado do CRM — estes leads nunca viraram registro.')) return;
-        alvos.forEach(function (i) { Store.descartarLead(lista[i], 'Excluído em lote na importação'); });
+        const excluidos = alvos.map(function (i) { return lista[i]; });
+        excluidos.forEach(function (l) { Store.descartarLead(l, 'Excluído em lote na importação'); });
         const ids = alvos.map(sumir).filter(Boolean);
-        darBaixa(ids);
+        darBaixa(idsDosLeads(excluidos));
         leads = (leads || []).filter(function (l) { return ids.indexOf(l.id) === -1; });
         pintar();
       });
