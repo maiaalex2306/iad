@@ -124,12 +124,21 @@
         return '<div data-slot-campos data-' + c.slot + '></div>';
       }
       if (c.tipo === 'select') {
-        return '<label class="campo' + (c.largura === 'metade' ? ' meia' : '') + '"><span>' + esc(c.rotulo) + '</span><select name="' + c.id + '">' +
-          c.opcoes.map(function (o) {
-            const val = typeof o === 'string' ? o : o.valor;
-            const rot = typeof o === 'string' ? o : o.rotulo;
-            return '<option value="' + esc(val) + '"' + (String(val) === String(v) ? ' selected' : '') + '>' + esc(rot) + '</option>';
-          }).join('') + '</select></label>';
+        const escolhas = c.opcoes.map(function (o) {
+          const val = typeof o === 'string' ? o : o.valor;
+          const rot = typeof o === 'string' ? o : o.rotulo;
+          return '<option value="' + esc(val) + '"' + (String(val) === String(v) ? ' selected' : '') + '>' + esc(rot) + '</option>';
+        }).join('');
+        const caixa = '<select name="' + c.id + '">' + escolhas + '</select>';
+        /* Lupa: consultar o que já está cadastrado sem sair do formulário.
+           Fica colada no campo porque a dúvida nasce ali — "é esta Maria
+           mesmo?" — e responder exigia abrir Cadastros noutra aba. */
+        const lupa = c.lupa
+          ? '<button type="button" class="lupa" data-lupa="' + esc(c.id) + '"' +
+            ' aria-label="' + esc(c.lupa) + '" title="' + esc(c.lupa) + '">\u2139</button>'
+          : '';
+        return '<label class="campo' + (c.largura === 'metade' ? ' meia' : '') + '"><span>' + esc(c.rotulo) + '</span>' +
+          (lupa ? '<span class="campo-lupa">' + caixa + lupa + '</span>' : caixa) + '</label>';
       }
       if (c.tipo === 'textarea') {
         return '<label class="campo' + (c.largura === 'metade' ? ' meia' : '') + '"><span>' + esc(c.rotulo) + '</span><textarea name="' + c.id + '">' + esc(v) + '</textarea>' +
@@ -249,6 +258,27 @@
       dlg.remove();
     });
     dlg.showModal();
+  }
+
+  /* Consulta rápida por cima do formulário. É só leitura: não tem o que
+     salvar, então sai no Esc, no clique fora e no Fechar. Empilhar um modal
+     sobre outro só funciona porque este não mexe em nada — quem volta,
+     volta para o formulário exatamente como deixou. */
+  function ficha(titulo, corpo, acoes) {
+    const dlg = document.createElement('dialog');
+    dlg.className = 'caixa-ficha';
+    dlg.innerHTML = '<div class="corpo"><h2>' + esc(titulo) + '</h2>' +
+      '<div class="ficha">' + corpo + '</div></div>' +
+      '<div class="rodape">' + (acoes || '') +
+      '<button class="btn" type="button" data-fechar autofocus>Fechar</button></div>';
+    document.body.appendChild(dlg);
+    dlg.querySelector('[data-fechar]').addEventListener('click', function () { dlg.close(); });
+    /* O clique no fundo escuro é o próprio dialog: dentro do conteúdo o alvo
+       é sempre um filho. */
+    dlg.addEventListener('click', function (ev) { if (ev.target === dlg) dlg.close(); });
+    dlg.addEventListener('close', function () { dlg.remove(); });
+    dlg.showModal();
+    return dlg;
   }
 
   /* Ditado: o vendedor sai da reunião e fala a evidência.
@@ -667,7 +697,7 @@
     },
     esc: esc, moeda: moeda, compacto: compacto, data: data, numero: numero,
     numeroDigitado: numeroDigitado, paraCampoMoeda: paraCampoMoeda,
-    formulario: formulario, confirmar: confirmar, barra: barra, vozDisponivel: vozDisponivel,
+    formulario: formulario, ficha: ficha, confirmar: confirmar, barra: barra, vozDisponivel: vozDisponivel,
     assistenteAtivo: assistenteAtivo, marcarSugerido: marcarSugerido, limparSugestao: limparSugestao
   };
 })(window);

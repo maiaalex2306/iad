@@ -2374,18 +2374,13 @@
            num negócio parecido de outra empresa. */
         { tipo: 'secao', rotulo: 'A que negócio esta tarefa pertence' },
         { id: 'contaId', rotulo: 'Empresa', tipo: 'select', padrao: contaAtual,
+          lupa: 'Ver os dados desta empresa',
           opcoes: contas.map(function (c) { return { valor: c.id, rotulo: c.nome }; }) },
         { id: 'oportunidadeId', rotulo: 'Negociação', tipo: 'select', padrao: t.oportunidadeId || '',
           opcoes: opcoesDeNegocio(contaAtual) },
         { id: 'negocioNovo', rotulo: 'Nome da nova negociação',
-          placeholder: 'Reúso da ETE, Água de processo, Torre de resfriamento…' },
-        { id: 'contatoId', rotulo: 'Com quem (contato)', tipo: 'select',
-          padrao: t.contatoId || '', opcoes: opcoesDeContato(contaAtual) },
-        { id: 'contatoNome', rotulo: 'Nome do novo contato' },
-        { id: 'contatoCargo', rotulo: 'Cargo', largura: 'metade' },
-        { id: 'contatoPapel', rotulo: 'Papel na compra', tipo: 'select', largura: 'metade', opcoes: P.PAPEIS },
-        { id: 'contatoEmail', rotulo: 'E-mail', largura: 'metade' },
-        { id: 'contatoTelefone', rotulo: 'Telefone / WhatsApp', largura: 'metade' },
+          placeholder: 'Reúso da ETE, Água de processo, Torre de resfriamento…' }
+      ].concat(camposDoContatoDaTarefa(contaAtual, t)).concat([
 
         /* A situação estava só na lista, nunca no formulário. Quem abria a
            tarefa por dentro de uma decisão — o "+ Tarefa" de "O que falta" —
@@ -2411,7 +2406,7 @@
         { id: 'donoId', rotulo: 'Responsável', tipo: 'select', padrao: t.donoId || '',
           opcoes: [{ valor: '', rotulo: '— sem responsável —' }]
             .concat(A.usuarios().map(function (u) { return { valor: u.id, rotulo: u.nome }; })) }
-      ], {}, function (d) {
+      ]), {}, function (d) {
         if (!d.titulo) { alert('A tarefa precisa de um assunto.'); return; }
         const alvo = resolverNegocioDaTarefa(d);
         if (!alvo) return;
@@ -4762,6 +4757,7 @@
       { tipo: 'secao', rotulo: 'A que negócio esta tarefa pertence',
         ajuda: 'Uma empresa pode ter várias negociações abertas. A tarefa entra em uma delas — é por ela que o avanço da decisão é contado.' },
       { id: 'contaId', rotulo: 'Empresa', tipo: 'select', padrao: padraoConta,
+        lupa: 'Ver os dados desta empresa',
         opcoes: contas.length
           ? contas.map(function (c) { return { valor: c.id, rotulo: c.nome }; })
           : [{ valor: '', rotulo: '— nenhuma empresa cadastrada —' }] },
@@ -4787,6 +4783,7 @@
   function camposDoContatoDaTarefa(contaId, o) {
     return [
       { id: 'contatoId', rotulo: 'Com quem (contato)', tipo: 'select',
+        lupa: 'Ver os dados desta pessoa',
         padrao: (o && o.contatoId) || '', opcoes: opcoesDeContato(contaId) },
       { id: 'contatoNome', rotulo: 'Nome do novo contato' },
       { id: 'contatoCargo', rotulo: 'Cargo', largura: 'metade' },
@@ -4794,6 +4791,116 @@
       { id: 'contatoEmail', rotulo: 'E-mail', largura: 'metade' },
       { id: 'contatoTelefone', rotulo: 'Telefone / WhatsApp', largura: 'metade' }
     ];
+  }
+
+  /* ---------- A lupa: ver quem é a pessoa e o que é a empresa ----------
+     A dúvida "é esta Maria mesmo?" nasce no formulário e só se respondia
+     saindo dele. Agora responde ali, numa caixa de leitura por cima. Os três
+     canais viram link porque o objetivo é sair daqui para a conversa em um
+     toque, e no celular é onde isso mais pesa. */
+  function paraWhatsapp(tel) {
+    const so = String(tel || '').replace(/\D/g, '');
+    if (!so) return '';
+    /* Número do Brasil vem sem o país; wa.me exige o país. */
+    return (so.length === 10 || so.length === 11) ? '55' + so : so;
+  }
+
+  function enderecoDoPerfil(url) {
+    const texto = String(url || '').trim();
+    if (!texto) return '';
+    if (/^https?:\/\//i.test(texto)) return texto;
+    if (/^(www\.)?linkedin\.com\//i.test(texto)) return 'https://' + texto.replace(/^www\./i, '');
+    const perfil = perfilLinkedin(texto);
+    return perfil ? 'https://www.linkedin.com/in/' + perfil : '';
+  }
+
+  function linhaDaFicha(rotulo, texto, endereco) {
+    if (!texto) return '';
+    const visivel = U.esc(texto);
+    const corpo = endereco
+      ? '<a href="' + U.esc(endereco) + '" target="_blank" rel="noopener">' + visivel + '</a>'
+      : visivel;
+    return '<div class="linha-ficha"><span class="rotulo">' + rotulo + '</span><span>' + corpo + '</span></div>';
+  }
+
+  function corpoDaFicha(linhas, vazio) {
+    const cheias = linhas.filter(Boolean);
+    return cheias.length ? cheias.join('')
+      : '<p class="nota-form">' + U.esc(vazio) + '</p>';
+  }
+
+  function fichaDoContato(c) {
+    const conta = c.contaId ? Store.conta(c.contaId) : null;
+    const chefe = c.reportaA ? Store.contato(c.reportaA) : null;
+    const perfil = (P.PERFIS || []).filter(function (x) { return x.id === c.perfil; })[0];
+    const posicoes = { nao_acessado: 'Não acessado', neutro: 'Neutro',
+      favoravel: 'Favorável', resistente: 'Resistente' };
+    const forcas = { 1: '1 — opina', 2: '2 — influencia', 3: '3 — decide' };
+    const zap = paraWhatsapp(c.telefone);
+
+    return corpoDaFicha([
+      linhaDaFicha('Empresa', conta ? conta.nome : ''),
+      linhaDaFicha('Cargo', c.cargo),
+      linhaDaFicha('Papel na compra', c.papel),
+      linhaDaFicha('LinkedIn', perfilLinkedin(c.linkedin) ? '/in/' + perfilLinkedin(c.linkedin) : c.linkedin,
+        enderecoDoPerfil(c.linkedin)),
+      linhaDaFicha('Telefone', c.telefone, zap ? 'https://wa.me/' + zap : ''),
+      linhaDaFicha('E-mail', c.email, 'mailto:' + c.email),
+      linhaDaFicha('Posição', posicoes[c.sentimento] || ''),
+      linhaDaFicha('Influência', forcas[String(c.influencia)] || ''),
+      linhaDaFicha('Perfil (Challenger)', perfil && perfil.id !== 'nao_classificado' ? perfil.rotulo : ''),
+      linhaDaFicha('Reporta a', chefe ? chefe.nome : '')
+    ], 'Esta pessoa está cadastrada só com o nome. Use Editar para completar a ficha.');
+  }
+
+  function fichaDaConta(a) {
+    const local = [a.cidade, a.uf].filter(Boolean).join(' / ');
+    const site = a.site ? (/^https?:\/\//i.test(a.site) ? a.site : 'https://' + a.site) : '';
+    const zap = paraWhatsapp(a.telefone);
+    const pessoas = Store.contatosDaConta(a.id);
+    const negocios = Store.dados().oportunidades.filter(function (o) {
+      return o.contaId === a.id && !o.desfecho;
+    });
+
+    return corpoDaFicha([
+      linhaDaFicha('Razão social', a.razaoSocial),
+      linhaDaFicha('CNPJ', a.cnpj),
+      linhaDaFicha('Segmento', a.segmento),
+      linhaDaFicha('Porte', a.porte),
+      linhaDaFicha('Relação', a.relacaoAtual),
+      linhaDaFicha('Onde fica', [local, a.pais].filter(Boolean).join(' · ')),
+      linhaDaFicha('Site', a.site, site),
+      linhaDaFicha('LinkedIn', a.linkedin, enderecoDoPerfil(a.linkedin)),
+      linhaDaFicha('Telefone', a.telefone, zap ? 'https://wa.me/' + zap : ''),
+      linhaDaFicha('Contatos', pessoas.length
+        ? pessoas.map(function (c) { return c.nome + (c.cargo ? ' (' + c.cargo + ')' : ''); }).join(', ') : ''),
+      linhaDaFicha('Negociações abertas', negocios.length
+        ? negocios.map(function (o) { return o.titulo; }).join(', ') : ''),
+      linhaDaFicha('Descrição', a.descricao),
+      linhaDaFicha('Necessidades', a.necessidades)
+    ], 'Esta empresa está cadastrada só com o nome. Use Editar para completar a ficha.');
+  }
+
+  /* Liga toda lupa do formulário. Lê o select na hora do clique — e não na
+     hora de montar — porque a escolha muda enquanto a caixa está aberta. */
+  function ligarLupas(dlg) {
+    dlg.querySelectorAll('[data-lupa]').forEach(function (botao) {
+      botao.addEventListener('click', function () {
+        const campo = dlg.querySelector('[name="' + botao.dataset.lupa + '"]');
+        const valor = campo ? campo.value : '';
+        if (!valor || valor === NOVO_CONTATO || valor === NOVA_CONTA) {
+          U.ficha('Nada para mostrar',
+            '<p class="nota-form">Escolha primeiro quem é, na lista ao lado. ' +
+            'Quem ainda vai ser cadastrado não tem ficha.</p>');
+          return;
+        }
+        const contato = Store.contato(valor);
+        if (contato) { U.ficha(contato.nome, fichaDoContato(contato)); return; }
+        const conta = Store.conta(valor);
+        if (conta) { U.ficha(conta.nome, fichaDaConta(conta)); return; }
+        U.ficha('Nada para mostrar', '<p class="nota-form">Este cadastro não foi encontrado.</p>');
+      });
+    });
   }
 
   /* O contato escolhido, ou o que acabou de ser digitado. Vincular ao grupo
@@ -4823,6 +4930,7 @@
      e em qualquer caso os campos do contato novo só aparecem quando alguém
      escolhe cadastrar. */
   function ligarContatoDaTarefa(dlg) {
+    ligarLupas(dlg);
     const contato = dlg.querySelector('[name="contatoId"]');
     if (!contato) return;
     if (dlg.querySelector('[name="contaId"]')) { ligarContatoDaEmpresa(dlg); return; }
