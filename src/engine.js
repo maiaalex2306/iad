@@ -280,8 +280,24 @@
       lacunas: lacunas(op),
       tempoNaEtapa: tempoNaEtapa(op),
       delta: deltaSemana(op),
-      autoria: autoria(op)
+      autoria: autoria(op),
+      tarefasAtrasadas: tarefasAtrasadas(op)
     };
+  }
+
+  /* Tarefa aberta com vencimento no passado.
+
+     O cartão do pipeline mostrava tempo sem evidência, adiamentos e
+     compromisso vencido, mas não mostrava a coisa mais simples de todas: que
+     alguém tinha uma tarefa para fazer e não fez. O vendedor via o cartão,
+     não via atraso nenhum, e ia procurar o atraso na tela de Tarefas. Duas
+     telas para uma pergunta que cabe no cartão. */
+  function tarefasAtrasadas(op) {
+    const hoje = Store.hoje();
+    return (Store.dados().tarefas || []).filter(function (t) {
+      return t.oportunidadeId === op.id && t.status === 'aberta' &&
+        t.vencimento && t.vencimento < hoje;
+    }).length;
   }
 
   /* ---------- Agregações para o painel ---------- */
@@ -1048,6 +1064,7 @@
     iad, evidenceAge, faixaEvidencia, decisionVelocity, coverage, gates,
     saude, classificar, nextBestDecision, alertas, resumo, carteira,
     focoDoDia, aprendizado, sugerirDimensao, podeComprovar, degrauPermitido, evidenciasDaDimensao,
+    tarefasAtrasadas,
     filtrar, mesesDisponiveis, segmentosDisponiveis, rotuloMes, segmentoDe, faixaSaude,
     porMes, porSegmento, porEtapa, matrizDecisoes, distribuicaoEvidencia,
     autoria, compromisso, mobilizadores, bloqueadores, tempoNaEtapa, medianaEtapaGanhos, deltaSemana, curva, historico, lacunas,

@@ -1291,7 +1291,7 @@
         'onclick="event.stopPropagation();App.moverEtapa(\'' + r.op.id + '\',\'' + etapas[destino] + '\')">' + simbolo + '</button>';
     };
 
-    return '<article class="mini g-' + r.classe.id + '" draggable="true" ' +
+    return '<article class="mini g-' + r.classe.id + (r.tarefasAtrasadas ? ' com-atraso' : '') + '" draggable="true" ' +
       'ondragstart="App.arrastar(event,\'' + r.op.id + '\')" onclick="App.abrir(\'' + r.op.id + '\')">' +
       '<div class="titulo">' + esc(r.op.titulo) + '</div>' +
       '<div class="tiny muted">' + esc((r.conta && r.conta.nome) || '') + '</div>' +
@@ -1302,6 +1302,7 @@
         '<span class="espaco"></span>' +
         '<span class="pill ' + r.faixa.classe + '">' + r.evidenceAge + 'd</span>' +
       '</div>' +
+      tarjaDeAtraso(r) +
       '<div class="rodape-mini">' + seta(i - 1, '‹', 'Voltar para ') + seta(i + 1, '›', 'Avançar para ') + '</div>' +
       '</article>';
   }
@@ -1335,9 +1336,24 @@
     }).join('') + '</span>';
   }
 
+  /* Tarefa atrasada muda a cor do cartão inteiro e ganha uma tarja no pé.
+
+     O cartão já dizia tempo sem evidência, adiamentos e compromisso vencido —
+     tudo sobre o cliente. Não dizia a única coisa que é sobre NÓS: alguém
+     tinha uma tarefa marcada e o dia passou. Isso é o que o vendedor pode
+     resolver hoje, sozinho, sem depender de ninguém, e era o que só aparecia
+     noutra tela. */
+  function tarjaDeAtraso(r) {
+    const n = r.tarefasAtrasadas || 0;
+    if (!n) return '';
+    return '<div class="tarja-atraso">' +
+      (n === 1 ? 'Tarefa atrasada' : n + ' tarefas atrasadas') + '</div>';
+  }
+
   function cardOportunidade(r) {
     const comp = r.compromisso;
-    return '<button class="item g-' + r.classe.id + '" onclick="App.abrir(\'' + r.op.id + '\')">' +
+    return '<button class="item g-' + r.classe.id + (r.tarefasAtrasadas ? ' com-atraso' : '') +
+      '" onclick="App.abrir(\'' + r.op.id + '\')">' +
       '<div class="row"><span class="tit">' + esc(r.op.titulo) + '</span><span class="espaco"></span>' +
       '<span class="pill navy">' + U.compacto(r.op.valor) + '</span></div>' +
       '<div class="small muted" style="margin:2px 0 8px">' + esc((r.conta && r.conta.nome) || 'Sem conta') + ' · ' + esc(r.op.etapa) + ' · ' + r.tempoNaEtapa + 'd nesta etapa</div>' +
@@ -1353,6 +1369,7 @@
       '<div class="tiny muted" style="margin-top:6px">Falta: ' +
       esc(r.lacunas.length ? r.lacunas.slice(0, 2).map(function (l) { return l.titulo; }).join(', ') +
         (r.lacunas.length > 2 ? ' e mais ' + (r.lacunas.length - 2) : '') : 'nada — resta formalizar') + '</div>' +
+      tarjaDeAtraso(r) +
       '</button>';
   }
 
