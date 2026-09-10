@@ -382,10 +382,26 @@
         continue;
       }
       if (t.charAt(0) === '(') {
-        linha.push(t.slice(1, -1)
+        const cru = t.slice(1, -1)
           .replace(/\\([nrt])/g, function (_, c) { return c === 'n' ? '\n' : c === 'r' ? '' : '\t'; })
           .replace(/\\([()\\])/g, '$1')
-          .replace(/\\([0-7]{1,3})/g, function (_, o) { return String.fromCharCode(parseInt(o, 8)); }));
+          .replace(/\\([0-7]{1,3})/g, function (_, o) { return String.fromCharCode(parseInt(o, 8)); });
+        /* Fonte de subconjunto — a que os editores geram — numera os glifos do
+           zero e escreve a cadeia com esses números. Lida como bytes, "Água"
+           vira "3'#)". O /ToUnicode existe justamente para desfazer isso, e
+           antes ele só era consultado nas cadeias <hex>: o texto saía cifrado
+           e ia cifrado para a IA, sem ninguém perceber. */
+        const mapa = (mapas && fonte) ? mapas[fonte] : null;
+        const codigos = [];
+        if (larguraDaChave(mapa) === 4) {
+          for (let i = 0; i + 1 < cru.length; i += 2) {
+            codigos.push((cru.charCodeAt(i) << 8) | cru.charCodeAt(i + 1));
+          }
+        } else {
+          for (let i = 0; i < cru.length; i++) codigos.push(cru.charCodeAt(i));
+        }
+        const traduzido = pelaFonte(codigos, mapa);
+        linha.push(traduzido != null ? traduzido : cru);
         continue;
       }
       if (t === 'TD' || t === 'Tm' || t === 'T*' || t === 'ET') quebrar();
@@ -397,16 +413,40 @@
   /* Sem mapa, o hexadecimal é lido como bytes: serve para o PDF simples que
      escreve <48656C6C6F>. Com mapa, cada código de dois bytes vira a letra
      que a fonte diz que ele é. */
+  /* A largura da chave do /ToUnicode diz se o código do caractere ocupa um
+     byte (fonte simples) ou dois (fonte composta). O CMap guarda o código na
+     largura original, então basta olhar a primeira chave. */
+  function larguraDaChave(mapa) {
+    if (!mapa) return 0;
+    for (const k in mapa) { if (Object.prototype.hasOwnProperty.call(mapa, k)) return k.length; }
+    return 0;
+  }
+
+  /* Traduz códigos pelo /ToUnicode da fonte. Só vale se a maioria dos códigos
+     estiver no mapa: fonte com ToUnicode parcial traduziria meia frase e
+     comeria a outra metade, o que é pior do que não traduzir. */
+  function pelaFonte(codigos, mapa) {
+    const largura = larguraDaChave(mapa);
+    if (!largura || !codigos.length) return null;
+    let saida = '', achados = 0;
+    for (let i = 0; i < codigos.length; i++) {
+      const chave = codigos[i].toString(16).toUpperCase().padStart(largura, '0');
+      if (mapa[chave] != null) { saida += mapa[chave]; achados++; }
+    }
+    return (achados / codigos.length) >= 0.6 ? saida : null;
+  }
+
   function decodificarHex(hex, mapa) {
     const h = hex.replace(/\s+/g, '').toUpperCase();
     if (!h) return '';
+    const largura = larguraDaChave(mapa) || 4;
     if (mapa) {
-      let s = '';
-      for (let i = 0; i + 4 <= h.length; i += 4) {
-        const codigo = h.substr(i, 4);
-        s += (mapa[codigo] != null) ? mapa[codigo] : '';
+      const codigos = [];
+      for (let i = 0; i + largura <= h.length; i += largura) {
+        codigos.push(parseInt(h.substr(i, largura), 16));
       }
-      if (s) return s;
+      const traduzido = pelaFonte(codigos, mapa);
+      if (traduzido) return traduzido;
     }
     let s = '';
     for (let i = 0; i + 2 <= h.length; i += 2) {

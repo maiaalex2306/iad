@@ -461,8 +461,35 @@
     estado.className = 'origem';
     if (entrada.parentNode) entrada.parentNode.appendChild(estado);
 
+    /* "1 documento lido" não diz qual. Quem anexa três precisa ver os três
+       nomes para saber que anexou o certo — e poder tirar o errado sem
+       recomeçar o formulário. */
+    const lista = document.createElement('div');
+    lista.className = 'anexos-ia';
+    if (entrada.parentNode) entrada.parentNode.appendChild(lista);
+
     const docs = [];
     dlg.documentosIA = docs;
+
+    const pintarLista = function () {
+      lista.innerHTML = docs.map(function (d, i) {
+        return '<span class="anexo' + (d.erro ? ' com-erro' : '') + '"' +
+          (d.erro ? ' title="' + esc(d.erro) + '"' : '') + '>' +
+          esc(d.nome) + '<em>' + (d.erro ? 'não deu' : tamanhoLegivel(d.tamanho)) + '</em>' +
+          '<button type="button" class="sai" data-tira="' + i + '" aria-label="Tirar este documento">×</button>' +
+          '</span>';
+      }).join('');
+    };
+
+    lista.addEventListener('click', function (ev) {
+      const botao = ev.target.closest('[data-tira]');
+      if (!botao) return;
+      docs.splice(Number(botao.dataset.tira), 1);
+      pintarLista();
+      estado.textContent = docs.length
+        ? docs.length + ' documento' + (docs.length > 1 ? 's' : '') + ' anexado' + (docs.length > 1 ? 's' : '') + '.'
+        : '';
+    });
 
     entrada.addEventListener('change', function () {
       const escolhidos = Array.prototype.slice.call(entrada.files || []);
@@ -494,10 +521,11 @@
           caixa.dispatchEvent(new Event('input'));
         }
 
+        pintarLista();
         const ruins = lidos.filter(function (d) { return d.erro; });
         estado.textContent = ruins.length
           ? ruins.map(function (d) { return d.nome + ': ' + d.erro; }).join(' · ')
-          : docs.length + ' documento' + (docs.length > 1 ? 's' : '') + ' lido' + (docs.length > 1 ? 's' : '') + '.';
+          : docs.length + ' documento' + (docs.length > 1 ? 's' : '') + ' anexado' + (docs.length > 1 ? 's' : '') + '.';
       });
     });
   }

@@ -1957,7 +1957,7 @@
 
     /* Concluir uma tarefa que já estava aberta. Mesmos campos do "já foi
        feita", sem repetir o que a tarefa já sabe (título, canal, decisão). */
-    concluirComRelato: function (opId, tarefaId, aoTerminar, docsVindos) {
+    concluirComRelato: function (opId, tarefaId, aoTerminar) {
       const op = Store.oportunidade(opId);
       const tarefa = Store.dados().tarefas.filter(function (t) { return t.id === tarefaId; })[0];
       if (!op || !tarefa) { if (aoTerminar) aoTerminar(); return; }
@@ -1986,7 +1986,6 @@
         concluirComOQueAconteceu(op, tarefaId, d, docs, tarefa.decisaoAlvo, aoTerminar);
       }, function (dlg) {
         U.ligarDocumentos(dlg, 'arquivo', 'relato');
-        herdarDocumentos(dlg, docsVindos);
       /* Cancelar não pode parar a fila: quem desistiu de contar esta segue
          para a próxima, e a tarefa fica aberta como estava. */
       }, aoTerminar || null);
@@ -2379,7 +2378,9 @@
            é encerrá-la, e encerrar passa pela leitura da IA como em todo
            lugar. O recado aparece só quando a escolha muda de fato. */
         { id: 'avisoConclusao', tipo: 'aviso', rotulo: aberta
-          ? 'Ao salvar, abre a tela de contar o que aconteceu — é ali que a IA lê e relê as oito decisões.'
+          ? 'Ao salvar, a tarefa é concluída e a IA lê os documentos anexados para reler as oito decisões. ' +
+            'Para colar uma ata, responder as quatro perguntas do fim de reunião ou marcar o próximo passo, ' +
+            'use Concluir na lista de tarefas.'
           : 'Ao salvar, a tarefa volta a ficar aberta, com a conclusão de ' +
             U.data(t.concluidaEm || t.vencimento) + ' desfeita.' }
       ]), {}, function (d, docs) {
@@ -2402,10 +2403,7 @@
            viajam junto em vez de serem anexados aqui — quem vai lê-los é a tela
            seguinte, e anexar nas duas gravaria o mesmo arquivo duas vezes. */
         const quer = d.situacao === 'feita';
-        if (aberta && quer) {
-          setTimeout(function () { App.concluirComRelato(alvo.id, id, null, docs); }, 0);
-          return;
-        }
+        if (aberta && quer) { concluirDaEdicao(alvo, id, d, docs); return; }
         anexarAoRegistro(docs, { oportunidadeId: alvo.id, contaId: alvo.contaId, categoria: 'Outro' });
         if (!aberta && !quer) { App.reabrirTarefa(id); return; }
         render();
@@ -5024,36 +5022,33 @@
     });
   }
 
-  /* Documentos escolhidos na tela anterior chegam aqui já lidos. Sem isto o
-     arquivo era anexado ao negócio e o conteúdo dele nunca chegava na leitura:
-     a caixa de arquivos abria vazia, a pessoa lia "nenhum arquivo escolhido" e
-     tinha toda razão em achar que o anexo se perdera. */
-  function herdarDocumentos(dlg, docs) {
-    if (!docs || !docs.length) return;
-    if (!dlg.documentosIA) dlg.documentosIA = [];
-    docs.forEach(function (d) { dlg.documentosIA.push(d); });
+  /* O texto dos documentos, cada um com a sua cota. Sem repartir, cinco
+     dossiês viram um só cortado no fim e os últimos somem inteiros. */
+  function textoDosDocumentos(docs) {
+    const comTexto = (docs || []).filter(function (d) { return d.texto; });
+    if (!comTexto.length) return '';
+    const cota = Math.floor(40000 / comTexto.length);
+    return comTexto.map(function (d) {
+      const t = d.texto.length > cota ? d.texto.slice(0, cota) + '\n[…]' : d.texto;
+      return '=== ' + d.nome + ' ===\n' + t;
+    }).join('\n\n');
+  }
 
-    /* Mesma regra da caixa de anexos: cada documento entra com uma cota, para
-       que cinco dossiês não virem um só cortado no fim. */
-    const caixa = dlg.querySelector('[name="relato"]');
-    const comTexto = docs.filter(function (d) { return d.texto; });
-    if (caixa && comTexto.length) {
-      const cota = Math.floor(40000 / comTexto.length);
-      const blocos = comTexto.map(function (d) {
-        const t = d.texto.length > cota ? d.texto.slice(0, cota) + '\n[…]' : d.texto;
-        return '=== ' + d.nome + ' ===\n' + t;
-      });
-      caixa.value = [caixa.value.trim(), blocos.join('\n\n')].filter(Boolean).join('\n\n');
-    }
+  /* Marcar "Já foi feita" e salvar conclui a tarefa ali mesmo: grava, manda a
+     IA ler o que foi anexado e volta para o negócio. Abrir outra tela para
+     perguntar a data, o canal e os documentos era pedir de novo o que já
+     estava preenchido na tela anterior.
 
-    const entrada = dlg.querySelector('[name="arquivo"]');
-    if (!entrada || !entrada.parentNode) return;
-    const nota = document.createElement('small');
-    nota.className = 'origem';
-    nota.textContent = (docs.length === 1 ? 'Já veio da tarefa: ' : 'Já vieram da tarefa: ') +
-      docs.map(function (d) { return d.nome; }).join(', ') +
-      '. Não precisa escolher de novo.';
-    entrada.parentNode.appendChild(nota);
+     Quem quiser colar uma ata, responder as quatro perguntas do fim de
+     reunião ou registrar o próximo passo combinado usa Concluir, na lista de
+     tarefas — essa tela existe para isso e continua igual. */
+  function concluirDaEdicao(op, tarefaId, d, docs) {
+    concluirComOQueAconteceu(op, tarefaId, {
+      feitaEm: Store.hoje(),
+      tipo: d.tipo,
+      relato: textoDosDocumentos(docs),
+      evidenciaDireta: 'nao'
+    }, docs, d.decisaoAlvo || '');
   }
 
   function concluirComOQueAconteceu(op, tarefaId, d, docs, dimensaoAlvo, aoTerminar) {
