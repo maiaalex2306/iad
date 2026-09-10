@@ -433,6 +433,29 @@ Campos: nome, cargo, papel, perfil, sentimento, influencia, email, telefone, lin
 - influencia: "1" opina, "2" influencia, "3" decide.`;
   }
 
+  /* Uma lista de pessoas soltas num texto. Nasceu do caso real: o vendedor
+     manda mensagem no LinkedIn para cinco pessoas de uma empresa que ainda
+     não estão no CRM e escreve os nomes na descrição da tarefa. Sem isto,
+     cadastrar as cinco à mão é o que separa a conversa do CRM.
+
+     Só pessoas do lado do cliente, e só o que o texto disser: pessoa
+     cadastrada com cargo inventado é pior do que pessoa não cadastrada. */
+  if (tipo === 'pessoas') {
+    return `${BASE}
+
+Tarefa: liste as PESSOAS do lado do cliente citadas no texto. Nada mais.
+
+Para cada uma: nome (completo, como aparece), cargo, area, email, telefone.
+
+- Só quem o texto nomeia. Não deduza gente que "deveria" existir na empresa.
+- Nome sem sobrenome não conta: "Aline" sozinho não é contato.
+- Não invente cargo, e-mail nem telefone. Campo que o texto não traz volta vazio.
+- Ignore quem é do nosso lado (o vendedor, colegas dele, a nossa empresa).
+- Não escreva evidência, nota nem opinião sobre a decisão: aqui só saem pessoas.
+
+Devolva {"contatos": [{"nome": "...", "cargo": "...", "area": "...", "email": "...", "telefone": "..."}]} e nada mais.`;
+  }
+
   if (tipo === 'oportunidade') {
     return `${BASE}
 
@@ -2089,7 +2112,8 @@ Deno.serve(async (req: Request) => {
        modelo bom: ali a pessoa parou para ler, e é a leitura que ela quer.
        Reunião, notas e desenvolvimento também continuam no bom, sempre — é
        deles que sai nota, e nota errada não aparece como erro na tela. */
-    const usaRapido = tipo === 'segmentos' || (tipo === 'plano' && !!ctx.etapaNova);
+    const usaRapido = tipo === 'segmentos' || tipo === 'pessoas' ||
+      (tipo === 'plano' && !!ctx.etapaNova);
 
     /* Quantos leads vieram neste bloco. Sai da própria entrada — cada lead
        começa numa linha "1. ", "2. " —, e não de um campo que o app manda:
@@ -2134,6 +2158,7 @@ Deno.serve(async (req: Request) => {
       if (tipo === 'plano') return responder({ passos: [], atencao: [] });
       if (tipo === 'notas') return responder({ decisoes: [] });
       if (tipo === 'desenvolvimento') return responder({ leitura: '', indoBem: [], indoMal: [], mudancas: [] });
+      if (tipo === 'pessoas') return responder({ campos: {}, frases: {}, contatos: [] });
       return responder({ campos: {}, frases: {} });
     }
     if (tipo === 'reuniao') return responder(validarReuniao(json, ctx, entrada));
@@ -2141,6 +2166,12 @@ Deno.serve(async (req: Request) => {
     if (tipo === 'plano') return responder(validarPlano(json));
     if (tipo === 'notas') return responder(validarNotas(json, entrada));
     if (tipo === 'desenvolvimento') return responder(validarDesenvolvimento(json));
+    /* `campos` vazio de propósito: quem chama é a mesma função de extração do
+       app, e ela exige o campo para distinguir resposta da função de página de
+       erro do gateway. Aqui o que interessa vai em `contatos`. */
+    if (tipo === 'pessoas') {
+      return responder({ campos: {}, frases: {}, contatos: validarContatos(json.contatos, ctx) });
+    }
     return responder(validar(tipo, json, ctx));
   } catch (e) {
     return responder({ erro: String((e as Error).message || e) }, 502);

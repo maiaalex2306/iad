@@ -1930,7 +1930,7 @@
         U.ligarDocumentos(dlg, 'arquivo', 'relato');
         ligarPainelDeMetodo(dlg);
         if (!op) ligarEmpresaENegocio(dlg);
-        ligarContatoDaTarefa(dlg);
+        ligarContatoDaTarefa(dlg, op);
         const situacao = dlg.querySelector('[name="situacao"]');
         const ajustar = function () {
           const feita = situacao.value === 'feita';
@@ -2398,7 +2398,7 @@
         U.ligarDocumentos(dlg, 'arquivo');
         ligarPainelDeMetodo(dlg);
         ligarEmpresaENegocio(dlg);
-        ligarContatoDaTarefa(dlg);
+        ligarContatoDaTarefa(dlg, atual);
         /* O recado da conclusão só faz sentido quando a escolha muda. */
         const situacao = dlg.querySelector('[name="situacao"]');
         const avisar = function () {
@@ -4758,6 +4758,10 @@
          foi digitado; em qualquer caso os arquivos ficam anexados ao negócio. */
       { id: 'arquivo', tipo: 'file',
         rotulo: 'Anexar documentos (Word, PDF, Excel, PowerPoint, texto) — pode escolher vários' },
+      /* Quem prospecta escreve os nomes das pessoas na descrição — é onde eles
+         nascem, antes de existir contato nenhum. O botão lê o que está escrito
+         e cadastra quem faltar na empresa da tarefa. */
+      { tipo: 'slot', slot: 'achar-pessoas' },
       { id: 'tipo', rotulo: 'Como (canal)', tipo: 'select', largura: 'metade',
         padrao: dados.tipo || extra.tipo || '', opcoes: Store.nomesDoCatalogo('tiposTarefa') },
       /* Situação é campo, não recado. Estava como aviso na tela de editar, e
@@ -4944,8 +4948,9 @@
      empresa escolhida (senão a tarefa nasce com o contato de outra conta);
      e em qualquer caso os campos do contato novo só aparecem quando alguém
      escolhe cadastrar. */
-  function ligarContatoDaTarefa(dlg) {
+  function ligarContatoDaTarefa(dlg, op) {
     ligarLupas(dlg);
+    ligarAcharPessoas(dlg, op);
     const contato = dlg.querySelector('[name="contatoId"]');
     if (!contato) return;
     if (dlg.querySelector('[name="contaId"]')) { ligarContatoDaEmpresa(dlg); return; }
@@ -5006,6 +5011,108 @@
        criando uma tarefa está com pressa. */
     return Store.criarOportunidade({
       contaId: conta.id, titulo: (d.negocioNovo || '').trim() || conta.nome, etapa: 'Prospecção'
+    });
+  }
+
+  /* ---------- As pessoas que estão no texto e não estão no CRM ----------
+     O caso é o da prospecção: manda-se mensagem no LinkedIn para cinco pessoas
+     de uma empresa que ainda não tem contato nenhum cadastrado, e os nomes
+     ficam na descrição da tarefa. Cadastrar as cinco à mão é o que separa a
+     conversa do CRM — e quando uma responde, não há ficha para pendurar nada.
+
+     O botão é explícito, e não automático no salvar, por duas razões: uma
+     leitura de IA a cada gravação de tarefa cobraria segundos de todo mundo
+     por causa de um caso; e cadastrar gente sem ninguém pedir é o tipo de
+     coisa que enche a base de nome torto. */
+  function contaDoFormulario(dlg, op) {
+    if (op) return op.contaId;
+    const sel = dlg.querySelector('[name="contaId"]');
+    if (sel && sel.value && sel.value !== NOVA_CONTA) return sel.value;
+    const negocio = dlg.querySelector('[name="oportunidadeId"]');
+    const alvo = negocio && negocio.value !== NOVO_NEGOCIO ? Store.oportunidade(negocio.value) : null;
+    return alvo ? alvo.contaId : '';
+  }
+
+  function textoDaTarefa(dlg) {
+    return ['titulo', 'descricao', 'relato'].map(function (nome) {
+      const el = dlg.querySelector('[name="' + nome + '"]');
+      return el ? String(el.value || '').trim() : '';
+    }).filter(Boolean).join('\n\n');
+  }
+
+  function ligarAcharPessoas(dlg, op) {
+    const alvo = dlg.querySelector('[data-achar-pessoas]');
+    if (!alvo || !U.assistenteAtivo()) return;
+    alvo.innerHTML = '<div class="row" style="margin-bottom:10px">' +
+      '<button type="button" class="btn ghost mini" data-buscar-pessoas>✨ Achar contatos no texto</button>' +
+      '<span class="tiny muted" data-aviso-pessoas></span></div>';
+    const botao = alvo.querySelector('[data-buscar-pessoas]');
+    const aviso = alvo.querySelector('[data-aviso-pessoas]');
+
+    botao.addEventListener('click', function () {
+      const contaId = contaDoFormulario(dlg, op);
+      if (!contaId) { aviso.textContent = 'Escolha a empresa primeiro.'; return; }
+      const texto = textoDaTarefa(dlg);
+      if (texto.length < 12) { aviso.textContent = 'Escreva os nomes na descrição primeiro.'; return; }
+
+      const rotulo = botao.textContent;
+      botao.disabled = true;
+      botao.textContent = 'Lendo…';
+      aviso.textContent = '';
+
+      IA.extrair('pessoas', texto, {
+        contatos: Store.contatosDaConta(contaId).map(function (c) { return c.nome; }),
+        empresa: (Store.conta(contaId) || {}).nome || ''
+      }).then(function (r) {
+        botao.disabled = false;
+        botao.textContent = rotulo;
+        if (r.erro) { aviso.textContent = r.erro; return; }
+        const achados = (r.contatos || []).filter(function (c) { return c && c.nome; });
+        if (!achados.length) {
+          aviso.textContent = 'Não achei nome de pessoa neste texto.';
+          return;
+        }
+        aviso.textContent = '';
+        escolherPessoas(contaId, achados, function (quantos) {
+          aviso.textContent = quantos
+            ? quantos + (quantos === 1 ? ' contato cadastrado.' : ' contatos cadastrados.')
+            : 'Nenhum cadastrado.';
+          /* O select de contato foi pintado antes destes existirem. */
+          const sel = dlg.querySelector('[name="contatoId"]');
+          if (!sel) return;
+          const escolhido = sel.value;
+          sel.innerHTML = opcoesDeContato(contaId).map(function (x) {
+            return '<option value="' + U.esc(x.valor) + '">' + U.esc(x.rotulo) + '</option>';
+          }).join('');
+          sel.value = escolhido;
+        });
+      });
+    });
+  }
+
+  /* A pessoa confere antes de entrar. O assistente lê bem e erra às vezes, e
+     contato errado no CRM não avisa que está errado: fica lá, contando como
+     cobertura do grupo comprador que ninguém tem. */
+  function escolherPessoas(contaId, achados, aoTerminar) {
+    U.formulario('Cadastrar quem está no texto', [
+      { tipo: 'aviso', rotulo: 'Achei estas pessoas. Elas entram como contatos de ' +
+        ((Store.conta(contaId) || {}).nome || 'a empresa') +
+        ', sem papel na compra e fora do grupo comprador — quem entra no grupo é quem participa de uma tarefa.' },
+      { tipo: 'slot', slot: 'pessoas' }
+    ], {}, function (d) {
+      const escolhidos = achados.filter(function (_, i) { return d['p' + i]; });
+      const quantos = criarContatosPropostos(contaId, escolhidos);
+      render();
+      if (aoTerminar) aoTerminar(quantos);
+    }, function (dlg) {
+      const alvo = dlg.querySelector('[data-pessoas]');
+      alvo.innerHTML = '<div class="lista-multi">' + achados.map(function (c, i) {
+        const detalhe = [c.cargo, c.area, c.email, c.telefone].filter(Boolean).join(' · ');
+        return '<label class="item-multi"><input type="checkbox" name="p' + i + '" checked>' +
+          ' <span>' + U.esc(c.nome) +
+          (detalhe ? '<em>' + U.esc(detalhe) + '</em>' : '<em>só o nome — complete depois</em>') +
+          '</span></label>';
+      }).join('') + '</div>';
     });
   }
 
