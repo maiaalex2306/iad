@@ -669,6 +669,13 @@ td .tiny { display: block; }
 }
 .campo-senha .olho:hover, .campo-senha .olho:focus-visible { opacity: 1; background: var(--bg); }
 
+/* Enquanto a IA lê o negócio que acabou de mudar de etapa. É discreto de
+   propósito: a etapa já foi gravada, isto aqui é só o aviso de que a leitura
+   está a caminho. */
+.pill.lendo {
+  border-color: var(--orange); color: var(--orange); background: var(--orange-soft);
+}
+
 /* A lupa: um botão pequeno colado ao select, que abre a ficha do que está
    escolhido. Fica dentro do campo para ninguém confundir com uma ação do
    formulário — ela não muda nada, só mostra. */

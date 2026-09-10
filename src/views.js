@@ -1300,7 +1300,9 @@
         '<strong>' + U.compacto(r.op.valor) + '</strong>' +
         '<span class="muted">IAD ' + r.iad + '</span>' +
         '<span class="espaco"></span>' +
-        '<span class="pill ' + r.faixa.classe + '">' + r.evidenceAge + 'd</span>' +
+        (estaLendo(r.op.id)
+          ? '<span class="pill lendo">lendo…</span>'
+          : '<span class="pill ' + r.faixa.classe + '">' + r.evidenceAge + 'd</span>') +
       '</div>' +
       tarjaDeAtraso(r) +
       '<div class="rodape-mini">' + seta(i - 1, '‹', 'Voltar para ') + seta(i + 1, '›', 'Avançar para ') + '</div>' +
@@ -1360,6 +1362,7 @@
       '<div class="row tiny">' +
         '<span class="pill">IAD ' + r.iad + '/' + P.IAD_MAXIMO + '</span>' +
         '<span class="pill ' + r.faixa.classe + '">' + r.evidenceAge + 'd sem evidência</span>' +
+        (estaLendo(r.op.id) ? '<span class="pill lendo">lendo…</span>' : '') +
         '<span class="pill">Grupo ' + r.coverage.percentual + '%</span>' +
         (comp && comp.vencido ? '<span class="pill dead">compromisso vencido</span>' : '') +
         ((r.op.adiamentos || 0) >= 2 ? '<span class="pill warn">' + r.op.adiamentos + ' adiamentos</span>' : '') +
@@ -4944,12 +4947,34 @@
   /* O plano vive aqui, e não no app, porque render() reconstrói a tela: se o
      resultado fosse injetado no DOM depois, criar uma tarefa a partir de um
      passo apagaria os outros — e a pessoa só conseguiria usar o primeiro. */
-  let planoIA = null;
+  /* Um plano por negócio, com a assinatura do estado em que ele foi lido.
+     Guardar mais de um permite arrastar dois cartões seguidos sem que o
+     segundo apague o primeiro; a assinatura evita perguntar de novo a mesma
+     coisa quando nada mudou — arrastar para a coluna errada e voltar deixou
+     de custar duas leituras. */
+  const planoIA = {};        /* opId → o plano mais recente, que o cockpit mostra */
+  const planoPorEstado = {}; /* opId|assinatura → plano, para não reler o que não mudou */
 
-  function definirPlano(opId, plano) { planoIA = plano ? { opId: opId, plano: plano } : null; }
-  function planoGuardado(opId) {
-    return (planoIA && planoIA.opId === opId) ? planoIA.plano : null;
+  function definirPlano(opId, plano, assinatura) {
+    if (!plano) { delete planoIA[opId]; return; }
+    planoIA[opId] = plano;
+    if (assinatura) planoPorEstado[opId + '|' + assinatura] = plano;
   }
+  /* Sem assinatura devolve o último plano do negócio — é o que o cockpit
+     mostra. Com assinatura, só devolve se o negócio ainda estiver no mesmo
+     estado em que aquele plano foi lido. */
+  function planoGuardado(opId, assinatura) {
+    if (assinatura == null) return planoIA[opId] || null;
+    return planoPorEstado[opId + '|' + assinatura] || null;
+  }
+
+  /* Negócios cuja leitura está em curso. O cartão mostra isso: sem a marca,
+     arrastar não dá sinal nenhum e a janela aparece depois, do nada. */
+  const lendoAgora = {};
+  function marcarLendo(opId, ligado) {
+    if (ligado) lendoAgora[opId] = true; else delete lendoAgora[opId];
+  }
+  function estaLendo(opId) { return !!lendoAgora[opId]; }
 
   function blocoPlanoIA(op) {
     if (!U.assistenteAtivo()) return '';
@@ -5246,7 +5271,9 @@
     periodoTarefas = 'tudo';
     abaCadastro = 'empresas';
     buscaCadastro = '';
-    planoIA = null;
+    [planoIA, planoPorEstado, lendoAgora].forEach(function (m) {
+      Object.keys(m).forEach(function (k) { delete m[k]; });
+    });
     pipelineFiltro = Object.assign({}, VAZIO_PIPELINE);
     tarefasFiltro = Object.assign({}, VAZIO_TAREFAS);
     tarefasMarcadas = {};
@@ -5262,7 +5289,8 @@
 
   global.IADViews = {
     hoje, painel, pipeline, tarefas, cockpit, revisao, contas, cadastros, playbook, dados, itemArquivo, listaLeads,
-    revisaoDaImportacao, recusaDoCliente, resumoDaLeitura, planoDaIA, definirPlano, planoGuardado, revisaoDasNotas,
+    revisaoDaImportacao, recusaDoCliente, resumoDaLeitura, planoDaIA, definirPlano, planoGuardado,
+    marcarLendo, estaLendo, revisaoDasNotas,
     acesso, barraAdmin, menuDoUsuario, definirTelaAcesso, definirPrimeiraEmpresa, listaUsuariosNuvem,
     pendenteAcesso: function () { return pendente; },
     tarefasFiltrar, tarefasEstado, tarefasVisiveis, tarefasDaPagina, tarefasSelecionadas, tarefasMarcar,

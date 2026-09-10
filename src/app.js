@@ -993,17 +993,25 @@
     /* Mudar de etapa é uma declaração: "este negócio avançou". O IAD existe
        para perguntar se a decisão do cliente avançou junto. Por isso a
        análise acontece aqui, no gesto, e não numa tela que ninguém abre. */
+    /* A etapa é gravada e o cartão anda na hora. A leitura da IA vai atrás,
+       ao fundo. Antes o cartão só se mexia depois de a IA responder: quem
+       arrastava ficava parado numa janela "Lendo este negócio…" por vários
+       segundos, sem poder fazer mais nada — e o que ele queria, que era mudar
+       a etapa, já estava decidido antes de a IA abrir a boca. */
     moverEtapa: function (opId, etapa) {
       const op = Store.oportunidade(opId);
       if (!op || op.etapa === etapa) return;
       Store.atualizarOportunidade(opId, { etapa: etapa });
+      if (IA.disponivel()) lerEtapaAoFundo(opId, etapa);
       render();
-      if (IA.disponivel()) App.planejar(opId, etapa);
     },
 
     /* Análise sob demanda. Não roda ao abrir o cockpit: cada chamada custa, e
        abrir a tela não é pedir análise. */
-    planejar: function (opId, etapaNova) {
+    /* O botão do cockpit. Aqui a espera é esperada — a pessoa pediu a leitura
+       e não tem outra coisa para fazer enquanto ela não vem —, então a janela
+       de espera fica. A mudança de etapa é que não podia esperar. */
+    planejar: function (opId) {
       const op = Store.oportunidade(opId);
       if (!op) return;
       if (!IA.disponivel()) { alert('Não consegui falar com o assistente. A função "assistente" ' +
@@ -1013,35 +1021,14 @@
       const dlg = document.createElement('dialog');
       dlg.className = 'revisao-ia';
       dlg.innerHTML = '<div class="corpo"><h2>Lendo este negócio…</h2>' +
-        '<p class="small muted">' + U.esc(op.titulo) + ' · IAD ' + r.iad + '/' + P.IAD_MAXIMO +
-        (etapaNova ? ' · agora em ' + U.esc(etapaNova) : '') + '</p></div>';
+        '<p class="small muted">' + U.esc(op.titulo) + ' · IAD ' + r.iad + '/' + P.IAD_MAXIMO + '</p></div>';
       document.body.appendChild(dlg);
       dlg.showModal();
 
-      IA.planoDaOportunidade(op, r, etapaNova).then(function (plano) {
+      IA.planoDaOportunidade(op, r, '').then(function (plano) {
         dlg.close(); dlg.remove();
         if (!plano) { alert('Não consegui falar com o assistente agora.'); return; }
-        V.definirPlano(opId, plano);
-
-        /* Vindo da mudança de etapa, o resultado é uma janela — o vendedor
-           acabou de agir e a resposta tem de encontrá-lo ali. Vindo do botão,
-           preenche o bloco do cockpit, sem interromper. */
-        if (etapaNova) {
-          const janela = document.createElement('dialog');
-          janela.className = 'revisao-ia';
-          janela.innerHTML = '<form method="dialog"><div class="corpo">' +
-            '<h2>O que a etapa ' + U.esc(etapaNova) + ' exige</h2>' +
-            '<p class="small muted">Etapa mudou. Estas decisões ainda não acompanham.</p>' +
-            V.planoDaIA(op, plano) +
-            '</div><div class="rodape">' +
-            '<button class="btn" value="ok" type="submit">Entendi</button>' +
-            '</div></form>';
-          document.body.appendChild(janela);
-          janela.addEventListener('close', function () { janela.remove(); });
-          janela.showModal();
-          return;
-        }
-
+        V.definirPlano(opId, plano, assinaturaDaEtapa(op, op.etapa));
         render();   /* o bloco se redesenha com o plano guardado */
       });
     },
@@ -5020,6 +5007,68 @@
     return Store.criarOportunidade({
       contaId: conta.id, titulo: (d.negocioNovo || '').trim() || conta.nome, etapa: 'Prospecção'
     });
+  }
+
+  /* Uma leitura por negócio de cada vez, e vale a última: arrastar três
+     colunas seguidas pede três leituras, e as duas primeiras já não
+     interessam quando a terceira chega. */
+  const leituraDaEtapa = {};
+  let numeroDaLeitura = 0;
+
+  /* O que faz o plano mudar: a etapa, as oito notas e o grupo comprador. A
+     contagem de eventos não entra de propósito — mudar de etapa já escreve um
+     evento, então ela nunca bateria com ela mesma e o plano guardado nunca
+     serviria para nada. Arrastar para a coluna errada e voltar deixou de
+     custar duas leituras. */
+  function assinaturaDaEtapa(op, etapa) {
+    const dims = op.dims || {};
+    const notas = P.DIMENSOES.map(function (d) { return dims[d.id] || 0; }).join('');
+    return etapa + '|' + notas + '|' + ((op.stakeholders || []).length);
+  }
+
+  function lerEtapaAoFundo(opId, etapa) {
+    const op = Store.oportunidade(opId);
+    if (!op) return;
+    const assinatura = assinaturaDaEtapa(op, etapa);
+    const guardado = V.planoGuardado(opId, assinatura);
+    if (guardado) { mostrarPlanoDaEtapa(op, etapa, guardado); return; }
+
+    const meu = ++numeroDaLeitura;
+    leituraDaEtapa[opId] = meu;
+    V.marcarLendo(opId, true);
+
+    IA.planoDaOportunidade(op, E.resumo(op), etapa).then(function (plano) {
+      if (leituraDaEtapa[opId] !== meu) return;      /* chegou uma mais nova */
+      delete leituraDaEtapa[opId];
+      V.marcarLendo(opId, false);
+      const atual = Store.oportunidade(opId);
+      if (!plano || !atual) { render(); return; }
+      V.definirPlano(opId, plano, assinatura);
+      mostrarPlanoDaEtapa(atual, etapa, plano);
+    }).catch(function () {
+      delete leituraDaEtapa[opId];
+      V.marcarLendo(opId, false);
+      render();
+    });
+  }
+
+  /* Se a pessoa abriu outra janela enquanto a IA lia, o plano não sobe por
+     cima do que ela está fazendo: fica guardado no negócio, no bloco
+     "Próximos passos" do cockpit. */
+  function mostrarPlanoDaEtapa(op, etapa, plano) {
+    if (document.querySelector('dialog[open]')) { render(); return; }
+    const janela = document.createElement('dialog');
+    janela.className = 'revisao-ia';
+    janela.innerHTML = '<form method="dialog"><div class="corpo">' +
+      '<h2>O que a etapa ' + U.esc(etapa) + ' exige</h2>' +
+      '<p class="small muted">Etapa mudou. Estas decisões ainda não acompanham.</p>' +
+      V.planoDaIA(op, plano) +
+      '</div><div class="rodape">' +
+      '<button class="btn" value="ok" type="submit">Entendi</button>' +
+      '</div></form>';
+    document.body.appendChild(janela);
+    janela.addEventListener('close', function () { janela.remove(); render(); });
+    janela.showModal();
   }
 
   /* O texto dos documentos, cada um com a sua cota. Sem repartir, cinco
