@@ -1957,7 +1957,7 @@
 
     /* Concluir uma tarefa que já estava aberta. Mesmos campos do "já foi
        feita", sem repetir o que a tarefa já sabe (título, canal, decisão). */
-    concluirComRelato: function (opId, tarefaId, aoTerminar) {
+    concluirComRelato: function (opId, tarefaId, aoTerminar, docsVindos) {
       const op = Store.oportunidade(opId);
       const tarefa = Store.dados().tarefas.filter(function (t) { return t.id === tarefaId; })[0];
       if (!op || !tarefa) { if (aoTerminar) aoTerminar(); return; }
@@ -1965,7 +1965,7 @@
       const campos = [
         { id: 'feitaEm', rotulo: 'Quando foi feita', tipo: 'date', padrao: Store.hoje(), largura: 'metade' },
         { id: 'arquivo', tipo: 'file',
-          rotulo: 'Documentos (Word, PDF, Excel, PowerPoint, texto) — pode escolher vários' },
+          rotulo: 'Anexar documentos (Word, PDF, Excel, PowerPoint, texto) — pode escolher vários' },
         { id: 'relato', rotulo: 'Cole a ata, a transcrição ou conte o que aconteceu', tipo: 'textarea', voz: true,
           placeholder: 'Cole aqui o resumo automático da call, a transcrição ou suas anotações. Some ao conteúdo dos documentos anexados acima.' }
       ];
@@ -1986,6 +1986,7 @@
         concluirComOQueAconteceu(op, tarefaId, d, docs, tarefa.decisaoAlvo, aoTerminar);
       }, function (dlg) {
         U.ligarDocumentos(dlg, 'arquivo', 'relato');
+        herdarDocumentos(dlg, docsVindos);
       /* Cancelar não pode parar a fila: quem desistiu de contar esta segue
          para a próxima, e a tarefa fica aberta como estava. */
       }, aoTerminar || null);
@@ -2396,12 +2397,16 @@
           oportunidadeId: alvo.id, decisaoAlvo: d.decisaoAlvo || '',
           contatoId: comQuem ? comQuem.id : (d.contatoId === NOVO_CONTATO ? t.contatoId : (d.contatoId || null))
         });
-        anexarAoRegistro(docs, { oportunidadeId: alvo.id, contaId: alvo.contaId, categoria: 'Outro' });
-
         /* A situação decide o que acontece depois de salvar. Concluir daqui é
-           o mesmo Concluir do rodapé e da listinha: uma porta só. */
+           o mesmo Concluir do rodapé e da listinha: uma porta só. Os documentos
+           viajam junto em vez de serem anexados aqui — quem vai lê-los é a tela
+           seguinte, e anexar nas duas gravaria o mesmo arquivo duas vezes. */
         const quer = d.situacao === 'feita';
-        if (aberta && quer) { setTimeout(function () { App.concluirComRelato(alvo.id, id); }, 0); return; }
+        if (aberta && quer) {
+          setTimeout(function () { App.concluirComRelato(alvo.id, id, null, docs); }, 0);
+          return;
+        }
+        anexarAoRegistro(docs, { oportunidadeId: alvo.id, contaId: alvo.contaId, categoria: 'Outro' });
         if (!aberta && !quer) { App.reabrirTarefa(id); return; }
         render();
       }, function (dlg) {
@@ -2424,24 +2429,12 @@
         if (negocio && t.oportunidadeId) negocio.value = t.oportunidadeId;
         const comQuem = dlg.querySelector('[name="contatoId"]');
         if (comQuem && t.contatoId) comQuem.value = t.contatoId;
-      }, null, [
-        /* O botão do rodapé não é um segundo caminho: ele marca a Situação e
-           manda salvar. Assim existe uma regra só — a do campo — e quem clica
-           no botão não perde o que acabou de editar, que era o que acontecia
-           quando ele fechava a janela por fora do Salvar. */
-        { rotulo: aberta ? 'Concluir' : 'Reabrir', classe: aberta ? 'alt' : 'ghost',
-          acao: function (dlg) {
-            const situacao = dlg.querySelector('[name="situacao"]');
-            if (situacao) situacao.value = aberta ? 'feita' : 'afazer';
-            dlg.querySelector('button[value="ok"]').click();
-            return false;
-          } },
-        { rotulo: 'Excluir', classe: 'ghost', acao: function () {
-          if (!U.confirmar('Excluir esta tarefa?')) return false;
-          Store.excluirTarefa(id);
-          render();
-        } }
-      ]);
+      /* Nada de Concluir nem Excluir no rodapé. Um formulário só faz duas
+         coisas: salvar ou desistir. Concluir ali disputava com o campo
+         Situação, que é onde a conclusão mora, e Excluir ao lado de Salvar
+         convidava ao clique errado. As duas ações são da lista de tarefas,
+         onde já estavam. */
+      });
     },
 
     /* Criar tarefa a partir da tela de Tarefas: um caminho só. O formulário é
@@ -5029,6 +5022,38 @@
     return Store.criarOportunidade({
       contaId: conta.id, titulo: (d.negocioNovo || '').trim() || conta.nome, etapa: 'Prospecção'
     });
+  }
+
+  /* Documentos escolhidos na tela anterior chegam aqui já lidos. Sem isto o
+     arquivo era anexado ao negócio e o conteúdo dele nunca chegava na leitura:
+     a caixa de arquivos abria vazia, a pessoa lia "nenhum arquivo escolhido" e
+     tinha toda razão em achar que o anexo se perdera. */
+  function herdarDocumentos(dlg, docs) {
+    if (!docs || !docs.length) return;
+    if (!dlg.documentosIA) dlg.documentosIA = [];
+    docs.forEach(function (d) { dlg.documentosIA.push(d); });
+
+    /* Mesma regra da caixa de anexos: cada documento entra com uma cota, para
+       que cinco dossiês não virem um só cortado no fim. */
+    const caixa = dlg.querySelector('[name="relato"]');
+    const comTexto = docs.filter(function (d) { return d.texto; });
+    if (caixa && comTexto.length) {
+      const cota = Math.floor(40000 / comTexto.length);
+      const blocos = comTexto.map(function (d) {
+        const t = d.texto.length > cota ? d.texto.slice(0, cota) + '\n[…]' : d.texto;
+        return '=== ' + d.nome + ' ===\n' + t;
+      });
+      caixa.value = [caixa.value.trim(), blocos.join('\n\n')].filter(Boolean).join('\n\n');
+    }
+
+    const entrada = dlg.querySelector('[name="arquivo"]');
+    if (!entrada || !entrada.parentNode) return;
+    const nota = document.createElement('small');
+    nota.className = 'origem';
+    nota.textContent = (docs.length === 1 ? 'Já veio da tarefa: ' : 'Já vieram da tarefa: ') +
+      docs.map(function (d) { return d.nome; }).join(', ') +
+      '. Não precisa escolher de novo.';
+    entrada.parentNode.appendChild(nota);
   }
 
   function concluirComOQueAconteceu(op, tarefaId, d, docs, dimensaoAlvo, aoTerminar) {

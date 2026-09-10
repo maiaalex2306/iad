@@ -2081,7 +2081,10 @@
             ' data-ajuda-titulo="Adiar" data-ajuda="Nova data e o motivo. O número de adiamentos fica na linha: negócio adiado três vezes é um dado sobre o negócio.">Adiar</button>') +
         '<button class="btn ghost mini" onclick="App.editarTarefa(\'' + t.id + '\')"' +
         ' data-ajuda-titulo="Editar" data-ajuda="A tarefa inteira: título, descrição, documentos anexados, canal, situação, decisão-alvo, com quem, data e responsável. Marcar a situação como “Já foi feita” abre a mesma tela de contar o que aconteceu.">Editar</button>' +
-        '<button class="btn ghost mini" onclick="App.excluirTarefa(\'' + t.id + '\')" title="Excluir">\u2715</button>' +
+        /* Escrito, não um X. O X ao lado de "Editar" era o único botão da
+           linha que não dizia o que fazia, e era o único que apagava. */
+        '<button class="btn ghost mini" onclick="App.excluirTarefa(\'' + t.id + '\')"' +
+        ' data-ajuda-titulo="Excluir" data-ajuda="Apaga a tarefa. Para dizer que ela aconteceu, use Concluir: excluir não move nenhuma das oito decisões.">Excluir</button>' +
         '</div>' +
 
         /* A descrição da tarefa some depois que ela é criada, e é justamente
