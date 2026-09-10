@@ -181,7 +181,11 @@ const FORMATOS: Record<string, Record<string, Regra>> = {
   reuniao: {},
   /* 'desenvolvimento' lê a carteira inteira, não um negócio: a série das
      semanas e o rendimento por tipo de tarefa. Validado à parte. */
-  desenvolvimento: {}
+  desenvolvimento: {},
+  /* Sem regra de campo: a saída é uma lista, e quem a valida é
+     validarContatos. Precisa estar aqui porque esta tabela é também a lista
+     do que a função aceita — tipo fora dela volta "tipo desconhecido". */
+  pessoas: {}
 };
 
 const ITENS_MAXIMOS = 12;

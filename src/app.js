@@ -5033,11 +5033,19 @@
     return alvo ? alvo.contaId : '';
   }
 
+  /* Tudo o que a tarefa carrega: o que foi digitado e o que foi anexado. Os
+     nomes tanto vêm na descrição quanto na lista que se exporta do LinkedIn e
+     se anexa — procurar só no que foi digitado deixava metade dos casos de
+     fora. */
   function textoDaTarefa(dlg) {
-    return ['titulo', 'descricao', 'relato'].map(function (nome) {
+    const digitado = ['titulo', 'descricao', 'relato'].map(function (nome) {
       const el = dlg.querySelector('[name="' + nome + '"]');
       return el ? String(el.value || '').trim() : '';
     }).filter(Boolean).join('\n\n');
+    const docs = textoDosDocumentos(dlg.documentosIA);
+    /* Se o relato já trouxe o conteúdo dos anexos, não manda duas vezes. */
+    if (docs && digitado.indexOf(docs.slice(0, 40)) !== -1) return digitado;
+    return [digitado, docs].filter(Boolean).join('\n\n');
   }
 
   function ligarAcharPessoas(dlg, op) {
@@ -5053,7 +5061,10 @@
       const contaId = contaDoFormulario(dlg, op);
       if (!contaId) { aviso.textContent = 'Escolha a empresa primeiro.'; return; }
       const texto = textoDaTarefa(dlg);
-      if (texto.length < 12) { aviso.textContent = 'Escreva os nomes na descrição primeiro.'; return; }
+      if (texto.length < 12) {
+        aviso.textContent = 'Escreva os nomes na descrição, ou anexe o arquivo com eles.';
+        return;
+      }
 
       const rotulo = botao.textContent;
       botao.disabled = true;
@@ -5066,7 +5077,14 @@
       }).then(function (r) {
         botao.disabled = false;
         botao.textContent = rotulo;
-        if (r.erro) { aviso.textContent = r.erro; return; }
+        if (r.erro) {
+          /* A função antiga não conhece esta leitura. "tipo desconhecido" é
+             verdade e não diz o que fazer. */
+          aviso.textContent = /tipo desconhecido/i.test(r.erro)
+            ? 'A função assistente publicada ainda não sabe ler pessoas. Republique-a e tente de novo.'
+            : r.erro;
+          return;
+        }
         const achados = (r.contatos || []).filter(function (c) { return c && c.nome; });
         if (!achados.length) {
           aviso.textContent = 'Não achei nome de pessoa neste texto.';
