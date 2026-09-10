@@ -1123,12 +1123,13 @@
       const plano = V.planoGuardado ? V.planoGuardado(opId) : null;
       const passo = plano && plano.passos[indice];
       if (!passo) return;
-      Store.criarTarefa({
-        oportunidadeId: opId, titulo: passo.acao.slice(0, 160),
-        tipo: 'Preparar', decisaoAlvo: passo.dimensao, vencimento: Store.hoje()
+      /* Abre a mesma tela de sempre, já preenchida. Criar a tarefa por baixo
+         dava uma tarefa sem canal, sem responsável, sem anexo e sem prazo
+         escolhido — e sem que ninguém tivesse visto a tela onde tudo isso
+         existe. Uma porta só, também aqui. */
+      App.novaTarefa(opId, passo.dimensao, {
+        titulo: passo.acao.slice(0, 160), tipo: 'Preparar'
       });
-      alert('Tarefa criada, mirando ' + passo.dimensao + '. Ajuste o prazo em Hoje.');
-      render();
     },
 
     definirInsight: function (opId) {
@@ -1880,35 +1881,12 @@
         'compromissoTexto', 'compromissoData', 'compromissoDono'].concat(PERGUNTAS);
       const DO_PLANEJAMENTO = ['vencimento', 'hora'];
 
-      const campos = camposDeDestino(op, o).concat([
-        { id: 'titulo', rotulo: 'Assunto da tarefa', padrao: o.titulo || '' },
-        { id: 'descricao', rotulo: 'Descrição (opcional)', tipo: 'textarea',
-          placeholder: 'O que precisa ser dito, levado ou perguntado. Fica com a tarefa.' },
-        { id: 'tipo', rotulo: 'Como (canal)', tipo: 'select', largura: 'metade',
-          padrao: o.tipo || '', opcoes: Store.nomesDoCatalogo('tiposTarefa') },
-        { id: 'situacao', rotulo: 'Situação', tipo: 'select', largura: 'metade',
-          padrao: o.situacao || 'afazer',
-          opcoes: [{ valor: 'afazer', rotulo: 'A fazer' }, { valor: 'feita', rotulo: 'Já foi feita' }] },
-        /* O anexo fica aqui em cima e nunca some. É o material que carrega a
-           informação — proposta, ata, planilha de consumo, dossiê — e escondê-lo
-           atrás de uma escolha era escondê-lo de quem mais precisa dele. Se a
-           tarefa já foi feita, a IA lê o conteúdo junto com o que foi digitado;
-           em qualquer caso os arquivos ficam anexados ao negócio. */
-        { id: 'arquivo', tipo: 'file',
-          rotulo: 'Documentos (Word, PDF, Excel, PowerPoint, texto) — pode escolher vários' },
-        {
-          id: 'decisaoAlvo', rotulo: 'Decisão que pretende provocar', tipo: 'select',
-          padrao: decisaoAlvo || ((r && r.nbd.dimensao) ? r.nbd.dimensao.id : 'problema'),
-          opcoes: P.DIMENSOES.map(function (d) { return { valor: d.id, rotulo: d.nome }; })
-        },
-        { tipo: 'slot', slot: 'metodo' },
-        { id: 'vencimento', rotulo: 'Para quando', tipo: 'date', padrao: Store.hoje(), largura: 'metade' },
-        { id: 'hora', rotulo: 'Hora (opcional)', tipo: 'time', largura: 'metade' },
-        { id: 'donoId', rotulo: 'Responsável', tipo: 'select',
-          padrao: (A.atual() || {}).id || '',
-          opcoes: [{ valor: '', rotulo: '— sem responsável —' }]
-            .concat(A.usuarios().map(function (u) { return { valor: u.id, rotulo: u.nome }; })) },
-
+      const campos = camposDeDestino(op, o)
+        .concat(camposDaTarefa(null, {
+          titulo: o.titulo, tipo: o.tipo, situacao: o.situacao || 'afazer',
+          decisaoAlvo: decisaoAlvo || ((r && r.nbd.dimensao) ? r.nbd.dimensao.id : 'problema')
+        }))
+        .concat([
         { id: 'secaoRelato', tipo: 'secao', rotulo: 'O que aconteceu',
           ajuda: 'O assistente lê tudo junto — o que você escreveu e o conteúdo dos documentos anexados acima — separa o que o CLIENTE fez e relê as oito decisões. Preencha o que tiver; nada aqui é obrigatório.' },
         { id: 'feitaEm', rotulo: 'Quando foi feita', tipo: 'date', padrao: Store.hoje(), largura: 'metade' },
@@ -2013,13 +1991,19 @@
       }, aoTerminar || null);
     },
 
-    /* O quadradinho do cockpit fecha a tarefa sem contar nada. Fecha mesmo —
-       tem gente que só quer riscar a linha —, mas fica marcado como sem
-       relato, igual ao lote: uma tarefa que não moveu decisão nenhuma não
-       pode parecer, na tela seguinte, igual a uma que moveu. */
+    /* O quadradinho do painel e do cockpit. Antes fechava a tarefa em
+       silêncio, e uma tarefa fechada em silêncio não alimenta nada: as oito
+       decisões continuavam como estavam e o funil andava sozinho. Agora ele
+       abre a mesma tela de contar o que aconteceu — a leitura da IA é o que
+       transforma a tarefa feita em avanço da oportunidade.
+
+       Tarefa sem negociação não tem o que a IA leia; essa fecha direto, e
+       fica marcada como sem relato para não se confundir com as outras. */
     concluirTarefa: function (id) {
-      Store.concluirTarefa(id, null, false, true);
-      render();
+      const t = Store.tarefa(id);
+      if (!t) return;
+      if (!t.oportunidadeId) { Store.concluirTarefa(id, null, false, true); render(); return; }
+      App.concluirComRelato(t.oportunidadeId, id);
     },
 
     excluirTarefa: function (id) {
@@ -2314,46 +2298,52 @@
       });
     },
 
-    /* Concluir em lote é a única porta desta tela por onde uma tarefa fecha
-       sem dizer o que aconteceu — e por isso ela não fecha calada.
+    /* Concluir em lote agora é a mesma coisa que concluir uma: a fila abre a
+       tela de contar o que aconteceu para cada tarefa, uma depois da outra.
 
        O método inteiro depende de uma distinção: riscar a linha é atividade
        nossa; o que move as oito decisões é o que o CLIENTE fez, e isso só
-       existe se alguém contar. Fechar cinco tarefas em silêncio deixaria o
-       funil andando e o índice parado, sem nada na tela explicando por quê.
-       Então perguntamos, e a saída de contar uma a uma é a primeira. */
+       existe se alguém contar. Fechar cinco tarefas em silêncio deixava o
+       funil andando e o índice parado. Quem não quiser contar agora fecha a
+       janela: a tarefa fica aberta, esperando, que é mais honesto do que
+       fechada e vazia. */
     tarefasConcluir: function () {
       const ids = V.tarefasSelecionadas();
       if (!ids.length) return;
-      const comNegocio = ids.filter(function (id) {
+      const abertas = ids.filter(function (id) {
         const t = Store.tarefa(id);
-        return t && t.status === 'aberta' && t.oportunidadeId;
+        return t && t.status === 'aberta';
       });
+      const comNegocio = abertas.filter(function (id) { return Store.tarefa(id).oportunidadeId; });
+      const soltas = abertas.filter(function (id) { return !Store.tarefa(id).oportunidadeId; });
+      if (!abertas.length) return;
 
-      U.formulario('Concluir ' + ids.length + (ids.length === 1 ? ' tarefa' : ' tarefas'), [
-        { tipo: 'secao', rotulo: 'Como quer fechar',
-          ajuda: 'Fechar sem relato move o funil e não move nenhuma das oito decisões: quem as move é o que o cliente fez, e isso está no que você contar. As fechadas sem relato ficam marcadas e voltam no filtro "Concluídas sem relato".' },
-        { id: 'modo', rotulo: 'Modo', tipo: 'select', padrao: comNegocio.length ? 'uma' : 'lote',
-          opcoes: [
-            { valor: 'uma', rotulo: 'Contar o que aconteceu — uma a uma (' + comNegocio.length + ')' },
-            { valor: 'lote', rotulo: 'Fechar sem relato, resolvo depois' }
-          ] },
-        { id: 'feitaEm', rotulo: 'Data da conclusão', tipo: 'date', padrao: Store.hoje() }
-      ], {}, function (d) {
-        if (d.modo === 'uma' && comNegocio.length) {
-          V.tarefasMarcar(null, false);
-          contarUmaAUma(comNegocio.slice());
-          return;
-        }
-        ids.forEach(function (id) {
-          const t = Store.tarefa(id);
-          if (t && t.status === 'aberta') Store.concluirTarefa(id, d.feitaEm || Store.hoje(), false, true);
-        });
+      /* Tarefa sem negociação não tem o que a IA leia: fecha direto, marcada
+         como sem relato, e o aviso diz quantas foram. */
+      const fecharSoltas = function () {
+        soltas.forEach(function (id) { Store.concluirTarefa(id, Store.hoje(), false, true); });
+      };
+
+      if (!comNegocio.length) {
+        fecharSoltas();
         V.tarefasMarcar(null, false);
         render();
-        alert(ids.length + (ids.length === 1 ? ' tarefa fechada' : ' tarefas fechadas') +
-          ' sem relato.\n\nNenhuma das oito decisões se moveu — para isso é preciso contar o que o cliente fez. ' +
-          'Elas estão no filtro “Concluídas sem relato”, esperando.');
+        alert(soltas.length + (soltas.length === 1 ? ' tarefa fechada' : ' tarefas fechadas') +
+          '.\n\nNenhuma estava ligada a uma negociação, então não havia decisão para mover.');
+        return;
+      }
+
+      U.formulario('Concluir ' + comNegocio.length + (comNegocio.length === 1 ? ' tarefa' : ' tarefas'), [
+        { tipo: 'aviso', rotulo: 'Vou abrir uma tela por tarefa para você contar o que aconteceu. ' +
+          'É essa leitura que move as oito decisões — sem ela o funil anda e o índice fica parado. ' +
+          'Quem não quiser contar uma delas agora é só fechar a janela: aquela tarefa continua aberta.' +
+          (soltas.length ? ' ' + soltas.length + (soltas.length === 1
+            ? ' tarefa sem negociação será fechada direto.'
+            : ' tarefas sem negociação serão fechadas direto.') : '') }
+      ], {}, function () {
+        fecharSoltas();
+        V.tarefasMarcar(null, false);
+        contarUmaAUma(comNegocio.slice());
       });
     },
 
@@ -2380,33 +2370,18 @@
           opcoes: opcoesDeNegocio(contaAtual) },
         { id: 'negocioNovo', rotulo: 'Nome da nova negociação',
           placeholder: 'Reúso da ETE, Água de processo, Torre de resfriamento…' }
-      ].concat(camposDoContatoDaTarefa(contaAtual, t)).concat([
-
-        /* A situação estava só na lista, nunca no formulário. Quem abria a
-           tarefa por dentro de uma decisão — o "+ Tarefa" de "O que falta" —
-           não tinha como saber se ela estava aberta nem como concluí-la, e o
-           mesmo objeto tinha duas telas diferentes conforme a porta de
-           entrada. Agora a porta é uma só. */
-        { tipo: 'secao', rotulo: 'A tarefa' },
-        { tipo: 'aviso', rotulo: aberta
-          ? 'Situação: a fazer. Para registrar o que aconteceu e deixar a IA reler as oito decisões, ' +
-            'use Concluir, no rodapé.'
-          : 'Situação: concluída em ' + U.data(t.concluidaEm || t.vencimento) +
-            '. Use Reabrir, no rodapé, se ela foi encerrada por engano.' },
-        { id: 'titulo', rotulo: 'Assunto da tarefa', padrao: t.titulo },
-        { id: 'descricao', rotulo: 'Descrição', tipo: 'textarea', padrao: t.descricao || '' },
-        { id: 'tipo', rotulo: 'Como (canal)', tipo: 'select', largura: 'metade',
-          padrao: t.tipo, opcoes: Store.nomesDoCatalogo('tiposTarefa') },
-        { id: 'decisaoAlvo', rotulo: 'Decisão que pretende provocar', tipo: 'select', largura: 'metade',
-          padrao: t.decisaoAlvo || '',
-          opcoes: [{ valor: '', rotulo: '— nenhuma —' }]
-            .concat(P.DIMENSOES.map(function (d) { return { valor: d.id, rotulo: d.nome }; })) },
-        { id: 'vencimento', rotulo: 'Data', tipo: 'date', largura: 'metade', padrao: t.vencimento },
-        { id: 'hora', rotulo: 'Horário', tipo: 'time', largura: 'metade', padrao: t.hora || '' },
-        { id: 'donoId', rotulo: 'Responsável', tipo: 'select', padrao: t.donoId || '',
-          opcoes: [{ valor: '', rotulo: '— sem responsável —' }]
-            .concat(A.usuarios().map(function (u) { return { valor: u.id, rotulo: u.nome }; })) }
-      ]), {}, function (d) {
+      ].concat(camposDoContatoDaTarefa(contaAtual, t))
+        .concat([{ tipo: 'secao', rotulo: 'A tarefa' }])
+        .concat(camposDaTarefa(t))
+        .concat([
+        /* Só nesta tela: aqui a tarefa já existe, então marcar "Já foi feita"
+           é encerrá-la, e encerrar passa pela leitura da IA como em todo
+           lugar. O recado aparece só quando a escolha muda de fato. */
+        { id: 'avisoConclusao', tipo: 'aviso', rotulo: aberta
+          ? 'Ao salvar, abre a tela de contar o que aconteceu — é ali que a IA lê e relê as oito decisões.'
+          : 'Ao salvar, a tarefa volta a ficar aberta, com a conclusão de ' +
+            U.data(t.concluidaEm || t.vencimento) + ' desfeita.' }
+      ]), {}, function (d, docs) {
         if (!d.titulo) { alert('A tarefa precisa de um assunto.'); return; }
         const alvo = resolverNegocioDaTarefa(d);
         if (!alvo) return;
@@ -2421,10 +2396,26 @@
           oportunidadeId: alvo.id, decisaoAlvo: d.decisaoAlvo || '',
           contatoId: comQuem ? comQuem.id : (d.contatoId === NOVO_CONTATO ? t.contatoId : (d.contatoId || null))
         });
+        anexarAoRegistro(docs, { oportunidadeId: alvo.id, contaId: alvo.contaId, categoria: 'Outro' });
+
+        /* A situação decide o que acontece depois de salvar. Concluir daqui é
+           o mesmo Concluir do rodapé e da listinha: uma porta só. */
+        const quer = d.situacao === 'feita';
+        if (aberta && quer) { setTimeout(function () { App.concluirComRelato(alvo.id, id); }, 0); return; }
+        if (!aberta && !quer) { App.reabrirTarefa(id); return; }
         render();
       }, function (dlg) {
+        U.ligarDocumentos(dlg, 'arquivo');
+        ligarPainelDeMetodo(dlg);
         ligarEmpresaENegocio(dlg);
         ligarContatoDaTarefa(dlg);
+        /* O recado da conclusão só faz sentido quando a escolha muda. */
+        const situacao = dlg.querySelector('[name="situacao"]');
+        const avisar = function () {
+          U.mostrarCampos(dlg, ['avisoConclusao'], (situacao.value === 'feita') !== !aberta);
+        };
+        situacao.addEventListener('change', avisar);
+        avisar();
         /* As duas ligações acima repintam os selects a partir da empresa, e
            repintar apaga o que estava escolhido. Devolver aqui é o que faz
            "Editar" abrir mostrando a tarefa como ela é, e não como ela
@@ -2434,24 +2425,17 @@
         const comQuem = dlg.querySelector('[name="contatoId"]');
         if (comQuem && t.contatoId) comQuem.value = t.contatoId;
       }, null, [
-        /* Concluir sai daqui pelo mesmo caminho de todo lugar: o relato, a IA
-           lendo, as oito relidas. Ter uma segunda forma de encerrar tarefa
-           seria ter uma segunda forma de pontuar, e aí as notas passam a
-           depender de por onde a pessoa entrou. */
-        (aberta
-          ? { rotulo: 'Concluir', classe: 'alt', acao: function (dlg) {
-              if (!t.oportunidadeId) {
-                alert('Esta tarefa não está ligada a nenhuma negociação. Escolha a negociação e salve antes de concluir.');
-                return false;
-              }
-              /* Fecha esta janela antes de abrir a do relato. Empilhar dois
-                 modais deixa o de baixo capturando teclado e foco, e o Esc
-                 fecha o errado. */
-              dlg.close();
-              setTimeout(function () { App.concluirComRelato(t.oportunidadeId, id); }, 0);
-              return false;
-            } }
-          : { rotulo: 'Reabrir', classe: 'ghost', acao: function () { App.reabrirTarefa(id); } }),
+        /* O botão do rodapé não é um segundo caminho: ele marca a Situação e
+           manda salvar. Assim existe uma regra só — a do campo — e quem clica
+           no botão não perde o que acabou de editar, que era o que acontecia
+           quando ele fechava a janela por fora do Salvar. */
+        { rotulo: aberta ? 'Concluir' : 'Reabrir', classe: aberta ? 'alt' : 'ghost',
+          acao: function (dlg) {
+            const situacao = dlg.querySelector('[name="situacao"]');
+            if (situacao) situacao.value = aberta ? 'feita' : 'afazer';
+            dlg.querySelector('button[value="ok"]').click();
+            return false;
+          } },
         { rotulo: 'Excluir', classe: 'ghost', acao: function () {
           if (!U.confirmar('Excluir esta tarefa?')) return false;
           Store.excluirTarefa(id);
@@ -4770,6 +4754,59 @@
       { id: 'negocioNovo', rotulo: 'Nome da nova negociação',
         placeholder: 'Reúso da ETE, Água de processo, Torre de resfriamento…' }
     ].concat(camposDoContatoDaTarefa(padraoConta, o));
+  }
+
+  /* ---------- O corpo da tarefa, um só para todas as telas ----------
+     Uma tarefa é a mesma coisa por qualquer porta. Manter duas listas de
+     campos escritas à mão foi o que fez "Editar tarefa" perder os anexos e a
+     situação enquanto "Nova tarefa" os tinha — a pessoa via duas telas de um
+     objeto só e não sabia qual valia. Agora quem muda um campo muda em todas
+     as portas, porque só existe uma lista.
+
+     A ordem também é regra: o anexo vem logo abaixo da descrição, porque o
+     documento é o que descreve a tarefa melhor do que qualquer texto. */
+  function camposDaTarefa(t, o) {
+    const dados = t || {};
+    const extra = o || {};
+    return [
+      { id: 'titulo', rotulo: 'Assunto da tarefa', padrao: dados.titulo || extra.titulo || '' },
+      { id: 'descricao', rotulo: 'Descrição (opcional)', tipo: 'textarea',
+        padrao: dados.descricao || '',
+        placeholder: 'O que precisa ser dito, levado ou perguntado. Fica com a tarefa.' },
+      /* O anexo nunca some, nem quando a tarefa ainda não aconteceu: é o
+         material que carrega a informação — proposta, ata, planilha, dossiê —
+         e escondê-lo atrás de uma escolha era escondê-lo de quem precisa
+         dele. Se a tarefa for concluída, a IA lê o conteúdo junto com o que
+         foi digitado; em qualquer caso os arquivos ficam anexados ao negócio. */
+      { id: 'arquivo', tipo: 'file',
+        rotulo: 'Anexar documentos (Word, PDF, Excel, PowerPoint, texto) — pode escolher vários' },
+      { id: 'tipo', rotulo: 'Como (canal)', tipo: 'select', largura: 'metade',
+        padrao: dados.tipo || extra.tipo || '', opcoes: Store.nomesDoCatalogo('tiposTarefa') },
+      /* Situação é campo, não recado. Estava como aviso na tela de editar, e
+         quem abria as duas telas via a mesma tarefa com duas caras. Marcar
+         "Já foi feita" leva sempre à mesma tela de contar o que aconteceu —
+         não existe segunda forma de concluir. */
+      { id: 'situacao', rotulo: 'Situação', tipo: 'select', largura: 'metade',
+        padrao: extra.situacao || (dados.status && dados.status !== 'aberta' ? 'feita' : 'afazer'),
+        opcoes: [{ valor: 'afazer', rotulo: 'A fazer' }, { valor: 'feita', rotulo: 'Já foi feita' }] },
+      { id: 'decisaoAlvo', rotulo: 'Decisão que pretende provocar', tipo: 'select',
+        padrao: t ? (dados.decisaoAlvo || '') : (extra.decisaoAlvo || ''),
+        opcoes: [{ valor: '', rotulo: '— nenhuma —' }]
+          .concat(P.DIMENSOES.map(function (d) { return { valor: d.id, rotulo: d.nome }; })) },
+      { tipo: 'slot', slot: 'metodo' },
+      { id: 'vencimento', rotulo: 'Para quando', tipo: 'date', largura: 'metade',
+        padrao: dados.vencimento || Store.hoje() },
+      { id: 'hora', rotulo: 'Hora (opcional)', tipo: 'time', largura: 'metade',
+        padrao: dados.hora || '' },
+      /* Tarefa nova nasce com quem está criando; tarefa que já existe mantém
+         quem está lá, inclusive ninguém. Herdar o usuário atual numa edição
+         daria dono a uma tarefa que ninguém assumiu, só por alguém ter
+         aberto a tela. */
+      { id: 'donoId', rotulo: 'Responsável', tipo: 'select',
+        padrao: t ? (dados.donoId || '') : ((A.atual() || {}).id || ''),
+        opcoes: [{ valor: '', rotulo: '— sem responsável —' }]
+          .concat(A.usuarios().map(function (u) { return { valor: u.id, rotulo: u.nome }; })) }
+    ];
   }
 
   /* Com quem é a tarefa. Faltava, e a falta era grave: sem a pessoa, a

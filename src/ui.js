@@ -115,7 +115,10 @@
           (c.ajuda ? '<em>' + esc(c.ajuda) + '</em>' : '') + '</div>';
       }
       if (c.tipo === 'aviso') {
-        return '<p class="nota-form">' + esc(c.rotulo) + '</p>';
+        /* Com id o aviso pode ser mostrado e escondido como qualquer campo —
+           é o que deixa um recado aparecer só quando a escolha muda. */
+        return '<p class="nota-form"' + (c.id ? ' data-aviso="' + esc(c.id) + '"' : '') + '>' +
+          esc(c.rotulo) + '</p>';
       }
       /* Espaço reservado que o formulário preenche depois — hoje, o que a IA
          descobriu sobre a empresa. Fica no meio dos campos, e não no fim,
@@ -430,7 +433,9 @@
       const campo = dlg.querySelector('[name="' + id + '"]');
       const alvo = campo
         ? campo.closest('label.campo')
-        : (dlg.querySelector('[data-secao="' + id + '"]') || dlg.querySelector('[data-multi="' + id + '"]'));
+        : (dlg.querySelector('[data-secao="' + id + '"]') ||
+           dlg.querySelector('[data-multi="' + id + '"]') ||
+           dlg.querySelector('[data-aviso="' + id + '"]'));
       if (!alvo) return;
       /* `hidden` sozinho não basta: label.campo é display:flex, e a regra de
          display da folha de estilo vence o hidden do navegador. O campo ficava
@@ -440,10 +445,14 @@
     });
   }
 
+  /* A caixa de texto é opcional: onde a tarefa ainda não foi concluída não
+     existe relato para o conteúdo dos arquivos alimentar, e mesmo assim os
+     arquivos precisam ser anexados ao negócio. Sem isso, "Editar tarefa"
+     mostrava o campo de anexo e não guardava nada. */
   function ligarDocumentos(dlg, idArquivo, idTexto) {
     const entrada = dlg.querySelector('[name="' + idArquivo + '"]');
-    const caixa = dlg.querySelector('[name="' + idTexto + '"]');
-    if (!entrada || !caixa) return;
+    const caixa = idTexto ? dlg.querySelector('[name="' + idTexto + '"]') : null;
+    if (!entrada) return;
 
     entrada.setAttribute('multiple', 'multiple');
     entrada.setAttribute('accept', ACEITA_DOCUMENTOS);
@@ -472,7 +481,7 @@
            Repartindo, cada um entra com o começo, que é onde ficam
            cabeçalho, cliente, escopo e números. É a mesma regra que a caixa
            ✨ dos cadastros já usava; esta aqui tinha ficado sem. */
-        const comTexto = lidos.filter(function (d) { return d.texto; });
+        const comTexto = caixa ? lidos.filter(function (d) { return d.texto; }) : [];
         if (comTexto.length) {
           const jaEscrito = caixa.value.trim();
           const sobra = Math.max(2000, COTA_DOCUMENTOS - jaEscrito.length);

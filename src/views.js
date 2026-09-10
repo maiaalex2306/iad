@@ -371,7 +371,7 @@
     const classes = ['', '', 'warn', 'dead'];
     const tarefas = (i.tarefas || []).slice(0, 3).map(function (t) {
       const atrasada = t.vencimento < Store.hoje();
-      return '<div class="tarefa-linha"><button class="quadro" onclick="event.stopPropagation();App.concluirTarefa(\'' + t.id + '\')" title="Concluir"></button>' +
+      return '<div class="tarefa-linha"><button class="quadro" onclick="event.stopPropagation();App.concluirTarefa(\'' + t.id + '\')" title="Concluir: contar o que aconteceu"></button>' +
         '<span class="small">' + esc(t.titulo) + '</span>' +
         '<span class="espaco"></span><span class="tiny ' + (atrasada ? 'atrasado' : 'muted') + '">' + U.data(t.vencimento) + '</span></div>';
     }).join('');
@@ -2052,7 +2052,7 @@
       return '<div class="tarefa-linha">' +
         (feita
           ? '<span class="quadro feito" title="Concluída">\u2713</span>'
-          : '<button class="quadro" onclick="App.concluirTarefa(\'' + t.id + '\')" title="Concluir sem registrar o que aconteceu"></button>') +
+          : '<button class="quadro" onclick="App.concluirTarefa(\'' + t.id + '\')" title="Concluir: contar o que aconteceu"></button>') +
         '<span class="small' + (feita ? ' muted' : '') + '">' +
         (t.tipo ? '<span class="pill tiny">' + esc(t.tipo) + '</span> ' : '') + esc(t.titulo) +
         (d ? ' <span class="tiny muted">\u2192 ' + esc(d.nome) + '</span>' : '') +
@@ -2080,7 +2080,7 @@
             '<button class="btn ghost mini" onclick="App.adiarUmaTarefa(\'' + t.id + '\')"' +
             ' data-ajuda-titulo="Adiar" data-ajuda="Nova data e o motivo. O número de adiamentos fica na linha: negócio adiado três vezes é um dado sobre o negócio.">Adiar</button>') +
         '<button class="btn ghost mini" onclick="App.editarTarefa(\'' + t.id + '\')"' +
-        ' data-ajuda-titulo="Editar" data-ajuda="Corrige o que ficou errado: título, canal, decisão-alvo, com quem, data e descrição.">Editar</button>' +
+        ' data-ajuda-titulo="Editar" data-ajuda="A tarefa inteira: título, descrição, documentos anexados, canal, situação, decisão-alvo, com quem, data e responsável. Marcar a situação como “Já foi feita” abre a mesma tela de contar o que aconteceu.">Editar</button>' +
         '<button class="btn ghost mini" onclick="App.excluirTarefa(\'' + t.id + '\')" title="Excluir">\u2715</button>' +
         '</div>' +
 
@@ -3284,8 +3284,9 @@
       '"nenhuma tarefa neste filtro", que se lê como dado perdido.</td></tr>' +
       '<tr><td class="rotulo-manual"><strong>Pontos de decisão que andaram</strong></td><td>O número que fecha o ciclo, no resumo ' +
       'da semana. Tarefa fechada é esforço; ponto de IAD é resultado. É ele que diz se a semana valeu.</td></tr>' +
-      '<tr><td class="rotulo-manual"><strong>Fechadas sem relato</strong></td><td>Dívida visível. Fechar em lote move o funil e ' +
-      'não move nenhuma das oito decisões — sem contar o que o cliente fez, não há o que reler.</td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>Fechadas sem relato</strong></td><td>Dívida visível, hoje só do passado e das tarefas ' +
+      'que não estão ligadas a nenhuma negociação. Toda conclusão passa pela tela de contar o que aconteceu: é ela que ' +
+      'move as oito decisões. Sem contar o que o cliente fez, não há o que reler.</td></tr>' +
       '<tr><td class="rotulo-manual"><strong>O que ela destrava</strong></td><td>Se a tarefa tem decisão-alvo, mostra a dimensão e a ' +
       'nota atual. Se não tem, mostra a primeira lacuna do negócio. É o que impede a lista de virar lista de afazeres solta.</td></tr>' +
       '<tr><td class="rotulo-manual"><strong>Adiar</strong></td><td>Adiar é um fato, não correção de data: fica contado na tarefa ' +
@@ -3637,10 +3638,12 @@
         'Apresentar, propor, cobrar retorno, mover etapa — é trabalho, e trabalho não é avanço.',
         'Fora do sistema') +
       passo(6, 'Você conclui a tarefa contando o que aconteceu',
-        'Quatro modos, do mais completo ao mais rápido: colar a ata ou anexar os documentos, responder as quatro ' +
-        'perguntas fechadas, registrar uma evidência direta, ou marcar que nada aconteceu. ' +
-        'Fechar sem contar fecha a tarefa e não move o índice — não é punição, é que sem relato não existe evidência para ler.',
-        'Tarefas → Concluir, ou Concluir dentro da própria tarefa') +
+        'Toda tarefa concluída passa por aqui — pelo quadradinho da lista, pelo Concluir do rodapé, pela Situação da ' +
+        'própria tarefa ou pela conclusão em lote, o caminho é o mesmo. Quatro modos, do mais completo ao mais rápido: ' +
+        'colar a ata ou anexar os documentos, responder as quatro perguntas fechadas, registrar uma evidência direta, ' +
+        'ou marcar que nada aconteceu. Se você fechar a janela sem contar, a tarefa continua aberta: é mais honesto do ' +
+        'que fechada e vazia.',
+        'Tarefas → Concluir, ou a Situação dentro da própria tarefa') +
       passo(7, 'A IA separa o que o CLIENTE fez e relê as oito',
         'Ela propõe uma evidência por decisão afetada, com a força de cada uma, e reavalia os oito degraus com ' +
         'tudo o que já estava registrado mais o material novo. Ela nunca rebaixa nota: corrigir para baixo é sempre humano.',
