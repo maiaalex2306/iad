@@ -332,8 +332,12 @@
      é isso que permite comparar o que funciona — reunião presencial move mais
      decisão do que WhatsApp? — e é isso que a metodologia lê depois. Reunião
      não é um botão separado: é um destes tipos. */
+  /* LinkedIn faltava, e a falta era esquisita: a evidência já podia ter
+     canal LinkedIn, a cadência do método já tratava "LinkedIn" como tipo de
+     tarefa, e a prospecção inteira entra por ali — só a lista de canais da
+     tarefa não conhecia o nome. */
   const TIPOS_TAREFA = ['Reunião', 'Visita', 'Telefonema', 'WhatsApp', 'E-mail',
-    'Apresentação', 'Proposta', 'Preparação', 'Cobrar retorno'];
+    'LinkedIn', 'Apresentação', 'Proposta', 'Preparação', 'Cobrar retorno'];
 
   /* Os nomes antigos, que existiam antes de a lista virar canal. Renomeados
      no lugar, e não acrescentados: acrescentar deixaria "Ligar" e "Telefonema"

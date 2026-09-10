@@ -803,8 +803,18 @@
     return catalogo(nome).filter(function (i) { return i.ativo !== false; });
   }
 
+  /* Sem nome repetido. O catálogo é por empresa, mas o administrador que está
+     em "Todas as empresas" enxerga o de todas — e via "WhatsApp" três vezes
+     numa lista de escolher um. O que fica gravado na tarefa é o nome, não o
+     id, então nome repetido é ruído puro: some, e nada se perde. */
   function nomesDoCatalogo(nome) {
-    return catalogoAtivos(nome).map(function (i) { return i.nome; });
+    const vistos = {};
+    return catalogoAtivos(nome).map(function (i) { return i.nome; }).filter(function (n) {
+      const chave = String(n || '').trim().toLowerCase();
+      if (!chave || vistos[chave]) return false;
+      vistos[chave] = true;
+      return true;
+    });
   }
 
   function criarNoCatalogo(nome, dados) {
