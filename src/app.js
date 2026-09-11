@@ -270,7 +270,7 @@
       'Existe uma cópia deste aparelho de ' + U.esc(U.data(copia.em)) + ', com ' +
       copia.contas + ' empresa(s) e ' + copia.oportunidades + ' negociação(ões). ' +
       '<button class="btn mini" onclick="App.restaurarCopiaLocal()">Restaurar essa cópia</button>' +
-      '<button class="btn ghost mini" onclick="App.ir(\'#/dados\')">Ver o diagnóstico</button></div>';
+      '<button class="btn ghost mini" onclick="App.verDiagnostico()">Ver o diagnóstico</button></div>';
   }
 
   /* Quem está logado e de onde: some quando ninguém está. */
@@ -876,6 +876,17 @@
     filtrarHoje: function (chave) { V.definirFiltroHoje(chave); render(); },
     modoPipeline: function (modo) { V.definirModoPipeline(modo); render(); },
     abaCadastro: function (aba) { V.definirAbaCadastro(aba); render(); },
+    abaConfig: function (aba) { V.definirAbaConfig(aba); render(); },
+
+    /* A Configuração virou abas, e o diagnóstico foi para a última delas.
+       Mandar para `#/dados` e deixar na aba de sincronizar seria mandar a
+       pessoa procurar — justo quem já está perdido, porque é dali que este
+       botão é clicado. */
+    verDiagnostico: function () {
+      V.definirAbaConfig('app');
+      App.ir('#/dados');
+      render();
+    },
 
     /* Buscar re-renderiza a tela; devolvemos o foco e o cursor ao campo. */
     buscarCadastro: function (texto) {

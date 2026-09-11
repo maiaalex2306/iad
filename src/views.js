@@ -4763,25 +4763,88 @@
       '</div><div id="resposta-servidor"></div></div>';
   }
 
+  /* ---------------- Configuração, em abas ----------------
+     Doze blocos numa página só, e a pessoa rolava três telas para achar o
+     botão de sincronizar. O agrupamento é por MOTIVO de entrar aqui, não por
+     natureza técnica:
+
+       Conta e nuvem   quem eu sou, para onde sincronizo, a IA está no ar?
+       Linked Helper   a ponte inteira, do endereço aos descartados
+       Dados           trazer, levar e apagar carteira
+       O aplicativo    a versão, a instalação e o diagnóstico
+
+     A primeira é a de sincronizar porque é a que se abre todo dia. A última é
+     a de quando alguma coisa parece errada — e é a única que alguém procura
+     com pressa, então tem nome de lugar e não de assunto. */
+  const ABAS_CONFIG = [
+    ['nuvem', 'Conta e nuvem'],
+    ['lh', 'Linked Helper'],
+    ['dados', 'Dados'],
+    ['app', 'O aplicativo']
+  ];
+
+  const AJUDA_CONFIG = {
+    nuvem: 'Sua conta, o servidor, para qual empresa você sincroniza e se o assistente de IA está respondendo.',
+    lh: 'A ponte com o Linked Helper: endereço, busca de respostas, quem foi descartado e o que as campanhas produziram de recusa.',
+    dados: 'Importar planilha, exportar e importar backup, e a carteira de demonstração.',
+    app: 'A versão instalada, como instalar no celular, e o diagnóstico de quando a tela aparece vazia.'
+  };
+
+  let abaConfig = 'nuvem';
+
+  function definirAbaConfig(a) { abaConfig = a; }
+
   function dados() {
     const est = Store.dados();
-    return '<h1>Configuração e instalação</h1>' +
-      /* Qual versão está rodando de verdade. Sem isto, "atualizou?" não tinha
-         resposta: o service worker serve a cópia antiga por tempo indefinido e
-         a tela fica igualzinha. Já custou uma hora de investigação às cegas. */
-      '<div class="card"><h2>Versão</h2>' +
+    const abas = ABAS_CONFIG.map(function (a) {
+      return '<button class="pill' + (abaConfig === a[0] ? ' orange' : '') +
+        '" onclick="App.abaConfig(\'' + a[0] + '\')" data-ajuda="' +
+        esc(AJUDA_CONFIG[a[0]] || '') + '">' + esc(a[1]) + '</button>';
+    }).join(' ');
+
+    const corpo = {
+      nuvem: configNuvem, lh: configLinkedHelper, dados: configDados, app: configApp
+    }[abaConfig] || configNuvem;
+
+    return '<h1>Configuração</h1>' +
+      '<div class="row" style="margin:8px 0 14px">' + abas + '</div>' +
+      corpo(est);
+  }
+
+  function configNuvem() {
+    return blocoNuvem() + blocoMinhaConta() + blocoAssistente();
+  }
+
+  function configLinkedHelper() {
+    return blocoLinkedHelper() + listaDeDescartados() + auditoriaDasCampanhas();
+  }
+
+  function configApp() {
+    return blocoVersao() + blocoInstalar() + blocoDiagnostico();
+  }
+
+  function blocoVersao() {
+    /* Qual versão está rodando de verdade. Sem isto, "atualizou?" não tinha
+       resposta: o service worker serve a cópia antiga por tempo indefinido e
+       a tela fica igualzinha. Já custou uma hora de investigação às cegas. */
+    return '<div class="card"><h2>Versão</h2>' +
       '<p class="small" id="versao-instalada">Conferindo…</p>' +
       '<p class="tiny muted">Se a versão aqui for mais antiga do que a que ' +
       'deveria, o navegador ainda está servindo a cópia guardada. Um F5 com ' +
-      'Ctrl (ou Cmd) segurado força a troca.</p></div>' +
-      '<div class="card"><h2>Instalar no desktop e no celular</h2>' +
+      'Ctrl (ou Cmd) segurado força a troca.</p></div>';
+  }
+
+  function blocoInstalar() {
+    return '<div class="card"><h2>Instalar no desktop e no celular</h2>' +
       '<p class="small">Este é um PWA: o mesmo código roda no navegador, instala no Windows/macOS/Linux e vira ícone no Android e no iPhone.</p>' +
       '<ul class="small"><li><strong>Android/Chrome/Edge:</strong> menu ⋮ → “Instalar aplicativo”.</li>' +
       '<li><strong>iPhone/Safari:</strong> Compartilhar → “Adicionar à Tela de Início”.</li>' +
       '<li><strong>Desktop:</strong> ícone de instalar na barra de endereço.</li></ul>' +
-      '<button class="btn alt" onclick="App.instalar()" data-ajuda-titulo="Instalar" data-ajuda="Cria um ícone próprio no computador ou celular. O app passa a abrir em janela separada e a funcionar sem internet.">Instalar aplicativo</button></div>' +
+      '<button class="btn alt" onclick="App.instalar()" data-ajuda-titulo="Instalar" data-ajuda="Cria um ícone próprio no computador ou celular. O app passa a abrir em janela separada e a funcionar sem internet.">Instalar aplicativo</button></div>';
+  }
 
-      '<div class="card"><h2>Importar planilha</h2>' +
+  function configDados(est) {
+    return '<div class="card"><h2>Importar planilha</h2>' +
       '<p class="small muted">Traga a carteira que já existe. Importe nesta ordem: empresas, depois contatos, depois oportunidades — contatos e oportunidades precisam da empresa já cadastrada.</p>' +
       '<div class="row"><button class="btn" onclick="App.importarCsv(\'empresas\')" data-ajuda="Importa empresas de um CSV. Comece por aqui: contatos e oportunidades precisam da empresa já cadastrada.">Empresas</button>' +
       '<button class="btn" onclick="App.importarCsv(\'contatos\')" data-ajuda="Importa contatos. Cada linha precisa nomear uma empresa que já exista.">Contatos</button>' +
@@ -4790,13 +4853,6 @@
       '<button class="btn ghost mini" onclick="App.baixarModelo(\'empresas\')" data-ajuda="Baixa um CSV de exemplo com as colunas certas para empresas.">empresas.csv</button>' +
       '<button class="btn ghost mini" onclick="App.baixarModelo(\'contatos\')" data-ajuda="Baixa um CSV de exemplo com as colunas certas para contatos.">contatos.csv</button>' +
       '<button class="btn ghost mini" onclick="App.baixarModelo(\'oportunidades\')" data-ajuda="Baixa um CSV de exemplo com as colunas certas para oportunidades.">oportunidades.csv</button></div></div>' +
-
-      blocoAssistente() +
-      blocoNuvem() +
-      blocoMinhaConta() +
-      blocoLinkedHelper() +
-
-      blocoDiagnostico() +
 
       '<div class="card"><h2>Backup</h2>' +
       '<p class="small muted">Os dados ficam no dispositivo (offline). Exporte para levar de máquina ou compartilhar com o time. Anexos não entram no JSON.</p>' +
@@ -4809,10 +4865,7 @@
       '<div class="card"><h2>Demonstração</h2>' +
       '<p class="small muted">Carrega uma carteira fictícia com os grupos de pipeline para treinar a leitura do modelo.</p>' +
       '<div class="row"><button class="btn ghost" onclick="App.carregarDemo()" data-ajuda-titulo="Demonstração" data-ajuda="Carrega uma carteira fictícia com os cinco grupos de pipeline, para treinar a leitura do modelo. Substitui o que está aqui.">Carregar demonstração</button>' +
-      '<button class="btn ghost" onclick="App.limpar()" data-ajuda-titulo="Apagar tudo" data-ajuda="Apaga a carteira deste aparelho. Não apaga o que já foi sincronizado no servidor, nem os acessos.">Apagar tudo</button></div></div>' +
-
-      listaDeDescartados() +
-      auditoriaDasCampanhas();
+      '<button class="btn ghost" onclick="App.limpar()" data-ajuda-titulo="Apagar tudo" data-ajuda="Apaga a carteira deste aparelho. Não apaga o que já foi sincronizado no servidor, nem os acessos.">Apagar tudo</button></div></div>';
   }
 
   /* ---------- não conformidades das campanhas do Linked Helper ----------
@@ -5681,6 +5734,7 @@
     definirPeriodoTarefas: function (f) { periodoTarefas = f; },
     definirModoPipeline: function (m) { modoPipeline = m; },
     definirAbaCadastro: function (a) { abaCadastro = a; buscaCadastro = ''; },
+    definirAbaConfig: definirAbaConfig,
     definirBuscaCadastro: function (b) { buscaCadastro = b; },
     definirPeriodo: function (f) { filtroPeriodo = f; },
     definirSegmento: function (f) { filtroSegmento = f; }
