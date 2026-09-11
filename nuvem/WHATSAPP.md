@@ -162,6 +162,22 @@ Na função, em **Secrets**:
 | `IAD_CHAVE_SECRETA` | a `service_role` do projeto, que ignora o RLS para gravar |
 | `WA_TOKEN_VERIFICACAO` | o texto que você inventa e repete no painel da Meta |
 | `WA_SEGREDO_APP` | o App Secret do aplicativo, com que a Meta assina cada POST |
+| `WA_TENANT_PADRAO` | o `tenant_id` que recebe mensagem de número ainda não cadastrado |
+
+`WA_TENANT_PADRAO` existe por causa de uma corrida que acontece uma vez só. O
+`phone_number_id` só é conhecido **depois** de conectar o número, e o `history`
+chega nos minutos seguintes. Entre conectar e cadastrar a linha em
+`whatsapp_numeros` existe uma janela de alguns minutos — e é exatamente dentro
+dela que os 6 meses chegam. Com este segredo definido, nada se perde.
+
+Pegue o valor com:
+
+```sql
+select id, nome from public.tenants order by criado_em;
+```
+
+Deixe vazio numa instalação com várias empresas: ali chutar o dono da conversa
+seria mostrar o cliente de um para outro, e descartar é o certo.
 
 `SUPABASE_URL` já existe no ambiente. Segredo trocado só vale no deploy
 seguinte: publique de novo depois de mexer.
@@ -192,6 +208,15 @@ Só agora, e com a função já publicada e testada.
 4. Confirmar o código no aparelho.
 5. Nos minutos seguintes, conferir se o `history` chegou e quantas mensagens
    gravou. É a única chance.
+6. Cadastrar o número, agora que o `phone_number_id` é conhecido. Ele aparece
+   no log da função, no aviso da empresa padrão:
+
+```sql
+insert into public.whatsapp_numeros (phone_number_id, tenant_id, numero, nome)
+values ('<o id que apareceu no log>', '<o tenant>', '+55 ...', 'Comercial');
+```
+
+   A partir daí a empresa padrão deixa de ser usada para este número.
 
 ---
 

@@ -37,6 +37,24 @@ const SERVICE = Deno.env.get('IAD_CHAVE_SECRETA') ||
 const TOKEN_VERIFICACAO = Deno.env.get('WA_TOKEN_VERIFICACAO') || '';
 const SEGREDO_APP = Deno.env.get('WA_SEGREDO_APP') || '';
 
+/* A empresa para quem vai a mensagem de um número que ainda não foi
+   cadastrado em `whatsapp_numeros`. Existe por causa de uma corrida que só
+   acontece uma vez, e que custa caro se perder:
+
+   o `phone_number_id` só é conhecido DEPOIS de conectar o número, e a carga
+   dos 6 meses chega nos minutos seguintes à conexão, uma vez só. Entre
+   conectar e cadastrar a linha na tabela existe uma janela de alguns minutos
+   — e era justamente dentro dela que o `history` chegava e era descartado por
+   número desconhecido.
+
+   Com este segredo definido, nada se perde: a conversa entra na empresa certa
+   e a linha em `whatsapp_numeros` pode ser cadastrada com calma depois.
+
+   Vazio, o comportamento antigo continua: número desconhecido é descartado,
+   não adivinhado. É o certo para uma instalação com várias empresas, onde
+   chutar o dono seria mostrar a conversa de um cliente para outro. */
+const TENANT_PADRAO = Deno.env.get('WA_TENANT_PADRAO') || '';
+
 function texto(corpo: string, status = 200): Response {
   return new Response(corpo, { status: status, headers: { 'content-type': 'text/plain' } });
 }
@@ -188,7 +206,17 @@ async function donoDoNumero(phoneNumberId: string): Promise<string> {
     'whatsapp_numeros?phone_number_id=eq.' + encodeURIComponent(phoneNumberId) +
     '&ativo=is.true&select=tenant_id&limit=1'
   ) as Record<string, string>[];
-  return achados.length ? String(achados[0].tenant_id || '') : '';
+  if (achados.length) return String(achados[0].tenant_id || '');
+
+  /* Número que ainda não foi cadastrado. Com a empresa padrão definida, a
+     mensagem entra nela em vez de se perder — ver o comentário de
+     TENANT_PADRAO. O aviso no log é para o cadastro não ficar esquecido. */
+  if (TENANT_PADRAO) {
+    console.log('whatsapp: numero ' + phoneNumberId +
+      ' fora de whatsapp_numeros, usando a empresa padrao');
+    return TENANT_PADRAO;
+  }
+  return '';
 }
 
 Deno.serve(async (req: Request) => {
