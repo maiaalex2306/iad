@@ -121,7 +121,7 @@
       /* Duas telas se completam depois de desenhadas: Dados mede o espaço
          usado e busca os leads na ponte; Cadastros lista quem está no
          servidor. Nenhuma das duas pode segurar o render. */
-      if (rota.hash === '#/dados') { pintarUso(); pintarLeads(); }
+      if (rota.hash === '#/dados') { pintarUso(); pintarLeads(); pintarVersao(); }
       else pintarUsuariosNuvem();
     }
 
@@ -354,6 +354,35 @@
       if (!destino) return;
       const mb = (u.bytes / 1048576).toFixed(1);
       destino.textContent = 'Anexos: ' + u.quantidade + ' arquivo(s), ' + mb + ' MB (guardados fora do JSON).';
+    }).catch(function () {});
+  }
+
+  /* A versão vem do nome do cache do service worker, e não de uma constante no
+     código: constante mente quando o navegador está servindo a cópia velha —
+     que é exatamente o caso em que a pergunta é feita. O nome do cache é o que
+     realmente está no aparelho. */
+  function pintarVersao() {
+    const alvo = document.getElementById('versao-instalada');
+    if (!alvo) return;
+
+    if (!global.caches || !navigator.serviceWorker) {
+      alvo.textContent = 'Rodando direto da rede, sem cópia guardada neste aparelho.';
+      return;
+    }
+    global.caches.keys().then(function (nomes) {
+      const destino = document.getElementById('versao-instalada');
+      if (!destino) return;
+      const meus = (nomes || []).filter(function (n) { return n.indexOf('iad-crm-') === 0; });
+      if (!meus.length) {
+        destino.textContent = 'Rodando direto da rede, sem cópia guardada neste aparelho.';
+        return;
+      }
+      /* Mais de um cache significa troca em andamento: o novo já baixou e o
+         velho ainda não foi limpo. Mostrar os dois evita a conclusão errada. */
+      destino.textContent = meus.length === 1
+        ? 'Versão instalada: ' + meus[0].replace('iad-crm-', '')
+        : 'Versões guardadas: ' + meus.map(function (n) { return n.replace('iad-crm-', ''); }).join(', ') +
+          ' — a troca ainda não terminou. Feche todas as abas do app e abra de novo.';
     }).catch(function () {});
   }
 

@@ -4748,6 +4748,14 @@
   function dados() {
     const est = Store.dados();
     return '<h1>Configuração e instalação</h1>' +
+      /* Qual versão está rodando de verdade. Sem isto, "atualizou?" não tinha
+         resposta: o service worker serve a cópia antiga por tempo indefinido e
+         a tela fica igualzinha. Já custou uma hora de investigação às cegas. */
+      '<div class="card"><h2>Versão</h2>' +
+      '<p class="small" id="versao-instalada">Conferindo…</p>' +
+      '<p class="tiny muted">Se a versão aqui for mais antiga do que a que ' +
+      'deveria, o navegador ainda está servindo a cópia guardada. Um F5 com ' +
+      'Ctrl (ou Cmd) segurado força a troca.</p></div>' +
       '<div class="card"><h2>Instalar no desktop e no celular</h2>' +
       '<p class="small">Este é um PWA: o mesmo código roda no navegador, instala no Windows/macOS/Linux e vira ícone no Android e no iPhone.</p>' +
       '<ul class="small"><li><strong>Android/Chrome/Edge:</strong> menu ⋮ → “Instalar aplicativo”.</li>' +
