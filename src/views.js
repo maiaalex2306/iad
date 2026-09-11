@@ -4164,6 +4164,16 @@
       'melhor</em>, <em>quem sumiu</em> — e ela mostra a resposta com as linhas clicáveis, que levam direto ' +
       'ao negócio. Os botões ao lado da pergunta são as perguntas que ela sabe responder; o texto livre é ' +
       'só um atalho para eles. Para chamá-la de volta depois de fechada, o rosto no alto da tela.</p>' +
+
+      '<p class="small">A pergunta também pode ter <strong>nome próprio</strong>: <em>como está a Pif ' +
+      'Paf</em>, <em>o que falta na Marilan</em>, <em>tarefas da Bio Water</em>, <em>quem eu conheço na ' +
+      'Hortência</em>. Quem resolve o nome é o aplicativo, contra as empresas que existem na sua carteira. ' +
+      'Se a empresa tiver duas negociações abertas, ela pergunta qual — chutar aqui seria responder sobre ' +
+      'o negócio errado. E se o nome não estiver na carteira, ela diz isso, em vez de escolher alguém.</p>' +
+
+      '<p class="small">E ela <strong>lembra da resposta anterior</strong>. Depois de perguntar qual conta ' +
+      'está melhor, <em>e o que falta nela?</em> funciona sem repetir o nome. É uma negociação de memória, ' +
+      'não um histórico: se você citar outra empresa, a conversa muda de assunto na hora.</p>' +
       '<div class="aviso"><strong>Aqui a IA não responde: ela só entende.</strong> Quem calcula quantas ' +
       'tarefas existem, qual negócio está melhor e há quantos dias o cliente sumiu é o motor, com os seus ' +
       'dados. A IA serve para descobrir qual das perguntas você fez. É por isso que o número que sai daqui ' +
@@ -5315,6 +5325,14 @@
     if (!r) return '';
 
     const linhas = (r.linhas || []).map(function (l) {
+      /* Três destinos possíveis, nesta ordem de precedência: refazer a mesma
+         pergunta apontando para uma negociação (`alvo`, a desambiguação), sair
+         da conversa para a tela onde se trabalha (`ir`), ou nenhum — que é o
+         caso da resposta que só informa e não tem para onde levar. */
+      if (l.alvo) {
+        return '<li><button type="button" data-alvo="' + esc(l.alvo) + '">' +
+          esc(l.texto) + '</button></li>';
+      }
       if (!l.ir) return '<li class="sem-ir">' + esc(l.texto) + '</li>';
       return '<li><button type="button" data-ir="' + esc(l.ir) + '">' +
         esc(l.texto) + '</button></li>';
@@ -5324,7 +5342,9 @@
       (r.resumo ? '<p class="resumo">' + esc(r.resumo) + '</p>' : '') +
       (linhas ? '<ul>' + linhas + '</ul>' : '') +
       (r.maisEm ? '<button type="button" class="btn ghost mini" data-ir="' +
-        esc(r.maisEm) + '">Ver a tela inteira</button>' : '') +
+        esc(r.maisEm) + '">' +
+        (r.maisEm.indexOf('#/op/') === 0 ? 'Abrir o negócio' : 'Ver a tela inteira') +
+        '</button>' : '') +
       '</div>';
   }
 

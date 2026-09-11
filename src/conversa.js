@@ -49,9 +49,11 @@
   }
 
   /* Um item de resposta. `ir` é o hash para onde a linha leva, quando leva —
-     resposta que só informa e não deixa agir vira relatório. */
-  function linha(texto, ir) {
-    return { texto: texto, ir: ir || '' };
+     resposta que só informa e não deixa agir vira relatório. `alvo` é o outro
+     caminho: em vez de sair da conversa, refaz a mesma pergunta apontando para
+     aquela negociação. É como a desambiguação funciona sem virar formulário. */
+  function linha(texto, ir, alvo) {
+    return { texto: texto, ir: ir || '', alvo: alvo || '' };
   }
 
   function daOportunidade(r, complemento) {
@@ -61,6 +63,90 @@
 
   function vazio(texto) {
     return { linhas: [linha(texto)], nada: true };
+  }
+
+  /* ---------------- o nome próprio ----------------
+     O vendedor não pensa na carteira, pensa numa conta. "Como está a Pif Paf"
+     é a pergunta que ele faz de verdade, e sem isto ela não tinha resposta.
+
+     Quem resolve o nome é este arquivo, contra as empresas que existem — não
+     a IA. Ela pode dizer que o vendedor citou "Pif Paf"; quem decide se isso
+     é a Pif Paf Alimentos, e qual das negociações dela, é o aplicativo. Nome
+     que não bate volta como "não achei", nunca como chute.
+
+     Palavras que aparecem no nome de meia carteira e não distinguem ninguém.
+     Sem esta lista, "grupo" casaria com todo mundo que tem Grupo no nome. */
+  const GENERICAS = ['grupo', 'industria', 'industrias', 'comercio', 'comercial',
+    'alimentos', 'ltda', 'sa', 'cia', 'companhia', 'empresa', 'do', 'da', 'de',
+    'dos', 'das', 'e', 'brasil', 'brasileira', 'nacional', 'participacoes',
+    'holding', 'agro', 'agroindustrial', 'servicos', 'solucoes', 'tecnologia'];
+
+  /* O núcleo do nome: o que sobra quando se tira o genérico. "Pif Paf
+     Alimentos" vira "pif paf", que é justamente como a pessoa escreve. */
+  function nucleo(nome) {
+    const partes = achatar(nome).split(/[^a-z0-9]+/).filter(function (w) {
+      return w && GENERICAS.indexOf(w) === -1;
+    });
+    return partes.join(' ');
+  }
+
+  /* As três formas de citar a mesma empresa, da mais forte para a mais fraca.
+     A força é o tamanho do trecho que casou: "pif paf" casando vale mais do
+     que uma palavra solta, e é assim que duas empresas parecidas se separam. */
+  function apelidos(nome) {
+    const lista = [];
+    const inteiro = achatar(nome);
+    if (inteiro.length >= 4) lista.push(inteiro);
+    const nu = nucleo(nome);
+    if (nu.length >= 4 && nu !== inteiro) lista.push(nu);
+    nu.split(' ').forEach(function (w) { if (w.length >= 5) lista.push(w); });
+    return lista;
+  }
+
+  /* Devolve as negociações abertas da empresa citada, e o nome que casou.
+     Zero, uma, ou várias — e várias não vira escolha automática: perguntar
+     qual é mais barato do que pendurar a resposta no negócio errado. */
+  function acharAlvo(texto) {
+    const t = achatar(texto);
+    if (t.length < 3) return null;
+
+    let melhor = null;
+    abertas().forEach(function (op) {
+      const conta = Store.conta(op.contaId);
+      const nomes = apelidos(op.titulo).concat(conta ? apelidos(conta.nome) : []);
+      nomes.forEach(function (n) {
+        if (t.indexOf(n) === -1) return;
+        if (!melhor || n.length > melhor.forca) melhor = { forca: n.length, nome: n };
+      });
+    });
+    if (!melhor) return null;
+
+    /* Tudo que casou com a mesma força entra: é o caso da empresa com duas
+       negociações abertas, que é exatamente quando se deve perguntar. */
+    const ops = abertas().filter(function (op) {
+      const conta = Store.conta(op.contaId);
+      const nomes = apelidos(op.titulo).concat(conta ? apelidos(conta.nome) : []);
+      return nomes.indexOf(melhor.nome) !== -1;
+    });
+    return { ops: ops, nome: melhor.nome };
+  }
+
+  /* Um exemplo escrito com a carteira da pessoa, para a dica na tela. Nome
+     inventado numa dica ensina a escrever errado. */
+  function exemploComNome() {
+    const op = abertas()[0];
+    if (!op) return '';
+    const conta = Store.conta(op.contaId);
+    return (conta && conta.nome) || op.titulo;
+  }
+
+  function precisaEscolher(alvo) {
+    return {
+      resumo: 'Qual negociação da ' + alvo.nome + '?',
+      linhas: alvo.ops.map(function (op) {
+        return linha(op.titulo + ' · ' + op.etapa, '', op.id);
+      })
+    };
   }
 
   /* ---------------- as intenções ----------------
@@ -113,6 +199,7 @@
             return linha(i.resumo.op.titulo + ' · ' + i.motivo + ' → ' + i.acao,
               '#/op/' + i.resumo.op.id);
           }),
+          alvo: itens[0].resumo.op.id,
           maisEm: '#/hoje'
         };
       }
@@ -144,6 +231,9 @@
           linhas: rs.slice(0, 5).map(function (r) {
             return daOportunidade(r, 'IAD ' + r.iad + ' · ' + r.evidenceAge + 'd · ' + r.classe.rotulo);
           }),
+          /* O protagonista da resposta. É o que faz a pergunta seguinte —
+             "e o que falta nela?" — ter a quem se referir. */
+          alvo: topo.op.id,
           maisEm: '#/pipeline'
         };
       }
@@ -168,6 +258,7 @@
           linhas: rs.slice(0, 6).map(function (r) {
             return daOportunidade(r, r.classe.rotulo + ' · ' + r.classe.desc);
           }),
+          alvo: rs[0].op.id,
           maisEm: '#/pipeline'
         };
       }
@@ -189,6 +280,7 @@
           linhas: rs.slice(0, 6).map(function (r) {
             return daOportunidade(r, dias(r.evidenceAge) + ' sem evidência');
           }),
+          alvo: rs[0].op.id,
           maisEm: '#/revisao'
         };
       }
@@ -264,6 +356,7 @@
           linhas: rs.slice(0, 6).map(function (r) {
             return daOportunidade(r, 'grupo ' + r.coverage.percentual + '% · ' + r.op.etapa);
           }),
+          alvo: rs[0].op.id,
           maisEm: '#/pipeline'
         };
       }
@@ -291,6 +384,121 @@
         };
       }
     }
+,
+
+    /* ---------------- as quatro que pedem nome próprio ----------------
+       Não viram chip: nove botões já é o limite do que se lê de relance, e
+       estas não fazem sentido sem uma empresa junto. Elas aparecem na dica
+       embaixo da caixa, escrita com uma conta da própria carteira. */
+
+    {
+      id: 'conta',
+      comAlvo: true,
+      chip: '',
+      exemplos: ['como está a', 'como anda a', 'situação da', 'me fala da', 'status da'],
+      palavras: ['como', 'situacao', 'situação', 'status', 'anda'],
+      responder: function (op) {
+        const r = E.resumo(op);
+        const t = tarefasAbertas().filter(function (x) { return x.oportunidadeId === op.id; });
+        const linhas = [
+          linha('Decisão: IAD ' + r.iad + '/' + P.IAD_MAXIMO + ' · ' + r.classe.rotulo +
+            ' · ' + r.classe.desc, '#/op/' + op.id),
+          linha('Cliente: ' + dias(r.evidenceAge) + ' sem evidência (' + r.faixa.rotulo + ')',
+            '#/op/' + op.id),
+          linha('Grupo comprador: ' + r.coverage.mapeados + ' mapeados, ' +
+            r.coverage.percentual + '% dos papéis críticos' +
+            (r.coverage.temEconomicBuyer ? '' : ', sem o decisor econômico'),
+            '#/op/' + op.id),
+          linha('Etapa ' + op.etapa + ' há ' + dias(r.tempoNaEtapa) + ' · ' +
+            (t.length ? t.length + (t.length === 1 ? ' tarefa aberta' : ' tarefas abertas')
+                      : 'nenhuma tarefa aberta'), '#/op/' + op.id)
+        ];
+        /* O alerta mais grave entra por último, que é onde o olho para. */
+        const grave = r.alertas.filter(function (a) { return a.nivel === 'alto'; })[0];
+        if (grave) linhas.push(linha('⚠ ' + grave.texto, '#/op/' + op.id));
+
+        return {
+          resumo: op.titulo + ', da ' + nomeDaConta(op) + ' — ' + moeda(op.valor),
+          linhas: linhas,
+          maisEm: '#/op/' + op.id
+        };
+      }
+    },
+
+    {
+      id: 'falta',
+      comAlvo: true,
+      chip: '',
+      exemplos: ['o que falta na', 'o que fazer na', 'qual o próximo passo da',
+        'por onde avanço na', 'o que está faltando'],
+      palavras: ['falta', 'faltando', 'fazer', 'proximo', 'próximo', 'passo', 'avanco', 'avanço'],
+      responder: function (op) {
+        const ls = E.lacunas(op);
+        if (!ls.length) return vazio('Nada em aberto nas oito decisões da ' + nomeDaConta(op) + '.');
+        return {
+          resumo: 'O que falta em ' + op.titulo,
+          linhas: ls.slice(0, 6).map(function (l) {
+            return linha(l.titulo + ': ' + l.falta, '#/op/' + op.id);
+          }),
+          maisEm: '#/op/' + op.id
+        };
+      }
+    },
+
+    {
+      id: 'tarefas_da_conta',
+      comAlvo: true,
+      chip: '',
+      exemplos: ['tarefas da', 'o que tenho marcado na', 'minhas tarefas na'],
+      palavras: ['tarefa', 'tarefas', 'marcado', 'agenda'],
+      responder: function (op) {
+        const hoje = Store.hoje();
+        const lista = tarefasAbertas()
+          .filter(function (t) { return t.oportunidadeId === op.id; })
+          .sort(function (a, b) { return String(a.vencimento).localeCompare(String(b.vencimento)); });
+        if (!lista.length) {
+          return vazio('Nenhuma tarefa aberta em ' + op.titulo + '. Negócio sem próxima ' +
+            'tarefa é negócio parado.');
+        }
+        return {
+          resumo: lista.length + (lista.length === 1 ? ' tarefa aberta em ' : ' tarefas abertas em ') +
+            op.titulo,
+          linhas: lista.map(function (t) {
+            const atraso = t.vencimento && t.vencimento < hoje ? ' · atrasada' : '';
+            return linha(data(t.vencimento) + ' · ' + (t.tipo ? t.tipo + ': ' : '') +
+              t.titulo + atraso, '#/op/' + op.id);
+          }),
+          maisEm: '#/op/' + op.id
+        };
+      }
+    },
+
+    {
+      id: 'quem_da_conta',
+      comAlvo: true,
+      chip: '',
+      exemplos: ['quem eu conheço na', 'quem está no grupo comprador da',
+        'com quem eu falo na', 'quais contatos da'],
+      palavras: ['quem', 'contato', 'contatos', 'pessoa', 'pessoas', 'conheco', 'conheço', 'falo'],
+      responder: function (op) {
+        const gente = E.stakeholdersDaOp(op);
+        if (!gente.length) {
+          return vazio('Ninguém no grupo comprador de ' + op.titulo + '. Venda sem ' +
+            'nome é venda que depende de sorte.');
+        }
+        const cob = E.coverage(op);
+        return {
+          resumo: gente.length + (gente.length === 1 ? ' pessoa mapeada, ' : ' pessoas mapeadas, ') +
+            cob.percentual + '% dos papéis críticos' +
+            (cob.faltando.length ? ' — falta ' + cob.faltando.join(', ') : ''),
+          linhas: gente.map(function (c) {
+            return linha(c.nome + (c.cargo ? ' · ' + c.cargo : '') +
+              (c.papel ? ' · ' + c.papel : ''), '#/op/' + op.id);
+          }),
+          maisEm: '#/op/' + op.id
+        };
+      }
+    }
   ];
 
   function porId(id) {
@@ -300,17 +508,19 @@
   /* ---------------- entender a pergunta ----------------
      Primeiro sem rede. Conta quantas palavras da intenção aparecem no texto, e
      só aceita quando uma ganha das outras — empate vira dúvida, e dúvida vai
-     para a IA em vez de chutar. */
+     para a IA em vez de chutar.
+
+     Quando a frase traz o nome de uma empresa, a disputa muda: só concorrem as
+     intenções que falam de UMA negociação. Quem escreveu o nome da Pif Paf não
+     está perguntando da carteira inteira. */
   function achatar(t) {
     return String(t || '').toLowerCase()
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   }
 
-  function entenderAqui(texto) {
+  function pontuar(texto, candidatas) {
     const t = achatar(texto);
-    if (t.length < 3) return null;
-
-    const pontos = INTENCOES.map(function (i) {
+    const pontos = candidatas.map(function (i) {
       let n = 0;
       i.palavras.forEach(function (p) { if (t.indexOf(achatar(p)) !== -1) n++; });
       /* O exemplo inteiro batendo vale mais do que palavra solta. */
@@ -318,20 +528,115 @@
       return { id: i.id, n: n };
     }).sort(function (a, b) { return b.n - a.n; });
 
-    if (!pontos[0].n) return null;
+    if (!pontos.length || !pontos[0].n) return null;
     if (pontos[1] && pontos[1].n === pontos[0].n) return null;   /* empate é dúvida */
     return pontos[0].id;
   }
 
-  /* A IA só escolhe entre as intenções que existem. Ela não escreve resposta,
-     não vê número e não inventa conta: devolve um id de uma lista fechada, e
-     id fora da lista é descartado aqui. */
-  function entenderComIA(texto) {
+  /* As palavras que não são nome de ninguém: artigos, pronomes, e o
+     vocabulário das próprias intenções. Serve a uma pergunta só, e é uma
+     pergunta de segurança: quando a frase pede uma negociação e não diz qual,
+     dá para usar a da resposta anterior?
+
+     Dá, se a frase não trouxer nome nenhum — "e o que falta nela?" é
+     claramente sobre a de antes. Não dá, se trouxer: quem escreveu "como está
+     a Zorglub" citou uma empresa, e responder sobre outra seria o pior erro
+     possível aqui. Melhor dizer que não achei. */
+  const COMUNS = ('a o as os um uma uns umas de do da dos das em no na nos nas ao aos ' +
+    'por para pra com sem sob sobre que qual quais quem quando onde como porque ' +
+    'e ou mas se me eu meu minha meus minhas nosso nossa te seu sua ' +
+    'sao esta estao ta tao tem tenho temos ter teve foi vai vou ver diz fala falar ' +
+    'ai la isso isto esse essa este aquele aquela ele ela eles elas ' +
+    'nele nela neles nelas dele dela deles delas nesse nessa neste nesta desse dessa disso ' +
+    'agora hoje amanha ontem antes depois ainda ja nao sim entao bem ' +
+    'mais menos muito pouco tudo nada algo coisa favor ' +
+    'conta contas empresa empresas negocio negocios negociacao negociacoes cliente clientes ' +
+    'caso vez la so ate mesmo cada qualquer outro outra').split(' ');
+
+  let vocabulario = null;
+  function conhecidas() {
+    if (vocabulario) return vocabulario;
+    vocabulario = {};
+    COMUNS.forEach(function (w) { vocabulario[w] = true; });
+    INTENCOES.forEach(function (i) {
+      i.palavras.concat(i.exemplos).forEach(function (frase) {
+        achatar(frase).split(/[^a-z0-9]+/).forEach(function (w) {
+          if (w) vocabulario[w] = true;
+        });
+      });
+    });
+    return vocabulario;
+  }
+
+  /* O que sobrou da frase depois de tirar tudo que é vocabulário. Se sobrou
+     alguma coisa, foi um nome — e um nome que ninguém reconheceu. */
+  function nomeNaoAchado(texto) {
+    const v = conhecidas();
+    const sobra = achatar(texto).split(/[^a-z0-9]+/).filter(function (w) {
+      return w.length >= 3 && !v[w] && !/^\d+$/.test(w);
+    });
+    if (!sobra.length) return '';
+    /* Devolve como o vendedor escreveu, não achatado: é o que ele vai ler. */
+    const original = String(texto).split(/[^\wÀ-ÿ]+/).filter(function (w) {
+      return sobra.indexOf(achatar(w)) !== -1;
+    });
+    return original.join(' ');
+  }
+
+  function globais() {
+    return INTENCOES.filter(function (i) { return !i.comAlvo; });
+  }
+
+  function comAlvo() {
+    return INTENCOES.filter(function (i) { return i.comAlvo; });
+  }
+
+  /* O entendimento local, já com nome próprio e com memória.
+
+     `ultimo` é a negociação da resposta anterior. É o que faz "e o que falta
+     nela?" funcionar — sem isso cada pergunta nasce órfã, e uma caixa de
+     perguntas órfãs é uma busca, não uma conversa. */
+  function entenderAqui(texto, ultimo) {
+    const t = achatar(texto);
+    if (t.length < 3) return null;
+
+    const alvo = acharAlvo(texto);
+    if (alvo) {
+      /* Citou a empresa e mais nada ("e a Pif Paf?"): a pergunta é como ela
+         está, que é o que se quer saber quando se diz só o nome. */
+      return { id: pontuar(texto, comAlvo()) || 'conta', alvo: alvo };
+    }
+
+    const id = pontuar(texto, INTENCOES);
+    if (!id) return null;
+
+    const i = porId(id);
+    if (!i.comAlvo) return { id: id, alvo: null };
+
+    /* Pergunta sobre uma negociação sem dizer qual. Vale a da resposta
+       anterior — e só ela: adivinhar uma terceira seria pior do que perguntar.
+
+       Mas só quando a frase não cita nome nenhum. Citou e não casou: a empresa
+       não está na carteira, e a resposta certa é dizer isso. */
+    const citado = nomeNaoAchado(texto);
+    if (citado) return { id: id, semAlvo: true, citado: citado };
+    if (!ultimo) return { id: id, semAlvo: true };
+    const op = Store.oportunidade(ultimo);
+    if (!op || op.desfecho) return { id: id, semAlvo: true };
+    return { id: id, alvo: { ops: [op], nome: nomeDaConta(op) } };
+  }
+
+  /* A IA só escolhe entre as intenções que existem, e só repete o nome que o
+     vendedor escreveu. Ela não escreve resposta, não vê número e não resolve
+     empresa nenhuma: devolve um id de uma lista fechada e um pedaço de texto,
+     e os dois passam por conferência aqui. */
+  function entenderComIA(texto, ultimo) {
     const IA = global.IADIA;
     if (!IA || !IA.disponivel()) return Promise.resolve(null);
 
     const opcoes = INTENCOES.map(function (i) {
-      return i.id + ': ' + i.exemplos.slice(0, 3).join(' / ');
+      return i.id + ': ' + i.exemplos.slice(0, 3).join(' / ') +
+        (i.comAlvo ? ' (precisa do nome de uma empresa)' : '');
     }).join('\n');
 
     /* O `extrair` recusa texto curto — e tem razão, para documento. Aqui
@@ -341,23 +646,62 @@
     return IA.extrair('intencao', pedido, { opcoes: opcoes }).then(function (r) {
       if (!r || r.erro || !r.campos) return null;
       const id = String(r.campos.intencao || '').trim();
-      return porId(id) ? id : null;
+      const i = porId(id);
+      if (!i) return null;
+      if (!i.comAlvo) return { id: id, alvo: null };
+
+      /* O nome vem da IA, a empresa vem da carteira. Ela pode ter lido
+         "Pif Paf" na frase; quem decide se isso é uma conta é daqui. */
+      const citado = String(r.campos.empresa || '').trim();
+      const alvo = (citado && acharAlvo(citado)) || acharAlvo(texto);
+      if (alvo) return { id: id, alvo: alvo };
+
+      if (ultimo) {
+        const op = Store.oportunidade(ultimo);
+        if (op && !op.desfecho) return { id: id, alvo: { ops: [op], nome: nomeDaConta(op) } };
+      }
+      return { id: id, semAlvo: true, citado: citado };
     }).catch(function () { return null; });
   }
 
-  function entender(texto) {
-    const local = entenderAqui(texto);
-    if (local) return Promise.resolve({ id: local, comIA: false });
-    return entenderComIA(texto).then(function (id) {
-      return id ? { id: id, comIA: true } : null;
+  function entender(texto, ultimo) {
+    const local = entenderAqui(texto, ultimo);
+    if (local) return Promise.resolve(Object.assign({ comIA: false }, local));
+    return entenderComIA(texto, ultimo).then(function (r) {
+      return r ? Object.assign({ comIA: true }, r) : null;
     });
   }
 
-  function responder(id) {
+  /* Responder. `alvo` é o id da negociação, quando a pergunta tem uma.
+
+     Devolve sempre um objeto com `id`, e mais `alvo` quando a resposta é de
+     uma negociação — é assim que a caixa sabe o que guardar para a próxima
+     pergunta. */
+  function responder(id, alvoId) {
     const i = porId(id);
     if (!i) return null;
-    const r = i.responder();
-    return Object.assign({ id: i.id, chip: i.chip }, r);
+
+    if (!i.comAlvo) return Object.assign({ id: i.id, chip: i.chip }, i.responder());
+
+    const op = alvoId ? Store.oportunidade(alvoId) : null;
+    if (!op) {
+      return {
+        id: i.id, chip: i.chip, precisa: true,
+        linhas: [linha('De qual empresa? Escreva o nome junto com a pergunta.')],
+        nada: true
+      };
+    }
+    return Object.assign({ id: i.id, chip: i.chip, alvo: op.id }, i.responder(op));
+  }
+
+  /* O que a caixa mostra quando a pergunta tem empresa: uma resposta, ou a
+     escolha entre as negociações abertas dela. */
+  function responderAoAlvo(id, alvo) {
+    if (!alvo || !alvo.ops.length) return responder(id, null);
+    if (alvo.ops.length > 1) {
+      return Object.assign({ id: id, chip: '', escolher: true }, precisaEscolher(alvo));
+    }
+    return responder(id, alvo.ops[0].id);
   }
 
   global.IADConversa = {
@@ -365,6 +709,9 @@
     entender: entender,
     entenderAqui: entenderAqui,
     responder: responder,
+    responderAoAlvo: responderAoAlvo,
+    acharAlvo: acharAlvo,
+    exemploComNome: exemploComNome,
     porId: porId,
     esc: esc
   };

@@ -191,7 +191,12 @@ const FORMATOS: Record<string, Record<string, Regra>> = {
      quem confere se o id existe é o aplicativo, contra a própria lista que
      ele mandou. A IA aqui não responde nada; ela aponta. */
   intencao: {
-    intencao: { como: 'texto', max: 40 }
+    intencao: { como: 'texto', max: 40 },
+    /* O nome que o vendedor escreveu, copiado da frase. NÃO é a empresa: quem
+       resolve nome em conta é o aplicativo, contra a carteira de verdade.
+       Aqui sai texto solto, e texto solto que não casa com ninguém volta como
+       "não achei" — nunca como negociação errada. */
+    empresa:  { como: 'texto', max: 80 }
   }
 };
 
@@ -482,12 +487,15 @@ Devolva {"contatos": [{"nome": "...", "cargo": "...", "area": "...", "email": ".
 Lista (id: exemplos):
 ${opcoes}
 
-Regras:
-- Devolva SOMENTE o id, exatamente como está na lista.
-- Se nenhuma corresponder com clareza, devolva vazio. Chutar é pior do que não entender: o aplicativo sabe dizer "não entendi" e mostrar as opções.
-- Não responda a pergunta. Não escreva número, nome de empresa nem opinião.
+Se a pergunta citar uma empresa, copie o nome dela no campo "empresa", exatamente como o vendedor escreveu.
 
-Devolva {"intencao": "id_escolhido"} e nada mais.`;
+Regras:
+- Devolva SOMENTE um id da lista, exatamente como está escrito nela.
+- Se nenhuma corresponder com clareza, devolva vazio. Chutar é pior do que não entender: o aplicativo sabe dizer "não entendi" e mostrar as opções.
+- O campo "empresa" é cópia, não dedução. Se a frase não trouxer nome de empresa, devolva vazio — inclusive quando o id escolhido pedir um. Quem descobre de qual negociação se trata é o aplicativo, não você.
+- Não responda a pergunta. Não escreva número nem opinião.
+
+Devolva {"intencao": "id_escolhido", "empresa": "nome citado ou vazio"} e nada mais.`;
   }
 
   if (tipo === 'oportunidade') {

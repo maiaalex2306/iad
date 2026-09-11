@@ -1413,6 +1413,11 @@ dialog.conversa { width: min(560px, 94vw); }
 
 .sugestoes { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 4px; }
 
+/* A dica ensina a perguntar por uma empresa, com uma conta da própria
+   carteira. Exemplo com nome inventado ensina a escrever errado. */
+.dica-iad { margin: 4px 0 0; font-size: .78rem; color: var(--muted); line-height: 1.5; }
+.dica-iad em { font-style: normal; color: var(--text); }
+
 .resposta-iad { margin: 12px 0 4px; padding: 12px; border: 1px solid var(--line);
   border-radius: var(--radius); background: var(--bg); }
 .resposta-iad.vazia { background: transparent; }

@@ -5152,10 +5152,21 @@
     if (!u || !C) return;
     marcarQueFalou(u.id);
 
-    const sugestoes = C.INTENCOES.map(function (i) {
+    /* Só as perguntas da carteira inteira viram botão. As que pedem o nome de
+       uma empresa não cabem num chip — elas entram na dica abaixo, escrita com
+       uma conta que a pessoa tem de verdade. Exemplo com nome inventado ensina
+       a escrever errado. */
+    const sugestoes = C.INTENCOES.filter(function (i) { return i.chip; }).map(function (i) {
       return '<button type="button" class="btn ghost mini" data-intencao="' +
         U.esc(i.id) + '">' + U.esc(i.chip) + '</button>';
     }).join('');
+
+    const exemplo = C.exemploComNome();
+    const dica = exemplo
+      ? '<p class="dica-iad">Ou pergunte por uma empresa: <em>como está a ' +
+        U.esc(exemplo) + '</em>, <em>o que falta na ' + U.esc(exemplo) +
+        '</em>, <em>quem eu conheço na ' + U.esc(exemplo) + '</em>.</p>'
+      : '';
 
     const dlg = document.createElement('dialog');
     dlg.className = 'conversa';
@@ -5166,6 +5177,7 @@
           '<span class="small muted">Pergunte com suas palavras, ou escolha abaixo.</span></div>' +
         '</div>' +
         '<div class="sugestoes">' + sugestoes + '</div>' +
+        dica +
         /* A caixa de texto vem ANTES da resposta, e não depois: resposta longa
            no celular empurraria o campo para fora da tela, e a segunda
            pergunta é justamente o que faz disto uma conversa. */
@@ -5184,10 +5196,25 @@
     const area = dlg.querySelector('[data-resposta]');
     const campo = dlg.querySelector('[data-pergunta]');
 
-    function mostrar(id) {
-      const r = C.responder(id);
+    /* A memória da conversa, e ela é uma linha só: a negociação da última
+       resposta. É o que faz "e o que falta nela?" ter sentido — sem isso cada
+       pergunta nasce órfã, e uma sequência de perguntas órfãs é uma busca, não
+       uma conversa. Uma negociação, não um histórico: guardar mais seria
+       adivinhar mais. */
+    let ultimo = '';
+    /* A última intenção, para a escolha entre duas negociações da mesma
+       empresa voltar à pergunta que estava sendo feita. */
+    let pendente = '';
+
+    function pintar(r) {
       if (!r) return;
+      if (r.alvo) ultimo = r.alvo;
+      pendente = r.id || pendente;
       area.innerHTML = V.respostaDaConversa(r);
+    }
+
+    function mostrar(id, alvoId) {
+      pintar(C.responder(id, alvoId || ultimo));
     }
 
     function pensando() {
@@ -5196,7 +5223,23 @@
 
     function naoEntendi() {
       area.innerHTML = '<p class="small muted">Não entendi essa. Escolha uma das ' +
-        'perguntas acima — são as que eu sei responder com número de verdade.</p>';
+        'perguntas acima, ou diga o nome de uma empresa da sua carteira — são as ' +
+        'perguntas que eu sei responder com número de verdade.</p>';
+    }
+
+    function responderA(r) {
+      if (!r || !r.id) { naoEntendi(); return; }
+      /* Empresa que não está na carteira não vira chute: o nome sai escrito
+         para a pessoa ver que ele foi lido e não encontrado. */
+      if (r.semAlvo) {
+        area.innerHTML = '<p class="small muted">' +
+          (r.citado ? 'Não achei <strong>' + U.esc(r.citado) + '</strong> na sua carteira. '
+                    : 'Essa pergunta é de uma negociação. ') +
+          'Diga o nome da empresa junto com a pergunta.</p>';
+        return;
+      }
+      if (r.alvo && r.alvo.ops) { pintar(C.responderAoAlvo(r.id, r.alvo)); return; }
+      mostrar(r.id);
     }
 
     function perguntar() {
@@ -5204,12 +5247,12 @@
       if (!texto) { campo.focus(); return; }
       /* O casamento local responde na hora quando dá. Só o que sobra vai para
          a rede, e aí sim a tela avisa que está esperando. */
-      const aqui = C.entenderAqui(texto);
-      if (aqui) { mostrar(aqui); return; }
+      const aqui = C.entenderAqui(texto, ultimo);
+      if (aqui) { responderA(aqui); return; }
       pensando();
-      C.entender(texto).then(function (r) {
+      C.entender(texto, ultimo).then(function (r) {
         if (!dlg.isConnected) return;
-        if (r && r.id) mostrar(r.id); else naoEntendi();
+        responderA(r);
       }).catch(naoEntendi);
     }
 
@@ -5218,6 +5261,11 @@
 
       const chip = ev.target.closest('[data-intencao]');
       if (chip) { campo.value = ''; mostrar(chip.getAttribute('data-intencao')); return; }
+
+      /* A empresa tinha duas negociações abertas e a pessoa escolheu uma. A
+         pergunta era a mesma; só faltava saber de qual. */
+      const escolha = ev.target.closest('[data-alvo]');
+      if (escolha) { mostrar(pendente, escolha.getAttribute('data-alvo')); return; }
 
       if (ev.target.closest('[data-perguntar]')) { perguntar(); return; }
       if (ev.target.closest('[data-fechar]')) { dlg.close(); return; }
