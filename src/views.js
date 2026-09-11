@@ -438,9 +438,34 @@
      abertas — dizer em qual delas esta conversa entra. */
   function donoDaConversa(c) {
     if (!c.contato) {
-      return '<div class="aviso"><strong>Sem dono.</strong> Este telefone não bate com ' +
-        'nenhum contato do CRM. Enquanto ninguém disser de quem é, a conversa não vira ' +
-        'evidência de negócio nenhum.' +
+      /* Sem dono por dois motivos diferentes, e a tela precisa separá-los.
+
+         Ninguém bate: é telefone novo, e a saída é cadastrar.
+
+         Mais de um bate com a mesma força fraca — só os 8 dígitos finais, DDDs
+         diferentes —, e aí o app se recusou a escolher de propósito. Aqui as
+         pessoas que empataram aparecem: escolher entre duas é muito mais fácil
+         do que procurar numa lista de trezentas. */
+      const parecidos = c.parecidos || [];
+      const duvida = parecidos.length > 1
+        ? '<p class="small" style="margin:8px 0 4px"><strong>' + parecidos.length +
+          ' contatos têm um telefone terminado nestes mesmos dígitos</strong>, em áreas ' +
+          'diferentes. Eu não escolho no palpite — diga qual é:</p>' +
+          '<div class="row" style="gap:6px;flex-wrap:wrap">' +
+          parecidos.map(function (p) {
+            const conta = Store.conta(p.contaId);
+            return '<button class="btn mini" onclick="App.apontarContatoDaConversa(\'' +
+              esc(c.chave) + '\',\'' + p.id + '\')">' + esc(p.nome) +
+              (conta ? ' · ' + esc(conta.nome) : '') + '</button>';
+          }).join('') + '</div>'
+        : '';
+
+      return '<div class="aviso"><strong>Sem dono.</strong> ' +
+        (duvida
+          ? 'Este telefone bate com mais de uma pessoa.'
+          : 'Este telefone não bate com nenhum contato do CRM.') +
+        ' Enquanto ninguém disser de quem é, a conversa não vira evidência de negócio nenhum.' +
+        duvida +
         '<div class="row" style="margin-top:8px;gap:8px">' +
         '<button class="btn mini" onclick="App.escolherContatoDaConversa(\'' + esc(c.chave) + '\')">Escolher um contato</button>' +
         '<button class="btn alt mini" onclick="App.novoContatoDaConversa(\'' + esc(c.chave) + '\')">Cadastrar como novo</button>' +
@@ -3551,8 +3576,30 @@
       'este CRM existe para não deixar acontecer. A leitura é barata quando alguém escolhe o que vale ' +
       'a pena ler.</p>' +
 
+      '<h3>Que formato de telefone cadastrar</h3>' +
+      '<p class="small">O que você quiser. Com o código do país ou sem, com o nono dígito ou sem, ' +
+      'com parênteses e traço ou só números — <strong>todos casam com a mesma pessoa</strong>. ' +
+      'O WhatsApp sempre entrega o número internacional completo, e é o app que faz a ponte ' +
+      'entre o que chegou e o que você digitou.</p>' +
+      '<p class="small">A comparação é em três camadas, da mais forte para a mais fraca:</p>' +
+      '<div class="tabela-rolagem"><table class="tabela-manual"><thead><tr>' +
+      '<th>Camada</th><th>Quando vale</th></tr></thead><tbody>' +
+      '<tr><td><strong>O número inteiro</strong></td><td>Bate tudo, país incluído. Não há dúvida.</td></tr>' +
+      '<tr><td><strong>Mesmo DDD, mesmos 8 finais</strong></td>' +
+      '<td>É o caso do nono dígito: <em>(19) 99123-4567</em> e <em>(19) 9123-4567</em> são a mesma pessoa, ' +
+      'e o app sabe disso.</td></tr>' +
+      '<tr><td><strong>Só os 8 finais</strong></td>' +
+      '<td>Palpite, e só vale se for o único. Dois números de <strong>áreas diferentes</strong> podem ' +
+      'terminar nos mesmos 8 dígitos — numa carteira de trinta contatos isso não acontece, numa de três ' +
+      'mil acontece. Quando acontece, o app <strong>não escolhe</strong>: mostra as pessoas que empataram ' +
+      'e pergunta.</td></tr>' +
+      '</tbody></table></div>' +
+      '<p class="small">Por isso o conselho prático é um só: <strong>cadastre com DDD</strong>. ' +
+      'Com DDD a conversa nunca cai na camada fraca, e você nunca precisa desempatar. O código do país ' +
+      'e o nono dígito o app resolve sozinho.</p>' +
+
       '<h3>De quem é a conversa</h3>' +
-      '<p class="small">Quando uma mensagem chega, o app tenta descobrir sozinho, em três degraus:</p>' +
+      '<p class="small">Descoberto o telefone, o app procura o dono em três degraus:</p>' +
       '<div class="escada-manual">' +
       '<div><span class="nota-manual n2">1</span><div><strong>O telefone bate com um contato</strong>' +
       '<span class="tiny muted">A conversa é daquela pessoa e, por ela, daquela empresa. A comparação ' +

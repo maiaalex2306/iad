@@ -5276,7 +5276,7 @@
         p.telefone = c.telefone || '';
         Store.salvar();
       }
-      const ops = W.casar(W.curto(p.telefone)).opcoes;
+      const ops = W.casar(p.telefone).opcoes;
       const aberta = (Store.dados().oportunidades || []).filter(function (o) {
         return !o.desfecho && (o.stakeholders || []).indexOf(p.id) !== -1;
       });
@@ -5293,6 +5293,19 @@
        contato recém-criado com este número é achado sozinho na próxima
        leitura da tela. Menos estado guardado, menos coisa para dessincronizar. */
     App.novoContato(null, { telefone: c.telefone || '', nome: c.nome || '' });
+  };
+
+  /* O desempate da camada fraca: a pessoa diz qual dos parecidos é o dono, e
+     o vínculo fica gravado na conversa inteira — não se pergunta de novo. */
+  App.apontarContatoDaConversa = function (chave, contatoId) {
+    const p = Store.contato(contatoId);
+    if (!p) return;
+    const abertas = (Store.dados().oportunidades || []).filter(function (o) {
+      return !o.desfecho && (o.stakeholders || []).indexOf(p.id) !== -1;
+    });
+    W.vincular(chave, p.id, abertas.length === 1 ? abertas[0].id : null)
+      .then(function () { render(); });
+    render();
   };
 
   App.apontarConversa = function (chave, opId) {

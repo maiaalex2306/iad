@@ -99,8 +99,28 @@ create index if not exists idx_msg_wa_casar
 ```
 
 `telefone_curto` existe porque o mesmo telefone chega escrito de quatro
-jeitos: com 55, sem 55, com o 9 na frente, com zero de operadora. Comparar os
-últimos 8 dígitos casa os quatro sem heurística frágil.
+jeitos: com 55, sem 55, com o 9 na frente, com zero de operadora. Os últimos 8
+dígitos casam os quatro — o nono dígito entra ANTES deles.
+
+Mas no aplicativo essa comparação é só a camada mais FRACA das três, e por um
+motivo que cresce com a carteira: dois números de DDDs diferentes podem
+terminar nos mesmos 8 dígitos. Em trinta contatos não acontece; em três mil,
+acontece — e o estrago é a conversa de um cliente aparecendo embaixo do nome de
+outro.
+
+| camada | quando vale |
+|---|---|
+| o número inteiro | bate tudo, país incluído |
+| mesmo DDD + mesmos 8 finais | o caso do nono dígito |
+| só os 8 finais | palpite, e só vale se for o único |
+
+Empate na camada fraca não vira escolha: vira pergunta, com os candidatos na
+tela. A coluna no banco continua guardando os 8 finais porque ela é o índice —
+serve para achar rápido, não para decidir.
+
+Um número de fora nunca ganha o 55: onze dígitos só são um celular brasileiro
+se o DDD existir E o terceiro dígito for 9. Sem essa conferência,
+`1 415 555 0000` virava `55 1 415 555 0000`.
 
 `origem` separa três coisas que se parecem e não são: o que passou pela API,
 o que o vendedor mandou do celular, e o que veio na carga de histórico.
