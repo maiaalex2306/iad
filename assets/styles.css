@@ -1491,3 +1491,13 @@ dialog.conversa { width: min(560px, 94vw); }
 .marco-fio { display: flex; align-items: center; gap: 8px; margin: 4px 0; color: var(--muted); }
 .marco-fio::before, .marco-fio::after { content: ''; flex: 1; height: 1px; background: var(--line); }
 .marco-fio span { font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; }
+
+/* O carimbo de versão no alto do manual. Discreto, mas sempre no mesmo lugar:
+   é a primeira coisa que se pergunta quando alguma coisa parece errada. */
+.carimbo-versao {
+  display: inline-flex; flex-direction: column; align-items: flex-end; gap: 1px;
+  padding: 5px 10px; border: 1px solid var(--line); border-radius: 9px;
+  background: var(--surface); white-space: nowrap;
+}
+.carimbo-versao strong { font-size: .82rem; }
+.carimbo-versao span { font-size: .7rem; color: var(--muted); }

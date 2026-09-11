@@ -4530,9 +4530,20 @@
       return '<span class="pill">' + esc(t) + '</span>';
     }).join(' ');
 
-    return '<h1>Manual do IAD CRM</h1>' +
-      '<p class="small muted" style="margin:-6px 0 14px">O método e o sistema, na mesma tela. ' +
-      'Funciona offline: está tudo guardado no aparelho.</p>' +
+    /* A versão fica aqui, no alto da tela que todo mundo abre, e não escondida
+       na Configuração. Quando alguém diz "o app está estranho", a primeira
+       pergunta é qual versão ele está vendo — e a resposta tem de estar à
+       mão, não a três cliques. */
+    const v = global.IADVersao || {};
+
+    return '<div class="row" style="align-items:flex-start">' +
+      '<div><h1 style="margin:0">Manual do IAD CRM</h1>' +
+      '<p class="small muted" style="margin:4px 0 14px">O método e o sistema, na mesma tela. ' +
+      'Funciona offline: está tudo guardado no aparelho.</p></div>' +
+      '<span class="espaco"></span>' +
+      (v.numero ? '<div class="carimbo-versao"><strong>' + esc(v.numero) + '</strong>' +
+        (v.data ? '<span>' + esc(U.data(v.data)) + '</span>' : '') + '</div>' : '') +
+      '</div>' +
       indiceDoManual() +
       '<div class="card" id="m-regra"><h2>A regra</h2>' +
       '<p>O estágio mostra onde a oportunidade está. As decisões mostram se ela realmente avançou.</p>' +

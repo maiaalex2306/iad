@@ -1,5 +1,9 @@
 /* Service worker: cache-first do app shell. Offline no celular e no desktop. */
-const CACHE = 'iad-crm-v156';
+/* Trocar este número obriga a trocar `window.IADVersao` em src/config.js, no
+   mesmo commit: um diz o que está guardado no aparelho, o outro o que está
+   rodando, e é a discordância entre os dois que denuncia uma troca pela
+   metade. */
+const CACHE = 'iad-crm-v157';
 const ARQUIVOS = [
   './', './index.html', './manifest.webmanifest',
   './assets/styles.css',

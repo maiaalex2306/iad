@@ -27,3 +27,12 @@ window.IADConfig = {
     chave: 'sb_publishable_-S7bUjXBrrtPawN7grybuA_SX-iigF8'
   }
 };
+
+/* A versão que este código é, e o dia em que ela saiu.
+
+   Anda junto com o CACHE do sw.js e tem de ser trocada no mesmo commit — são
+   os dois lados da mesma informação. Em Configuração → Versão aparece o nome
+   do cache, que é o que está GUARDADO no aparelho; aqui é o que está RODANDO.
+   Quando os dois discordam, o navegador está no meio de uma troca, e saber
+   disso vale mais do que a coincidência dos dois números. */
+window.IADVersao = { numero: 'v157', data: '2026-09-11' };
