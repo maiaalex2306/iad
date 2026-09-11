@@ -480,11 +480,45 @@
     return chamar('/rest/v1/convites?email=eq.' + encodeURIComponent(String(email).toLowerCase()), { metodo: 'DELETE' });
   }
 
+  /* Duas empresas com o mesmo nome escrito diferente são dois cofres, e
+     ninguém percebe até a carteira sumir dentro de um deles. Foi o que
+     aconteceu: "acP", "AcP", "Advanced Channel Partners" e "AcP - Advanced
+     Channel Partners" viraram quatro empresas, e a carteira ficou numa.
+
+     Comparar é do jeito que o olho compara: sem acento, sem maiúscula, sem
+     pontuação e sem espaço repetido. "AcP" e "acP" são a mesma coisa para
+     qualquer pessoa, e passam a ser para o app também. */
+  function achatarNome(v) {
+    return String(v || '').trim().toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, ' ').trim();
+  }
+
+  function soDigitosCnpj(v) { return String(v || '').replace(/\D/g, ''); }
+
   function criarEmpresa(nome, cnpj) {
-    return chamar('/rest/v1/tenants', {
-      metodo: 'POST', cabecalhos: { Prefer: 'return=representation' },
-      corpo: { nome: nome, cnpj: cnpj || '' }
-    }).then(function (linhas) { return (linhas && linhas[0]) || null; });
+    return empresasDaNuvem().then(function (jaExistem) {
+      const nomeNovo = achatarNome(nome);
+      const cnpjNovo = soDigitosCnpj(cnpj);
+
+      const igual = (jaExistem || []).filter(function (t) {
+        if (achatarNome(t.nome) === nomeNovo) return true;
+        return !!cnpjNovo && soDigitosCnpj(t.cnpj) === cnpjNovo;
+      })[0];
+
+      if (igual) {
+        throw new Error('Já existe a empresa "' + igual.nome + '"' +
+          (soDigitosCnpj(igual.cnpj) === cnpjNovo && cnpjNovo ? ' com este mesmo CNPJ' : '') +
+          '.\n\nCriar outra parecida separa a carteira em dois cofres, e ' +
+          'descobrir isso depois é caro. Use a que já existe, ou mude o nome ' +
+          'para algo que distinga as duas de verdade.');
+      }
+
+      return chamar('/rest/v1/tenants', {
+        metodo: 'POST', cabecalhos: { Prefer: 'return=representation' },
+        corpo: { nome: String(nome).trim(), cnpj: cnpj || '' }
+      }).then(function (linhas) { return (linhas && linhas[0]) || null; });
+    });
   }
 
   function souAdminNaNuvem() {
@@ -562,10 +596,27 @@
        Então só fica retido o que está carimbado com um UUID diferente do meu:
        aquilo é carteira de outra empresa de verdade. */
     const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    /* O administrador é a exceção, e a falta dela custou caro uma vez.
+
+       Ele enxerga todas as empresas e é quem socorre quando alguma carteira
+       fica no lugar errado — mas o envio olhava só a empresa do PERFIL dele.
+       Resultado: o administrador via os registros na tela, o app dizia "186
+       são de outra empresa e não foram enviados", e a única saída que sobrava
+       era escrever SQL à mão. Quem administra tem de conseguir resgatar pelo
+       aplicativo; é para isso que ele é administrador.
+
+       Aqui não se perde isolamento: o carimbo de cada registro vai junto e o
+       RLS do banco decide de novo do lado de lá. O que muda é só quem tem
+       permissão de empurrar carimbo de outra empresa — e é o administrador,
+       que já pode ler e escrever em todas. */
+    const souAdmin = String(perfil.papel || '') === 'admin';
+
     const daEmpresa = function (r) {
       const dele = String(r.tenantId || '');
       if (!dele) return true;
       if (dele === String(perfil.tenant_id)) return true;
+      if (souAdmin && UUID.test(dele)) return true;
       return !UUID.test(dele);
     };
 
