@@ -404,6 +404,7 @@
       filtrosDoAdmin: ctx.admin ? ctx.filtros : null,
       colecoes: linhas,
       registrosPorEmpresa: porTenant,
+      empresasFantasma: empresasFantasma(),
       oportunidadesSemDono: semDono
     };
   }
@@ -420,6 +421,52 @@
      outra, e apaga a empresa esvaziada. Não toca no servidor: lá a mesma
      limpeza é uma consulta, e misturar as duas num clique só esconderia qual
      das duas falhou. */
+  /* Empresas que carimbam registros aqui e não existem mais no servidor.
+
+     Nascem de uma situação específica e cada vez mais comum: a mesma empresa
+     foi cadastrada duas vezes, as duas foram juntadas do lado do servidor, e
+     este aparelho continua com o carimbo antigo. O registro fica apontando
+     para um cofre que não existe — e sincronizar devolve erro de chave
+     estrangeira, que é a mensagem menos útil possível para quem só quer a
+     carteira de volta.
+
+     `(sem empresa)` fica de fora: aquilo é registro criado offline antes de
+     haver empresa, e quem cuida dele é o adotarOrfaos. */
+  function empresasFantasma() {
+    const conhecidas = {};
+    (estado.tenants || []).forEach(function (t) { conhecidas[String(t.id)] = true; });
+
+    const colecoes = ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos'];
+    const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    const conta = {};
+    colecoes.forEach(function (nome) {
+      (estado[nome] || []).forEach(function (r) {
+        const k = String(r.tenantId || '');
+        /* Só UUID: o carimbo `ten_xxx` que o app inventa nunca existiu em
+           servidor nenhum e não é fantasma, é local de nascença. */
+        if (!k || conhecidas[k] || !UUID.test(k)) return;
+        conta[k] = (conta[k] || 0) + 1;
+      });
+    });
+
+    return Object.keys(conta).map(function (id) {
+      return { id: id, registros: conta[id] };
+    });
+  }
+
+  /* Traz para uma empresa tudo que aponta para empresa que não existe mais.
+     Um clique, sem ninguém precisar copiar identificador de uma tela para
+     outra — que é onde o erro acontece. */
+  function adotarFantasmas(paraId) {
+    if (!paraId) return 0;
+    let total = 0;
+    empresasFantasma().forEach(function (f) {
+      total += moverRegistros(f.id, paraId);
+    });
+    return total;
+  }
+
   function moverRegistros(deId, paraId) {
     if (!deId || !paraId || deId === paraId) return 0;
     const colecoes = ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos'];
@@ -1196,7 +1243,7 @@
     registrarRecusa, recusas, recusasPorCampanha, limparRecusas, excluirRecusa,
     descartarLead, foiDescartado, descartes, desfazerDescarte, chaveDoLead,
     criarTarefa, atualizarTarefa, adiarTarefa, concluirTarefa, excluirTarefa,
-    adotarOrfaos,
+    adotarOrfaos, empresasFantasma, adotarFantasmas,
     catalogo, catalogoAtivos, nomesDoCatalogo, criarNoCatalogo, atualizarNoCatalogo,
     removerDoCatalogo, produto,
     fecharOportunidade, reabrirOportunidade, excluirOportunidade,

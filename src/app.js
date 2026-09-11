@@ -3093,6 +3093,41 @@
        A tela do diagnóstico já mostrava as empresas espelhadas e os registros
        por empresa. Mostrar o problema sem dar o conserto obriga a pessoa a
        cadastrar tudo de novo, que foi exatamente o que aconteceu. */
+    /* O caso que aparece depois de juntar empresas do lado do servidor: os
+       registros aqui continuam carimbados com o identificador que deixou de
+       existir. Sincronizar devolve erro de chave estrangeira — a mensagem
+       menos útil possível para quem só quer a carteira de volta.
+
+       Um clique, sem copiar identificador de uma tela para outra, que é
+       exatamente onde o erro acontece. */
+    adotarFantasmas: function () {
+      const fantasmas = Store.empresasFantasma();
+      if (!fantasmas.length) { alert('Nada aqui aponta para empresa inexistente.'); return; }
+
+      const u = A.atual();
+      const f = A.filtros();
+      /* Para o administrador em "Todas as empresas" não existe empresa atual,
+         e adivinhar aqui seria escolher o cofre por ele. */
+      const alvo = (u && u.papel === 'admin' && f.tenant !== 'todas') ? f.tenant
+        : (u && u.papel !== 'admin' ? u.tenantId : '');
+      if (!alvo) {
+        alert('Escolha antes uma empresa no menu do seu nome, em "Empresa que estou vendo".\n\n' +
+          'Com "Todas as empresas" eu não sei para qual delas trazer estes registros.');
+        return;
+      }
+      const nome = (A.tenant(alvo) || {}).nome || alvo;
+      const quantos = fantasmas.reduce(function (n, x) { return n + x.registros; }, 0);
+
+      if (!U.confirmar('Trazer ' + quantos + ' registro(s) para "' + nome + '"?\n\n' +
+        'Eles estão carimbados com ' + fantasmas.length + ' empresa(s) que não existem mais no ' +
+        'servidor — o caso de empresas que foram juntadas lá.\n\n' +
+        'Só muda o carimbo neste aparelho. Sincronize depois para mandar ao servidor.')) return;
+
+      const n = Store.adotarFantasmas(alvo);
+      render();
+      alert(n + ' registro(s) agora pertencem a "' + nome + '".\n\nSincronize para mandá-los ao servidor.');
+    },
+
     juntarEmpresas: function () {
       const d = Store.diagnostico();
       const lista = (d.empresasEspelhadas || []).map(function (t) {

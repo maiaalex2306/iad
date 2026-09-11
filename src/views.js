@@ -4741,6 +4741,13 @@
       (d.empresasEspelhadas.length
         ? d.empresasEspelhadas.map(function (t) { return esc(t.nome || t.id); }).join(' · ')
         : '(nenhuma)') +
+      ((d.empresasFantasma || []).length
+        ? ' <button class="btn alt mini" onclick="App.adotarFantasmas()" ' +
+          'data-ajuda-titulo="Trazer os registros órfãos" ' +
+          'data-ajuda="Registros carimbados com empresa que não existe mais no servidor — o que sobra depois de juntar duas empresas do lado de lá. Sem isto eles não sobem, e o erro que aparece é de chave estrangeira.">' +
+          'Trazer ' + (d.empresasFantasma).reduce(function (n, f) { return n + f.registros; }, 0) +
+          ' registro(s) órfão(s)</button>'
+        : '') +
       (d.empresasEspelhadas.length > 1
         ? ' <button class="btn ghost mini" onclick="App.juntarEmpresas()" ' +
           'data-ajuda-titulo="Juntar empresas duplicadas" data-ajuda="A mesma empresa cadastrada duas vezes tem dois identificadores, e cada registro aponta para um só. O que estiver carimbado com a errada fica invisível para quem entra pela certa.">Juntar duplicadas</button>'

@@ -567,6 +567,28 @@
     return saida;
   }
 
+  /* O PostgREST recusa um lote em que os objetos não têm exatamente as mesmas
+     colunas: "All object keys must match". E os registros de um app que mudou
+     ao longo do tempo NÃO têm: a conta cadastrada em julho não conhece o campo
+     que nasceu em setembro. Uma carteira antiga, restaurada de uma cópia,
+     esbarra nisso e a sincronização inteira falha.
+
+     Preencher o que falta com null resolveria o erro e criaria outro, pior: no
+     merge o PostgREST só toca nas colunas que vieram, então mandar `cnpj: null`
+     para um registro que não tinha o campo apagaria o CNPJ que está no
+     servidor. Silenciosamente.
+
+     Então não se preenche nada: separam-se os lotes por formato. Cada grupo vai
+     com as colunas que ele realmente tem, e o que não veio fica como está lá. */
+  function porFormato(linhas) {
+    const grupos = {};
+    linhas.forEach(function (l) {
+      const assinatura = Object.keys(l).sort().join('|');
+      (grupos[assinatura] = grupos[assinatura] || []).push(l);
+    });
+    return Object.keys(grupos).map(function (k) { return grupos[k]; });
+  }
+
   function paraApp(linha) {
     const saida = {};
     Object.keys(linha).forEach(function (coluna) {
@@ -634,17 +656,36 @@
        primeiro erro aborta tudo e o problema seguinte só aparece depois de
        consertar este — descobrir de um em um custa uma rodada por defeito.
        Aqui todas as tabelas são tentadas e os erros voltam juntos. */
+    /* De quem é cada registro na hora de subir.
+
+       Antes ia tudo carimbado com a empresa do perfil, e enquanto só subia a
+       carteira da própria empresa isso dava no mesmo. Com o administrador
+       podendo empurrar as outras, deixar assim seria o desastre silencioso:
+       ele sincroniza para socorrer a AcP e derruba a carteira dela dentro da
+       empresa DELE, recarimbada, sem erro nenhum na tela.
+
+       Carimbo de servidor manda. Sem carimbo, ou com carimbo local `ten_xxx`,
+       o dono é a empresa de quem está sincronizando — é o registro criado
+       offline antes de haver empresa. */
+    const donoDoRegistro = function (r) {
+      const dele = String(r.tenantId || '');
+      return UUID.test(dele) ? dele : perfil.tenant_id;
+    };
+
     let retidos = 0;
     const envios = TABELAS.map(function (t) {
       const minhas = (estado[t.local] || []).filter(daEmpresa);
       retidos += ((estado[t.local] || []).length - minhas.length);
-      const linhas = minhas.map(function (r) { return paraBanco(r, perfil.tenant_id, donoId); });
+      const linhas = minhas.map(function (r) { return paraBanco(r, donoDoRegistro(r), donoId); });
       if (!linhas.length) return Promise.resolve({ tabela: t.remota, enviados: 0 });
-      return chamar('/rest/v1/' + t.remota, {
-        metodo: 'POST',
-        cabecalhos: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-        corpo: linhas
-      }).then(
+
+      return Promise.all(porFormato(linhas).map(function (lote) {
+        return chamar('/rest/v1/' + t.remota, {
+          metodo: 'POST',
+          cabecalhos: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+          corpo: lote
+        });
+      })).then(
         function () { return { tabela: t.remota, enviados: linhas.length }; },
         function (e) { return { tabela: t.remota, enviados: 0, erro: e.message }; }
       );
@@ -790,7 +831,7 @@
     sincronizarNaEntrada, definirDadosDaEmpresa, definirDadosDoPerfil, minhaSituacao, comoOServidorMeVe, primeirasLinhas, ondeEstaoOsRegistros,
     convitesDaNuvem, convidar, removerConvite, recuperarSenha, criarEmpresa, chamarFuncao,
     mensagensWhatsapp, marcarLidasWhatsapp, vincularWhatsapp,
-    empresaParecida, achatarNome,
+    empresaParecida, achatarNome, porFormato,
     adotarTokens,
     trocarMinhaSenha,
     paraBanco, paraApp
