@@ -133,6 +133,12 @@
        igual na metodologia: a primeira mostra disciplina de planejamento, a
        segunda mostra o vendedor correndo atrás do próprio histórico. */
     dados.tarefas.forEach(function (t) {
+      /* Limpeza de um campo que nunca devia ter sido gravado: marca de
+         trabalho da importação do Linked Helper, que ficava colada na tarefa e
+         subia na sincronização. Hoje ela se chama `_criadaAgora` e o envio
+         descarta o que começa com underscore; isto aqui tira o que já estava
+         guardado, para o registro não carregar lixo a vida inteira. */
+      if ('criadaAgora' in t) delete t.criadaAgora;
       if (!t.origem) t.origem = 'planejada';
       if (t.comRelato == null) t.comRelato = false;
       if (t.hora == null) t.hora = '';

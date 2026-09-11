@@ -551,7 +551,12 @@
   function paraColuna(nome) { return nome.replace(/[A-Z]/g, function (l) { return '_' + l.toLowerCase(); }); }
   function paraCampo(nome) { return nome.replace(/_([a-z])/g, function (_, l) { return l.toUpperCase(); }); }
 
-  const IGNORAR_AO_ENVIAR = ['donoId'];
+  /* `criadaAgora` é o nome antigo da marca de trabalho que hoje se chama
+     `_criadaAgora`. Renomear protegeu os registros novos e não os que já
+     estavam guardados no navegador — e são justamente esses que travavam a
+     sincronização. Fica aqui para sempre: o aparelho de alguém pode ficar
+     meses sem abrir o app. */
+  const IGNORAR_AO_ENVIAR = ['donoId', 'criadaAgora'];
 
   function paraBanco(registro, tenantId, donoId) {
     const saida = {};
