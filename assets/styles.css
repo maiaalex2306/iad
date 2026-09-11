@@ -1440,3 +1440,54 @@ dialog.conversa { width: min(560px, 94vw); }
 /* O botão do topo, para chamar a IaD de volta depois de fechada. */
 .topbar .chamar-iad { display: inline-flex; align-items: center; }
 .topbar .chamar-iad .rosto-iad { display: block; }
+
+/* ---------- As conversas do WhatsApp ----------
+   A tarja azul é irmã da laranja e de propósito: mesmo mecanismo, mesmo lugar,
+   outro assunto. A laranja diz que VOCÊ está devendo; esta diz que o CLIENTE
+   falou. As duas podem aparecer juntas no mesmo cartão, e nessa ordem — a
+   dívida primeiro, a notícia boa embaixo. */
+.tarja-conversa {
+  margin: 8px -10px 0; padding: 5px 10px;
+  background: var(--navy); color: #fff;
+  font-size: .72rem; font-weight: 600; letter-spacing: .02em;
+  border-top: 1px solid rgba(255,255,255,.15);
+}
+.item .tarja-conversa { margin: 8px -14px -14px; border-radius: 0 0 var(--radius) var(--radius); }
+
+.lista-conversas { display: grid; gap: 8px; }
+.conversa-linha { text-align: left; width: 100%; }
+.conversa-linha.nova { border-left: 3px solid var(--navy); }
+.conversa-linha .previa {
+  color: var(--muted);
+  /* Uma linha só: a prévia serve para reconhecer a conversa, não para lê-la. */
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pill.novas { background: var(--navy); color: #fff; }
+
+.bloco-conversas { border-left: 3px solid var(--navy); }
+
+/* O fio da conversa. Rolagem própria e altura limitada: seis meses de
+   histórico numa página sem limite deixaria o botão de registrar a
+   quilômetros do topo. */
+.fio {
+  display: grid; gap: 8px; margin-top: 12px;
+  max-height: 58dvh; overflow-y: auto; padding-right: 4px;
+}
+.balao {
+  max-width: 78%; padding: 8px 11px; border-radius: 12px;
+  background: var(--bg); border: 1px solid var(--line);
+}
+.balao.meu { margin-left: auto; background: var(--orange-soft); border-color: transparent; }
+/* O que veio na carga dos 6 meses. Mais apagado porque é passado: está ali
+   para consulta, não para ação. */
+.balao.antigo { opacity: .72; }
+.balao .quem { color: var(--muted); margin-bottom: 2px; }
+.balao .texto { font-size: .9rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.balao .quando { color: var(--muted); margin-top: 3px; text-align: right; }
+
+@media (max-width: 560px) { .balao { max-width: 88%; } }
+
+/* A linha entre o passado importado e a conversa viva. */
+.marco-fio { display: flex; align-items: center; gap: 8px; margin: 4px 0; color: var(--muted); }
+.marco-fio::before, .marco-fio::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+.marco-fio span { font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; }

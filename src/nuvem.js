@@ -271,6 +271,47 @@
     return chamar('/rest/v1/tenants?select=*&order=nome.asc');
   }
 
+  /* ---------- as conversas do WhatsApp ----------
+     Diferente de tudo que passa por `sincronizar`: estas linhas não moram no
+     navegador e não sobem daqui. Quem escreve é a Edge Function `whatsapp`,
+     com a chave de serviço; o app só lê, e o RLS decide o que cada empresa
+     enxerga. Ver nuvem/WHATSAPP.md.
+
+     O teto de 2000 existe porque a carga de histórico traz 6 meses de uma vez:
+     sem limite, o primeiro acesso depois de conectar o número puxaria tudo de
+     uma vez para dentro do navegador. As mais recentes são as que importam. */
+  function mensagensWhatsapp(quantas) {
+    return chamar('/rest/v1/mensagens_whatsapp?select=*&order=enviada_em.desc&limit=' +
+      (quantas || 2000));
+  }
+
+  /* Marcar lida é do app, não da função: só quem abriu a conversa sabe que ela
+     foi lida. `in.(...)` porque são várias de uma vez, e uma chamada por
+     mensagem seria trinta chamadas ao abrir uma conversa. */
+  function marcarLidasWhatsapp(ids) {
+    const lista = (ids || []).filter(Boolean);
+    if (!lista.length) return Promise.resolve(null);
+    const alvo = lista.map(function (i) { return '"' + String(i).replace(/"/g, '') + '"'; }).join(',');
+    return chamar('/rest/v1/mensagens_whatsapp?id=in.(' + encodeURIComponent(alvo) + ')', {
+      metodo: 'PATCH',
+      cabecalhos: { prefer: 'return=minimal' },
+      corpo: { lida: true }
+    });
+  }
+
+  /* O casamento da conversa com quem já está no CRM. Vale para o telefone
+     inteiro, não para uma mensagem: quem descobriu de quem é a conversa
+     descobriu de quem são todas as mensagens dela, inclusive as que ainda vão
+     chegar — por isso a próxima leitura reaproveita o vínculo. */
+  function vincularWhatsapp(telefoneCurto, contatoId, oportunidadeId) {
+    return chamar('/rest/v1/mensagens_whatsapp?telefone_curto=eq.' +
+      encodeURIComponent(telefoneCurto), {
+      metodo: 'PATCH',
+      cabecalhos: { prefer: 'return=minimal' },
+      corpo: { contato_id: contatoId || null, oportunidade_id: oportunidadeId || null }
+    });
+  }
+
   /* Empresa e papel passam por funções que conferem quem está pedindo, e não
      por PATCH direto: escrever nessas duas colunas foi revogado no banco. Um
      PATCH em perfis deixava qualquer um se promover a administrador com a chave
@@ -687,6 +728,7 @@
     definirBloqueioDoPerfil, definirBloqueioDaEmpresa,
     sincronizarNaEntrada, definirDadosDaEmpresa, definirDadosDoPerfil, minhaSituacao, comoOServidorMeVe, primeirasLinhas, ondeEstaoOsRegistros,
     convitesDaNuvem, convidar, removerConvite, recuperarSenha, criarEmpresa, chamarFuncao,
+    mensagensWhatsapp, marcarLidasWhatsapp, vincularWhatsapp,
     adotarTokens,
     trocarMinhaSenha,
     paraBanco, paraApp

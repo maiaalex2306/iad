@@ -4,7 +4,8 @@
 
   const P = global.IADPlaybook, Store = global.IADStore, E = global.IADEngine,
     U = global.IADUI, V = global.IADViews, Arq = global.IADArquivos, Csv = global.IADCsv,
-    A = global.IADAuth, IA = global.IADIA, C = global.IADConversa;
+    A = global.IADAuth, IA = global.IADIA, C = global.IADConversa,
+    W = global.IADWhatsapp;
 
   const ROTAS = [
     { hash: '#/hoje', ico: '⚡', nome: 'Hoje', render: V.hoje,
@@ -18,6 +19,11 @@
        item e está no lugar certo. */
     { hash: '#/tarefas', ico: '✅', nome: 'Tarefas', render: V.tarefas,
       ajuda: 'Todas as suas tarefas numa lista só: filtre por responsável, período, tipo e status, aja em lote, e conclua contando o que aconteceu — que é o que faz as oito decisões andarem.' },
+    /* Depois das Tarefas e antes da Revisão: a conversa é matéria-prima de
+       tarefa, não relatório de semana. Quem terminou a lista do dia olha aqui
+       se alguém respondeu. */
+    { hash: '#/conversas', ico: '💬', nome: 'Conversas', render: V.conversas,
+      ajuda: 'As conversas de WhatsApp, por pessoa. Mensagem não é evidência: você lê, e quando alguma coisa valeu a pena, registra o que aconteceu — e aí a IA lê e as oito decisões andam.' },
     { hash: '#/revisao', ico: '🔄', nome: 'Revisão', render: V.revisao,
       ajuda: 'A reunião semanal numa tela: o que mudou na decisão de cada cliente nos últimos 7 dias.' },
     { hash: '#/cadastros', ico: '📇', nome: 'Cadastros', render: V.cadastros,
@@ -73,10 +79,17 @@
        não existe na empresa nova. A tela dizia "0 negociações" e não tinha
        como estar mais certa nem mais inútil. */
     V.conferirSessao(logado ? logado.id : null);
+    if (!logado && W) W.esquecer();
 
     /* Registro sem empresa fica invisível. Aqui, com a sessão já conhecida,
        o que tiver nascido assim é adotado antes de a tela ser desenhada. */
     if (logado) Store.adotarOrfaos();
+
+    /* As conversas moram só no servidor, e a contagem de não lidas aparece no
+       cartão do pipeline e no topo de Hoje — ou seja, em telas que não são a
+       de Conversas. Por isso a busca acontece uma vez por sessão, aqui, e não
+       ao abrir aquela tela. */
+    if (logado && W && W.disponivel() && !W.carregadas()) pintarConversas();
 
     document.body.classList.toggle('sem-sessao', !logado);
     if (!logado) {
@@ -88,6 +101,9 @@
     pintarTopo();
 
     const hash = location.hash || '#/hoje';
+    /* Saiu de Conversas, fechou a conversa: voltar depois e cair no meio de um
+       fio antigo é desorientador. */
+    if (hash !== '#/conversas' && V.conversaAberta()) V.definirConversa('');
 
     /* A faixa entra DENTRO do conteúdo, e não entre a barra e ele: no desktop
        o topo é fixo, quem fica antes do <main> nasce embaixo dele, e a faixa
@@ -1963,7 +1979,7 @@
 
     /* Concluir uma tarefa que já estava aberta. Mesmos campos do "já foi
        feita", sem repetir o que a tarefa já sabe (título, canal, decisão). */
-    concluirComRelato: function (opId, tarefaId, aoTerminar) {
+    concluirComRelato: function (opId, tarefaId, aoTerminar, valores) {
       const op = Store.oportunidade(opId);
       const tarefa = Store.dados().tarefas.filter(function (t) { return t.id === tarefaId; })[0];
       if (!op || !tarefa) { if (aoTerminar) aoTerminar(); return; }
@@ -1987,7 +2003,10 @@
           tipo: 'select', opcoes: OPCOES_SIM_NAO }
       );
 
-      U.formulario('Concluir: ' + tarefa.titulo, campos, {}, function (d, docs) {
+      /* `valores` chega preenchido quando a conclusão nasce de uma conversa de
+         WhatsApp: o relato já vem escrito, e o vendedor edita o que quiser
+         antes de mandar ler. */
+      U.formulario('Concluir: ' + tarefa.titulo, campos, valores || {}, function (d, docs) {
         d.tipo = tarefa.tipo;
         concluirComOQueAconteceu(op, tarefaId, d, docs, tarefa.decisaoAlvo, aoTerminar);
       }, function (dlg) {
@@ -5100,6 +5119,139 @@
       contaId: conta.id, titulo: (d.negocioNovo || '').trim() || conta.nome, etapa: 'Prospecção'
     });
   }
+
+  /* ---------- As conversas do WhatsApp ----------
+     A regra, escrita aqui porque é aqui que ela pode ser quebrada por
+     descuido: mensagem não é evidência. Nada nesta seção mexe em nota, chama a
+     IA ou mexe no `evidenceAge`. A única coisa que transforma conversa em
+     avanço é o vendedor clicar em "Registrar o que aconteceu" — e aí a
+     conversa entra pela porta que já existe, a da tarefa concluída com relato.
+
+     Ver nuvem/WHATSAPP.md, Fase 4. */
+
+  function nomeDaConversa(c) {
+    if (c.contato) return c.contato.nome;
+    return c.nome || c.telefone || 'Desconhecido';
+  }
+
+  /* Buscar não pode segurar a tela. A lista desenha vazia, a resposta chega e
+     a tela se repinta — o mesmo que Dados faz com os leads da ponte. */
+  function pintarConversas(forcar) {
+    if (!W || !W.disponivel()) return;
+    W.carregar(forcar).then(function () { render(); });
+  }
+
+  App.recarregarConversas = function () {
+    if (!W) return;
+    W.carregar(true).then(function () { render(); });
+  };
+
+  App.abrirConversa = function (chave) {
+    V.definirConversa(chave);
+    render();
+    /* Marcar lida depois de desenhar: a pessoa vê a conversa na hora, e o
+       servidor confirma quando puder. */
+    W.marcarLidas(chave).then(function () { render(); });
+  };
+
+  App.fecharConversa = function () {
+    V.definirConversa('');
+    render();
+  };
+
+  /* O casamento à mão, quando o telefone não bate com ninguém. Três saídas, e
+     nenhuma delas é o app adivinhar. */
+  App.escolherContatoDaConversa = function (chave) {
+    const c = W.conversa(chave);
+    if (!c) return;
+    const gente = (Store.dados().contatos || []).slice().sort(function (a, b) {
+      return String(a.nome).localeCompare(String(b.nome));
+    });
+    if (!gente.length) {
+      alert('Nenhum contato cadastrado ainda. Use "Cadastrar como novo".');
+      return;
+    }
+
+    U.formulario('De quem é esta conversa?', [{
+      id: 'contatoId', rotulo: 'Contato', tipo: 'select',
+      opcoes: gente.map(function (p) {
+        const conta = Store.conta(p.contaId);
+        return { valor: p.id, rotulo: p.nome + (conta ? ' — ' + conta.nome : '') };
+      })
+    }], {}, function (d) {
+      const p = Store.contato(d.contatoId);
+      if (!p) return;
+      /* Se a pessoa não tinha telefone, este vira o telefone dela: da próxima
+         vez o casamento acontece sozinho. Se tinha outro, não sobrescreve —
+         gente tem dois números, e apagar o que estava lá seria pior do que
+         casar à mão de novo. */
+      if (!String(p.telefone || '').trim()) {
+        p.telefone = c.telefone || '';
+        Store.salvar();
+      }
+      const ops = W.casar(W.curto(p.telefone)).opcoes;
+      const aberta = (Store.dados().oportunidades || []).filter(function (o) {
+        return !o.desfecho && (o.stakeholders || []).indexOf(p.id) !== -1;
+      });
+      const escolhida = (aberta.length === 1 ? aberta[0] : null) || (ops.length === 1 ? ops[0] : null);
+      W.vincular(chave, p.id, escolhida ? escolhida.id : null).then(function () { render(); });
+      render();
+    });
+  };
+
+  App.novoContatoDaConversa = function (chave) {
+    const c = W.conversa(chave);
+    if (!c) return;
+    /* Sem vínculo explícito depois: o casamento é por telefone, então o
+       contato recém-criado com este número é achado sozinho na próxima
+       leitura da tela. Menos estado guardado, menos coisa para dessincronizar. */
+    App.novoContato(null, { telefone: c.telefone || '', nome: c.nome || '' });
+  };
+
+  App.apontarConversa = function (chave, opId) {
+    const c = W.conversa(chave);
+    if (!c || !c.contato) return;
+    W.vincular(chave, c.contato.id, opId).then(function () { render(); });
+    render();
+  };
+
+  /* O botão que faz a conversa virar trabalho. Cria a tarefa já apontando o
+     negócio e o contato, e manda para a MESMA tela de conclusão de sempre —
+     com o relato preenchido, para o vendedor cortar o que não interessa antes
+     de mandar ler. Nada de novo no motor: a conversa entra pela porta aberta.
+
+     A tarefa nasce e morre junto com a decisão de registrar: se a pessoa
+     desistir no meio, some, para não deixar tarefa órfã de um clique. */
+  App.registrarConversa = function (chave) {
+    const c = W.conversa(chave);
+    if (!c || !c.op) return;
+
+    const ultima = c.ultima || {};
+    const dia = String(ultima.enviada_em || '').slice(0, 10) || Store.hoje();
+    const quem = nomeDaConversa(c);
+
+    const t = Store.criarTarefa({
+      oportunidadeId: c.op.id,
+      contatoId: c.contato ? c.contato.id : null,
+      titulo: 'WhatsApp com ' + quem,
+      tipo: 'WhatsApp',
+      vencimento: dia,
+      origem: 'whatsapp',
+      status: 'aberta'
+    });
+
+    const limpar = function () {
+      const ainda = Store.tarefa(t.id);
+      if (ainda && ainda.status === 'aberta') Store.excluirTarefa(t.id);
+      W.marcarLidas(chave);
+      render();
+    };
+
+    App.concluirComRelato(c.op.id, t.id, limpar, {
+      feitaEm: dia,
+      relato: W.comoTexto(chave)
+    });
+  };
 
   /* ---------- A conversa com a IaD ----------
      Quem abre um CRM pela manhã não quer um painel: quer saber por onde

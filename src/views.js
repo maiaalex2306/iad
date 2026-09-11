@@ -353,6 +353,7 @@
       '<p class="muted small">' + (grupos[0].qtd
         ? grupos[0].qtd + ' negócio(s) precisam de você agora · ' + U.compacto(grupos[0].valor) + ' envolvidos'
         : 'Nada urgente hoje.') + '</p>' +
+      responderamNoWhatsapp() +
       '<div class="tiles">' + cartoesResumo +
         '<button class="tile todos' + (filtroHoje === 'todos' ? ' ativo' : '') + '" onclick="App.filtrarHoje(\'todos\')">' +
         '<span class="qtd">' + foco.itens.length + '</span><span class="rot">Todos</span>' +
@@ -363,6 +364,214 @@
           return { rotulo: g.rotulo, valor: g.valor, cor: g.cor };
         })) + '</div>' +
       '<div class="lista-foco">' + itens + '</div>';
+  }
+
+  /* ---------------- as conversas do WhatsApp ----------------
+     A regra, de novo, porque é ela que explica o que esta tela NÃO faz:
+     mensagem não é evidência. Aqui não tem nota, não tem IA e não tem avanço.
+     Tem a conversa, quem é a pessoa, e um botão que transforma o que valeu a
+     pena numa tarefa concluída — que é a porta que já existe.
+
+     Qual conversa está aberta. Mora aqui e não no hash porque a chave é um
+     telefone: pôr isso na barra de endereço deixaria o número do cliente no
+     histórico do navegador, e não há motivo. */
+  let conversaAberta = '';
+
+  function definirConversa(chave) { conversaAberta = chave || ''; }
+
+  function quemFala(c) {
+    if (c.contato) return c.contato.nome;
+    if (c.nome) return c.nome;
+    return global.IADWhatsapp.bonito(c.telefone) || 'Desconhecido';
+  }
+
+  function ondeTrabalha(c) {
+    if (c.op) {
+      const conta = Store.conta(c.op.contaId);
+      return esc(c.op.titulo) + ' · ' + esc((conta && conta.nome) || '');
+    }
+    if (c.contato) {
+      const conta = Store.conta(c.contato.contaId);
+      return conta ? esc(conta.nome) + ' · sem negociação apontada' : 'Contato sem empresa';
+    }
+    return '<em>Sem dono</em>';
+  }
+
+  function quandoFoi(iso) {
+    const dia = String(iso || '').slice(0, 10);
+    const hora = String(iso || '').slice(11, 16);
+    return U.data(dia) + (hora ? ' ' + hora : '');
+  }
+
+  function linhaDeConversa(c) {
+    const u = c.ultima || {};
+    const previa = (u.texto || ('[' + (u.tipo || 'anexo') + ']')).slice(0, 90);
+    return '<button class="item conversa-linha' + (c.naoLidas ? ' nova' : '') +
+      '" onclick="App.abrirConversa(\'' + esc(c.chave) + '\')">' +
+      '<div class="row"><span class="tit">' + esc(quemFala(c)) + '</span>' +
+      '<span class="espaco"></span>' +
+      (c.naoLidas ? '<span class="pill novas">' + c.naoLidas + '</span>' : '') +
+      '<span class="tiny muted">' + quandoFoi(u.enviada_em) + '</span></div>' +
+      '<div class="tiny muted" style="margin:2px 0 6px">' + ondeTrabalha(c) + '</div>' +
+      '<div class="small previa">' + (u.direcao === 'saida' ? '<span class="muted">Você: </span>' : '') +
+      esc(previa) + '</div>' +
+      (c.historico ? '<div class="tiny muted" style="margin-top:5px">' + c.historico +
+        ' do histórico importado</div>' : '') +
+      '</button>';
+  }
+
+  function balao(m, nomeDele) {
+    const meu = m.direcao === 'saida';
+    const corpo = m.texto || ('[' + (m.tipo || 'anexo') + ']');
+    return '<div class="balao' + (meu ? ' meu' : '') +
+      (m.origem === 'historico' ? ' antigo' : '') + '">' +
+      '<div class="quem tiny">' + esc(meu ? 'Você' : nomeDele) +
+      (m.origem === 'celular' ? ' · do celular' : '') + '</div>' +
+      '<div class="texto">' + esc(corpo) + '</div>' +
+      '<div class="quando tiny">' + quandoFoi(m.enviada_em) + '</div>' +
+      '</div>';
+  }
+
+  /* Quem é a pessoa, e o que fazer quando o app não sabe. Três saídas, e
+     nenhuma delas é o app adivinhar: escolher um contato existente, cadastrar
+     um novo já com o telefone, ou — quando a pessoa está em duas negociações
+     abertas — dizer em qual delas esta conversa entra. */
+  function donoDaConversa(c) {
+    if (!c.contato) {
+      return '<div class="aviso"><strong>Sem dono.</strong> Este telefone não bate com ' +
+        'nenhum contato do CRM. Enquanto ninguém disser de quem é, a conversa não vira ' +
+        'evidência de negócio nenhum.' +
+        '<div class="row" style="margin-top:8px;gap:8px">' +
+        '<button class="btn mini" onclick="App.escolherContatoDaConversa(\'' + esc(c.chave) + '\')">Escolher um contato</button>' +
+        '<button class="btn alt mini" onclick="App.novoContatoDaConversa(\'' + esc(c.chave) + '\')">Cadastrar como novo</button>' +
+        '</div></div>';
+    }
+
+    if (!c.op && c.opcoes.length > 1) {
+      return '<div class="aviso"><strong>' + esc(c.contato.nome) + ' está em ' +
+        c.opcoes.length + ' negociações abertas.</strong> Diga em qual esta conversa entra — ' +
+        'pendurar no negócio errado é pior do que não pendurar.' +
+        '<div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap">' +
+        c.opcoes.map(function (o) {
+          return '<button class="btn mini" onclick="App.apontarConversa(\'' + esc(c.chave) +
+            '\',\'' + o.id + '\')">' + esc(o.titulo) + '</button>';
+        }).join('') + '</div></div>';
+    }
+
+    if (!c.op) {
+      return '<div class="aviso"><strong>' + esc(c.contato.nome) + '</strong> não está no ' +
+        'grupo comprador de nenhuma negociação aberta. A conversa fica aqui até existir um ' +
+        'negócio para ela.</div>';
+    }
+    return '';
+  }
+
+  function conversas() {
+    const W = global.IADWhatsapp;
+    const topo = '<div class="row"><h1>Conversas</h1><span class="espaco"></span>' +
+      '<button class="btn ghost mini" onclick="App.recarregarConversas()">Atualizar</button></div>';
+
+    if (!W || !W.disponivel()) {
+      return topo + '<div class="card"><div class="vazio">As conversas do WhatsApp moram no ' +
+        'servidor. Entre com sua conta da nuvem para vê-las.</div></div>';
+    }
+    if (!W.carregadas()) {
+      return topo + '<div class="card"><div class="vazio">Buscando as conversas…</div></div>';
+    }
+    if (W.erro()) {
+      return topo + '<div class="card"><div class="aviso">' + esc(W.erro()) + '</div></div>';
+    }
+
+    if (conversaAberta) return topo + fioDaConversa(W.conversa(conversaAberta));
+
+    const lista = W.conversas();
+    if (!lista.length) {
+      return topo + '<div class="card"><div class="vazio">Nenhuma conversa ainda. ' +
+        'Elas aparecem aqui assim que o número estiver conectado.</div></div>' + comoFunciona();
+    }
+
+    const novas = lista.filter(function (c) { return c.naoLidas; });
+    const resto = lista.filter(function (c) { return !c.naoLidas; });
+
+    return topo +
+      '<p class="muted small">' + lista.length + (lista.length === 1 ? ' conversa' : ' conversas') +
+      (novas.length ? ' · ' + novas.length + ' com mensagem nova' : ' · nada novo') + '</p>' +
+      (novas.length ? '<h2 class="sub">Responderam</h2><div class="lista-conversas">' +
+        novas.map(linhaDeConversa).join('') + '</div>' : '') +
+      (resto.length ? '<h2 class="sub">Todas</h2><div class="lista-conversas">' +
+        resto.map(linhaDeConversa).join('') + '</div>' : '') +
+      comoFunciona();
+  }
+
+  function comoFunciona() {
+    return '<div class="card" style="margin-top:14px"><h2>Por que ela não lê sozinha</h2>' +
+      '<p class="small">"Bom dia, tudo bem?" não move decisão nenhuma. Se a IA lesse tudo, o ' +
+      'histórico encheria de evidência inventada e o IAD subiria com conversa fiada — que é ' +
+      'justamente o que este CRM existe para não deixar acontecer.</p>' +
+      '<p class="small">Você lê, e quando alguma coisa valeu a pena, clica em ' +
+      '<strong>Registrar o que aconteceu</strong>. Isso cria uma tarefa já concluída, canal ' +
+      'WhatsApp, com a conversa como relato. Daí em diante é o caminho de sempre: a IA separa ' +
+      'o que o CLIENTE fez e relê as oito decisões.</p></div>';
+  }
+
+  /* Uma linha separando o que veio na importação do que aconteceu desde a
+     conexão. Sem ela, a conversa de abril encosta na de hoje e parece a mesma
+     coisa — e não é: uma é passado que o vendedor já viveu, a outra é o que
+     está em jogo agora. */
+  function fioEmOrdem(c, nome) {
+    let passou = false;
+    return c.mensagens.map(function (m) {
+      let antes = '';
+      if (!passou && m.origem !== 'historico') {
+        passou = true;
+        if (c.historico) antes = '<div class="marco-fio"><span>desde a conexão</span></div>';
+      }
+      return antes + balao(m, nome);
+    }).join('');
+  }
+
+  function fioDaConversa(c) {
+    if (!c) {
+      return '<div class="card"><div class="vazio">Conversa não encontrada.</div>' +
+        '<button class="btn" onclick="App.fecharConversa()">Voltar</button></div>';
+    }
+
+    const nome = quemFala(c);
+    const acoes = '<div class="row" style="gap:8px;flex-wrap:wrap">' +
+      '<button class="btn ghost mini" onclick="App.fecharConversa()">‹ Voltar</button>' +
+      '<span class="espaco"></span>' +
+      (c.op ? '<button class="btn ghost mini" onclick="App.abrir(\'' + c.op.id + '\')">Abrir o negócio</button>' : '') +
+      (c.contato ? '<button class="btn ghost mini" onclick="App.verContato(\'' + c.contato.id + '\')">Ver o contato</button>' : '') +
+      '<button class="btn primario mini" onclick="App.registrarConversa(\'' + esc(c.chave) + '\')"' +
+      (c.op ? '' : ' disabled title="Aponte a negociação primeiro"') +
+      '>Registrar o que aconteceu</button></div>';
+
+    return '<div class="card">' + acoes +
+      '<h2 style="margin:12px 0 2px">' + esc(nome) + '</h2>' +
+      '<p class="small muted" style="margin:0 0 10px">' + ondeTrabalha(c) + ' · ' +
+      esc(global.IADWhatsapp.bonito(c.telefone)) + '</p>' +
+      donoDaConversa(c) +
+      '<div class="fio">' + fioEmOrdem(c, nome) + '</div>' +
+      '</div>';
+  }
+
+  /* O que entra no topo de Hoje, antes das tarefas. Cliente que escreveu é a
+     coisa mais quente do dia: se ele está esperando resposta, nada do que
+     estava planejado importa mais do que isso. */
+  function responderamNoWhatsapp() {
+    const W = global.IADWhatsapp;
+    if (!W || !W.carregadas()) return '';
+    const lista = W.responderam();
+    if (!lista.length) return '';
+
+    return '<div class="card bloco-conversas">' +
+      '<div class="row"><h2 style="margin:0">Responderam no WhatsApp</h2>' +
+      '<span class="espaco"></span>' +
+      '<button class="btn ghost mini" onclick="location.hash=\'#/conversas\'">Ver todas</button></div>' +
+      '<p class="tiny muted" style="margin:4px 0 10px">Mensagem não é evidência — mas cliente ' +
+      'que escreveu é a coisa mais quente do dia.</p>' +
+      '<div class="lista-conversas">' + lista.slice(0, 5).map(linhaDeConversa).join('') + '</div>' +
+      '</div>';
   }
 
   function cartaoFoco(i) {
@@ -1305,6 +1514,7 @@
           : '<span class="pill ' + r.faixa.classe + '">' + r.evidenceAge + 'd</span>') +
       '</div>' +
       tarjaDeAtraso(r) +
+      tarjaDeConversas(r.op) +
       '<div class="rodape-mini">' + seta(i - 1, '‹', 'Voltar para ') + seta(i + 1, '›', 'Avançar para ') + '</div>' +
       '</article>';
   }
@@ -1352,6 +1562,18 @@
       (n === 1 ? 'Tarefa atrasada' : n + ' tarefas atrasadas') + '</div>';
   }
 
+  /* A tarja azul: mesmo mecanismo da laranja, outro assunto. Uma diz que VOCÊ
+     está devendo; esta diz que o CLIENTE falou. A segunda é melhor notícia e
+     por isso não substitui a primeira — as duas podem aparecer juntas. */
+  function tarjaDeConversas(op) {
+    const W = global.IADWhatsapp;
+    if (!W || !W.carregadas()) return '';
+    const n = W.naoLidasDaOp(op.id);
+    if (!n) return '';
+    return '<div class="tarja-conversa">' +
+      (n === 1 ? 'Respondeu no WhatsApp' : n + ' mensagens novas no WhatsApp') + '</div>';
+  }
+
   function cardOportunidade(r) {
     const comp = r.compromisso;
     return '<button class="item g-' + r.classe.id + (r.tarefasAtrasadas ? ' com-atraso' : '') +
@@ -1373,6 +1595,7 @@
       esc(r.lacunas.length ? r.lacunas.slice(0, 2).map(function (l) { return l.titulo; }).join(', ') +
         (r.lacunas.length > 2 ? ' e mais ' + (r.lacunas.length - 2) : '') : 'nada — resta formalizar') + '</div>' +
       tarjaDeAtraso(r) +
+      tarjaDeConversas(r.op) +
       '</button>';
   }
 
@@ -3217,6 +3440,7 @@
     ['m-telas', 'As telas, uma a uma'],
     ['m-pipeline', 'Os grupos do pipeline'],
     ['m-tarefas', 'A tela de Tarefas'],
+    ['m-conversas', 'As conversas do WhatsApp'],
     ['m-aprendizado', 'Aprendizado e plano'],
     ['m-config', 'Configuração'],
     ['m-ia-vendedor', 'A IA no seu dia'],
@@ -3282,6 +3506,69 @@
       'grupo que servir. Por isso Zumbi vence todos: um negócio com IAD alto e quarenta dias de silêncio é zumbi, ' +
       'não é real.</p>' +
       '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' + linhas + '</tbody></table></div></div>';
+  }
+
+  function manualDasConversas() {
+    return '<div class="card" id="m-conversas"><h2>As conversas do WhatsApp</h2>' +
+
+      '<p class="small">O mesmo número que você já usa no celular passa a entregar as conversas aqui ' +
+      'dentro, sem você mudar de hábito. O que o cliente escreve, o que <em>você</em> escreve do seu ' +
+      'aparelho, e até seis meses de conversa antiga entram na mesma linha do tempo.</p>' +
+
+      '<div class="aviso"><strong>Mensagem não é evidência.</strong> Evidência é o que o cliente ' +
+      'decidiu, e quem diz que uma mensagem virou decisão é você, não o sistema.</div>' +
+
+      '<h3>Por que ela não lê sozinha</h3>' +
+      '<p class="small">"Bom dia, tudo bem?" não move decisão nenhuma. Se a IA lesse tudo, o histórico ' +
+      'encheria de evidência inventada e o IAD subiria com conversa fiada — que é exatamente o que ' +
+      'este CRM existe para não deixar acontecer. A leitura é barata quando alguém escolhe o que vale ' +
+      'a pena ler.</p>' +
+
+      '<h3>De quem é a conversa</h3>' +
+      '<p class="small">Quando uma mensagem chega, o app tenta descobrir sozinho, em três degraus:</p>' +
+      '<div class="escada-manual">' +
+      '<div><span class="nota-manual n2">1</span><div><strong>O telefone bate com um contato</strong>' +
+      '<span class="tiny muted">A conversa é daquela pessoa e, por ela, daquela empresa. A comparação ' +
+      'usa os últimos oito dígitos, então o mesmo número escrito com 55, sem 55, com o nono dígito ou ' +
+      'com zero de operadora casa do mesmo jeito.</span></div></div>' +
+      '<div><span class="nota-manual n3">2</span><div><strong>A pessoa está no grupo comprador de uma ' +
+      'única negociação aberta</strong><span class="tiny muted">A conversa também é daquela negociação. ' +
+      'Se ela estiver em duas, o app <em>pergunta</em>: pendurar evidência no negócio errado é pior do ' +
+      'que não pendurar.</span></div></div>' +
+      '<div><span class="nota-manual n0">3</span><div><strong>Nada bate: "Sem dono"</strong>' +
+      '<span class="tiny muted">Duas saídas, e as duas são suas: escolher um contato que já existe, ou ' +
+      'cadastrar um novo — o telefone já vem preenchido.</span></div></div>' +
+      '</div>' +
+
+      '<h3>O que a conversa vira</h3>' +
+      '<p class="small">Você abre, lê, e clica em <strong>Registrar o que aconteceu</strong>. Isso cria ' +
+      'uma tarefa <strong>já concluída</strong>, canal WhatsApp, com o texto da conversa como relato e ' +
+      'na data da última mensagem. Daí em diante é o caminho que você já conhece: a IA separa o que o ' +
+      'CLIENTE fez, propõe as evidências com a força de cada uma e relê as oito decisões. Nada de novo ' +
+      'no motor — a conversa entra pela porta que já estava aberta.</p>' +
+      '<p class="small">O relato já vem escrito, com quem falou cada coisa, e é editável: corte o que ' +
+      'não interessa antes de mandar ler.</p>' +
+
+      '<h3>O que acontece sozinho, e o que não acontece</h3>' +
+      '<div class="tabela-rolagem"><table class="tabela-manual"><thead><tr>' +
+      '<th>Acontece sozinho</th><th>Não acontece sozinho</th></tr></thead><tbody>' +
+      '<tr><td>A contagem de mensagens novas, no cartão do pipeline e no topo de Hoje.</td>' +
+      '<td><strong>O tempo sem evidência não zera.</strong> Só evidência zera. Conversa não lida não é ' +
+      'avanço, e fingir que é seria apagar o sinal que este CRM existe para dar.</td></tr>' +
+      '<tr><td>O que você manda do celular entra na mesma linha do tempo, junto com o que o cliente ' +
+      'respondeu.</td><td><strong>A nota das oito não muda.</strong> Muda quando a IA lê, e ela só lê ' +
+      'quando você mandar.</td></tr>' +
+      '<tr><td>A conversa antiga aparece marcada como histórico, separada por uma linha do que veio ' +
+      'depois da conexão.</td><td><strong>O histórico não cria tarefa nenhuma</strong> e fica fora da ' +
+      'contagem de não lidas. Ele também não entra no relato: evidência de abril entrando como avanço ' +
+      'de hoje é o erro que o tempo sem evidência existe para denunciar.</td></tr>' +
+      '</tbody></table></div>' +
+
+      '<h3>O que vem junto, e que vale saber</h3>' +
+      '<p class="small">Conversa de grupo não sincroniza, fica só no aplicativo. O WhatsApp Business ' +
+      'precisa ser aberto ao menos uma vez a cada treze dias. Receber é grátis, e responder dentro de ' +
+      'vinte e quatro horas também — o que custa é disparo de marketing, que não é o que o IAD faz.</p>' +
+      '</div>';
   }
 
   function manualDasTarefas() {
@@ -4308,6 +4595,7 @@
       manualDasTelas() +
       manualDoPipeline() +
       manualDasTarefas() +
+      manualDasConversas() +
       manualDoAprendizado() +
       manualDaConfiguracao() +
       manualDaIAParaOVendedor() +
@@ -5352,6 +5640,7 @@
     hoje, painel, pipeline, tarefas, cockpit, revisao, contas, cadastros, playbook, dados, itemArquivo, listaLeads,
     revisaoDaImportacao, recusaDoCliente, resumoDaLeitura, planoDaIA, definirPlano, planoGuardado,
     marcarLendo, estaLendo, revisaoDasNotas, respostaDaConversa,
+    conversas, definirConversa, conversaAberta: function () { return conversaAberta; },
     acesso, barraAdmin, menuDoUsuario, definirTelaAcesso, definirPrimeiraEmpresa, listaUsuariosNuvem,
     pendenteAcesso: function () { return pendente; },
     tarefasFiltrar, tarefasEstado, tarefasVisiveis, tarefasDaPagina, tarefasSelecionadas, tarefasMarcar,

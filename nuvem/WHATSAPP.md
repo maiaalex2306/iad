@@ -220,9 +220,10 @@ values ('<o id que apareceu no log>', '<o tenant>', '+55 ...', 'Comercial');
 
 ---
 
-## Fase 4 — Dentro do CRM
+## Fase 4 — Dentro do CRM  ✅ feita
 
-Aqui é onde a coisa vira produto. A regra que organiza tudo:
+Construída em `src/whatsapp.js` (o casamento e o cache), com a tela em
+`views.js` (`conversas`) e as ações em `app.js`. A regra que organiza tudo:
 
 > Mensagem não é evidência. Evidência é o que o cliente decidiu, e quem diz
 > que uma mensagem virou decisão é o vendedor, não o sistema.
@@ -244,10 +245,12 @@ Chutar aqui seria pendurar evidência no negócio errado.
 
 ### Onde aparece
 
-- **Conversas**, seção nova no menu, ao lado de Tarefas. Lista por pessoa, com
-  a última mensagem e quantas não lidas.
+- **Conversas**, seção no menu entre Tarefas e Revisão — a conversa é
+  matéria-prima de tarefa, não relatório de semana. Lista por pessoa, com a
+  última mensagem e quantas não lidas.
 - **No cartão do pipeline**, uma tarja como a de tarefa atrasada, mas azul:
-  "3 mensagens novas". Mesmo mecanismo, cor diferente.
+  "3 mensagens novas". Mesmo mecanismo, cor diferente — e as duas podem
+  aparecer juntas, a dívida em cima, a notícia boa embaixo.
 - **Em Hoje, no topo**, antes das tarefas: "Responderam no WhatsApp". Cliente
   que escreveu é a coisa mais quente do dia, e tem de ser a primeira da tela.
 
@@ -284,8 +287,11 @@ quando alguém escolhe o que vale a pena ler.
 - **A nota das oito não muda.** Muda quando a IA lê, e ela só lê quando o
   vendedor mandar.
 - **O histórico dos 6 meses não cria tarefa nenhuma.** Entra marcado como
-  histórico, fora da contagem de não lidas. O vendedor escolhe o que importa.
-  É por aqui que a conversa antiga com a Hortência entra.
+  histórico, separado por uma linha do que veio depois da conexão, e fora da
+  contagem de não lidas. Também fica **fora do relato** ao registrar: evidência
+  de abril entrando como avanço de hoje é o erro que o `evidenceAge` existe
+  para denunciar. O vendedor escolhe o que importa — é por aqui que a conversa
+  antiga com a Hortência entra.
 
 ## Fase 5 — Responder
 
