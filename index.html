@@ -28,6 +28,7 @@
               title="Sua conta: empresa ativa, troca de conta, senha e sair"></button>
       <div id="menu-quem" class="menu-quem" hidden></div>
     </div>
+    <button class="chamar-iad" onclick="App.conversar()" data-ajuda-titulo="Falar com a IaD" data-ajuda="Pergunte com suas palavras — tarefas do dia, qual negócio está melhor, quem sumiu — e a resposta sai dos seus dados, não do modelo." title="Falar com a IaD"><svg class="rosto-iad" width="22" height="22" viewBox="0 0 64 64" role="img" aria-label="IaD"><circle class="antena-fio" cx="32" cy="8" r="3"/><path class="antena" d="M32 11 V17"/><rect class="cabeca" x="10" y="17" width="44" height="38" rx="13"/><circle class="olho" cx="24" cy="34" r="4"/><circle class="olho" cx="40" cy="34" r="4"/><path class="boca" d="M24 44 Q32 50 40 44"/><circle class="luz" cx="32" cy="8" r="1.6"/></svg></button>
     <button onclick="App.ir('#/playbook')" data-ajuda-titulo="O método" data-ajuda="A teoria inteira: como uma tarefa vira avanço, o que conta como evidência em cada uma das oito decisões, e o que fazer em cada canal." title="O método">❓</button>
     <button onclick="App.sair()" data-ajuda-titulo="Sair" data-ajuda="Encerra a sessão neste aparelho. Os dados sincronizados continuam no servidor." title="Sair">⏻</button>
   </header>
@@ -50,6 +51,7 @@
   <script src="src/ajuda.js"></script>
 <script src="src/graficos.js"></script>
 <script src="src/seed.js"></script>
+<script src="src/conversa.js"></script>
 <script src="src/views.js"></script>
 <script src="src/app.js"></script>
 </body>

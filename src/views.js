@@ -4158,6 +4158,18 @@
       '<th>Quando</th><th>O que ela faz — e o que fica com você</th><th>Poupa</th>' +
       '</tr></thead><tbody>' + linhas + '</tbody></table></div>' +
 
+      '<h3>A IaD, a caixa que abre quando você entra</h3>' +
+      '<p class="small">Uma vez por dia, na primeira tela depois do login, ela pergunta o que você quer ' +
+      'saber. Você responde com suas palavras — <em>quais minhas tarefas do dia</em>, <em>qual conta está ' +
+      'melhor</em>, <em>quem sumiu</em> — e ela mostra a resposta com as linhas clicáveis, que levam direto ' +
+      'ao negócio. Os botões ao lado da pergunta são as perguntas que ela sabe responder; o texto livre é ' +
+      'só um atalho para eles. Para chamá-la de volta depois de fechada, o rosto no alto da tela.</p>' +
+      '<div class="aviso"><strong>Aqui a IA não responde: ela só entende.</strong> Quem calcula quantas ' +
+      'tarefas existem, qual negócio está melhor e há quantos dias o cliente sumiu é o motor, com os seus ' +
+      'dados. A IA serve para descobrir qual das perguntas você fez. É por isso que o número que sai daqui ' +
+      'é o mesmo que está na tela — e é por isso que, com o assistente fora do ar, os botões continuam ' +
+      'funcionando.</div>' +
+
       '<h3>A regra que resume as oito linhas acima</h3>' +
       '<div class="aviso"><strong>Ela lê e propõe. Você conta o que aconteceu. O motor calcula. ' +
       'E só o que o CLIENTE fez move a nota.</strong></div>' +
@@ -5292,10 +5304,34 @@
     return true;
   }
 
+  /* ---------- A resposta da conversa ----------
+     Três partes, nesta ordem porque é a ordem em que se lê: a frase que
+     resume, as linhas que sustentam a frase, e o caminho para a tela inteira.
+
+     Cada linha carrega `data-ir`. Resposta que só informa vira relatório, e
+     relatório é justamente o que este CRM não quer ser: a pessoa perguntou
+     porque vai fazer alguma coisa, e o clique tem de sair daqui. */
+  function respostaDaConversa(r) {
+    if (!r) return '';
+
+    const linhas = (r.linhas || []).map(function (l) {
+      if (!l.ir) return '<li class="sem-ir">' + esc(l.texto) + '</li>';
+      return '<li><button type="button" data-ir="' + esc(l.ir) + '">' +
+        esc(l.texto) + '</button></li>';
+    }).join('');
+
+    return '<div class="resposta-iad' + (r.nada ? ' vazia' : '') + '">' +
+      (r.resumo ? '<p class="resumo">' + esc(r.resumo) + '</p>' : '') +
+      (linhas ? '<ul>' + linhas + '</ul>' : '') +
+      (r.maisEm ? '<button type="button" class="btn ghost mini" data-ir="' +
+        esc(r.maisEm) + '">Ver a tela inteira</button>' : '') +
+      '</div>';
+  }
+
   global.IADViews = {
     hoje, painel, pipeline, tarefas, cockpit, revisao, contas, cadastros, playbook, dados, itemArquivo, listaLeads,
     revisaoDaImportacao, recusaDoCliente, resumoDaLeitura, planoDaIA, definirPlano, planoGuardado,
-    marcarLendo, estaLendo, revisaoDasNotas,
+    marcarLendo, estaLendo, revisaoDasNotas, respostaDaConversa,
     acesso, barraAdmin, menuDoUsuario, definirTelaAcesso, definirPrimeiraEmpresa, listaUsuariosNuvem,
     pendenteAcesso: function () { return pendente; },
     tarefasFiltrar, tarefasEstado, tarefasVisiveis, tarefasDaPagina, tarefasSelecionadas, tarefasMarcar,

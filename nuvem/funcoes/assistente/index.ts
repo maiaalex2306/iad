@@ -185,7 +185,14 @@ const FORMATOS: Record<string, Record<string, Regra>> = {
   /* Sem regra de campo: a saída é uma lista, e quem a valida é
      validarContatos. Precisa estar aqui porque esta tabela é também a lista
      do que a função aceita — tipo fora dela volta "tipo desconhecido". */
-  pessoas: {}
+  pessoas: {},
+  /* 'intencao' é o roteador da conversa: a frase do vendedor entra, o nome de
+     uma pergunta conhecida sai. Um campo de texto só, e curto de propósito —
+     quem confere se o id existe é o aplicativo, contra a própria lista que
+     ele mandou. A IA aqui não responde nada; ela aponta. */
+  intencao: {
+    intencao: { como: 'texto', max: 40 }
+  }
 };
 
 const ITENS_MAXIMOS = 12;
@@ -458,6 +465,29 @@ Para cada uma: nome (completo, como aparece), cargo, area, email, telefone.
 - Não escreva evidência, nota nem opinião sobre a decisão: aqui só saem pessoas.
 
 Devolva {"contatos": [{"nome": "...", "cargo": "...", "area": "...", "email": "...", "telefone": "..."}]} e nada mais.`;
+  }
+
+  /* O roteador da conversa. Ele não sabe nada do CRM e não precisa saber: a
+     única coisa que entra é a lista das perguntas que o aplicativo sabe
+     responder, e a única coisa que sai é o nome de uma delas.
+
+     Isto é deliberado e é o produto. Quem calcula quantas tarefas existem
+     hoje é o motor, com os dados; se a IA respondesse, um dia diria quatro
+     onde são seis, e um CRM que erra o próprio número não serve para nada.
+     Aqui ela faz o que faz bem — entender português — e nada além. */
+  if (tipo === 'intencao') {
+    const opcoes = String(ctx.opcoes || '');
+    return `Você é um roteador. O vendedor escreveu uma pergunta e você escolhe, na lista abaixo, qual pergunta conhecida corresponde a ela.
+
+Lista (id: exemplos):
+${opcoes}
+
+Regras:
+- Devolva SOMENTE o id, exatamente como está na lista.
+- Se nenhuma corresponder com clareza, devolva vazio. Chutar é pior do que não entender: o aplicativo sabe dizer "não entendi" e mostrar as opções.
+- Não responda a pergunta. Não escreva número, nome de empresa nem opinião.
+
+Devolva {"intencao": "id_escolhido"} e nada mais.`;
   }
 
   if (tipo === 'oportunidade') {
@@ -966,6 +996,9 @@ function tetoDeSaida(tipo: string, quantos = 0): number {
     return Math.min(Math.max(quantos * 500, 2000), 5000);
   }
   if (tipo === 'plano' || tipo === 'desenvolvimento') return 4000;
+  /* Uma palavra de saída. O teto alto aqui é para o raciocínio dos gpt-oss,
+     que sai do mesmo orçamento — não para o texto. */
+  if (tipo === 'intencao') return 800;
   return 2500;
 }
 
@@ -2117,6 +2150,7 @@ Deno.serve(async (req: Request) => {
        Reunião, notas e desenvolvimento também continuam no bom, sempre — é
        deles que sai nota, e nota errada não aparece como erro na tela. */
     const usaRapido = tipo === 'segmentos' || tipo === 'pessoas' ||
+      tipo === 'intencao' ||
       (tipo === 'plano' && !!ctx.etapaNova);
 
     /* Quantos leads vieram neste bloco. Sai da própria entrada — cada lead

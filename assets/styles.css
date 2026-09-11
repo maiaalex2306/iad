@@ -1391,3 +1391,47 @@ td.subiu { color: var(--ok); font-weight: 600; }
   display: block; padding-left: 10px;
   border-left: 2px solid var(--orange);
 }
+
+/* ---------- A conversa com a IaD ----------
+   A caixa que abre no primeiro acesso do dia. Estreita de propósito: é uma
+   conversa, não um painel — e conversa em coluna larga cansa de ler. */
+dialog.conversa { width: min(560px, 94vw); }
+
+.fala-iad { display: flex; align-items: center; gap: 14px; margin-bottom: 4px; }
+.fala-iad strong { display: block; font-size: 1.05rem; }
+.fala-iad .small { display: block; margin-top: 2px; }
+
+/* O rosto. Herda a paleta em vez de trazer cor própria: trocar o tema troca
+   a IaD junto, e ela não fica sendo a única coisa da tela fora do tom. */
+.rosto-iad { flex: 0 0 auto; }
+.rosto-iad .cabeca { fill: var(--navy); }
+.rosto-iad .olho { fill: var(--surface); }
+.rosto-iad .boca { fill: none; stroke: var(--surface); stroke-width: 3; stroke-linecap: round; }
+.rosto-iad .antena { stroke: var(--navy); stroke-width: 3; stroke-linecap: round; }
+.rosto-iad .antena-fio { fill: var(--orange); }
+.rosto-iad .luz { fill: #fff; }
+
+.sugestoes { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 4px; }
+
+.resposta-iad { margin: 12px 0 4px; padding: 12px; border: 1px solid var(--line);
+  border-radius: var(--radius); background: var(--bg); }
+.resposta-iad.vazia { background: transparent; }
+.resposta-iad .resumo { margin: 0 0 8px; font-weight: 600; }
+.resposta-iad ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.resposta-iad li.sem-ir { padding: 6px 0; color: var(--muted); font-size: .88rem; }
+
+/* A linha inteira é o botão. Alvo grande no celular, e a resposta continua
+   parecendo texto até o dedo chegar nela. */
+.resposta-iad li button {
+  display: block; width: 100%; text-align: left; border: 0; background: transparent;
+  color: var(--text); font: inherit; font-size: .88rem; padding: 7px 8px;
+  border-radius: 9px; cursor: pointer;
+}
+.resposta-iad li button:hover { background: var(--surface); }
+.resposta-iad > button.btn { margin-top: 10px; }
+
+.pensando { margin: 12px 0 4px; color: var(--muted); font-size: .88rem; }
+
+/* O botão do topo, para chamar a IaD de volta depois de fechada. */
+.topbar .chamar-iad { display: inline-flex; align-items: center; }
+.topbar .chamar-iad .rosto-iad { display: block; }

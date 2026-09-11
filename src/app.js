@@ -4,7 +4,7 @@
 
   const P = global.IADPlaybook, Store = global.IADStore, E = global.IADEngine,
     U = global.IADUI, V = global.IADViews, Arq = global.IADArquivos, Csv = global.IADCsv,
-    A = global.IADAuth, IA = global.IADIA;
+    A = global.IADAuth, IA = global.IADIA, C = global.IADConversa;
 
   const ROTAS = [
     { hash: '#/hoje', ico: '⚡', nome: 'Hoje', render: V.hoje,
@@ -118,6 +118,18 @@
     if (barra) barra.innerHTML = V.barraAdmin();
 
     window.scrollTo(0, 0);
+
+    /* A IaD aparece uma vez por dia, na primeira tela depois do login — e
+       depois do render, nunca antes: abrir um diálogo modal sobre uma tela
+       ainda em branco assusta e não dá contexto nenhum. O setTimeout é isso,
+       e nada mais. */
+    if (!jaFalouHoje(logado.id)) {
+      /* Marcado aqui, e não lá dentro: render roda a cada troca de tela, e
+         duas navegações rápidas abririam duas caixas antes de a primeira
+         chegar a marcar o dia. */
+      marcarQueFalou(logado.id);
+      setTimeout(function () { App.conversar(); }, 400);
+    }
   }
 
   /* A tabela e a barra de lote se redesenham sozinhas; o resto da tela, não.
@@ -5088,6 +5100,146 @@
       contaId: conta.id, titulo: (d.negocioNovo || '').trim() || conta.nome, etapa: 'Prospecção'
     });
   }
+
+  /* ---------- A conversa com a IaD ----------
+     Quem abre um CRM pela manhã não quer um painel: quer saber por onde
+     começar. O menu resolve isso mal, porque exige saber o nome da tela antes
+     de saber a pergunta. Aqui a ordem se inverte — a pergunta vem primeiro.
+
+     A regra que sustenta a tela inteira está em conversa.js e vale repetir:
+     a IA não responde, ela só entende. Quem calcula é o motor. Com o
+     assistente fora do ar a caixa continua funcionando, só sem texto livre.
+
+     Aparece uma vez por dia, na primeira tela depois do login. Duas vezes já
+     seria um obstáculo entre a pessoa e o trabalho dela. */
+
+  const VISTO_HOJE = 'iad-crm:conversa:visto';
+
+  function jaFalouHoje(usuarioId) {
+    try {
+      return localStorage.getItem(VISTO_HOJE) === usuarioId + '|' + Store.hoje();
+    } catch (e) { return true; }
+  }
+
+  function marcarQueFalou(usuarioId) {
+    try { localStorage.setItem(VISTO_HOJE, usuarioId + '|' + Store.hoje()); } catch (e) {}
+  }
+
+  /* A IaD. Um rosto desenhado à mão em SVG, não um emoji e não uma imagem:
+     emoji muda de cara em cada sistema, imagem é mais um arquivo para o
+     service worker guardar. Isto acompanha a paleta e pesa nada. */
+  function personagem(tamanho) {
+    const t = tamanho || 56;
+    return '<svg class="rosto-iad" width="' + t + '" height="' + t + '" viewBox="0 0 64 64" ' +
+      'role="img" aria-label="IaD">' +
+      '<circle class="antena-fio" cx="32" cy="8" r="3"/>' +
+      '<path class="antena" d="M32 11 V17"/>' +
+      '<rect class="cabeca" x="10" y="17" width="44" height="38" rx="13"/>' +
+      '<circle class="olho" cx="24" cy="34" r="4"/>' +
+      '<circle class="olho" cx="40" cy="34" r="4"/>' +
+      '<path class="boca" d="M24 44 Q32 50 40 44"/>' +
+      '<circle class="luz" cx="32" cy="8" r="1.6"/>' +
+      '</svg>';
+  }
+
+  function primeiroNome(u) {
+    const n = String((u && (u.nome || u.login)) || '').trim();
+    return n.split(/[\s@]+/)[0] || 'Olá';
+  }
+
+  App.conversar = function () {
+    const u = A.atual();
+    if (!u || !C) return;
+    marcarQueFalou(u.id);
+
+    const sugestoes = C.INTENCOES.map(function (i) {
+      return '<button type="button" class="btn ghost mini" data-intencao="' +
+        U.esc(i.id) + '">' + U.esc(i.chip) + '</button>';
+    }).join('');
+
+    const dlg = document.createElement('dialog');
+    dlg.className = 'conversa';
+    dlg.innerHTML =
+      '<div class="corpo">' +
+        '<div class="fala-iad">' + personagem(56) +
+          '<div><strong>' + U.esc(primeiroNome(u)) + ', o que você quer saber?</strong>' +
+          '<span class="small muted">Pergunte com suas palavras, ou escolha abaixo.</span></div>' +
+        '</div>' +
+        '<div class="sugestoes">' + sugestoes + '</div>' +
+        /* A caixa de texto vem ANTES da resposta, e não depois: resposta longa
+           no celular empurraria o campo para fora da tela, e a segunda
+           pergunta é justamente o que faz disto uma conversa. */
+        '<label class="campo"><span>Sua pergunta</span>' +
+          '<input type="text" data-pergunta autocomplete="off" ' +
+          'placeholder="Quais minhas tarefas do dia?"></label>' +
+        '<div data-resposta></div>' +
+      '</div>' +
+      '<div class="rodape">' +
+        '<button class="btn" type="button" data-fechar>Fechar</button>' +
+        '<button class="btn primario" type="button" data-perguntar>Perguntar</button>' +
+      '</div>';
+
+    document.body.appendChild(dlg);
+
+    const area = dlg.querySelector('[data-resposta]');
+    const campo = dlg.querySelector('[data-pergunta]');
+
+    function mostrar(id) {
+      const r = C.responder(id);
+      if (!r) return;
+      area.innerHTML = V.respostaDaConversa(r);
+    }
+
+    function pensando() {
+      area.innerHTML = '<p class="pensando">Entendendo…</p>';
+    }
+
+    function naoEntendi() {
+      area.innerHTML = '<p class="small muted">Não entendi essa. Escolha uma das ' +
+        'perguntas acima — são as que eu sei responder com número de verdade.</p>';
+    }
+
+    function perguntar() {
+      const texto = String(campo.value || '').trim();
+      if (!texto) { campo.focus(); return; }
+      /* O casamento local responde na hora quando dá. Só o que sobra vai para
+         a rede, e aí sim a tela avisa que está esperando. */
+      const aqui = C.entenderAqui(texto);
+      if (aqui) { mostrar(aqui); return; }
+      pensando();
+      C.entender(texto).then(function (r) {
+        if (!dlg.isConnected) return;
+        if (r && r.id) mostrar(r.id); else naoEntendi();
+      }).catch(naoEntendi);
+    }
+
+    dlg.addEventListener('click', function (ev) {
+      if (ev.target === dlg) { dlg.close(); return; }
+
+      const chip = ev.target.closest('[data-intencao]');
+      if (chip) { campo.value = ''; mostrar(chip.getAttribute('data-intencao')); return; }
+
+      if (ev.target.closest('[data-perguntar]')) { perguntar(); return; }
+      if (ev.target.closest('[data-fechar]')) { dlg.close(); return; }
+
+      /* Resposta que não deixa agir é relatório. Cada linha leva ao lugar
+         onde o trabalho acontece, e a caixa sai da frente. */
+      const ir = ev.target.closest('[data-ir]');
+      if (ir) {
+        const destino = ir.getAttribute('data-ir');
+        dlg.close();
+        App.ir(destino);
+      }
+    });
+
+    campo.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter') { ev.preventDefault(); perguntar(); }
+    });
+
+    dlg.addEventListener('close', function () { dlg.remove(); });
+    dlg.showModal();
+    campo.focus();
+  };
 
   /* ---------- Os contatos da empresa, de dentro do negócio ----------
      Para falar com alguém era preciso sair do cockpit, ir a Cadastros, achar
