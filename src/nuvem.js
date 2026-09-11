@@ -496,23 +496,33 @@
 
   function soDigitosCnpj(v) { return String(v || '').replace(/\D/g, ''); }
 
+  /* A regra, separada da rede de propósito: assim ela é testável sem servidor,
+     e a tela pode avisar enquanto a pessoa digita, antes de ela clicar. */
+  function empresaParecida(lista, nome, cnpj) {
+    const nomeNovo = achatarNome(nome);
+    const cnpjNovo = soDigitosCnpj(cnpj);
+    if (!nomeNovo && !cnpjNovo) return null;
+
+    return (lista || []).filter(function (t) {
+      if (nomeNovo && achatarNome(t.nome) === nomeNovo) return true;
+      return !!cnpjNovo && soDigitosCnpj(t.cnpj) === cnpjNovo;
+    })[0] || null;
+  }
+
+  function recusaDeDuplicada(igual, cnpj) {
+    const mesmoCnpj = !!soDigitosCnpj(cnpj) &&
+      soDigitosCnpj(igual.cnpj) === soDigitosCnpj(cnpj);
+    return 'Já existe a empresa "' + igual.nome + '"' +
+      (mesmoCnpj ? ' com este mesmo CNPJ' : '') + '.\n\n' +
+      'Criar outra parecida separa a carteira em dois cofres, e descobrir isso ' +
+      'depois é caro. Use a que já existe, ou mude o nome para algo que ' +
+      'distinga as duas de verdade.';
+  }
+
   function criarEmpresa(nome, cnpj) {
     return empresasDaNuvem().then(function (jaExistem) {
-      const nomeNovo = achatarNome(nome);
-      const cnpjNovo = soDigitosCnpj(cnpj);
-
-      const igual = (jaExistem || []).filter(function (t) {
-        if (achatarNome(t.nome) === nomeNovo) return true;
-        return !!cnpjNovo && soDigitosCnpj(t.cnpj) === cnpjNovo;
-      })[0];
-
-      if (igual) {
-        throw new Error('Já existe a empresa "' + igual.nome + '"' +
-          (soDigitosCnpj(igual.cnpj) === cnpjNovo && cnpjNovo ? ' com este mesmo CNPJ' : '') +
-          '.\n\nCriar outra parecida separa a carteira em dois cofres, e ' +
-          'descobrir isso depois é caro. Use a que já existe, ou mude o nome ' +
-          'para algo que distinga as duas de verdade.');
-      }
+      const igual = empresaParecida(jaExistem, nome, cnpj);
+      if (igual) throw new Error(recusaDeDuplicada(igual, cnpj));
 
       return chamar('/rest/v1/tenants', {
         metodo: 'POST', cabecalhos: { Prefer: 'return=representation' },
@@ -780,6 +790,7 @@
     sincronizarNaEntrada, definirDadosDaEmpresa, definirDadosDoPerfil, minhaSituacao, comoOServidorMeVe, primeirasLinhas, ondeEstaoOsRegistros,
     convitesDaNuvem, convidar, removerConvite, recuperarSenha, criarEmpresa, chamarFuncao,
     mensagensWhatsapp, marcarLidasWhatsapp, vincularWhatsapp,
+    empresaParecida, achatarNome,
     adotarTokens,
     trocarMinhaSenha,
     paraBanco, paraApp
