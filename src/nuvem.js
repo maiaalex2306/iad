@@ -598,6 +598,34 @@
     return saida;
   }
 
+  /* O app se atualiza sozinho, pelo navegador; o banco não. Quando um campo
+     novo nasce no código, ele só existe do lado de lá depois que alguém roda o
+     SQL — e até lá o PostgREST recusa a tabela INTEIRA, não a coluna. Uma
+     carteira de trezentos registros para de subir por causa de um campo que
+     ninguém usa ainda.
+
+     O erro cru é `Could not find the 'nutricao' column of 'oportunidades' in
+     the schema cache`, e ele manda a pessoa procurar no lugar errado: parece
+     defeito do app, e é banco desatualizado. Aqui ele vira a frase que diz o
+     que fazer. */
+  function explicarFalhas(falhas) {
+    const faltando = [];
+    falhas.forEach(function (f) {
+      const m = /Could not find the '([^']+)' column of '([^']+)'/.exec(f.erro || '');
+      if (m) faltando.push(m[2] + '.' + m[1]);
+    });
+
+    if (faltando.length) {
+      return 'O banco está atrás do aplicativo: ' +
+        (faltando.length === 1 ? 'falta a coluna ' : 'faltam as colunas ') +
+        faltando.join(', ') + '.\n\n' +
+        'Nada foi perdido — os registros continuam neste aparelho. ' +
+        'Rode o arquivo de correção mais recente da pasta nuvem/ no SQL Editor ' +
+        'do Supabase e sincronize de novo.';
+    }
+    return falhas.map(function (f) { return f.tabela + ': ' + f.erro; }).join(' — ');
+  }
+
   /* ---------- sincronização ---------- */
   function empurrar() {
     const perfil = sessaoPerfil();
@@ -694,7 +722,7 @@
     return Promise.all(envios).then(function (resultados) {
       const falhas = resultados.filter(function (r) { return r.erro; });
       if (falhas.length) {
-        throw new Error(falhas.map(function (f) { return f.tabela + ': ' + f.erro; }).join(' — '));
+        throw new Error(explicarFalhas(falhas));
       }
       return {
         enviados: resultados.reduce(function (s, r) { return s + r.enviados; }, 0),
@@ -831,7 +859,7 @@
     sincronizarNaEntrada, definirDadosDaEmpresa, definirDadosDoPerfil, minhaSituacao, comoOServidorMeVe, primeirasLinhas, ondeEstaoOsRegistros,
     convitesDaNuvem, convidar, removerConvite, recuperarSenha, criarEmpresa, chamarFuncao,
     mensagensWhatsapp, marcarLidasWhatsapp, vincularWhatsapp,
-    empresaParecida, achatarNome, porFormato,
+    empresaParecida, achatarNome, porFormato, explicarFalhas,
     adotarTokens,
     trocarMinhaSenha,
     paraBanco, paraApp

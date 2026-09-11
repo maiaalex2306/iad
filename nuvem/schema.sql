@@ -89,6 +89,10 @@ create table if not exists public.oportunidades (
   tipo                 text default 'Novo negócio',
   concorrentes         text default '',
   produto              text default '',
+  origem               text default '',
+  campanha             text default '',
+  sdr                  text default '',
+  sdr_email            text default '',
   fechamento_previsto  date,
   adiamentos           int default 0,
   gate_liberado_por    text,
@@ -100,6 +104,9 @@ create table if not exists public.oportunidades (
   itens                jsonb default '[]'::jsonb,
   insight              jsonb,
   proximo_compromisso  jsonb,
+  /* Nulo quer dizer "não está em nutrição", que é diferente de estar com os
+     campos vazios. */
+  nutricao             jsonb,
   desfecho             jsonb,
   criado_em            date default current_date,
   atualizado_em        timestamptz default now()
@@ -112,11 +119,17 @@ create table if not exists public.tarefas (
   oportunidade_id text,
   contato_id     text,
   titulo         text not null,
+  descricao      text default '',
   tipo           text default 'Ligar',
   decisao_alvo   text default '',
   vencimento     date,
+  hora           text default '',
   status         text default 'aberta',
   concluida_em   date,
+  origem         text default 'planejada',
+  com_relato     boolean default false,
+  sem_registro   boolean default false,
+  adiamentos     int default 0,
   criado_em      date default current_date,
   atualizado_em  timestamptz default now()
 );
