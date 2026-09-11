@@ -1,5 +1,13 @@
 -- Limpeza: deixa só o administrador e apaga o resto para recomeçar.
 --
+-- ATENÇÃO — ESTE É O BOTÃO VERMELHO. Ele apaga TODAS as empresas e TODOS os
+-- usuários menos um. Serve para zerar uma instalação de teste antes do primeiro
+-- cliente, e para mais nada.
+--
+-- Para tirar UMA empresa do caminho, ou as linhas da demonstração, use
+-- `limpeza-seletiva.sql` ao lado. Este arquivo levaria os clientes de verdade
+-- junto, e o nome dele não deixa isso óbvio o bastante.
+--
 -- APAGA DE VERDADE, E NÃO TEM DESFAZER. Rode a consulta de conferência
 -- primeiro e leia o resultado antes de executar o bloco de baixo.
 
