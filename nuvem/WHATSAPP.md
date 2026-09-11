@@ -137,6 +137,22 @@ Gravação idempotente pelo `wamid`. A Meta reentrega o webhook quando não
 recebe 200 rápido, e sem isso a mesma mensagem entraria duas vezes — o mesmo
 problema que o Linked Helper já nos deu.
 
+### Publicar, pelo painel, sem instalar nada
+
+O painel do Supabase publica Edge Functions direto do navegador. Não precisa
+da CLI, nem de Docker, nem de Deno. É o mesmo caminho da função `assistente`.
+
+1. Abra o código e copie tudo (Ctrl+A, Ctrl+C):
+   <https://raw.githubusercontent.com/maiaalex2306/iad/claude/decisoes-estagios-vendas-eckjo0/nuvem/funcoes/whatsapp/index.ts>
+2. No painel do projeto: **Edge Functions** → **Deploy a new function** →
+   **Via Editor**.
+3. Nome da função: exatamente `whatsapp`, minúsculo e sem acento. O nome vira
+   o endereço, e é ele que a Meta vai chamar.
+4. Apague o exemplo do editor, cole o código, **Deploy**.
+
+O que sobe é um arquivo só, sem dependências. Publicar de novo por cima
+substitui a versão anterior — não há como "quebrar" pela metade.
+
 ### Três segredos, e o Verify JWT desligado
 
 Na função, em **Secrets**:
