@@ -181,7 +181,12 @@
           ' aria-label="Mostrar a senha" data-ajuda="Mostra ou esconde a senha digitada.">👁</button>' +
           '</span></label>';
       }
-      return '<label class="campo' + (c.largura === 'metade' ? ' meia' : '') + '"><span>' + esc(c.rotulo) + '</span><input type="' + (c.tipo || 'text') + '" name="' + c.id + '" value="' + esc(v) + '"' + (c.placeholder ? ' placeholder="' + esc(c.placeholder) + '"' : '') + '></label>';
+      /* `dica` é a explicação que fica embaixo do campo, sempre visível.
+         Diferente do placeholder, que some no primeiro caractere digitado — e
+         por isso não serve para o que a pessoa precisa saber ENQUANTO digita,
+         como o formato aceito num telefone. */
+      return '<label class="campo' + (c.largura === 'metade' ? ' meia' : '') + '"><span>' + esc(c.rotulo) + '</span><input type="' + (c.tipo || 'text') + '" name="' + c.id + '" value="' + esc(v) + '"' + (c.placeholder ? ' placeholder="' + esc(c.placeholder) + '"' : '') + '>' +
+        (c.dica ? '<span class="dica-campo">' + esc(c.dica) + '</span>' : '') + '</label>';
     }).join('');
 
     /* Ações que não são "salvar" nem "cancelar" — excluir, por exemplo. Ficam

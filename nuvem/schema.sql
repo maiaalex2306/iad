@@ -66,8 +66,12 @@ create table if not exists public.contatos (
   sentimento     text default 'nao_acessado',
   influencia     int default 2,
   reporta_a      text,
-  email          text default '',
-  telefone       text default '',
+  /* Dois de cada. `email` é o profissional e `telefone` é o WhatsApp — é por
+     ele que a conversa que chega casa com a pessoa. */
+  email              text default '',
+  email_pessoal      text default '',
+  telefone           text default '',
+  telefone_comercial text default '',
   linkedin       text default '',
   canal_preferido text default '',
   criado_em      date default current_date,

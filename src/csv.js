@@ -67,8 +67,13 @@
       empresa: ['empresa', 'conta', 'organizacao', 'cliente'],
       cargo: ['cargo', 'funcao', 'titulo'],
       papel: ['papel', 'papel na compra', 'funcao na compra'],
-      email: ['email', 'e-mail'],
-      telefone: ['telefone', 'celular', 'whatsapp', 'fone'],
+      /* `whatsapp` cai no campo `telefone` porque é ele que casa a conversa
+         com a pessoa. O comercial é o da mesa, e planilha de CRM chama de
+         "telefone comercial" ou "fixo". */
+      email: ['email', 'e-mail', 'email profissional', 'e-mail profissional', 'email corporativo'],
+      emailPessoal: ['email pessoal', 'e-mail pessoal', 'email particular'],
+      telefone: ['whatsapp', 'celular', 'telefone', 'fone', 'movel'],
+      telefoneComercial: ['telefone comercial', 'comercial', 'fixo', 'telefone fixo', 'ramal'],
       linkedin: ['linkedin', 'perfil']
     },
     oportunidades: {
@@ -166,7 +171,9 @@
         Store.criarContato({
           contaId: d.contaId, nome: d.nome, cargo: d.cargo,
           papel: P.PAPEIS.indexOf(d.papel) !== -1 ? d.papel : 'Usuário',
-          email: d.email, telefone: d.telefone, linkedin: d.linkedin
+          email: d.email, emailPessoal: d.emailPessoal,
+          telefone: d.telefone, telefoneComercial: d.telefoneComercial,
+          linkedin: d.linkedin
         });
       } else {
         Store.criarOportunidade({
@@ -183,12 +190,12 @@
   function modelo(tipo) {
     const cabecalhos = {
       empresas: 'nome;segmento;porte;cidade;uf;site;relacao',
-      contatos: 'nome;empresa;cargo;papel;email;telefone;linkedin',
+      contatos: 'nome;empresa;cargo;papel;email;email pessoal;whatsapp;telefone comercial;linkedin',
       oportunidades: 'titulo;empresa;valor;etapa;fechamento;tipo'
     };
     const exemplos = {
       empresas: 'ACME Agroindustrial;Agro;500-1000 funcionários;Uberlândia;MG;acme.com.br;Prospect',
-      contatos: 'Carlos Menezes;ACME Agroindustrial;Gerente de Operações;Champion / Mobilizer;carlos@acme.com.br;34999990000;',
+      contatos: 'Carlos Menezes;ACME Agroindustrial;Gerente de Operações;Champion / Mobilizer;carlos@acme.com.br;carlos.menezes@gmail.com;(34) 99999-0000;(34) 3333-1000;linkedin.com/in/carlosmenezes',
       oportunidades: 'Projeto X;ACME Agroindustrial;840000;Diagnóstico;31/12/2026;Novo negócio'
     };
     return cabecalhos[tipo] + '\n' + exemplos[tipo] + '\n';

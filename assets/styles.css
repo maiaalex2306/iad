@@ -1501,3 +1501,18 @@ dialog.conversa { width: min(560px, 94vw); }
 }
 .carimbo-versao strong { font-size: .82rem; }
 .carimbo-versao span { font-size: .7rem; color: var(--muted); }
+
+/* A explicação que fica embaixo do campo. Diferente do placeholder, que some
+   no primeiro caractere — e por isso não serve para o que a pessoa precisa
+   saber justamente enquanto digita. */
+.campo .dica-campo {
+  display: block; margin-top: 4px; font-size: .72rem;
+  color: var(--muted); line-height: 1.45; font-weight: 400;
+}
+
+/* O símbolo do WhatsApp. O verde da marca onde ele identifica o canal; a cor
+   de quem está em volta onde ele é só um adorno de link. */
+.ico-zap { fill: #25D366; flex: 0 0 auto; vertical-align: -2px; }
+.ico-zap.herdado { fill: currentColor; }
+.titulo-zap { display: inline-flex; align-items: center; gap: 9px; }
+.link-zap { display: inline-flex; align-items: center; gap: 4px; }

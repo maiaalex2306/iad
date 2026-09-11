@@ -22,7 +22,10 @@
     /* Depois das Tarefas e antes da Revisão: a conversa é matéria-prima de
        tarefa, não relatório de semana. Quem terminou a lista do dia olha aqui
        se alguém respondeu. */
-    { hash: '#/conversas', ico: '💬', nome: 'Conversas', render: V.conversas,
+    /* O único item do menu com símbolo desenhado em vez de emoji: aqui o
+       ícone identifica o canal, e o emoji de balãozinho não diz WhatsApp em
+       sistema nenhum. */
+    { hash: '#/conversas', ico: V.iconeWhatsapp(17), nome: 'Conversas', render: V.conversas,
       ajuda: 'As conversas de WhatsApp, por pessoa. Mensagem não é evidência: você lê, e quando alguma coisa valeu a pena, registra o que aconteceu — e aí a IA lê e as oito decisões andam.' },
     { hash: '#/revisao', ico: '🔄', nome: 'Revisão', render: V.revisao,
       ajuda: 'A reunião semanal numa tela: o que mudou na decisão de cada cliente nos últimos 7 dias.' },
@@ -5049,8 +5052,12 @@
       linhaDaFicha('Papel na compra', c.papel),
       linhaDaFicha('LinkedIn', perfilLinkedin(c.linkedin) ? '/in/' + perfilLinkedin(c.linkedin) : c.linkedin,
         enderecoDoPerfil(c.linkedin)),
-      linhaDaFicha('Telefone', c.telefone, zap ? 'https://wa.me/' + zap : ''),
-      linhaDaFicha('E-mail', c.email, 'mailto:' + c.email),
+      linhaDaFicha('WhatsApp', c.telefone, zap ? 'https://wa.me/' + zap : ''),
+      linhaDaFicha('Telefone comercial', c.telefoneComercial,
+        c.telefoneComercial ? 'tel:' + String(c.telefoneComercial).replace(/[^\d+]/g, '') : ''),
+      linhaDaFicha('E-mail profissional', c.email, c.email ? 'mailto:' + c.email : ''),
+      linhaDaFicha('E-mail pessoal', c.emailPessoal,
+        c.emailPessoal ? 'mailto:' + c.emailPessoal : ''),
       linhaDaFicha('Posição', posicoes[c.sentimento] || ''),
       linhaDaFicha('Influência', forcas[String(c.influencia)] || ''),
       linhaDaFicha('Perfil (Challenger)', perfil && perfil.id !== 'nao_classificado' ? perfil.rotulo : ''),
@@ -5571,11 +5578,13 @@
   };
 
   function linhaDeContato(c, noGrupo, opId) {
-    const zap = paraWhatsapp(c.telefone);
     const canais = [
       c.linkedin ? '<a href="' + U.esc(enderecoDoPerfil(c.linkedin)) + '" target="_blank" rel="noopener">LinkedIn</a>' : '',
-      zap ? '<a href="https://wa.me/' + zap + '" target="_blank" rel="noopener">' + U.esc(c.telefone) + '</a>' : '',
-      c.email ? '<a href="mailto:' + U.esc(c.email) + '">' + U.esc(c.email) + '</a>' : ''
+      V.linkWhatsapp(c.telefone),
+      c.telefoneComercial ? '<a href="tel:' + U.esc(String(c.telefoneComercial).replace(/[^\d+]/g, '')) +
+        '">' + U.esc(c.telefoneComercial) + '</a>' : '',
+      c.email ? '<a href="mailto:' + U.esc(c.email) + '">' + U.esc(c.email) + '</a>' : '',
+      c.emailPessoal ? '<a href="mailto:' + U.esc(c.emailPessoal) + '">' + U.esc(c.emailPessoal) + '</a>' : ''
     ].filter(Boolean).join(' · ');
 
     return '<div class="contato-linha">' +
@@ -6335,8 +6344,16 @@
         { valor: '1', rotulo: '1 — opina' }, { valor: '2', rotulo: '2 — influencia' }, { valor: '3', rotulo: '3 — decide' }] },
       { id: 'reportaA', rotulo: 'Reporta a', tipo: 'select', opcoes: [{ valor: '', rotulo: '— não informado —' }]
         .concat(colegas.map(function (c) { return { valor: c.id, rotulo: c.nome + ' (' + c.papel + ')' }; })) },
-      { id: 'email', rotulo: 'E-mail' },
-      { id: 'telefone', rotulo: 'Telefone / WhatsApp' },
+      { id: 'email', rotulo: 'E-mail profissional', largura: 'metade' },
+      /* O profissional morre quando a pessoa troca de emprego; o pessoal é o
+         que sobrevive. Numa venda consultiva o comprador de hoje é o comprador
+         da próxima empresa dele. */
+      { id: 'emailPessoal', rotulo: 'E-mail pessoal', largura: 'metade' },
+      { id: 'telefone', rotulo: 'WhatsApp', largura: 'metade',
+        placeholder: '(19) 99123-4567',
+        dica: 'Escreva como quiser: com ou sem DDI, com ou sem o nono dígito, com pontuação ou sem. ' +
+          'O app compara os últimos oito dígitos, e é assim que a conversa que chega casa com esta pessoa.' },
+      { id: 'telefoneComercial', rotulo: 'Telefone comercial', largura: 'metade' },
       { id: 'linkedin', rotulo: 'LinkedIn' }
     ];
   }

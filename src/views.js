@@ -468,7 +468,8 @@
 
   function conversas() {
     const W = global.IADWhatsapp;
-    const topo = '<div class="row"><h1>Conversas</h1><span class="espaco"></span>' +
+    const topo = '<div class="row"><h1 class="titulo-zap">' + iconeWhatsapp(26) +
+      'Conversas</h1><span class="espaco"></span>' +
       '<button class="btn ghost mini" onclick="App.recarregarConversas()">Atualizar</button></div>';
 
     if (!W || !W.disponivel()) {
@@ -1565,6 +1566,32 @@
   /* A tarja azul: mesmo mecanismo da laranja, outro assunto. Uma diz que VOCÊ
      está devendo; esta diz que o CLIENTE falou. A segunda é melhor notícia e
      por isso não substitui a primeira — as duas podem aparecer juntas. */
+  /* O glifo do WhatsApp, desenhado à mão. Não é emoji — emoji muda de cara em
+     cada sistema e o de telefone verde não é o WhatsApp —, e não é imagem de
+     fora, que o service worker teria de guardar e a rede de baixar.
+
+     `herdar` deixa a cor vir do texto ao redor: dentro de um link ele fica da
+     cor do link, e no menu da cor do menu. Só onde ele identifica o canal é
+     que vale o verde da marca. */
+  function iconeWhatsapp(tamanho, herdar) {
+    const t = tamanho || 16;
+    return '<svg class="ico-zap' + (herdar ? ' herdado' : '') + '" width="' + t + '" height="' + t + '" ' +
+      'viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+      '<path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2Zm0 18.15h-.01a8.23 8.23 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.21 8.21 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.25-8.24 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23Z"/>' +
+      '<path d="M16.56 14.23c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.24-.64.8-.78.97-.14.16-.29.18-.54.06-.25-.13-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.5.11-.11.25-.29.37-.44.13-.15.17-.25.25-.41.08-.17.04-.31-.02-.44-.06-.12-.56-1.35-.77-1.84-.2-.49-.41-.42-.56-.43l-.48-.01c-.16 0-.43.06-.66.31-.22.25-.86.84-.86 2.05s.89 2.38 1.01 2.54c.12.17 1.74 2.66 4.22 3.73.59.25 1.05.4 1.41.52.59.19 1.13.16 1.56.1.47-.07 1.47-.6 1.68-1.18.21-.58.21-1.08.14-1.18-.06-.11-.22-.17-.47-.29Z"/>' +
+      '</svg>';
+  }
+
+  /* Um link que abre a conversa no WhatsApp, com o símbolo do canal ao lado.
+     `wa.me` exige o país; número do Brasil chega sem ele. */
+  function linkWhatsapp(telefone, rotulo) {
+    const so = String(telefone || '').replace(/\D/g, '');
+    if (!so) return '';
+    const numero = (so.length === 10 || so.length === 11) ? '55' + so : so;
+    return '<a class="link-zap" href="https://wa.me/' + numero + '" target="_blank" rel="noopener">' +
+      iconeWhatsapp(14) + esc(rotulo || telefone) + '</a>';
+  }
+
   function tarjaDeConversas(op) {
     const W = global.IADWhatsapp;
     if (!W || !W.carregadas()) return '';
@@ -5720,6 +5747,7 @@
     revisaoDaImportacao, recusaDoCliente, resumoDaLeitura, planoDaIA, definirPlano, planoGuardado,
     marcarLendo, estaLendo, revisaoDasNotas, respostaDaConversa,
     conversas, definirConversa, conversaAberta: function () { return conversaAberta; },
+    iconeWhatsapp, linkWhatsapp,
     acesso, barraAdmin, menuDoUsuario, definirTelaAcesso, definirPrimeiraEmpresa, listaUsuariosNuvem,
     pendenteAcesso: function () { return pendente; },
     tarefasFiltrar, tarefasEstado, tarefasVisiveis, tarefasDaPagina, tarefasSelecionadas, tarefasMarcar,

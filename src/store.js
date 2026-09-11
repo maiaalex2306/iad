@@ -147,6 +147,12 @@
       if (t.adiamentos == null) t.adiamentos = 0;
     });
     dados.contatos.forEach(function (c) {
+      /* Os campos novos nascem vazios em quem já existia. `email` continua
+         sendo o profissional e `telefone` continua sendo o WhatsApp: renomear
+         o sentido de um campo que já tem dado dentro é o jeito de perder o
+         dado sem ninguém perceber. */
+      if (c.emailPessoal == null) c.emailPessoal = '';
+      if (c.telefoneComercial == null) c.telefoneComercial = '';
       if (c.influencia == null) c.influencia = 2;
       if (c.reportaA === undefined) c.reportaA = null;
       if (c.telefone === undefined) c.telefone = '';
@@ -635,7 +641,19 @@
   function criarContato(dados) {
     const novo = Object.assign({
       id: uid('ctt'), contaId: null, nome: '', cargo: '', papel: 'Usuário',
-      email: '', telefone: '', linkedin: '', influencia: 2, reportaA: null,
+      /* Dois de cada, e a razão é prática, não cadastral.
+
+         O e-mail profissional morre quando a pessoa troca de emprego; o
+         pessoal é o que sobrevive — e numa venda consultiva o comprador de
+         hoje é o comprador da próxima empresa dele.
+
+         Nos telefones a separação é operacional: `telefone` é o WhatsApp, e é
+         por ele que a conversa casa com o contato. O comercial é o da mesa,
+         que ninguém usa para conversar e que não deve concorrer no casamento
+         como primeira escolha. */
+      email: '', emailPessoal: '',
+      telefone: '', telefoneComercial: '',
+      linkedin: '', influencia: 2, reportaA: null,
       canalPreferido: '', perfil: 'nao_classificado', sentimento: 'nao_acessado', criadoEm: hoje()
     }, carimbo(true), dados);
     estado.contatos.push(novo);

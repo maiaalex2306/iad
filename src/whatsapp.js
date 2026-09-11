@@ -99,8 +99,17 @@
   function contatoDoTelefone(telefoneCurto) {
     if (!telefoneCurto) return null;
     const gente = Store.dados().contatos || [];
+
+    /* O WhatsApp primeiro, o comercial depois, e em duas passadas de propósito.
+       Numa passada só, um contato cujo telefone comercial coincide com o
+       WhatsApp de outro ganharia a conversa por estar antes na lista. O campo
+       WhatsApp é a resposta certa quando ele existe; o comercial é o palpite
+       razoável quando ele não existe. */
     for (let i = 0; i < gente.length; i++) {
       if (curto(gente[i].telefone) === telefoneCurto) return gente[i];
+    }
+    for (let i = 0; i < gente.length; i++) {
+      if (curto(gente[i].telefoneComercial) === telefoneCurto) return gente[i];
     }
     return null;
   }
