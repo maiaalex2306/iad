@@ -3034,8 +3034,21 @@
               'isso é erro de permissão ou de instalação, não carteira vazia. ' +
               '<strong>Me mande este quadro.</strong>';
           } else if (contas.tem || ops.tem) {
-            veredito = 'O servidor tem registros para você e o app mostrou zero. ' +
-              '<strong>Aí o problema é do app</strong> — me mande este quadro.';
+            /* O servidor tem registros. Só é problema do app se a tela estiver
+               vazia — e quem abre este diagnóstico nem sempre está vendo zero.
+               Dizer "o app mostrou zero" para quem está olhando a carteira
+               cheia faz a pessoa duvidar do que está na frente dela. */
+            const aqui = Store.diagnostico().colecoes;
+            const visiveis = function (nome) {
+              const l = aqui.filter(function (c) { return c.colecao === nome; })[0];
+              return l ? l.visiveis : 0;
+            };
+            const naTela = visiveis('contas') + visiveis('oportunidades');
+            veredito = naTela > 0
+              ? 'Está tudo no lugar: o servidor tem registros para você e o app está ' +
+                'mostrando ' + naTela + '. <strong>Nada a corrigir aqui.</strong>'
+              : 'O servidor tem registros para você e o app está mostrando zero. ' +
+                '<strong>Aí o problema é do app</strong> — me mande este quadro.';
           } else {
             veredito = 'Você é gestor, na empresa certa, e o servidor não tem nenhuma conta nesta empresa. ' +
               'Os seus registros estão em <strong>outra empresa</strong> — ou nunca chegaram ao servidor. ' +
