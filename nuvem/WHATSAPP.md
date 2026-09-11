@@ -47,6 +47,10 @@ Feita por você, no painel da Meta. Não envolve código.
    para começar sem e virar depois sem refazer a conexão.
 4. Guardar três coisas: o **App ID**, o **App Secret** e o **token de
    verificação** que você mesmo inventa para o webhook.
+5. **Verificar o portfólio empresarial.** A Meta exige isso antes de mandar o
+   app para análise ou acessar dados de gente de fora da sua empresa — que é
+   exatamente o que uma conversa de cliente é. Leva dias, não minutos, e por
+   isso é a primeira coisa a começar, não a última.
 
 O App Secret nunca entra no repositório nem no navegador. Ele vive como
 segredo da Edge Function, pela mesma razão que a `service_role` e a chave da
@@ -133,11 +137,40 @@ Gravação idempotente pelo `wamid`. A Meta reentrega o webhook quando não
 recebe 200 rápido, e sem isso a mesma mensagem entraria duas vezes — o mesmo
 problema que o Linked Helper já nos deu.
 
+### Três segredos, e o Verify JWT desligado
+
+Na função, em **Secrets**:
+
+| segredo | o que é |
+|---|---|
+| `IAD_CHAVE_SECRETA` | a `service_role` do projeto, que ignora o RLS para gravar |
+| `WA_TOKEN_VERIFICACAO` | o texto que você inventa e repete no painel da Meta |
+| `WA_SEGREDO_APP` | o App Secret do aplicativo, com que a Meta assina cada POST |
+
+`SUPABASE_URL` já existe no ambiente. Segredo trocado só vale no deploy
+seguinte: publique de novo depois de mexer.
+
+E então, no painel da função → **Settings** → desligue **Verify JWT**.
+
+Isto não é detalhe: **sem desligar, nada funciona, e o sintoma engana**. O
+porteiro do Supabase exige um token de sessão antes de deixar o pedido chegar à
+função. A Meta não tem sessão nenhuma no nosso projeto e nem deveria ter — ela
+manda um POST assinado, que é outra forma de provar quem é. O porteiro recusa
+com 401, a função nunca roda, e no painel da Meta a verificação do webhook
+falha sem dizer por quê.
+
+A segurança não afrouxa, muda de lugar: quem confere passa a ser a função, e
+ela confere o que importa aqui — o HMAC do corpo com o App Secret, que o
+porteiro do Supabase não sabe olhar.
+
 ## Fase 3 — Conectar o número
 
 Só agora, e com a função já publicada e testada.
 
-1. Apontar o webhook do aplicativo para a função.
+1. Apontar o webhook do aplicativo para a função:
+   `https://drhonmdffhnwamwzynrs.supabase.co/functions/v1/whatsapp`, com o
+   mesmo texto de `WA_TOKEN_VERIFICACAO` no campo de verificação, e assinar os
+   campos `messages`, `smb_message_echoes` e `history`.
 2. Rodar o Embedded Signup com o sub-fluxo de Coexistence.
 3. O número precisa estar no WhatsApp Business versão 2.24.17 ou mais nova.
 4. Confirmar o código no aparelho.
