@@ -4553,7 +4553,7 @@
       ehContaNova ? conta : null,
       ehContatoNovo ? contato : null,
       ehNegocioNovo ? op : null,
-      (tarefa && tarefa.criadaAgora) ? tarefa : null
+      (tarefa && tarefa._criadaAgora) ? tarefa : null
     ]);
     return { op: op, novo: ehNegocioNovo, contatoNovo: ehContatoNovo, falas: falasNovas.length };
   }
@@ -4585,7 +4585,7 @@
     })[0];
 
     if (aberta) {
-      aberta.criadaAgora = false;
+      aberta._criadaAgora = false;
       if (!temNovidade) return aberta;
       aberta.descricao = descricaoDaTarefaDoLead(op, contato, lead);
       /* O contato da tarefa passa a ser quem falou por último: é com ele que
@@ -4609,8 +4609,13 @@
       descricao: descricaoDaTarefaDoLead(op, contato, lead)
     });
     /* Marca de trabalho, não campo do registro: diz a quem chamou que esta
-       tarefa nasceu agora e por isso pode receber o dono da SDR. */
-    nova.criadaAgora = true;
+       tarefa nasceu agora e por isso pode receber o dono da SDR.
+
+       O underscore não é estilo, é contrato: `paraBanco` descarta tudo que
+       começa com ele. Sem isso este campo subia junto e o banco recusava a
+       tabela inteira — "Could not find the 'criada_agora' column" —, parando a
+       sincronização da carteira por causa de uma marca temporária. */
+    nova._criadaAgora = true;
     return nova;
   }
 

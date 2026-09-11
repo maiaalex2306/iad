@@ -557,6 +557,12 @@
     const saida = {};
     Object.keys(registro).forEach(function (campo) {
       if (IGNORAR_AO_ENVIAR.indexOf(campo) !== -1) return;
+      /* Campo que começa com underscore é marca de trabalho do app, não dado:
+         serve a um passo do código e morre ali. Se subir, o banco não tem a
+         coluna e recusa a TABELA inteira — a carteira para de sincronizar por
+         causa de uma variável temporária. É convenção, e está escrita aqui
+         porque é aqui que ela é cobrada. */
+      if (campo.charAt(0) === '_') return;
       const valor = registro[campo];
       if (valor === undefined) return;
       saida[paraColuna(campo)] = valor === '' && /Em$|previsto$|vencimento$/i.test(campo) ? null : valor;
