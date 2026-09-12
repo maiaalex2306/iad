@@ -1626,24 +1626,177 @@
       (n === 1 ? 'Respondeu no WhatsApp' : n + ' mensagens novas no WhatsApp') + '</div>';
   }
 
+  /* ---------------- Os balões do cartão ----------------
+
+     O cartão é denso de propósito: sete números num cartão do tamanho de um
+     cartão de visita. Denso funciona para quem já sabe o que cada um quer
+     dizer, e é uma parede para quem chegou ontem — e o pior é que a dúvida
+     não tem onde ser tirada, porque o manual está a três telas dali.
+
+     O balão não repete o rótulo: ele explica O ESTE número. "Grupo 0%" vira
+     "nenhum dos quatro papéis críticos está ocupado — faltam Decisor
+     econômico, Champion, Usuário-chave e Técnico". Quem passa o ponteiro em
+     cima da própria dúvida recebe a resposta da própria dúvida. */
+  function ajuda(titulo, texto) {
+    return ' data-ajuda-titulo="' + esc(titulo) + '" data-ajuda="' + esc(texto) + '"';
+  }
+
+  function plural(n, um, muitos) { return n + ' ' + (n === 1 ? um : muitos); }
+
+  function lista(nomes) {
+    if (nomes.length === 1) return nomes[0];
+    return nomes.slice(0, -1).join(', ') + ' e ' + nomes[nomes.length - 1];
+  }
+
+  function ajudaDoIad(r) {
+    const falta = P.IAD_MADURO - r.iad;
+    return ajuda('IAD ' + r.iad + ' de ' + P.IAD_MAXIMO,
+      'Índice de Avanço da Decisão: a soma das oito decisões, de 0 a 4 cada uma. ' +
+      (falta > 0
+        ? 'A partir de ' + P.IAD_MADURO + ' a decisão conta como madura — faltam ' + falta + ' pontos.'
+        : 'Acima de ' + P.IAD_MADURO + ': a decisão já está madura.'));
+  }
+
+  function ajudaDaEvidencia(r) {
+    const q = r.evidenceAge === 1 ? '1 dia' : r.evidenceAge + ' dias';
+    return ajuda(q + ' sem evidência',
+      'Tempo desde a última evidência vinda do CLIENTE. Proposta enviada, ' +
+      'follow-up e reunião marcada por nós não zeram este relógio — só o que ' +
+      'ele faz ou diz. Hoje: ' + r.faixa.rotulo.toLowerCase() +
+      '. Verde até 7 dias, amarelo até 14, vermelho até 30, e acima disso o ' +
+      'negócio vira zumbi.');
+  }
+
+  function ajudaDoGrupoComprador(r) {
+    const c = r.coverage;
+    const base = 'Quantos dos ' + c.criticosTotal + ' papéis críticos da compra ' +
+      'estão ocupados por alguém cadastrado neste negócio. ';
+    if (!c.mapeados) {
+      return ajuda('Grupo ' + c.percentual + '%',
+        base + 'Ninguém foi cadastrado ainda como participante da compra. ' +
+        'Vender para uma pessoa só é o risco mais silencioso que existe: ' +
+        'ela troca de emprego e o negócio morre junto.');
+    }
+    if (!c.faltando.length) {
+      return ajuda('Grupo ' + c.percentual + '%',
+        base + 'Todos ocupados, com ' + plural(c.mapeados, 'pessoa mapeada', 'pessoas mapeadas') + '.');
+    }
+    return ajuda('Grupo ' + c.percentual + '%',
+      base + plural(c.mapeados, 'pessoa mapeada', 'pessoas mapeadas') +
+      '. Ninguém ocupa: ' + lista(c.faltando) + '.' +
+      (c.temEconomicBuyer ? '' : ' Sem decisor econômico, ninguém dentro da conta pode dizer sim.'));
+  }
+
+  function ajudaDoCompromisso(comp) {
+    const dono = comp.dono === 'cliente' ? 'do cliente' : 'nossa';
+    return ajuda('Compromisso vencido',
+      'Combinado: ' + comp.texto + ', para ' + U.data(comp.data) + '. ' +
+      'Passaram-se ' + plural(comp.diasAtraso, 'dia', 'dias') + ' e a vez é ' + dono + '. Data combinada é o que permite dizer que o ' +
+      'negócio atrasou; sem ela, nada nunca está atrasado.');
+  }
+
+  function ajudaDoValor(op) {
+    const t = Store.totaisDaOportunidade(op);
+    if (!t.temItens) {
+      return ajuda('Valor do negócio',
+        'Digitado à mão: ainda não há produtos na lista. Assim que houver o ' +
+        'primeiro item, o valor passa a ser somado deles.');
+    }
+    return ajuda('Valor do negócio',
+      'Somado dos produtos deste negócio' +
+      (t.mensal
+        ? ': ' + U.moeda(t.unico) + ' de uma vez mais ' + U.moeda(t.mensal) +
+          ' por mês, por ' + t.meses + ' meses de contrato.'
+        : '.'));
+  }
+
+  /* O que falta, pelos nomes. A linha do cartão diz "e mais 9", e nove do quê
+     é justamente a pergunta — ainda mais porque a lista mistura decisão que
+     não subiu de degrau com papel vazio, insight e data não combinada, que são
+     trabalhos bem diferentes. Contar por tipo ainda obrigaria a abrir o
+     negócio para saber QUAIS. O balão diz os nomes. */
+  const NOME_DA_PENDENCIA = {
+    dimensao: 'Decisões que ainda não chegaram ao topo',
+    comprovacao: 'Decisões com nota alta e sem prova que as sustente',
+    papel: 'Papéis vazios no grupo comprador',
+    mobilizador: 'Ninguém no grupo age como mobilizador',
+    insight: 'O cliente ainda não adotou o nosso reenquadramento do problema',
+    compromisso: 'Não há data combinada — sem ela, nada nunca está atrasado'
+  };
+
+  function ajudaDasLacunas(r) {
+    if (!r.lacunas.length) {
+      return ajuda('Não falta nada',
+        'As oito decisões estão no topo, o grupo comprador está coberto e há ' +
+        'data combinada com o cliente. O que resta é formalizar.');
+    }
+
+    /* Agrupado na ordem em que o motor produziu, que é a ordem da escada de
+       decisão: quem lê de cima para baixo lê na ordem de fazer. */
+    const grupos = [];
+    r.lacunas.forEach(function (l) {
+      const g = grupos.filter(function (x) { return x.tipo === l.tipo; })[0] ||
+        (grupos.push({ tipo: l.tipo, itens: [] }), grupos[grupos.length - 1]);
+      /* Para papel vazio o título da lacuna vira "Papéis ausentes no grupo
+         comprador" quando falta mais de um — e repeti-lo depois do rótulo
+         produzia "Papéis vazios no grupo comprador: Papéis ausentes no grupo
+         comprador". Os nomes dos papéis estão em l.papeis. */
+      if (l.tipo === 'papel' && l.papeis) g.itens = g.itens.concat(l.papeis);
+      else g.itens.push(l.titulo);
+    });
+
+    const partes = grupos.map(function (g) {
+      const rot = NOME_DA_PENDENCIA[g.tipo] || 'Outras';
+      /* As pendências que já são a frase inteira não ganham dois pontos e uma
+         repetição do próprio nome logo em seguida. */
+      if (g.tipo === 'mobilizador' || g.tipo === 'insight' || g.tipo === 'compromisso') return rot + '.';
+      /* Nomear as oito uma a uma quando são todas é gastar três linhas para
+         dizer "nenhuma saiu do lugar". */
+      if (g.tipo === 'dimensao' && g.itens.length === P.DIMENSOES.length) {
+        return 'As oito decisões, nenhuma delas no topo.';
+      }
+      return rot + ': ' + g.itens.join(', ') + '.';
+    });
+
+    return ajuda(r.lacunas.length === 1 ? '1 pendência' : r.lacunas.length + ' pendências',
+      partes.join(' ') + ' Abra o negócio na aba Decisão para ver o que fazer em cada uma.');
+  }
+
   function cardOportunidade(r) {
     const comp = r.compromisso;
     return '<button class="item g-' + r.classe.id + (r.tarefasAtrasadas ? ' com-atraso' : '') +
       '" onclick="App.abrir(\'' + r.op.id + '\')">' +
-      '<div class="row"><span class="tit">' + esc(r.op.titulo) + '</span><span class="espaco"></span>' +
-      '<span class="pill navy">' + U.compacto(r.op.valor) + '</span></div>' +
-      '<div class="small muted" style="margin:2px 0 8px">' + esc((r.conta && r.conta.nome) || 'Sem conta') + ' · ' + esc(r.op.etapa) + ' · ' + r.tempoNaEtapa + 'd nesta etapa</div>' +
+      '<div class="row"><span class="tit"' +
+        ajuda(r.classe.rotulo, r.classe.desc) + '>' + esc(r.op.titulo) + '</span>' +
+      '<span class="espaco"></span>' +
+      '<span class="pill navy"' + ajudaDoValor(r.op) + '>' + U.compacto(r.op.valor) + '</span></div>' +
+      '<div class="small muted" style="margin:2px 0 8px">' + esc((r.conta && r.conta.nome) || 'Sem conta') +
+        ' · <span' + ajuda('Etapa no CRM',
+          'A etapa organiza o funil e é escolhida por nós. Quem mede se o cliente ' +
+          'andou são as oito decisões — mudar a etapa não move nenhuma delas. ' +
+          'Parada aqui há ' + r.tempoNaEtapa + ' dia(s).') + '>' +
+        esc(r.op.etapa) + ' · ' + r.tempoNaEtapa + 'd nesta etapa</span></div>' +
       '<div class="row tiny">' +
-        '<span class="pill">IAD ' + r.iad + '/' + P.IAD_MAXIMO + '</span>' +
-        '<span class="pill ' + r.faixa.classe + '">' + r.evidenceAge + 'd sem evidência</span>' +
+        '<span class="pill"' + ajudaDoIad(r) + '>IAD ' + r.iad + '/' + P.IAD_MAXIMO + '</span>' +
+        '<span class="pill ' + r.faixa.classe + '"' + ajudaDaEvidencia(r) + '>' + r.evidenceAge + 'd sem evidência</span>' +
         (estaLendo(r.op.id) ? '<span class="pill lendo">lendo…</span>' : '') +
-        '<span class="pill">Grupo ' + r.coverage.percentual + '%</span>' +
-        (comp && comp.vencido ? '<span class="pill dead">compromisso vencido</span>' : '') +
-        ((r.op.adiamentos || 0) >= 2 ? '<span class="pill warn">' + r.op.adiamentos + ' adiamentos</span>' : '') +
+        '<span class="pill"' + ajudaDoGrupoComprador(r) + '>Grupo ' + r.coverage.percentual + '%</span>' +
+        (comp && comp.vencido
+          ? '<span class="pill dead"' + ajudaDoCompromisso(comp) + '>compromisso vencido</span>' : '') +
+        ((r.op.adiamentos || 0) >= 2
+          ? '<span class="pill warn"' + ajuda(r.op.adiamentos + ' adiamentos',
+              'A previsão de fechamento já foi empurrada para a frente ' + r.op.adiamentos +
+              ' vezes. Dois ou mais é sinal de negócio que não está andando — e não ' +
+              'de calendário apertado.') + '>' + r.op.adiamentos + ' adiamentos</span>' : '') +
       '</div>' +
-      '<div class="row" style="margin-top:9px;gap:8px">' + tiraDecisao(r.op) +
+      '<div class="row" style="margin-top:9px;gap:8px"><span' +
+        ajuda('As oito decisões',
+          'Uma barra por decisão, na ordem da escada, colorida pela nota de 0 a 4. ' +
+          'Barra clara é zero. Barra riscada é nota alta sem evidência do cliente ' +
+          'que a sustente — o que parece avanço e não é.') + '>' +
+        tiraDecisao(r.op) + '</span>' +
       '<span class="tiny muted">' + r.iad + '/' + P.IAD_MAXIMO + '</span></div>' +
-      '<div class="tiny muted" style="margin-top:6px">Falta: ' +
+      '<div class="tiny muted" style="margin-top:6px"' + ajudaDasLacunas(r) + '>Falta: ' +
       esc(r.lacunas.length ? r.lacunas.slice(0, 2).map(function (l) { return l.titulo; }).join(', ') +
         (r.lacunas.length > 2 ? ' e mais ' + (r.lacunas.length - 2) : '') : 'nada — resta formalizar') + '</div>' +
       tarjaDeAtraso(r) +
