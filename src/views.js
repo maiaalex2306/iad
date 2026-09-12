@@ -1758,16 +1758,38 @@
     const conta = r.conta;
     const tempo = r.tempoNaEtapa === 1 ? 'há 1 dia' : 'há ' + r.tempoNaEtapa + ' dias';
     const t = Store.totaisDaOportunidade(op);
+    const fechada = !!op.desfecho;
+
+    /* Os campos que se mexem, mexem-se aqui. Mandar quem está olhando o valor
+       abrir "Editar" e procurá-lo no meio de dez campos é fazer a pessoa sair
+       do lugar onde a dúvida nasceu — e foi o que aconteceu com a previsão de
+       fechamento, procurada na ficha e encontrada só no formulário. */
+    const acao = function (rotulo, chamada) {
+      if (fechada) return '';
+      return ' <button class="btn-ficha" onclick="' + chamada + '" ' +
+        'aria-label="Mudar ' + esc(rotulo) + '" title="Mudar ' + esc(rotulo) + '">mudar</button>';
+    };
+
+    const valor = t.temItens
+      ? U.moeda(op.valor) +
+        '<span class="tiny muted">somado dos itens' +
+        (fechada ? '' : ' <button class="btn-ficha" onclick="App.abaCockpit(\'produtos\')">ver</button>') +
+        '</span>'
+      : U.moeda(op.valor) + acao('o valor', 'App.mudarValor(\'' + op.id + '\')') +
+        '<span class="tiny muted">digitado à mão; passa a ser somado quando houver produtos</span>';
+
     const campos = [
       ['Conta', conta ? esc(conta.nome) : '—'],
-      /* Quando há itens, o valor é conta e não digitação — e dizer de onde ele
-         vem evita a pergunta "por que não consigo mudar este campo?". */
-      ['Valor total', U.moeda(op.valor) +
-        (t.temItens ? '<span class="tiny muted">somado dos itens</span>' : '')],
-      ['Etapa CRM', esc(op.etapa) + ' <span class="muted">' + tempo + '</span>'],
+      ['Valor total', valor],
+      ['Etapa CRM', esc(op.etapa) + ' <span class="muted">' + tempo + '</span>' +
+        acao('a etapa', 'App.mudarEtapa(\'' + op.id + '\')')],
       ['Tipo', esc(op.tipo || 'Novo negócio')],
-      ['Previsão de fechamento', op.fechamentoPrevisto ? U.data(op.fechamentoPrevisto) : '—'],
-      ['Fonte', nomeDaFonte(op)],
+      ['Previsão de fechamento',
+        (op.fechamentoPrevisto ? U.data(op.fechamentoPrevisto) : '—') +
+        acao('a previsão', 'App.mudarPrevisao(\'' + op.id + '\')') +
+        ((op.adiamentos || 0) >= 2
+          ? '<span class="tiny atrasado">' + op.adiamentos + ' adiamentos</span>' : '')],
+      ['Fonte', nomeDaFonte(op) + acao('a fonte', 'App.mudarFonte(\'' + op.id + '\')')],
       ['Campanha', op.campanha ? esc(op.campanha) : '—'],
       ['SDR', op.sdr ? esc(op.sdr) : '—'],
       ['Criada em', op.criadoEm ? U.data(op.criadoEm) : '—'],
@@ -1781,6 +1803,7 @@
       campos.splice(2, 0, ['Valor mensal', U.moeda(t.mensal) +
         '<span class="tiny muted">× ' + t.meses + ' meses de contrato</span>']);
     }
+
     return '<div class="card ficha">' + campos.map(function (c) {
       return '<div class="ficha-campo"><span class="rot">' + esc(c[0]) + '</span>' +
         '<span class="val">' + c[1] + '</span></div>';

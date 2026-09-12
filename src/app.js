@@ -1507,6 +1507,65 @@
       });
     },
 
+    /* ---------- Os campos que se mexem na própria ficha ----------
+
+       Uma caixa por campo, com o campo dentro. É o contrário do formulário
+       completo: ali a pessoa procura o que quer mudar entre dez campos, e
+       encontrar exige saber o nome que o formulário deu àquilo. Aqui ela já
+       apontou para o que quer mudar. */
+    mudarPrevisao: function (opId) {
+      const op = Store.oportunidade(opId);
+      if (!op || op.desfecho) return;
+      U.formulario('Previsão de fechamento', [
+        { id: 'fechamentoPrevisto', rotulo: 'Nova previsão', tipo: 'date',
+          dica: 'Adiar entra no histórico e conta no contador de adiamentos — dois ou mais são um sinal, não um detalhe.' }
+      ], { fechamentoPrevisto: op.fechamentoPrevisto || '' }, function (d) {
+        if (!d.fechamentoPrevisto) return;
+        /* Passa pelo atualizarOportunidade de sempre, e não por uma atribuição
+           direta, porque é ele que registra o adiamento no histórico. Escrever
+           no campo por fora seria mudar a data e apagar o rastro. */
+        Store.atualizarOportunidade(opId, { fechamentoPrevisto: d.fechamentoPrevisto });
+        render();
+      });
+    },
+
+    mudarEtapa: function (opId) {
+      const op = Store.oportunidade(opId);
+      if (!op || op.desfecho) return;
+      U.formulario('Etapa no CRM', [
+        { id: 'etapa', rotulo: 'Etapa', tipo: 'select', opcoes: P.ETAPAS,
+          dica: 'A etapa organiza o funil. Quem mede se o negócio andou são as oito decisões — mudar a etapa aqui não move nenhuma delas.' }
+      ], { etapa: op.etapa }, function (d) {
+        Store.atualizarOportunidade(opId, { etapa: d.etapa });
+        render();
+      });
+    },
+
+    mudarValor: function (opId) {
+      const op = Store.oportunidade(opId);
+      if (!op || op.desfecho) return;
+      if ((op.itens || []).length) {
+        alert('O valor deste negócio é somado dos produtos.\n\nPara mudá-lo, mexa na lista da aba Produtos.');
+        return;
+      }
+      U.formulario('Valor do negócio', [
+        { id: 'valor', rotulo: 'Valor (R$)', tipo: 'moeda',
+          dica: 'Digitado à mão enquanto não houver produtos. Assim que a aba Produtos tiver o primeiro item, o valor passa a ser somado deles.' }
+      ], { valor: op.valor }, function (d) {
+        Store.atualizarOportunidade(opId, { valor: d.valor });
+        render();
+      });
+    },
+
+    mudarFonte: function (opId) {
+      const op = Store.oportunidade(opId);
+      if (!op || op.desfecho) return;
+      U.formulario('De onde veio', [campoDeFonte(op.fonteId)], { fonteId: op.fonteId || '' }, function (d) {
+        Store.atualizarOportunidade(opId, { fonteId: d.fonteId });
+        render();
+      });
+    },
+
     /* ---------- Itens da oportunidade ----------
        O que ESTE negócio leva, que não é o catálogo da empresa. Escolher o
        produto traz o preço de tabela como sugestão e o tipo de cobrança como
