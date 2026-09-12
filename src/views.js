@@ -1754,42 +1754,53 @@
      pedaço é preciso decorar a ordem, e quem não decorou lê "1 dias" e fica
      procurando o que isso quer dizer. Em rótulo e valor, cada campo se acha
      pelo nome — e o que está vazio aparece vazio, em vez de sumir. */
+  /* O lápis. Desenhado à mão em SVG pelo mesmo motivo do símbolo do WhatsApp:
+     emoji de lápis muda de cara em cada sistema, e imagem de fora a rede teria
+     de baixar. Doze pixels, apagado até o ponteiro chegar perto — e visível
+     mesmo assim, porque em celular não existe passar o ponteiro. */
+  function lapis() {
+    return '<svg class="ico-lapis" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">' +
+      '<path d="M11.8 1.9 14.1 4.2 5.6 12.7 2.4 13.6 3.3 10.4z" fill="none" stroke="currentColor" ' +
+      'stroke-width="1.5" stroke-linejoin="round"/>' +
+      '<path d="M10.2 3.5 12.5 5.8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>' +
+      '</svg>';
+  }
+
   function fichaDaOportunidade(op, r) {
     const conta = r.conta;
     const tempo = r.tempoNaEtapa === 1 ? 'há 1 dia' : 'há ' + r.tempoNaEtapa + ' dias';
     const t = Store.totaisDaOportunidade(op);
     const fechada = !!op.desfecho;
 
-    /* Os campos que se mexem, mexem-se aqui. Mandar quem está olhando o valor
-       abrir "Editar" e procurá-lo no meio de dez campos é fazer a pessoa sair
-       do lugar onde a dúvida nasceu — e foi o que aconteceu com a previsão de
-       fechamento, procurada na ficha e encontrada só no formulário. */
+    /* Dois lápis, e só dois: o valor e a data. São os que se mexem no meio de
+       uma conversa — o cliente pede desconto, o cliente empurra o prazo. Etapa,
+       tipo e fonte se mexem uma vez e ficam, e para elas o formulário de
+       Editar basta. Lápis em tudo vira enfeite: quando cada campo tem um,
+       nenhum chama atenção. */
     const acao = function (rotulo, chamada) {
       if (fechada) return '';
-      return ' <button class="btn-ficha" onclick="' + chamada + '" ' +
-        'aria-label="Mudar ' + esc(rotulo) + '" title="Mudar ' + esc(rotulo) + '">mudar</button>';
+      return '<button class="btn-lapis" onclick="' + chamada + '" ' +
+        'aria-label="Mudar ' + esc(rotulo) + '" title="Mudar ' + esc(rotulo) + '">' + lapis() + '</button>';
     };
 
-    const valor = t.temItens
-      ? U.moeda(op.valor) +
-        '<span class="tiny muted">somado dos itens' +
-        (fechada ? '' : ' <button class="btn-ficha" onclick="App.abaCockpit(\'produtos\')">ver</button>') +
-        '</span>'
-      : U.moeda(op.valor) + acao('o valor', 'App.mudarValor(\'' + op.id + '\')') +
-        '<span class="tiny muted">digitado à mão; passa a ser somado quando houver produtos</span>';
+    /* O valor não se digita aqui, nem quando a lista está vazia: ele mora nos
+       produtos, e o lápis leva para lá. Ter dois lugares de mexer no mesmo
+       número é como ter dois relógios — nunca se sabe qual está certo. */
+    const valor = U.moeda(op.valor) +
+      acao('o valor, nos produtos', 'App.abaCockpit(\'produtos\')') +
+      (t.temItens ? '<span class="tiny muted">somado dos itens</span>' : '');
 
     const campos = [
       ['Conta', conta ? esc(conta.nome) : '—'],
       ['Valor total', valor],
-      ['Etapa CRM', esc(op.etapa) + ' <span class="muted">' + tempo + '</span>' +
-        acao('a etapa', 'App.mudarEtapa(\'' + op.id + '\')')],
+      ['Etapa CRM', esc(op.etapa) + ' <span class="muted">' + tempo + '</span>'],
       ['Tipo', esc(op.tipo || 'Novo negócio')],
       ['Previsão de fechamento',
         (op.fechamentoPrevisto ? U.data(op.fechamentoPrevisto) : '—') +
         acao('a previsão', 'App.mudarPrevisao(\'' + op.id + '\')') +
         ((op.adiamentos || 0) >= 2
           ? '<span class="tiny atrasado">' + op.adiamentos + ' adiamentos</span>' : '')],
-      ['Fonte', nomeDaFonte(op) + acao('a fonte', 'App.mudarFonte(\'' + op.id + '\')')],
+      ['Fonte', nomeDaFonte(op)],
       ['Campanha', op.campanha ? esc(op.campanha) : '—'],
       ['SDR', op.sdr ? esc(op.sdr) : '—'],
       ['Criada em', op.criadoEm ? U.data(op.criadoEm) : '—'],
@@ -1801,7 +1812,7 @@
        nunca vende recorrência é ruído permanente. */
     if (t.mensal) {
       campos.splice(2, 0, ['Valor mensal', U.moeda(t.mensal) +
-        '<span class="tiny muted">× ' + t.meses + ' meses de contrato</span>']);
+        '<span class="tiny muted">× ' + t.meses + ' meses</span>']);
     }
 
     return '<div class="card ficha">' + campos.map(function (c) {
@@ -1953,7 +1964,9 @@
 
     if (!t.temItens) {
       return topo + '<div class="vazio">Nenhum item ainda. Enquanto a lista estiver vazia, o valor ' +
-        'do negócio é o que foi digitado à mão — ' + U.moeda(op.valor) + '.</div></div>';
+        'do negócio é o que foi digitado à mão — ' + U.moeda(op.valor) + '.<br>' +
+        '<button class="btn ghost mini" style="margin-top:10px" onclick="App.mudarValor(\'' + op.id + '\')">' +
+        'Digitar o valor à mão</button></div></div>';
     }
 
     const linhas = op.itens.map(function (i) {

@@ -1567,13 +1567,16 @@ td .tiny { display: block; line-height: 1.35; }
 
 .corpo-aba { margin-top: 14px; }
 
-/* O botãozinho de mudar, dentro da ficha. Discreto porque é adorno até que se
-   precise dele, e à vista porque quem está olhando o campo é justamente quem
-   quer mexer nele. */
-.btn-ficha {
-  border: 0; background: none; padding: 0 2px; cursor: pointer;
-  font: inherit; font-size: .72rem; font-weight: 600;
-  color: var(--navy-2); text-decoration: underline; text-underline-offset: 2px;
+/* O lápis da ficha. Texto sublinhado em quatro campos deixava a ficha com cara
+   de rodapé de página cheio de links; o lápis diz a mesma coisa sem competir
+   com o valor, que é o que se veio ler. Apagado em repouso e cheio quando o
+   ponteiro chega — e nunca escondido, porque em celular não há ponteiro. */
+.btn-lapis {
+  border: 0; background: none; padding: 2px; margin-left: 6px; cursor: pointer;
+  color: var(--muted); opacity: .55; vertical-align: -1px;
+  line-height: 0; border-radius: 5px;
 }
-.btn-ficha:hover { color: var(--orange); }
-.ficha-campo .val .tiny .btn-ficha { font-size: inherit; }
+.ficha-campo:hover .btn-lapis { opacity: .9; }
+.btn-lapis:hover, .btn-lapis:focus-visible { color: var(--orange); opacity: 1; background: var(--bg); }
+/* Alvo de toque decente no celular sem engordar o desenho. */
+@media (pointer: coarse) { .btn-lapis { padding: 6px; margin-left: 2px; } }

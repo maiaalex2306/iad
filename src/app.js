@@ -1529,18 +1529,6 @@
       });
     },
 
-    mudarEtapa: function (opId) {
-      const op = Store.oportunidade(opId);
-      if (!op || op.desfecho) return;
-      U.formulario('Etapa no CRM', [
-        { id: 'etapa', rotulo: 'Etapa', tipo: 'select', opcoes: P.ETAPAS,
-          dica: 'A etapa organiza o funil. Quem mede se o negócio andou são as oito decisões — mudar a etapa aqui não move nenhuma delas.' }
-      ], { etapa: op.etapa }, function (d) {
-        Store.atualizarOportunidade(opId, { etapa: d.etapa });
-        render();
-      });
-    },
-
     mudarValor: function (opId) {
       const op = Store.oportunidade(opId);
       if (!op || op.desfecho) return;
@@ -1553,15 +1541,6 @@
           dica: 'Digitado à mão enquanto não houver produtos. Assim que a aba Produtos tiver o primeiro item, o valor passa a ser somado deles.' }
       ], { valor: op.valor }, function (d) {
         Store.atualizarOportunidade(opId, { valor: d.valor });
-        render();
-      });
-    },
-
-    mudarFonte: function (opId) {
-      const op = Store.oportunidade(opId);
-      if (!op || op.desfecho) return;
-      U.formulario('De onde veio', [campoDeFonte(op.fonteId)], { fonteId: op.fonteId || '' }, function (d) {
-        Store.atualizarOportunidade(opId, { fonteId: d.fonteId });
         render();
       });
     },
