@@ -989,7 +989,7 @@
       if (!podeMexerEmProduto()) return;
       const p = Store.produto(id);
       if (!p) return;
-      U.formulario('Editar produto', camposProduto().concat([
+      U.formulario('Editar produto', camposProduto(p).concat([
         { id: 'ativo', rotulo: 'Situação', tipo: 'select', opcoes: [{ valor: 'sim', rotulo: 'Ativo' }, { valor: 'nao', rotulo: 'Inativo' }] }
       ]), Object.assign({}, p, { ativo: p.ativo === false ? 'nao' : 'sim' }), function (d) {
         Store.atualizarNoCatalogo('produtos', id, Object.assign({}, d, {
@@ -6351,12 +6351,35 @@
   }
 
   /* ---------- campos reutilizados ---------- */
-  function camposProduto() {
+  /* A unidade vira lista, e a lista guarda o que já estava escrito. Trocar um
+     campo livre por um fechado sem cuidar do que existe é o jeito de alguém
+     abrir o cadastro e descobrir que a unidade do produto dele sumiu — e não
+     tem como saber qual era. Se o valor gravado não estiver na tabela, ele
+     entra na lista como está, marcado. */
+  function campoDeUnidade(atual) {
+    const guardada = String(atual || '').trim();
+    const conhecidas = {};
+    P.UNIDADES.forEach(function (g) {
+      g.opcoes.forEach(function (o) { conhecidas[o.valor] = true; });
+    });
+    const extra = guardada && !conhecidas[guardada]
+      ? [{ grupo: 'O que já estava aqui', opcoes: [{ valor: guardada, rotulo: guardada }] }]
+      : [];
+
+    return {
+      id: 'unidade', rotulo: 'Unidade', tipo: 'select',
+      opcoes: [{ valor: '', rotulo: '— sem unidade —' }].concat(P.UNIDADES).concat(extra),
+      dica: 'É o que explica o preço. R$ 35.000 por unidade e R$ 35.000 por hora são propostas muito diferentes. ' +
+        'Para valor fechado sem quantidade, use "verba".'
+    };
+  }
+
+  function camposProduto(produto) {
     return [
       { id: 'nome', rotulo: 'Produto' },
       { id: 'sku', rotulo: 'Código / SKU' },
       { id: 'categoria', rotulo: 'Categoria' },
-      { id: 'unidade', rotulo: 'Unidade', placeholder: 'un, kg, t, hora, mês' },
+      campoDeUnidade(produto && produto.unidade),
       { id: 'precoReferencia', rotulo: 'Preço de referência (R$)', tipo: 'moeda',
         dica: 'O preço de tabela. Cada oportunidade congela o valor do dia em que o item entrou, então mexer aqui não reescreve o que já foi negociado.' },
       { id: 'tipoCobranca', rotulo: 'Como se cobra', tipo: 'select',

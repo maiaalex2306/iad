@@ -127,10 +127,21 @@
         return '<div data-slot-campos data-' + c.slot + '></div>';
       }
       if (c.tipo === 'select') {
-        const escolhas = c.opcoes.map(function (o) {
+        const opcao = function (o) {
           const val = typeof o === 'string' ? o : o.valor;
           const rot = typeof o === 'string' ? o : o.rotulo;
           return '<option value="' + esc(val) + '"' + (String(val) === String(v) ? ' selected' : '') + '>' + esc(rot) + '</option>';
+        };
+        /* Grupos quando a lista é longa. Quarenta unidades numa coluna só é
+           uma lista que ninguém percorre até o fim: com "Contagem", "Peso e
+           volume" e "Serviço" escritos no meio, a pessoa desce até o assunto e
+           procura dentro dele. */
+        const escolhas = c.opcoes.map(function (o) {
+          if (o && o.grupo) {
+            return '<optgroup label="' + esc(o.grupo) + '">' +
+              o.opcoes.map(opcao).join('') + '</optgroup>';
+          }
+          return opcao(o);
         }).join('');
         const caixa = '<select name="' + c.id + '">' + escolhas + '</select>';
         /* Lupa: consultar o que já está cadastrado sem sair do formulário.
@@ -204,6 +215,18 @@
       '<button class="btn" value="ok" type="submit">Salvar</button></div></form>';
 
     document.body.appendChild(dlg);
+
+    /* O valor se acerta ao sair do campo. Digitar "35000" e ver "35000" na
+       tela deixa a dúvida de sempre — são trinta e cinco mil ou trezentos e
+       cinquenta reais? Formatar ENQUANTO se digita é pior: o cursor pula de
+       lugar a cada separador de milhar. Ao sair, o número vira número. */
+    dlg.querySelectorAll('input[inputmode="decimal"]').forEach(function (el) {
+      el.addEventListener('blur', function () {
+        if (!el.value.trim()) return;
+        el.value = paraCampoMoeda(numeroDigitado(el.value));
+      });
+    });
+
     dlg.querySelectorAll('[data-extra]').forEach(function (botao) {
       botao.addEventListener('click', function () {
         const b = (extras || [])[Number(botao.dataset.extra)];

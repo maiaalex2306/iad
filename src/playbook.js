@@ -411,6 +411,90 @@
      conferir — o campo fica à vista na oportunidade, para ser trocado. */
   const PRAZO_CONTRATO_PADRAO = 12;
 
+  /* ---------------- Unidades ----------------
+
+     Digitado à mão, o mesmo "mês" vira "mes", "Mês", "mensal" e "mês " com
+     espaço no fim. Quatro grafias que não somam e não filtram — e a unidade é
+     justamente o que explica o preço: R$ 35.000 por unidade e R$ 35.000 por
+     hora são propostas muito diferentes.
+
+     A lista sai do que os ERPs brasileiros usam de fato. A SEFAZ só valida a
+     unidade TRIBUTÁVEL da NF-e; a comercial é livre, e por isso cada sistema
+     mantém a sua — com a mesma base de sempre: un, cx, pç, kg, m, h.
+
+     Serviço tem lista própria nos ERPs sérios, e aqui também: hora, mês,
+     visita, projeto e verba não são "unidade de produto com outro nome". Verba
+     é a que mais falta nos sistemas pequenos — é o valor fechado, sem
+     quantidade, que é como boa parte de projeto se vende.
+
+     As técnicas estão aí porque é o que esta carteira vende: tratamento de
+     água se cota em metro cúbico por hora, não em peça. */
+  const UNIDADES = [
+    { grupo: 'Contagem', opcoes: [
+      { valor: 'un', rotulo: 'un — Unidade' },
+      { valor: 'pç', rotulo: 'pç — Peça' },
+      { valor: 'cj', rotulo: 'cj — Conjunto' },
+      { valor: 'kit', rotulo: 'kit — Kit' },
+      { valor: 'par', rotulo: 'par — Par' },
+      { valor: 'dz', rotulo: 'dz — Dúzia' },
+      { valor: 'mil', rotulo: 'mil — Milheiro' }
+    ] },
+    { grupo: 'Embalagem', opcoes: [
+      { valor: 'cx', rotulo: 'cx — Caixa' },
+      { valor: 'pct', rotulo: 'pct — Pacote' },
+      { valor: 'fd', rotulo: 'fd — Fardo' },
+      { valor: 'sc', rotulo: 'sc — Saco' },
+      { valor: 'bb', rotulo: 'bb — Bombona' },
+      { valor: 'bd', rotulo: 'bd — Balde' },
+      { valor: 'gl', rotulo: 'gl — Galão' },
+      { valor: 'fr', rotulo: 'fr — Frasco' },
+      { valor: 'lt', rotulo: 'lt — Lata' },
+      { valor: 'rl', rotulo: 'rl — Rolo' },
+      { valor: 'tb', rotulo: 'tb — Tubo' }
+    ] },
+    { grupo: 'Peso e volume', opcoes: [
+      { valor: 'kg', rotulo: 'kg — Quilograma' },
+      { valor: 'g', rotulo: 'g — Grama' },
+      { valor: 't', rotulo: 't — Tonelada' },
+      { valor: 'L', rotulo: 'L — Litro' },
+      { valor: 'mL', rotulo: 'mL — Mililitro' },
+      { valor: 'm³', rotulo: 'm³ — Metro cúbico' }
+    ] },
+    { grupo: 'Comprimento e área', opcoes: [
+      { valor: 'm', rotulo: 'm — Metro' },
+      { valor: 'cm', rotulo: 'cm — Centímetro' },
+      { valor: 'mm', rotulo: 'mm — Milímetro' },
+      { valor: 'km', rotulo: 'km — Quilômetro' },
+      { valor: 'm²', rotulo: 'm² — Metro quadrado' }
+    ] },
+    { grupo: 'Tempo', opcoes: [
+      { valor: 'h', rotulo: 'h — Hora' },
+      { valor: 'h/h', rotulo: 'h/h — Homem-hora' },
+      { valor: 'dia', rotulo: 'dia — Dia' },
+      { valor: 'diária', rotulo: 'diária — Diária' },
+      { valor: 'semana', rotulo: 'semana — Semana' },
+      { valor: 'mês', rotulo: 'mês — Mês' },
+      { valor: 'ano', rotulo: 'ano — Ano' }
+    ] },
+    { grupo: 'Serviço', opcoes: [
+      { valor: 'verba', rotulo: 'verba — Valor fechado, sem quantidade' },
+      { valor: 'projeto', rotulo: 'projeto — Projeto' },
+      { valor: 'serviço', rotulo: 'serviço — Serviço' },
+      { valor: 'visita', rotulo: 'visita — Visita' },
+      { valor: 'atendimento', rotulo: 'atendimento — Atendimento' },
+      { valor: 'chamado', rotulo: 'chamado — Chamado' },
+      { valor: 'licença', rotulo: 'licença — Licença' },
+      { valor: 'usuário', rotulo: 'usuário — Usuário' },
+      { valor: 'ponto', rotulo: 'ponto — Ponto instalado' }
+    ] },
+    { grupo: 'Técnicas', opcoes: [
+      { valor: 'm³/h', rotulo: 'm³/h — Metro cúbico por hora' },
+      { valor: 'L/h', rotulo: 'L/h — Litro por hora' },
+      { valor: 'kW', rotulo: 'kW — Quilowatt' },
+      { valor: 'kWh', rotulo: 'kWh — Quilowatt-hora' }
+    ] }
+  ];
+
   const CATEGORIAS_ARQUIVO = [
     'Business case', 'Critérios de avaliação', 'Proposta', 'Contrato',
     'Referência / case', 'Dados do cliente', 'Ata de reunião', 'Outro'
@@ -524,7 +608,7 @@
     DESFECHOS_RENOMEADOS, MOTIVOS_PERDA, MOTIVOS_DESISTENCIA, MOTIVOS_NUTRICAO, PRAZOS_NUTRICAO,
     NIVEIS_DA_ESCADA, NOTA_MAXIMA, IAD_MAXIMO, IAD_MADURO,
     FORCAS, FORCA_MINIMA_DO_DEGRAU, TIPOS_TAREFA, TIPOS_TAREFA_RENOMEADOS, CATEGORIAS_ARQUIVO,
-    CATEGORIAS_FONTE, FONTES_PADRAO, RECORRENCIAS, PRAZO_CONTRATO_PADRAO,
+    CATEGORIAS_FONTE, FONTES_PADRAO, RECORRENCIAS, PRAZO_CONTRATO_PADRAO, UNIDADES,
     PERFIS, PERFIS_MOBILIZADORES, ESTADOS_INSIGHT,
     RELACOES_CONTA, TIPOS_OPORTUNIDADE, FECHAMENTO_REUNIAO,
     CANAIS, FAIXAS_EVIDENCIA, ATIVIDADES_QUE_NAO_CONTAM
