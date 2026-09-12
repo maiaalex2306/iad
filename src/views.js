@@ -1426,9 +1426,9 @@
   function pipeline() {
     const est = Store.dados();
     const filtros = FILTROS.map(function (f) {
-      return '<button class="pill tem-ajuda' + (filtroGrupo === f[0] ? ' orange' : '') +
-        '" onclick="App.filtrar(\'' + f[0] + '\')">' + esc(f[1]) +
-        ajudaDoGrupo(f[1], f[2]) + '</button>';
+      return '<button class="pill' + (filtroGrupo === f[0] ? ' orange' : '') +
+        '" onclick="App.filtrar(\'' + f[0] + '\')"' + ajudaDoGrupo(f[1], f[2]) + '>' +
+        esc(f[1]) + '</button>';
     }).join(' ');
 
     /* O grupo "Encerrados" era um filtro à parte com lista própria. Agora é o
@@ -2225,18 +2225,23 @@
       '<div class="corpo">' + conteudo + '</div></details>';
   }
 
-  /* Mesmo balão das oito decisões, com o vocabulário dos grupos de pipeline. */
+  /* As linhas com rótulo vão no atributo, em JSON, e o balão flutuante as
+     desenha. Antes eram um segundo balão, escrito dentro do próprio botão,
+     com outro desenho — e dois desenhos para a mesma coisa é a pessoa
+     aprendendo duas vezes. */
+  function ajudaComLinhas(titulo, texto, linhas, alerta) {
+    return ' data-ajuda-titulo="' + esc(titulo) + '" data-ajuda="' + esc(texto) + '"' +
+      (linhas && linhas.length
+        ? ' data-ajuda-linhas="' + esc(JSON.stringify(linhas)) + '"' : '') +
+      (alerta ? ' data-ajuda-alerta="' + esc(alerta) + '"' : '');
+  }
+
   function ajudaDoGrupo(nome, a) {
-    const linha = function (rotulo, texto) {
-      return '<span class="ajuda-rot">' + rotulo + '</span><span class="ajuda-linha">' + esc(texto) + '</span>';
-    };
-    return '<span class="ajuda" role="tooltip">' +
-      '<span class="ajuda-titulo">' + esc(nome) + '</span>' +
-      '<span class="ajuda-pergunta">' + esc(a.oQue) + '</span>' +
-      linha('Entra quando', a.entra) +
-      linha('Sai quando', a.sai) +
-      linha('O que fazer', a.faca) +
-      '</span>';
+    return ajudaComLinhas(nome, a.oQue, [
+      ['Entra quando', a.entra],
+      ['Sai quando', a.sai],
+      ['O que fazer', a.faca]
+    ]);
   }
 
   /* ---------------- Avanço: o mapa das 8 decisões ---------------- */
@@ -2257,11 +2262,10 @@
         ? ' onclick="App.novaTarefa(\'' + op.id + '\',\'' + d.id +
           '\',{situacao:\'feita\',evidenciaDireta:\'sim\',titulo:\'' + esc(d.nome) + '\'})"'
         : '';
-      return '<button class="celula tem-ajuda ' + classe + '"' + abre + '>' +
+      return '<button class="celula ' + classe + '"' + abre + ajudaDaDimensao(d, n, provado) + '>' +
         '<span class="marca">' + marca + '</span>' +
         '<span class="rot">' + esc(d.nome) + '</span>' +
         '<span class="estado">' + esc(n === 2 && !provado ? 'sem prova' : ESTADOS[n]) + '</span>' +
-        ajudaDaDimensao(d, n, provado) +
         '</button>';
     }).join('') + '</div>';
   }
@@ -2273,26 +2277,15 @@
      Vai dentro do <button>, então só pode conter conteúdo de frase: spans com
      display block, nunca div ou ul. */
   function ajudaDaDimensao(d, n, provado) {
-    const niveis = d.niveis.map(function (texto, i) {
-      return '<span class="nivel' + (i === n ? ' agora' : '') + '">' +
-        '<span class="n">' + i + '</span>' + esc(texto) + '</span>';
-    }).join('');
+    const linhas = d.niveis.map(function (texto, i) {
+      /* O degrau atual vai marcado, e é a única informação do balão que muda
+         de negócio para negócio: o resto é a régua, igual para todos. */
+      return [i === n ? i + ' · agora' : String(i), texto, i === n];
+    });
+    linhas.push(['O que comprova', d.evidencias.slice(0, 3).join(' · ')]);
 
-    const comprova = d.evidencias.slice(0, 3).map(function (e) {
-      return '<span class="ev">' + esc(e) + '</span>';
-    }).join('');
-
-    return '<span class="ajuda" role="tooltip">' +
-      '<span class="ajuda-titulo">' + esc(d.nome) + '</span>' +
-      '<span class="ajuda-pergunta">' + esc(d.pergunta) + '</span>' +
-      '<span class="ajuda-rot">O que cada nota significa</span>' +
-      '<span class="niveis">' + niveis + '</span>' +
-      '<span class="ajuda-rot">O que comprova</span>' +
-      '<span class="evs">' + comprova + '</span>' +
-      (n === 2 && !provado
-        ? '<span class="ajuda-alerta">Está em 2 sem evidência confirmada ou documentada.</span>'
-        : '') +
-      '</span>';
+    return ajudaComLinhas(d.nome, d.pergunta, linhas,
+      n === 2 && !provado ? 'Está em 2 sem evidência confirmada ou documentada.' : '');
   }
 
   function blocoAvanco(op, r) {

@@ -764,7 +764,7 @@ dialog.caixa-ficha { width: min(520px, 94vw); }
 .balao-ajuda {
   position: absolute;
   z-index: 200;
-  max-width: 300px;
+  max-width: 320px;
   padding: 9px 12px 10px;
   background: var(--dica-fundo);
   color: var(--dica-tinta);
@@ -780,8 +780,24 @@ dialog.caixa-ficha { width: min(520px, 94vw); }
   transition: opacity .1s ease;
 }
 .balao-ajuda.visivel { opacity: 1; }
-.balao-ajuda strong { display: block; font-size: .8rem; margin-bottom: 2px; }
-.balao-ajuda span { display: block; opacity: .92; }
+.balao-ajuda strong { display: block; font-size: .8rem; font-weight: 800; margin-bottom: 2px; }
+.balao-ajuda > span { display: block; opacity: .92; }
+
+/* As linhas com rótulo, que antes moravam no balão desenhado dentro do botão.
+   Mesmo conteúdo, mesma hierarquia, agora dentro do único balão que existe. */
+.balao-ajuda .rot {
+  display: block; margin-top: 9px; font-size: .62rem; font-weight: 700;
+  letter-spacing: .1em; text-transform: uppercase; opacity: .62;
+}
+.balao-ajuda .rot + .linha { margin-top: 1px; opacity: .92; }
+/* O degrau em que a decisão está agora. Sem cor nova: o mesmo roxo do balão,
+   cheio, contra os outros que estão apagados. */
+.balao-ajuda .linha.agora { opacity: 1; font-weight: 700; }
+.balao-ajuda .alerta {
+  display: block; margin-top: 10px; padding-top: 9px;
+  border-top: 1px solid var(--dica-borda);
+  font-weight: 700; opacity: 1;
+}
 @media (prefers-reduced-motion: reduce) { .balao-ajuda { transition: none; } }
 
 /* ---------- Ajuda pelo contexto ----------
@@ -790,110 +806,11 @@ dialog.caixa-ficha { width: min(520px, 94vw); }
 
    Só onde existe ponteiro: no toque, o dedo que abriria o balão é o mesmo que
    registra a evidência, e o balão ficaria preso na tela. */
-.tem-ajuda { position: relative; }
-.tem-ajuda .ajuda { display: none; }
-
-/* Sem consultar a capacidade do aparelho. A versão anterior perguntava por
-   "hover", que responde pelo dispositivo PRINCIPAL: num notebook com tela
-   sensível ao toque o principal pode ser o dedo, e a regra inteira era
-   descartada — o balão nunca aparecia, mesmo com o mouse ligado. Nem
-   "any-hover" é confiável.
-
-   Então a decisão passa a ser só de largura: acima de 700px há espaço para o
-   balão. No toque ele pode ficar visível até o próximo toque em outro lugar,
-   o que é bem menos ruim do que a ajuda simplesmente não existir. */
-@media (min-width: 700px) {
-  .tem-ajuda .ajuda {
-    display: block;
-    position: absolute;
-    top: calc(100% + 8px);
-    left: 0;
-    z-index: 60;
-    width: 320px;
-    max-width: 78vw;
-    padding: 13px 15px 14px;
-    background: var(--surface);
-    color: var(--text);
-    border: 1px solid var(--line);
-    border-top: 3px solid var(--navy-2);
-    border-radius: 10px;
-    box-shadow: 0 6px 28px rgba(16, 32, 47, .18);
-    text-align: left;
-    white-space: normal;
-    opacity: 0;
-    visibility: hidden;
-    transform: translateY(-3px);
-    transition: opacity .12s ease, transform .12s ease, visibility .12s;
-    pointer-events: none;      /* o balão não rouba o clique da célula */
-  }
-
-  /* As três últimas colunas abrem para a esquerda, senão saem da tela. */
-  .mapa-decisao .celula:nth-child(n+6) .ajuda { left: auto; right: 0; }
-
-  .tem-ajuda:hover .ajuda,
-  .tem-ajuda:focus-visible .ajuda {
-    opacity: 1;
-    visibility: visible;
-    transform: translateY(0);
-  }
-
-  .tem-ajuda .ajuda-titulo {
-    display: block; font-size: .84rem; font-weight: 800;
-    letter-spacing: -.01em; margin-bottom: 3px;
-  }
-  .tem-ajuda .ajuda-pergunta {
-    display: block; font-size: .78rem; line-height: 1.42;
-    color: var(--text); margin-bottom: 11px;
-  }
-  .tem-ajuda .ajuda-rot {
-    display: block; font-size: .62rem; font-weight: 700;
-    letter-spacing: .1em; text-transform: uppercase;
-    color: var(--muted); margin-bottom: 5px;
-  }
-
-  .tem-ajuda .niveis { display: block; margin-bottom: 11px; }
-  .tem-ajuda .niveis .nivel {
-    display: grid; grid-template-columns: 17px 1fr; gap: 7px;
-    align-items: start; font-size: .72rem; line-height: 1.35;
-    color: var(--muted); padding: 2px 0;
-  }
-  .tem-ajuda .niveis .nivel .n {
-    font-weight: 800; text-align: center; color: var(--muted);
-    background: var(--bg); border-radius: 4px; font-size: .68rem;
-  }
-  .tem-ajuda .niveis .nivel.agora { color: var(--text); font-weight: 600; }
-  .tem-ajuda .niveis .nivel.agora .n { background: var(--navy-2); color: #fff; }
-
-  .tem-ajuda .evs { display: block; }
-  .tem-ajuda .evs .ev {
-    display: block; font-size: .71rem; line-height: 1.35;
-    color: var(--muted); padding-left: 11px; position: relative;
-    margin-bottom: 2px;
-  }
-  .tem-ajuda .evs .ev::before {
-    content: '·'; position: absolute; left: 2px; font-weight: 800; color: var(--ok);
-  }
-
-  .tem-ajuda .ajuda-alerta {
-    display: block; margin-top: 10px; padding-top: 9px;
-    border-top: 1px solid var(--line);
-    font-size: .71rem; line-height: 1.35; color: var(--risk); font-weight: 600;
-  }
-
-  /* Nos grupos do pipeline o balão explica entra/sai em vez de níveis. */
-  .tem-ajuda .ajuda-linha {
-    display: block; font-size: .73rem; line-height: 1.42;
-    color: var(--muted); margin-bottom: 10px; font-weight: 400;
-  }
-  .tem-ajuda .ajuda-linha:last-child { margin-bottom: 0; }
-  .pill.tem-ajuda .ajuda { font-weight: 400; letter-spacing: 0; text-transform: none; }
-  /* As últimas pílulas abrem para a esquerda, senão saem da tela. */
-  .filtros-pipeline .pill:nth-child(n+5) .ajuda { left: auto; right: 0; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .tem-ajuda .ajuda { transition: none; }
-}
+/* O balão desenhado dentro do próprio botão foi embora: as 120 linhas que
+   viviam aqui redesenhavam, com outra cor e outro posicionamento, o mesmo
+   balão flutuante que já existia — e o flutuante ainda fazia melhor a parte
+   difícil, que é virar para cima ou para a esquerda quando encostaria na
+   borda. Quem precisar de linha com rótulo declara data-ajuda-linhas. */
 .celula.sem-prova .marca { color: var(--risk); }
 
 /* A mesma leitura, do tamanho de uma linha, para comparar negócios na lista. */

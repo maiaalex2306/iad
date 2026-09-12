@@ -34,9 +34,30 @@
     alvoAtual = el;
 
     const b = criar();
+    const esc = global.IADUI.esc;
     const titulo = el.getAttribute('data-ajuda-titulo');
-    b.innerHTML = (titulo ? '<strong>' + global.IADUI.esc(titulo) + '</strong>' : '') +
-      '<span>' + global.IADUI.esc(texto) + '</span>';
+
+    /* Havia dois balões no app: este, flutuante, e um segundo escrito dentro
+       de cada botão, com rótulo e linhas. Dois desenhos para a mesma coisa é
+       a pessoa aprendendo duas vezes — e o segundo só existia porque este não
+       sabia mostrar linha com rótulo. Agora sabe, e o outro deixou de existir.
+
+       O formato é JSON no atributo: [rótulo, texto, destaque?]. Atributo com
+       texto livre separado por algum caractere quebra no dia em que o texto
+       contiver o caractere, e esse dia sempre chega. */
+    let linhas = [];
+    const bruto = el.getAttribute('data-ajuda-linhas');
+    if (bruto) { try { linhas = JSON.parse(bruto) || []; } catch (e) { linhas = []; } }
+
+    const alerta = el.getAttribute('data-ajuda-alerta');
+
+    b.innerHTML = (titulo ? '<strong>' + esc(titulo) + '</strong>' : '') +
+      '<span>' + esc(texto) + '</span>' +
+      linhas.map(function (l) {
+        return '<b class="rot">' + esc(l[0]) + '</b>' +
+          '<span class="linha' + (l[2] ? ' agora' : '') + '">' + esc(l[1]) + '</span>';
+      }).join('') +
+      (alerta ? '<span class="alerta">' + esc(alerta) + '</span>' : '');
 
     /* Medir antes de posicionar: só assim dá para saber se cabe. */
     b.style.left = '0px';
