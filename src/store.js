@@ -33,11 +33,56 @@
      à vista, para ser trocado. */
   const PRAZO_PADRAO_DE_FECHAMENTO = 120;
 
+  /* ---------------- A tabela de fontes ----------------
+
+     A carteira que já existe tem o de-onde-veio guardado em texto solto
+     (`op.origem`). Renomear o sentido daquela coluna seria o jeito conhecido
+     de perder o dado sem ninguém perceber, então ela fica onde está e ganha
+     uma companheira: `op.fonteId` aponta para a linha da tabela.
+
+     A amarração é por nome achatado — sem acento, sem maiúscula, sem
+     pontuação — porque foi digitado à mão e vem escrito de cinco jeitos. O
+     que não casar com nada vira fonte nova em vez de virar traço: a lista
+     nasce do que a pessoa já usava, e não de uma lista que eu inventei. */
+  function semearFontes(dados) {
+    dados.fontes = dados.fontes || [];
+    if (dados.fontes.length) return;
+    const padrao = (global.IADPlaybook && global.IADPlaybook.FONTES_PADRAO) || [];
+    dados.fontes = padrao.map(function (f) {
+      return { id: uid('fnt'), nome: f.nome, categoria: f.categoria, ativo: true, criadoEm: hoje() };
+    });
+  }
+
+  function achatar(nome) {
+    return String(nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  }
+
+  function amarrarFontes(dados) {
+    dados.fontes = dados.fontes || [];
+    const porNome = {};
+    dados.fontes.forEach(function (f) { porNome[achatar(f.nome)] = f; });
+
+    (dados.oportunidades || []).forEach(function (op) {
+      if (op.fonteId) return;
+      const texto = String(op.origem || '').trim();
+      if (!texto) return;
+      let f = porNome[achatar(texto)];
+      if (!f) {
+        f = { id: uid('fnt'), nome: texto, categoria: 'outra', ativo: true, criadoEm: hoje(),
+              tenantId: op.tenantId };
+        dados.fontes.push(f);
+        porNome[achatar(texto)] = f;
+      }
+      op.fonteId = f.id;
+    });
+  }
+
   function estadoVazio() {
     return {
       versao: VERSAO, tenants: [], usuarios: [],
       contas: [], contatos: [], oportunidades: [], tarefas: [],
-      segmentos: [], tiposTarefa: [], produtos: [], config: { moeda: 'BRL' },
+      segmentos: [], tiposTarefa: [], produtos: [], fontes: [], config: { moeda: 'BRL' },
       /* Auditoria das campanhas do Linked Helper. Não é carteira: são as
          respostas que dizem NÃO, guardadas fora do pipeline de propósito.
          Dentro dele elas seriam negócio; aqui elas são o que a campanha
@@ -103,7 +148,7 @@
       dados.tenants.push({ id: uid('ten'), nome: 'Minha empresa', cnpj: '', ativo: true, criadoEm: hoje() });
     }
     const primeiro = dados.tenants[0] ? dados.tenants[0].id : null;
-    ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos', 'recusas', 'descartes']
+    ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos', 'fontes', 'recusas', 'descartes']
       .forEach(function (colecao) {
         (dados[colecao] || []).forEach(function (r) { if (r.tenantId == null) r.tenantId = primeiro; });
       });
@@ -128,6 +173,8 @@
     } else {
       padronizarTiposTarefa(dados);
     }
+    semearFontes(dados);
+    amarrarFontes(dados);
     /* Tarefa nasce planejada (marquei para fazer) ou registrada (aconteceu e
        eu anotei depois). As duas concluídas contam igual no funil e não contam
        igual na metodologia: a primeira mostra disciplina de planejamento, a
@@ -315,7 +362,7 @@
       return !UUID.test(dele);
     };
 
-    ['contas', 'contatos', 'segmentos', 'tiposTarefa', 'produtos'].forEach(function (colecao) {
+    ['contas', 'contatos', 'segmentos', 'tiposTarefa', 'produtos', 'fontes'].forEach(function (colecao) {
       (estado[colecao] || []).forEach(function (r) { if (semCasa(r)) r.tenantId = alvo; });
     });
     ['oportunidades', 'tarefas'].forEach(function (colecao) {
@@ -381,7 +428,7 @@
     const ctx = contexto();
     const A = global.IADAuth;
     const u = ctx.usuario;
-    const colecoes = ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos'];
+    const colecoes = ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos', 'fontes'];
 
     const linhas = colecoes.map(function (nome) {
       const todos = estado[nome] || [];
@@ -448,7 +495,7 @@
     const conhecidas = {};
     (estado.tenants || []).forEach(function (t) { conhecidas[String(t.id)] = true; });
 
-    const colecoes = ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos'];
+    const colecoes = ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos', 'fontes'];
     const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
     const conta = {};
@@ -481,7 +528,7 @@
 
   function moverRegistros(deId, paraId) {
     if (!deId || !paraId || deId === paraId) return 0;
-    const colecoes = ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos'];
+    const colecoes = ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos', 'fontes'];
     let mexidos = 0;
     colecoes.forEach(function (nome) {
       (estado[nome] || []).forEach(function (r) {
@@ -493,7 +540,7 @@
   }
 
   function esquecerEmpresa(id) {
-    const usada = ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos']
+    const usada = ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos', 'fontes']
       .some(function (nome) {
         return (estado[nome] || []).some(function (r) { return String(r.tenantId || '') === String(id); });
       });
@@ -517,6 +564,7 @@
       segmentos: porTenant(estado.segmentos),
       tiposTarefa: porTenant(estado.tiposTarefa),
       produtos: porTenant(estado.produtos),
+      fontes: porTenant(estado.fontes),
       config: estado.config
     };
   }
@@ -607,7 +655,7 @@
     /* A padronização vem antes da adoção, e não depois: o tipo que ela
        acrescenta nasce sem empresa e ficaria invisível até o render seguinte. */
     const padronizou = padronizarTiposTarefa(estado);
-    ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos', 'recusas']
+    ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos', 'fontes', 'recusas']
       .forEach(function (colecao) {
         (estado[colecao] || []).forEach(function (r) {
           if (!r.tenantId) { r.tenantId = ctx.tenantId; adotados++; }
@@ -698,6 +746,9 @@
       /* De onde o negócio veio. Com várias SDRs prospectando, sem isto não
          dá para dizer qual campanha e qual pessoa produziram pipeline real. */
       origem: '',
+      /* Aponta para a linha da tabela de fontes. `origem` continua sendo o
+         texto solto do que foi criado antes dela existir. */
+      fonteId: '',
       campanha: '',
       sdr: '',
       sdrEmail: '',
@@ -864,7 +915,7 @@
   }
 
   /* ---------- Catálogos: segmentos, tipos de tarefa e produtos ---------- */
-  const CATALOGOS = { segmentos: 'seg', tiposTarefa: 'tpt', produtos: 'prd' };
+  const CATALOGOS = { segmentos: 'seg', tiposTarefa: 'tpt', produtos: 'prd', fontes: 'fnt' };
 
   function catalogo(nome) {
     return (estado[nome] || []).filter(function (i) { return visivel(i, false); });
@@ -919,6 +970,15 @@
   }
 
   function produto(id) { return catalogo('produtos').find(function (p) { return p.id === id; }); }
+
+  function fonte(id) { return catalogo('fontes').find(function (f) { return f.id === id; }); }
+
+  /* De onde o negócio veio, em texto, para quem só precisa ler. A fonte
+     cadastrada manda; o texto solto antigo é o que sobra quando ela falta. */
+  function origemDaOportunidade(op) {
+    const f = op && op.fonteId && fonte(op.fonteId);
+    return f ? f.nome : String((op && op.origem) || '');
+  }
 
   /* ---------- Tarefas ---------- */
   /* ---------- auditoria das campanhas do Linked Helper ----------
@@ -1262,6 +1322,7 @@
     conta, contato, oportunidade, tarefa, contatosDaConta, tarefasDaOportunidade,
     daquiADias, PRAZO_PADRAO_DE_FECHAMENTO,
     dados, contexto, tenantDeTrabalho, visivel, diagnostico,
+    fonte, origemDaOportunidade,
     criarConta, criarContato, criarOportunidade, atualizarOportunidade, vincularStakeholder,
     pontuar, registrarEvento, removerEvento, definirCompromisso, definirInsight,
     registrarRecusa, recusas, recusasPorCampanha, limparRecusas, excluirRecusa,

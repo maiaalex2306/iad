@@ -94,6 +94,9 @@ create table if not exists public.oportunidades (
   concorrentes         text default '',
   produto              text default '',
   origem               text default '',
+  /* Aponta para fontes.id. `origem` continua guardando o texto solto do que
+     foi criado antes de a tabela de fontes existir. */
+  fonte_id             text default '',
   campanha             text default '',
   sdr                  text default '',
   sdr_email            text default '',
@@ -170,6 +173,18 @@ create table if not exists public.tipos_tarefa (
   atualizado_em timestamptz default now()
 );
 
+-- De onde o lead veio. Lista por empresa, como segmentos e tipos de tarefa.
+create table if not exists public.fontes (
+  id            text primary key,
+  tenant_id     uuid not null references public.tenants(id) on delete cascade,
+  nome          text not null,
+  categoria     text not null default 'outra',
+  ativo         boolean default true,
+  criado_em     date default current_date,
+  atualizado_em timestamptz default now()
+);
+
+create index if not exists idx_fontes_tenant        on public.fontes(tenant_id);
 create index if not exists idx_contas_tenant        on public.contas(tenant_id);
 create index if not exists idx_contatos_tenant      on public.contatos(tenant_id);
 create index if not exists idx_oportunidades_tenant on public.oportunidades(tenant_id);
@@ -185,6 +200,7 @@ alter table public.tarefas       enable row level security;
 alter table public.produtos      enable row level security;
 alter table public.segmentos     enable row level security;
 alter table public.tipos_tarefa  enable row level security;
+alter table public.fontes        enable row level security;
 
 -- Cada um lê e escreve o próprio perfil; o administrador lê todos.
 drop policy if exists perfis_leitura on public.perfis;
@@ -212,11 +228,11 @@ drop policy if exists tenants_atualizacao on public.tenants;
 create policy tenants_atualizacao on public.tenants for update
   using (id = public.meu_tenant() or public.sou_admin());
 
--- As sete tabelas de negócio seguem a mesma regra, aplicada uma vez por tabela.
+-- As oito tabelas de negócio seguem a mesma regra, aplicada uma vez por tabela.
 do $$
 declare t text;
 begin
-  foreach t in array array['contas','contatos','oportunidades','tarefas','produtos','segmentos','tipos_tarefa']
+  foreach t in array array['contas','contatos','oportunidades','tarefas','produtos','segmentos','tipos_tarefa','fontes']
   loop
     execute format('drop policy if exists %I_tudo on public.%I', t, t);
     execute format($f$

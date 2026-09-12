@@ -880,6 +880,7 @@
     modoPipeline: function (modo) { V.definirModoPipeline(modo); render(); },
     abaCadastro: function (aba) { V.definirAbaCadastro(aba); render(); },
     abaConfig: function (aba) { V.definirAbaConfig(aba); render(); },
+    abaCockpit: function (aba) { V.definirAbaCockpit(aba); render(); },
 
     /* A Configuração virou abas, e o diagnóstico foi para a última delas.
        Mandar para `#/dados` e deixar na aba de sincronizar seria mandar a
@@ -905,6 +906,15 @@
        falo? Cada empresa tem os seus — a tabela é por empresa desde sempre. */
     camposDoCatalogo: function (nome) {
       const campos = [{ id: 'nome', rotulo: 'Nome' }];
+      if (nome === 'fontes') {
+        return campos.concat([
+          { id: 'categoria', rotulo: 'Categoria', tipo: 'select',
+            opcoes: P.CATEGORIAS_FONTE.map(function (c) {
+              return { valor: c.id, rotulo: c.rotulo + (c.nota ? ' — ' + c.nota : '') };
+            }),
+            dica: 'Separa o que veio até nós do que fomos buscar. É essa divisão que diz se a carteira depende de sorte ou de trabalho.' }
+        ]);
+      }
       if (nome !== 'segmentos') return campos;
       return campos.concat([
         { id: 'subsegmentos', rotulo: 'Subsegmentos', tipo: 'textarea',
@@ -917,11 +927,12 @@
     },
 
     novoItemCatalogo: function (nome) {
-      const titulo = nome === 'segmentos' ? 'Novo segmento' : 'Novo tipo de tarefa';
+      const titulo = { segmentos: 'Novo segmento', fontes: 'Nova fonte' }[nome] || 'Novo tipo de tarefa';
       U.formulario(titulo, App.camposDoCatalogo(nome), {}, function (d) {
         if (!d.nome) return;
         Store.criarNoCatalogo(nome, {
           nome: d.nome,
+          categoria: d.categoria || 'outra',
           subsegmentos: d.subsegmentos || '',
           oportunidades: d.oportunidades || '',
           personas: d.personas || ''
@@ -938,12 +949,14 @@
       ]);
       U.formulario('Editar', campos, {
         nome: item.nome,
+        categoria: item.categoria || 'outra',
         subsegmentos: item.subsegmentos || '',
         oportunidades: item.oportunidades || '',
         personas: item.personas || '',
         ativo: item.ativo === false ? 'nao' : 'sim'
       }, function (d) {
         const mudancas = { nome: d.nome, ativo: d.ativo === 'sim' };
+        if (nome === 'fontes') mudancas.categoria = d.categoria || 'outra';
         if (nome === 'segmentos') {
           mudancas.subsegmentos = d.subsegmentos || '';
           mudancas.oportunidades = d.oportunidades || '';
@@ -1483,7 +1496,7 @@
       const contas = Store.dados().contas;
       const jaTem = (op.itens || []).map(function (i) { return i.produtoId; });
       U.formulario('Editar oportunidade', camposOportunidade(contas, op.contaId, {
-        edicao: true, produtoIds: jaTem
+        edicao: true, produtoIds: jaTem, fonteId: op.fonteId || ''
       }).concat([
         { id: 'notas', rotulo: 'Notas', tipo: 'textarea' }
       ]), op, function (d) {
@@ -3501,7 +3514,7 @@
 
         const op = Store.criarOportunidade({
           contaId: contaId, titulo: d.titulo, etapa: d.etapa,
-          origem: 'Linked Helper', campanha: lead.campanha || '',
+          origem: 'Linked Helper', fonteId: fonteDoLinkedHelper(), campanha: lead.campanha || '',
           sdr: lead.operador || '', sdrEmail: lead.operadorEmail || '',
           notas: notasDoLead(lead)
         });
@@ -4541,6 +4554,7 @@
            campanha é o que permite ler o resultado depois, por pessoa e por
            campanha. Fica em campo próprio, não perdido dentro das notas. */
         origem: 'Linked Helper',
+        fonteId: fonteDoLinkedHelper(),
         campanha: lead.campanha || '',
         sdr: lead.operador || '',
         sdrEmail: lead.operadorEmail || '',
@@ -6488,6 +6502,28 @@
     };
   }
 
+  /* De onde o lead veio, escolhido de uma lista em vez de digitado. Digitar
+     produzia "Linked Helper", "linkedin helper" e "LH" na mesma carteira, e
+     três grafias do mesmo canal não somam — que é justamente o que se quer
+     fazer com esse campo depois. */
+  /* A ponte escreve sempre a mesma fonte, e escrevê-la pelo nome garante que
+     o lead caia na linha certa da tabela mesmo que alguém a tenha renomeado
+     ou apagado — `criarNoCatalogo` devolve a que já existe, ou cria. */
+  function fonteDoLinkedHelper() {
+    const f = Store.criarNoCatalogo('fontes', { nome: 'Linked Helper', categoria: 'saida' });
+    return f ? f.id : '';
+  }
+
+  function campoDeFonte(padrao) {
+    const fontes = Store.catalogoAtivos('fontes');
+    return {
+      id: 'fonteId', rotulo: 'Fonte', tipo: 'select', padrao: padrao || '',
+      dica: 'Como este negócio chegou até você. A lista se edita em Cadastros → Fontes.',
+      opcoes: [{ valor: '', rotulo: '— não informada —' }].concat(
+        fontes.map(function (f) { return { valor: f.id, rotulo: f.nome }; }))
+    };
+  }
+
   function camposOportunidade(contas, contaPadrao, opcoes) {
     const o = opcoes || {};
     const contaInicial = contaPadrao || (contas[0] && contas[0].id) || '';
@@ -6531,6 +6567,10 @@
       { id: 'tipo', rotulo: 'Tipo', tipo: 'select', opcoes: P.TIPOS_OPORTUNIDADE },
       { id: 'fechamentoPrevisto', rotulo: 'Fechamento previsto', tipo: 'date',
         padrao: Store.daquiADias(Store.PRAZO_PADRAO_DE_FECHAMENTO) },
+      campoDeFonte(o.fonteId),
+      { id: 'campanha', rotulo: 'Campanha', largura: 'metade',
+        dica: 'A ação específica dentro da fonte. A fonte diz o canal; a campanha diz qual disparo.' },
+      { id: 'sdr', rotulo: 'SDR / quem prospectou', largura: 'metade' },
       { id: 'concorrentes', rotulo: 'Concorrentes (inclusive “não fazer nada”)' }
     ]);
   }

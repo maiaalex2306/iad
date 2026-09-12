@@ -141,7 +141,8 @@
             ' aria-label="' + esc(c.lupa) + '" title="' + esc(c.lupa) + '">\u2139</button>'
           : '';
         return '<label class="campo' + (c.largura === 'metade' ? ' meia' : '') + '"><span>' + esc(c.rotulo) + '</span>' +
-          (lupa ? '<span class="campo-lupa">' + caixa + lupa + '</span>' : caixa) + '</label>';
+          (lupa ? '<span class="campo-lupa">' + caixa + lupa + '</span>' : caixa) +
+          (c.dica ? '<span class="dica-campo">' + esc(c.dica) + '</span>' : '') + '</label>';
       }
       if (c.tipo === 'textarea') {
         return '<label class="campo' + (c.largura === 'metade' ? ' meia' : '') + '"><span>' + esc(c.rotulo) + '</span><textarea name="' + c.id + '">' + esc(v) + '</textarea>' +

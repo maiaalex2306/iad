@@ -1709,6 +1709,11 @@
     const r = E.resumo(op);
     const conta = r.conta;
 
+    /* Trocar de negócio volta para a aba da Decisão. Guardar a aba entre
+       negócios faria o próximo abrir direto em Arquivos — que nunca é o que
+       se quer ver primeiro. */
+    if (opDaAba !== op.id) { opDaAba = op.id; abaCockpit = 'decisao'; }
+
     const desf = op.desfecho ? P.DESFECHOS.find(function (x) { return x.id === op.desfecho.tipo; }) : null;
     const banner = desf
       ? '<div class="card" style="margin-top:10px"><div class="row"><span class="pill ' + desf.classe + '">' + esc(desf.rotulo) + '</span>' +
@@ -1718,41 +1723,143 @@
         (op.desfecho.concorrente ? '<p class="tiny muted" style="margin:6px 0 0">Concorrente: ' + esc(op.desfecho.concorrente) + '</p>' : '') + '</div>'
       : '';
 
+    return barraDeAcoes(op) +
+      (op.nutricao ? faixaDeNutricao(op) : '') +
+      banner +
+      '<h1 style="margin-top:10px">' + esc(op.titulo) + '</h1>' +
+      fichaDaOportunidade(op, r) +
+      abasDoCockpit(op) +
+      '<div class="corpo-aba">' + corpoDaAba(op, r) + '</div>';
+  }
+
+  function barraDeAcoes(op) {
     return '<div class="row"><button class="btn ghost mini" onclick="App.ir(\'#/pipeline\')">← Pipeline</button>' +
       '<span class="espaco"></span>' +
       /* As pessoas da empresa, de dentro do negócio. Antes, para achar o
          telefone de alguém era preciso sair do cockpit, ir a Cadastros e
          voltar — três telas de distância de onde a conversa acontece. */
       '<button class="btn ghost mini" onclick="App.contatosDaEmpresa(\'' + op.id + '\')" data-ajuda-titulo="Contatos" data-ajuda="Quem é da empresa, com LinkedIn, telefone e e-mail para falar em um toque. Mostra separado quem está no grupo comprador deste negócio e quem está de fora.">Contatos</button>' +
-      '<button class="btn ghost mini" onclick="App.editarOportunidade(\'' + op.id + '\')" data-ajuda-titulo="Editar" data-ajuda="Muda título, valor, etapa, tipo, previsão e concorrentes. Não mexe nas decisões.">Editar</button>' +
+      '<button class="btn ghost mini" onclick="App.editarOportunidade(\'' + op.id + '\')" data-ajuda-titulo="Editar" data-ajuda="Muda título, valor, etapa, tipo, previsão, fonte e concorrentes. Não mexe nas decisões.">Editar</button>' +
       (op.desfecho ? ''
         : (op.nutricao
             ? '<button class="btn ghost mini" onclick="App.retomarNutricao(\'' + op.id + '\')" data-ajuda-titulo="Retomar" data-ajuda="Tira da nutrição e devolve à carteira ativa. Uma evidência nova do cliente já faz isso sozinha.">Retomar da nutrição</button>'
             : '<button class="btn ghost mini" onclick="App.colocarEmNutricao(\'' + op.id + '\')" data-ajuda-titulo="Nutrição" data-ajuda="O processo parou porque a conta ainda não está pronta. Sai da previsão, continua na agenda, e volta sozinha quando o cliente se mexer.">Colocar em nutrição</button>') +
-          '<button class="btn ghost mini" onclick="App.encerrar(\'' + op.id + '\')" data-ajuda-titulo="Encerrar" data-ajuda="Registra o desfecho — ganho, perda ou desistência — e congela o retrato das oito decisões. É daqui que sai o Aprendizado do painel.">Encerrar</button>') + '</div>' +
-      (op.nutricao ? faixaDeNutricao(op) : '') +
-      banner +
-      '<h1 style="margin-top:10px">' + esc(op.titulo) + '</h1>' +
-      '<p class="muted small">' + esc((conta && conta.nome) || 'Sem conta') + ' · ' + U.moeda(op.valor) + ' · ' + esc(op.tipo || 'Novo negócio') +
-      ' · Etapa CRM: ' + esc(op.etapa) + ' há ' + r.tempoNaEtapa + ' dias' +
-      (op.fechamentoPrevisto ? ' · previsão ' + U.data(op.fechamentoPrevisto) : '') + '</p>' +
-      (op.concorrentes
-        ? '<p class="tiny muted" style="margin:-6px 0 0">Contra: ' + esc(op.concorrentes) + '</p>'
-        : '') +
-      /* O que está sendo vendido. Ficava só guardado em op.itens e não
-         aparecia em lugar nenhum: escolher produto no cadastro e não ver o
-         que se escolheu é a mesma coisa que não ter escolhido. */
-      itensDaOportunidade(op) +
-      /* De onde veio e de quem: com várias SDRs prospectando, é isso que
-         permite ler o resultado por pessoa e por campanha depois. */
-      (op.origem
-        ? '<p class="tiny muted" style="margin:2px 0 0">Origem: ' + esc(op.origem) +
-          (op.campanha ? ' \u00b7 campanha ' + esc(op.campanha) : '') +
-          (op.sdr ? ' \u00b7 SDR ' + esc(op.sdr) : '') + '</p>'
-        : '') +
+          '<button class="btn ghost mini" onclick="App.encerrar(\'' + op.id + '\')" data-ajuda-titulo="Encerrar" data-ajuda="Registra o desfecho — ganho, perda ou desistência — e congela o retrato das oito decisões. É daqui que sai o Aprendizado do painel.">Encerrar</button>') + '</div>';
+  }
 
-      painelTarefas(op) +
-      blocoAvanco(op, r) +
+  /* ---------------- A ficha do negócio ----------------
+
+     Era uma linha de texto corrido: "Rede D'Or · R$ 0 · Novo negócio · Etapa
+     CRM: Conexão há 1 dias · previsão 08/01/2027". Para saber o que é cada
+     pedaço é preciso decorar a ordem, e quem não decorou lê "1 dias" e fica
+     procurando o que isso quer dizer. Em rótulo e valor, cada campo se acha
+     pelo nome — e o que está vazio aparece vazio, em vez de sumir. */
+  function fichaDaOportunidade(op, r) {
+    const conta = r.conta;
+    const tempo = r.tempoNaEtapa === 1 ? 'há 1 dia' : 'há ' + r.tempoNaEtapa + ' dias';
+    const campos = [
+      ['Conta', conta ? esc(conta.nome) : '—'],
+      ['Valor total', U.moeda(op.valor)],
+      ['Etapa CRM', esc(op.etapa) + ' <span class="muted">' + tempo + '</span>'],
+      ['Tipo', esc(op.tipo || 'Novo negócio')],
+      ['Previsão de fechamento', op.fechamentoPrevisto ? U.data(op.fechamentoPrevisto) : '—'],
+      ['Fonte', nomeDaFonte(op)],
+      ['Campanha', op.campanha ? esc(op.campanha) : '—'],
+      ['SDR', op.sdr ? esc(op.sdr) : '—'],
+      ['Criada em', op.criadoEm ? U.data(op.criadoEm) : '—'],
+      ['Concorrentes', op.concorrentes ? esc(op.concorrentes) : '—']
+    ];
+    return '<div class="card ficha">' + campos.map(function (c) {
+      return '<div class="ficha-campo"><span class="rot">' + esc(c[0]) + '</span>' +
+        '<span class="val">' + c[1] + '</span></div>';
+    }).join('') + '</div>';
+  }
+
+  /* O nome da fonte, com a legenda antiga como rede de segurança: negócio
+     criado antes da tabela guardou o texto solto em op.origem, e continuar
+     mostrando esse texto é melhor do que mostrar um traço. */
+  function nomeDaFonte(op) {
+    const f = op.fonteId && Store.fonte(op.fonteId);
+    if (f) return esc(f.nome);
+    if (op.origem) return esc(op.origem) + ' <span class="tiny muted">(texto antigo)</span>';
+    return '—';
+  }
+
+  /* ---------------- As abas do cockpit ----------------
+
+     Quinze blocos empilhados numa página só, e o histórico — que é o que se
+     abre para entender o negócio — ficava depois de rolar quatro telas. Cada
+     aba responde a uma pergunta diferente, e só uma delas se faz por vez:
+
+       Decisão     o negócio está andando? (é a razão de o produto existir)
+       Histórico   o que já aconteceu aqui
+       Tarefas     o que está combinado
+       WhatsApp    o que o cliente falou
+       E-mail      o que foi trocado por escrito
+       Propostas   o que foi ofertado, por quanto
+       Produtos    o que está sendo vendido
+       Arquivos    o que foi anexado
+
+     Decisão vem primeira e é a que abre: um CRM comum abre no histórico
+     porque o histórico é o produto dele. Aqui o produto é o avanço. */
+  const ABAS_COCKPIT = [
+    ['decisao', 'Decisão'],
+    ['historico', 'Histórico'],
+    ['tarefas', 'Tarefas'],
+    ['whatsapp', 'WhatsApp'],
+    ['email', 'E-mail'],
+    ['propostas', 'Propostas'],
+    ['produtos', 'Produtos'],
+    ['arquivos', 'Arquivos']
+  ];
+
+  const AJUDA_COCKPIT = {
+    decisao: 'As oito decisões, o que falta, o próximo passo e os alertas. É a tela que diz se o negócio está andando de verdade.',
+    historico: 'Tudo o que aconteceu neste negócio, com evidência do cliente separada de atividade nossa.',
+    tarefas: 'O que está combinado e o que venceu. Tarefa concluída sem relato aparece marcada.',
+    whatsapp: 'As conversas de WhatsApp que casaram com um contato desta empresa.',
+    email: 'Os e-mails trocados dentro deste negócio. Ainda não construído.',
+    propostas: 'As propostas enviadas, com valor, validade e resposta. Ainda não construído.',
+    produtos: 'O que está sendo vendido, com quantidade e preço.',
+    arquivos: 'Os anexos, organizados pela decisão que destravam.'
+  };
+
+  let abaCockpit = 'decisao';
+  let opDaAba = '';
+
+  function definirAbaCockpit(a) { abaCockpit = a; }
+
+  function abasDoCockpit(op) {
+    const W = global.IADWhatsapp;
+    const abertas = Store.tarefasDaOportunidade(op.id).filter(function (t) {
+      return t.status === 'aberta';
+    }).length;
+    const novas = (W && W.carregadas()) ? W.naoLidasDaOp(op.id) : 0;
+    /* O número na aba é o que faz a aba fechada continuar avisando. Sem ele,
+       esconder as tarefas atrás de um clique esconderia também o atraso. */
+    const contagem = { tarefas: abertas, whatsapp: novas };
+
+    return '<div class="abas-cockpit">' + ABAS_COCKPIT.map(function (a) {
+      const n = contagem[a[0]];
+      return '<button class="aba' + (abaCockpit === a[0] ? ' ativa' : '') + '" ' +
+        'onclick="App.abaCockpit(\'' + a[0] + '\')" data-ajuda-titulo="' + esc(a[1]) +
+        '" data-ajuda="' + esc(AJUDA_COCKPIT[a[0]] || '') + '">' + esc(a[1]) +
+        (n ? '<span class="conta' + (a[0] === 'whatsapp' ? ' zap' : '') + '">' + n + '</span>' : '') +
+        '</button>';
+    }).join('') + '</div>';
+  }
+
+  function corpoDaAba(op, r) {
+    const f = {
+      decisao: abaDecisao, historico: abaHistorico, tarefas: abaTarefas,
+      whatsapp: abaWhatsapp, email: abaEmail, propostas: abaPropostas,
+      produtos: abaProdutos, arquivos: abaArquivos
+    }[abaCockpit] || abaDecisao;
+    return f(op, r);
+  }
+
+  function abaDecisao(op, r) {
+    return blocoAvanco(op, r) +
       blocoPlanoIA(op) +
       blocoLacunas(op, r) +
       blocoInsight(op, r) +
@@ -1761,9 +1868,115 @@
       detalhe('As 8 decisões', 'pontue aqui', blocoDimensoes(op)) +
       detalhe('Proposal Gate', r.gates.prontidao + '% de prontidão', blocoGate(op, r)) +
       detalhe('Buying group', r.coverage.mapeados + ' pessoa(s) · ' + r.coverage.percentual + '% dos papéis críticos', blocoGrupo(op, r)) +
-      detalhe('Arquivos', 'anexos por decisão', blocoArquivos(op)) +
-      detalhe('Evolução da decisão', 'a curva do IAD', curvaIAD(op)) +
-      detalhe('Histórico', 'tudo o que aconteceu', blocoHistorico(op));
+      detalhe('Evolução da decisão', 'a curva do IAD', curvaIAD(op));
+  }
+
+  function abaHistorico(op) { return blocoHistorico(op); }
+  function abaTarefas(op) { return painelTarefas(op); }
+  function abaArquivos(op) { return blocoArquivos(op); }
+
+  function abaWhatsapp(op) {
+    const W = global.IADWhatsapp;
+    const topo = '<div class="card"><div class="row"><h2 class="titulo-zap" style="margin:0">' +
+      iconeWhatsapp(20) + 'WhatsApp</h2><span class="espaco"></span>' +
+      '<button class="btn ghost mini" onclick="App.ir(\'#/conversas\')">Ver todas as conversas</button></div>';
+
+    if (!W || !W.disponivel()) {
+      return topo + '<div class="vazio">As conversas moram no servidor. Entre com a sua conta da nuvem para vê-las.</div></div>';
+    }
+    if (!W.carregadas()) return topo + '<div class="vazio">Buscando as conversas…</div></div>';
+    if (W.erro()) return topo + '<div class="aviso">' + esc(W.erro()) + '</div></div>';
+
+    const minhas = W.conversas().filter(function (c) { return c.op && c.op.id === op.id; });
+    if (!minhas.length) {
+      return topo + '<div class="vazio">Nenhuma conversa apontada para este negócio. Uma conversa ' +
+        'cai aqui quando o telefone de quem escreveu casa com o de um contato desta empresa.</div></div>';
+    }
+    return topo +
+      '<p class="tiny muted" style="margin:6px 0 10px">Mensagem não é evidência. O que vira avanço ' +
+      'é o que você registra a partir dela.</p>' +
+      '<div class="lista-conversas">' + minhas.map(linhaDeConversa).join('') + '</div></div>';
+  }
+
+  /* O que está sendo vendido. Ficava numa linha de texto — "Compõe: A · B · C"
+     — sem quantidade, sem preço e sem soma. Escolher produto no cadastro e não
+     ver o que se escolheu é a mesma coisa que não ter escolhido. */
+  function abaProdutos(op) {
+    const topo = '<div class="card"><div class="row"><h2 style="margin:0">Produtos e serviços</h2>' +
+      '<span class="espaco"></span>' +
+      '<button class="btn ghost mini" onclick="App.editarOportunidade(\'' + op.id + '\')">Editar a lista</button></div>';
+
+    const itens = (op.itens || []).map(function (i) {
+      const p = Store.produto(i.produtoId);
+      const qtd = i.quantidade || 1;
+      const preco = i.precoUnitario != null ? i.precoUnitario : ((p && p.precoReferencia) || 0);
+      return {
+        nome: p ? p.nome : 'Produto que saiu do catálogo',
+        nota: p ? [p.categoria, p.unidade].filter(Boolean).join(' · ') : '',
+        qtd: qtd, preco: preco, total: preco * qtd
+      };
+    });
+
+    if (!itens.length) {
+      return topo + '<div class="vazio">Nenhum produto escolhido. O valor do negócio está digitado à mão.</div></div>';
+    }
+
+    const soma = itens.reduce(function (s, i) { return s + i.total; }, 0);
+    const linhas = itens.map(function (i) {
+      return '<tr><td><strong>' + esc(i.nome) + '</strong>' +
+        (i.nota ? '<span class="tiny muted">' + esc(i.nota) + '</span>' : '') + '</td>' +
+        '<td class="right">' + i.qtd + '</td>' +
+        '<td class="right">' + U.moeda(i.preco) + '</td>' +
+        '<td class="right">' + U.moeda(i.total) + '</td></tr>';
+    }).join('');
+
+    /* A soma dos itens e o valor do negócio são dois números independentes: o
+       valor é digitado à mão e ninguém o recalcula quando a lista muda. Três
+       produtos somando 300 mil dentro de um negócio que diz valer 80 é o tipo
+       de erro que só aparece na proposta, tarde demais. Enquanto a proposta
+       não existir, o mínimo honesto é apontar a diferença. */
+    const divergencia = Math.abs(soma - (op.valor || 0)) > 0.5
+      ? '<div class="aviso" style="margin-top:10px">A soma dos itens é ' + U.moeda(soma) +
+        ' e o valor do negócio é ' + U.moeda(op.valor) + '. Os dois números são digitados ' +
+        'separadamente — confira qual está certo.</div>'
+      : '';
+
+    return topo +
+      '<div class="tabela-rolagem" style="margin-top:10px"><table>' +
+      '<thead><tr><th>Item</th><th class="right">Qtd.</th><th class="right">Preço</th><th class="right">Total</th></tr></thead>' +
+      '<tbody>' + linhas + '</tbody>' +
+      '<tfoot><tr><td colspan="3" class="right"><strong>Soma dos itens</strong></td>' +
+      '<td class="right"><strong>' + U.moeda(soma) + '</strong></td></tr></tfoot>' +
+      '</table></div>' + divergencia + '</div>';
+  }
+
+  function abaEmail(op) {
+    return porVir('E-mail',
+      'Os e-mails deste negócio, do jeito que a conversa aconteceu: quem escreveu, quando, e o que foi combinado.',
+      ['Cada negócio ganha um endereço próprio de cópia oculta. Você põe esse endereço em cópia ao escrever para o cliente e o e-mail entra aqui sozinho, amarrado à pessoa certa.',
+       'O casamento é pelo Message-ID antes de qualquer outra coisa — é a única marca que a resposta carrega do original, e é a mesma que impede o e-mail de entrar duas vezes.',
+       'O estudo está em estudos/EMAIL.md. Nada disso foi construído ainda.']);
+  }
+
+  function abaPropostas(op) {
+    return porVir('Propostas',
+      'O que foi ofertado neste negócio: itens, valor único e valor mensal separados, desconto, validade e a resposta do cliente.',
+      ['Valor de implantação e valor mensal nunca somam. Hoje o sistema não sabe a diferença entre 10 mil uma vez e 10 mil por mês.',
+       'O preço de tabela fica congelado na linha da proposta. Sem isso, mexer no catálogo reescreve o que já foi enviado.',
+       'O estado da proposta é o que mais interessa aqui: "expirada sem resposta" é o retrato do falso avançado, que é justamente o que o IAD existe para denunciar.',
+       'O estudo está em estudos/PROPOSTAS.md. Nada disso foi construído ainda.']);
+  }
+
+  /* A aba que ainda não tem obra dentro. Existe para o lugar ficar definido
+     antes: quem abre sabe onde a coisa vai morar, e o que for construído
+     depois não precisa disputar espaço com o que já está na tela. */
+  function porVir(titulo, oQue, pontos) {
+    return '<div class="card"><div class="row"><h2 style="margin:0">' + esc(titulo) + '</h2>' +
+      '<span class="espaco"></span><span class="pill warn">por construir</span></div>' +
+      '<p class="small" style="margin:8px 0 10px">' + esc(oQue) + '</p>' +
+      '<ul class="small muted" style="margin:0;padding-left:18px;display:grid;gap:6px">' +
+      pontos.map(function (p) { return '<li>' + esc(p) + '</li>'; }).join('') +
+      '</ul></div>';
   }
 
   /* A mesma tela tinha DOIS cards de tarefa: o painel completo no topo, com
@@ -2284,16 +2497,6 @@
     const adiante = new Date();
     adiante.setDate(adiante.getDate() + dias);
     return data >= limite.toISOString().slice(0, 10) && data <= adiante.toISOString().slice(0, 10);
-  }
-
-  function itensDaOportunidade(op) {
-    const itens = (op.itens || []).map(function (i) {
-      const p = Store.produto(i.produtoId);
-      return p ? p.nome : null;
-    }).filter(Boolean);
-    if (!itens.length) return '';
-    return '<p class="tiny muted" style="margin:2px 0 0">Compõe: ' +
-      itens.map(esc).join(' \u00b7 ') + '</p>';
   }
 
   function painelTarefas(op) {
@@ -3033,6 +3236,7 @@
     empresas: 'Cadastra uma conta — uma empresa cliente.', contatos: 'Cadastra uma pessoa e a liga a uma empresa.',
     oportunidades: 'Cria um negócio.', segmentos: 'Acrescenta um segmento à lista.',
     tiposTarefa: 'Acrescenta um tipo de tarefa.', produtos: 'Cadastra um produto com preço de referência.',
+    fontes: 'Acrescenta uma origem de lead à lista.',
     usuarios: 'Cadastra um usuário neste aparelho. Com a nuvem ligada, as contas ficam no servidor.'
   };
 
@@ -3043,6 +3247,7 @@
     segmentos: 'A lista que alimenta o campo Segmento das empresas e a análise por segmento no painel.',
     tiposTarefa: 'A lista de tipos que aparece ao criar uma tarefa.',
     produtos: 'O catálogo com preço de referência, para compor o valor das oportunidades.',
+    fontes: 'De onde os leads vêm. É o que permite ler depois qual canal produz negócio que fecha, e não só qual produz volume.',
     usuarios: 'Quem tem acesso. Com a nuvem ligada, as contas ficam no servidor — cadastrar aqui só afeta este aparelho.'
   };
 
@@ -3052,7 +3257,7 @@
   const ABAS_CADASTRO = [
     ['empresas', 'Contas'], ['contatos', 'Contatos'], ['oportunidades', 'Oportunidades'],
     ['segmentos', 'Segmentos'], ['tiposTarefa', 'Tipos de tarefa'], ['produtos', 'Produtos'],
-    ['usuarios', 'Usuários']
+    ['fontes', 'Fontes'], ['usuarios', 'Usuários']
   ];
   let abaCadastro = 'empresas';
   let buscaCadastro = '';
@@ -3066,14 +3271,15 @@
     const criar = {
       empresas: 'App.novaConta()', contatos: 'App.novoContato()', oportunidades: 'App.novaOportunidade()',
       segmentos: "App.novoItemCatalogo('segmentos')", tiposTarefa: "App.novoItemCatalogo('tiposTarefa')",
-      produtos: 'App.novoProduto()', usuarios: 'App.novoUsuario()'
+      produtos: 'App.novoProduto()', fontes: "App.novoItemCatalogo('fontes')",
+      usuarios: 'App.novoUsuario()'
     }[abaCadastro];
 
     const corpo = {
       empresas: listaEmpresas, contatos: listaContatos, oportunidades: listaOportunidades,
       segmentos: function (e) { return listaCatalogo(e, 'segmentos'); },
       tiposTarefa: function (e) { return listaCatalogo(e, 'tiposTarefa'); },
-      produtos: listaProdutos, usuarios: listaUsuarios
+      produtos: listaProdutos, fontes: listaFontes, usuarios: listaUsuarios
     }[abaCadastro](est);
 
     /* Duas portas diferentes. Pessoa é do administrador. Produto é do gestor:
@@ -3228,6 +3434,38 @@
         acoes(i) + '</tr>';
     }).join('');
     return tabela(['Tipo de tarefa', 'Situação', 'Em uso', ''], linhas, 'Nada cadastrado ainda.');
+  }
+
+  /* As fontes com o que cada uma produziu ao lado. A tabela sozinha é um
+     cadastro; com a contagem de negócios e o valor em aberto ela vira a
+     resposta para "de onde vem o que fecha" — que é a razão de ela existir. */
+  function listaFontes(est) {
+    const cats = P.CATEGORIAS_FONTE || [];
+    const nomeDaCategoria = function (id) {
+      const c = cats.find(function (x) { return x.id === id; });
+      return c ? c.rotulo : '—';
+    };
+
+    const linhas = Store.catalogo('fontes').filter(function (f) {
+      return combina(f.nome) || combina(nomeDaCategoria(f.categoria));
+    }).map(function (f) {
+      const ops = est.oportunidades.filter(function (o) { return o.fonteId === f.id; });
+      const abertas = ops.filter(function (o) { return !o.desfecho; });
+      const ganhas = ops.filter(function (o) { return o.desfecho && o.desfecho.tipo === 'ganho'; });
+      const valor = abertas.reduce(function (soma, o) { return soma + (o.valor || 0); }, 0);
+      return '<tr><td><strong>' + esc(f.nome) + '</strong></td>' +
+        '<td>' + esc(nomeDaCategoria(f.categoria)) + '</td>' +
+        '<td>' + (f.ativo === false ? '<span class="pill">inativo</span>' : '<span class="pill ok">ativo</span>') + '</td>' +
+        '<td class="right">' + ops.length + '</td>' +
+        '<td class="right">' + ganhas.length + '</td>' +
+        '<td class="right">' + (valor ? U.compacto(valor) : '—') + '</td>' +
+        '<td class="right" style="white-space:nowrap">' +
+        '<button class="btn ghost mini" onclick="App.editarItemCatalogo(\'fontes\',\'' + f.id + '\')">Editar</button> ' +
+        '<button class="btn ghost mini" onclick="App.excluirItemCatalogo(\'fontes\',\'' + f.id + '\')">Excluir</button></td></tr>';
+    }).join('');
+
+    return tabela(['Fonte', 'Categoria', 'Situação', 'Negócios', 'Ganhos', 'Em aberto', ''],
+      linhas, 'Nenhuma fonte cadastrada ainda.');
   }
 
   function listaProdutos(est) {
@@ -5738,6 +5976,8 @@
     filtroTarefas = 'abertas';
     periodoTarefas = 'tudo';
     abaCadastro = 'empresas';
+    abaCockpit = 'decisao';
+    opDaAba = '';
     buscaCadastro = '';
     [planoIA, planoPorEstado, lendoAgora].forEach(function (m) {
       Object.keys(m).forEach(function (k) { delete m[k]; });
@@ -5810,6 +6050,7 @@
     definirModoPipeline: function (m) { modoPipeline = m; },
     definirAbaCadastro: function (a) { abaCadastro = a; buscaCadastro = ''; },
     definirAbaConfig: definirAbaConfig,
+    definirAbaCockpit: definirAbaCockpit,
     definirBuscaCadastro: function (b) { buscaCadastro = b; },
     definirPeriodo: function (f) { filtroPeriodo = f; },
     definirSegmento: function (f) { filtroSegmento = f; }

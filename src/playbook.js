@@ -347,6 +347,54 @@
     'Enviar material': 'E-mail', 'Preparar': 'Preparação'
   };
 
+  /* ---------------- De onde o lead veio ----------------
+
+     Era texto solto no negócio: um escrevia "Linked Helper", outro "linkedin
+     helper", outro "LH". Somar isso depois é impossível, e é justamente a
+     soma que interessa — qual canal produz pipeline que fecha, e não qual
+     canal produz volume.
+
+     A categoria existe porque o nome sozinho não responde a pergunta que se
+     faz primeiro. "Feiras e Eventos" e "Indicação de cliente" são fontes
+     diferentes com custos e taxas de conversão diferentes, mas as duas são
+     coisas que vêm até nós — e ler isso separado de prospecção ativa é o que
+     diz se a carteira depende de sorte ou de trabalho. */
+  const CATEGORIAS_FONTE = [
+    { id: 'saida', rotulo: 'Prospecção ativa', nota: 'nós fomos atrás' },
+    { id: 'entrada', rotulo: 'O cliente veio', nota: 'ele chegou até nós' },
+    { id: 'relacao', rotulo: 'Relacionamento', nota: 'indicação, parceiro, base' },
+    { id: 'outra', rotulo: 'Outra', nota: '' }
+  ];
+
+  /* A lista com que a tabela nasce. Não é regra: é o ponto de partida para
+     não obrigar ninguém a cadastrar dez fontes antes de usar o sistema. */
+  const FONTES_PADRAO = [
+    /* Prospecção ativa: nós escolhemos a empresa e fomos atrás. */
+    { nome: 'Linked Helper', categoria: 'saida' },
+    { nome: 'LinkedIn', categoria: 'saida' },
+    { nome: 'E-mail marketing', categoria: 'saida' },
+    { nome: 'Prospecção por e-mail', categoria: 'saida' },
+    { nome: 'Telefone frio', categoria: 'saida' },
+    /* O cliente veio. Google e Instagram entram aqui, e não em prospecção:
+       quem clica num anúncio ou responde a um post está se apresentando. */
+    { nome: 'Google', categoria: 'entrada' },
+    { nome: 'Instagram', categoria: 'entrada' },
+    { nome: 'Site', categoria: 'entrada' },
+    { nome: 'WhatsApp', categoria: 'entrada' },
+    { nome: 'Feiras e Eventos', categoria: 'entrada' },
+    /* Relacionamento. As duas indicações ficam separadas de propósito: cliente
+       que indica é prova de entrega, representante que indica é canal — e uma
+       carteira que depende só da segunda não está crescendo sozinha. */
+    { nome: 'Indicação por Clientes', categoria: 'relacao' },
+    { nome: 'Indicação Representante', categoria: 'relacao' },
+    { nome: 'Parceiro', categoria: 'relacao' },
+    { nome: 'Cliente da base', categoria: 'relacao' },
+    /* Outras. "Importação de planilha" não é canal de verdade: é o que marca
+       o lote que entrou de uma vez, para não contaminar a conta dos outros. */
+    { nome: 'Importação de planilha', categoria: 'outra' },
+    { nome: 'Não informada', categoria: 'outra' }
+  ];
+
   const CATEGORIAS_ARQUIVO = [
     'Business case', 'Critérios de avaliação', 'Proposta', 'Contrato',
     'Referência / case', 'Dados do cliente', 'Ata de reunião', 'Outro'
@@ -460,6 +508,7 @@
     DESFECHOS_RENOMEADOS, MOTIVOS_PERDA, MOTIVOS_DESISTENCIA, MOTIVOS_NUTRICAO, PRAZOS_NUTRICAO,
     NIVEIS_DA_ESCADA, NOTA_MAXIMA, IAD_MAXIMO, IAD_MADURO,
     FORCAS, FORCA_MINIMA_DO_DEGRAU, TIPOS_TAREFA, TIPOS_TAREFA_RENOMEADOS, CATEGORIAS_ARQUIVO,
+    CATEGORIAS_FONTE, FONTES_PADRAO,
     PERFIS, PERFIS_MOBILIZADORES, ESTADOS_INSIGHT,
     RELACOES_CONTA, TIPOS_OPORTUNIDADE, FECHAMENTO_REUNIAO,
     CANAIS, FAIXAS_EVIDENCIA, ATIVIDADES_QUE_NAO_CONTAM

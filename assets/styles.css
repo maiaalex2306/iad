@@ -1516,3 +1516,48 @@ dialog.conversa { width: min(560px, 94vw); }
 .ico-zap.herdado { fill: currentColor; }
 .titulo-zap { display: inline-flex; align-items: center; gap: 9px; }
 .link-zap { display: inline-flex; align-items: center; gap: 4px; }
+
+/* ---------- A ficha e as abas do cockpit ----------
+   O cabeçalho do negócio era uma linha de texto corrido com sete informações
+   separadas por ponto. Em rótulo e valor, cada campo se acha pelo nome — e o
+   que está vazio aparece vazio, em vez de sumir e deixar a dúvida. */
+.ficha {
+  display: grid; gap: 10px 18px; margin-top: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+.ficha-campo { display: grid; gap: 1px; min-width: 0; }
+.ficha-campo .rot {
+  font-size: .68rem; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--muted); font-weight: 600;
+}
+.ficha-campo .val { font-size: .88rem; font-weight: 600; overflow-wrap: anywhere; }
+.ficha-campo .val .muted, .ficha-campo .val .tiny { font-weight: 400; }
+
+/* A barra de abas. Rola de lado no celular em vez de quebrar em duas linhas:
+   oito abas empilhadas empurrariam o conteúdo para fora da primeira tela, que
+   é exatamente o que as abas vieram resolver. */
+.abas-cockpit {
+  display: flex; gap: 2px; margin: 16px 0 0;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto; scrollbar-width: none;
+}
+.abas-cockpit::-webkit-scrollbar { display: none; }
+.abas-cockpit .aba {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 14px; border: 0; background: none; cursor: pointer;
+  font: inherit; font-size: .84rem; font-weight: 600; color: var(--muted);
+  white-space: nowrap; border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.abas-cockpit .aba:hover { color: var(--text); }
+.abas-cockpit .aba.ativa { color: var(--navy-2); border-bottom-color: var(--orange); }
+/* O número na aba é o que faz a aba fechada continuar avisando. Sem ele,
+   esconder as tarefas atrás de um clique esconderia também o atraso. */
+.abas-cockpit .conta {
+  min-width: 18px; padding: 0 5px; border-radius: 9px;
+  background: var(--line); color: var(--text);
+  font-size: .68rem; font-weight: 700; text-align: center;
+}
+.abas-cockpit .conta.zap { background: var(--navy); color: #fff; }
+.abas-cockpit .aba.ativa .conta { background: var(--orange); color: #fff; }
+
+.corpo-aba { margin-top: 14px; }

@@ -544,7 +544,8 @@
     { local: 'tarefas', remota: 'tarefas' },
     { local: 'produtos', remota: 'produtos' },
     { local: 'segmentos', remota: 'segmentos' },
-    { local: 'tiposTarefa', remota: 'tipos_tarefa' }
+    { local: 'tiposTarefa', remota: 'tipos_tarefa' },
+    { local: 'fontes', remota: 'fontes' }
   ];
 
   /* camelCase no app, snake_case no Postgres: a conversão é mecânica. */
