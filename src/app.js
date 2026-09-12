@@ -1021,7 +1021,7 @@
             .concat(Store.nomesDoCatalogo('segmentos').map(function (n) { return { valor: n, rotulo: n }; })) },
         { id: 'titulo', rotulo: 'Oportunidade' },
         { id: 'valor', rotulo: 'Valor (R$)', tipo: 'moeda' },
-        { id: 'fechamentoPrevisto', rotulo: 'Fechamento previsto', tipo: 'date',
+        { id: 'fechamentoPrevisto', rotulo: 'Previsão de fechamento', tipo: 'date',
           padrao: Store.daquiADias(Store.PRAZO_PADRAO_DE_FECHAMENTO) },
         { id: 'contatoNome', rotulo: 'Contato (opcional)' },
         { id: 'contatoCargo', rotulo: 'Cargo do contato' },
@@ -1494,19 +1494,75 @@
       const op = Store.oportunidade(id);
       if (!op) return;
       const contas = Store.dados().contas;
-      const jaTem = (op.itens || []).map(function (i) { return i.produtoId; });
       U.formulario('Editar oportunidade', camposOportunidade(contas, op.contaId, {
-        edicao: true, produtoIds: jaTem, fonteId: op.fonteId || ''
+        edicao: true, fonteId: op.fonteId || '', temItens: (op.itens || []).length > 0
       }).concat([
         { id: 'notas', rotulo: 'Notas', tipo: 'textarea' }
       ]), op, function (d) {
-        const ids = d.produtoIds;
-        delete d.produtoIds;
+        /* Nada de itens por aqui. Este formulário não conhece a lista, e é
+           por isso que ele não pode apagá-la — era o que acontecia quando o
+           multi-select saía vazio. */
         Store.atualizarOportunidade(id, d);
-        /* Desmarcar tudo é uma escolha, não um esquecimento: limpa os itens. */
-        const atual = Store.oportunidade(id);
-        if (ids && ids.length) aplicarItens(atual, ids);
-        else if (atual) { atual.itens = []; Store.salvar(); }
+        render();
+      });
+    },
+
+    /* ---------- Itens da oportunidade ----------
+       O que ESTE negócio leva, que não é o catálogo da empresa. Escolher o
+       produto traz o preço de tabela como sugestão e o tipo de cobrança como
+       padrão — e os dois ficam editáveis, porque negociação é exatamente
+       mexer neles. */
+    adicionarItem: function (opId) {
+      const op = Store.oportunidade(opId);
+      if (!op) return;
+      const produtos = Store.catalogoAtivos('produtos');
+      if (!produtos.length) {
+        alert('Nenhum produto cadastrado.\n\n' +
+          'A lista do que a empresa vende fica em Cadastros → Produtos, e só o gestor mexe nela. ' +
+          'Aqui você escolhe quais entram neste negócio.');
+        return;
+      }
+      U.formulario('Adicionar produto ou serviço', camposDoItem(produtos), {
+        produtoId: produtos[0].id,
+        quantidade: 1,
+        precoUnitario: produtos[0].precoReferencia || 0,
+        recorrencia: produtos[0].tipoCobranca || 'unico',
+        desconto: 0
+      }, function (d) {
+        Store.adicionarItem(opId, d);
+        render();
+      }, ligarPrecoDoProduto(produtos));
+    },
+
+    editarItem: function (opId, itemId) {
+      const op = Store.oportunidade(opId);
+      const item = op && (op.itens || []).find(function (i) { return i.id === itemId; });
+      if (!item) return;
+      const produtos = Store.catalogoAtivos('produtos');
+      U.formulario('Editar o item', camposDoItem(produtos, item), item, function (d) {
+        Store.atualizarItem(opId, itemId, {
+          quantidade: d.quantidade, precoUnitario: d.precoUnitario,
+          recorrencia: d.recorrencia, desconto: d.desconto
+        });
+        render();
+      });
+    },
+
+    excluirItem: function (opId, itemId) {
+      if (!U.confirmar('Tirar este item do negócio? O valor é recalculado.')) return;
+      Store.removerItem(opId, itemId);
+      render();
+    },
+
+    prazoContrato: function (opId) {
+      const op = Store.oportunidade(opId);
+      if (!op) return;
+      U.formulario('Prazo do contrato', [
+        { id: 'meses', rotulo: 'Meses', tipo: 'number',
+          dica: 'Por quantos meses o valor mensal entra no valor do negócio. ' +
+            'É o que transforma "5 mil por mês" num número que a previsão consegue somar.' }
+      ], { meses: Store.totaisDaOportunidade(op).meses }, function (d) {
+        Store.definirPrazoContrato(opId, d.meses);
         render();
       });
     },
@@ -6282,7 +6338,11 @@
       { id: 'sku', rotulo: 'Código / SKU' },
       { id: 'categoria', rotulo: 'Categoria' },
       { id: 'unidade', rotulo: 'Unidade', placeholder: 'un, kg, t, hora, mês' },
-      { id: 'precoReferencia', rotulo: 'Preço de referência (R$)', tipo: 'moeda' },
+      { id: 'precoReferencia', rotulo: 'Preço de referência (R$)', tipo: 'moeda',
+        dica: 'O preço de tabela. Cada oportunidade congela o valor do dia em que o item entrou, então mexer aqui não reescreve o que já foi negociado.' },
+      { id: 'tipoCobranca', rotulo: 'Como se cobra', tipo: 'select',
+        opcoes: P.RECORRENCIAS.map(function (r) { return { valor: r.id, rotulo: r.rotulo + ' — ' + r.nota }; }),
+        dica: 'É só o padrão que o item traz ao entrar num negócio; lá dentro ele continua editável.' },
       { id: 'descricao', rotulo: 'Descrição', tipo: 'textarea' }
     ];
   }
@@ -6442,18 +6502,15 @@
      de referência: a negociação do preço acontece depois, e chutar quantidade
      aqui seria inventar. O valor do negócio só é preenchido quando estava
      zerado — se a pessoa digitou um valor, ele vence a soma do catálogo. */
+  /* O caminho rápido da criação: marcar produtos vira uma linha cada, com
+     quantidade 1 e o preço de tabela. É o começo, não o fim — quantidade,
+     preço negociado e desconto se ajustam depois na aba Produtos, que é onde
+     cada linha tem os campos que a negociação usa. */
   function aplicarItens(op, ids) {
     const escolhidos = (ids || []).filter(Boolean);
     if (!escolhidos.length) return 0;
-    op.itens = escolhidos.map(function (id) {
-      const p = Store.produto(id);
-      return { produtoId: id, quantidade: 1, precoUnitario: p ? (p.precoReferencia || 0) : 0 };
-    });
-    if (!op.valor) {
-      op.valor = op.itens.reduce(function (soma, i) { return soma + (i.precoUnitario || 0); }, 0);
-    }
-    Store.salvar();
-    return op.itens.length;
+    escolhidos.forEach(function (id) { Store.adicionarItem(op.id, { produtoId: id, quantidade: 1 }); });
+    return (Store.oportunidade(op.id).itens || []).length;
   }
 
   /* Cria o contato que o vendedor digitou no próprio formulário e o vincula
@@ -6495,7 +6552,8 @@
         return {
           valor: p.id,
           rotulo: p.nome,
-          nota: [p.categoria, p.unidade, p.precoReferencia ? U.moeda(p.precoReferencia) : '']
+          nota: [p.categoria, p.unidade, p.precoReferencia ? U.moeda(p.precoReferencia) : '',
+            p.tipoCobranca === 'mensal' ? 'mensal' : '']
             .filter(Boolean).join(' · ')
         };
       })
@@ -6512,6 +6570,52 @@
   function fonteDoLinkedHelper() {
     const f = Store.criarNoCatalogo('fontes', { nome: 'Linked Helper', categoria: 'saida' });
     return f ? f.id : '';
+  }
+
+  /* O produto só se escolhe ao criar o item. Trocar o produto de uma linha que
+     já existe é apagar uma e criar outra — e assim fica claro que o preço de
+     tabela congelado é o do produto certo. */
+  function camposDoItem(produtos, item) {
+    const escolha = item
+      ? { tipo: 'aviso', rotulo: 'Produto ou serviço: ' + item.nome +
+          (item.precoTabela ? ' · tabela ' + U.moeda(item.precoTabela) + ' quando entrou' : '') }
+      : { id: 'produtoId', rotulo: 'Produto ou serviço', tipo: 'select',
+          opcoes: produtos.map(function (p) {
+            return { valor: p.id, rotulo: p.nome +
+              (p.precoReferencia ? ' — ' + U.moeda(p.precoReferencia) : '') };
+          }),
+          dica: 'A lista da empresa, de Cadastros → Produtos. Escolher traz o preço de tabela como sugestão.' };
+
+    return [
+      escolha,
+      { id: 'quantidade', rotulo: 'Quantidade', tipo: 'number', largura: 'metade' },
+      { id: 'precoUnitario', rotulo: 'Valor unitário', tipo: 'moeda', largura: 'metade',
+        dica: 'O preço negociado. Sai do catálogo e vira desta oportunidade.' },
+      { id: 'recorrencia', rotulo: 'Recorrência', tipo: 'select', largura: 'metade',
+        opcoes: P.RECORRENCIAS.map(function (r) {
+          return { valor: r.id, rotulo: r.rotulo + ' — ' + r.nota };
+        }),
+        dica: 'Único e mensal nunca somam entre si na tela.' },
+      { id: 'desconto', rotulo: 'Desconto (%)', tipo: 'number', largura: 'metade' }
+    ];
+  }
+
+  /* Trocar o produto troca a sugestão de preço e de cobrança. Sem isto a
+     pessoa escolhe o item e fica com o preço do anterior — que é o jeito mais
+     silencioso de mandar uma proposta errada. */
+  function ligarPrecoDoProduto(produtos) {
+    return function (dlg) {
+      const sel = dlg.querySelector('[name="produtoId"]');
+      const preco = dlg.querySelector('[name="precoUnitario"]');
+      const rec = dlg.querySelector('[name="recorrencia"]');
+      if (!sel || !preco) return;
+      sel.addEventListener('change', function () {
+        const p = produtos.find(function (x) { return x.id === sel.value; });
+        if (!p) return;
+        preco.value = U.paraCampoMoeda(p.precoReferencia || 0);
+        if (rec) rec.value = p.tipoCobranca || 'unico';
+      });
+    };
   }
 
   function campoDeFonte(padrao) {
@@ -6560,12 +6664,24 @@
       { id: 'contatoTelefone', rotulo: 'Telefone / WhatsApp', largura: 'metade' }
     ];
 
-    return base.concat(doContato).concat([
-      campoDeProdutos(o.produtoIds),
-      { id: 'valor', rotulo: 'Valor (R$)', tipo: 'moeda' },
+    /* Na edição o multi-select de produtos não aparece, e não é esquecimento:
+       ele reconstrói a lista do zero a cada salvamento, com quantidade 1 e
+       preço de tabela. Quem já ajustou quantidade, preço negociado e desconto
+       perderia tudo ao mexer no título. A lista se edita na aba Produtos, que
+       é onde cada linha tem os campos que importam.
+
+       O valor também sai quando já existe item: ali ele é conta, não
+       digitação, e um campo editável que o sistema sobrescreve em seguida é
+       pior do que campo nenhum. */
+    const daVenda = o.edicao
+      ? (o.temItens ? [] : [{ id: 'valor', rotulo: 'Valor (R$)', tipo: 'moeda',
+          dica: 'Digitado à mão enquanto não houver produtos na aba Produtos. Assim que houver, o valor passa a ser somado deles.' }])
+      : [campoDeProdutos(o.produtoIds), { id: 'valor', rotulo: 'Valor (R$)', tipo: 'moeda' }];
+
+    return base.concat(doContato).concat(daVenda).concat([
       { id: 'etapa', rotulo: 'Etapa CRM', tipo: 'select', opcoes: P.ETAPAS },
       { id: 'tipo', rotulo: 'Tipo', tipo: 'select', opcoes: P.TIPOS_OPORTUNIDADE },
-      { id: 'fechamentoPrevisto', rotulo: 'Fechamento previsto', tipo: 'date',
+      { id: 'fechamentoPrevisto', rotulo: 'Previsão de fechamento', tipo: 'date',
         padrao: Store.daquiADias(Store.PRAZO_PADRAO_DE_FECHAMENTO) },
       campoDeFonte(o.fonteId),
       { id: 'campanha', rotulo: 'Campanha', largura: 'metade',

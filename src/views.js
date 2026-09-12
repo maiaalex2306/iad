@@ -1757,9 +1757,13 @@
   function fichaDaOportunidade(op, r) {
     const conta = r.conta;
     const tempo = r.tempoNaEtapa === 1 ? 'há 1 dia' : 'há ' + r.tempoNaEtapa + ' dias';
+    const t = Store.totaisDaOportunidade(op);
     const campos = [
       ['Conta', conta ? esc(conta.nome) : '—'],
-      ['Valor total', U.moeda(op.valor)],
+      /* Quando há itens, o valor é conta e não digitação — e dizer de onde ele
+         vem evita a pergunta "por que não consigo mudar este campo?". */
+      ['Valor total', U.moeda(op.valor) +
+        (t.temItens ? '<span class="tiny muted">somado dos itens</span>' : '')],
       ['Etapa CRM', esc(op.etapa) + ' <span class="muted">' + tempo + '</span>'],
       ['Tipo', esc(op.tipo || 'Novo negócio')],
       ['Previsão de fechamento', op.fechamentoPrevisto ? U.data(op.fechamentoPrevisto) : '—'],
@@ -1769,6 +1773,14 @@
       ['Criada em', op.criadoEm ? U.data(op.criadoEm) : '—'],
       ['Concorrentes', op.concorrentes ? esc(op.concorrentes) : '—']
     ];
+
+    /* O mensal ganha linha própria em vez de entrar no valor total como se
+       fosse a mesma moeda. Aparece só quando existe: campo vazio para quem
+       nunca vende recorrência é ruído permanente. */
+    if (t.mensal) {
+      campos.splice(2, 0, ['Valor mensal', U.moeda(t.mensal) +
+        '<span class="tiny muted">× ' + t.meses + ' meses de contrato</span>']);
+    }
     return '<div class="card ficha">' + campos.map(function (c) {
       return '<div class="ficha-campo"><span class="rot">' + esc(c[0]) + '</span>' +
         '<span class="val">' + c[1] + '</span></div>';
@@ -1898,56 +1910,84 @@
       '<div class="lista-conversas">' + minhas.map(linhaDeConversa).join('') + '</div></div>';
   }
 
-  /* O que está sendo vendido. Ficava numa linha de texto — "Compõe: A · B · C"
-     — sem quantidade, sem preço e sem soma. Escolher produto no cadastro e não
-     ver o que se escolheu é a mesma coisa que não ter escolhido. */
+  /* ---------------- A aba Produtos ----------------
+
+     Duas tabelas, e confundi-las é o erro clássico. O CATÁLOGO, em Cadastros →
+     Produtos, é o que a empresa vende: uma lista só, do gestor, com preço de
+     referência. Os ITENS são o que ESTE negócio leva — quantidade, preço
+     negociado e desconto são da negociação, não do catálogo.
+
+     Por isso a linha guarda o preço de tabela do dia em que entrou, e mostra a
+     variação ao lado do preço praticado. Descobrir que se vendeu 18% abaixo da
+     tabela é informação; descobrir isso depois de assinado é prejuízo. */
   function abaProdutos(op) {
+    const t = Store.totaisDaOportunidade(op);
     const topo = '<div class="card"><div class="row"><h2 style="margin:0">Produtos e serviços</h2>' +
       '<span class="espaco"></span>' +
-      '<button class="btn ghost mini" onclick="App.editarOportunidade(\'' + op.id + '\')">Editar a lista</button></div>';
+      '<button class="btn alt mini" onclick="App.adicionarItem(\'' + op.id + '\')">+ Adicionar</button></div>' +
+      '<p class="tiny muted" style="margin:6px 0 0">O que ESTE negócio leva. A lista da empresa fica ' +
+      'em Cadastros → Produtos; aqui a quantidade, o preço e o desconto são desta negociação.</p>';
 
-    const itens = (op.itens || []).map(function (i) {
-      const p = Store.produto(i.produtoId);
-      const qtd = i.quantidade || 1;
-      const preco = i.precoUnitario != null ? i.precoUnitario : ((p && p.precoReferencia) || 0);
-      return {
-        nome: p ? p.nome : 'Produto que saiu do catálogo',
-        nota: p ? [p.categoria, p.unidade].filter(Boolean).join(' · ') : '',
-        qtd: qtd, preco: preco, total: preco * qtd
-      };
-    });
-
-    if (!itens.length) {
-      return topo + '<div class="vazio">Nenhum produto escolhido. O valor do negócio está digitado à mão.</div></div>';
+    if (!t.temItens) {
+      return topo + '<div class="vazio">Nenhum item ainda. Enquanto a lista estiver vazia, o valor ' +
+        'do negócio é o que foi digitado à mão — ' + U.moeda(op.valor) + '.</div></div>';
     }
 
-    const soma = itens.reduce(function (s, i) { return s + i.total; }, 0);
-    const linhas = itens.map(function (i) {
-      return '<tr><td><strong>' + esc(i.nome) + '</strong>' +
-        (i.nota ? '<span class="tiny muted">' + esc(i.nota) + '</span>' : '') + '</td>' +
-        '<td class="right">' + i.qtd + '</td>' +
-        '<td class="right">' + U.moeda(i.preco) + '</td>' +
-        '<td class="right">' + U.moeda(i.total) + '</td></tr>';
+    const linhas = op.itens.map(function (i) {
+      const rec = (P.RECORRENCIAS.find(function (r) { return r.id === i.recorrencia; }) || {}).rotulo || 'Único';
+      /* A variação contra a tabela, quando houve. Percentual e não valor: é
+         assim que se pensa desconto, e é assim que se compara entre itens. */
+      const tab = Number(i.precoTabela) || 0;
+      const uni = Number(i.precoUnitario) || 0;
+      const variacao = tab && Math.abs(tab - uni) > 0.005
+        ? '<span class="tiny ' + (uni < tab ? 'atrasado' : 'muted') + '">tabela ' + U.moeda(tab) +
+          ' (' + (uni < tab ? '−' : '+') + Math.round(Math.abs(uni - tab) / tab * 100) + '%)</span>'
+        : '';
+      return '<tr><td style="min-width:150px"><strong>' + esc(i.nome) + '</strong>' +
+        (i.produtoId ? '' : '<span class="tiny muted">fora do catálogo</span>') + '</td>' +
+        '<td>' + esc(rec) + '</td>' +
+        '<td class="right">' + U.numero(i.quantidade) + '</td>' +
+        '<td class="right">' + U.moeda(uni) + variacao + '</td>' +
+        '<td class="right">' + (i.desconto ? U.numero(i.desconto, 1) + '%' : '—') + '</td>' +
+        '<td class="right"><strong>' + U.moeda(Store.totalDoItem(i)) + '</strong>' +
+        (i.recorrencia === 'mensal' ? '<span class="tiny muted">por mês</span>' : '') + '</td>' +
+        '<td class="right" style="white-space:nowrap">' +
+        '<button class="btn ghost mini" onclick="App.editarItem(\'' + op.id + '\',\'' + i.id + '\')">Editar</button> ' +
+        '<button class="btn ghost mini" onclick="App.excluirItem(\'' + op.id + '\',\'' + i.id + '\')">Excluir</button></td></tr>';
     }).join('');
 
-    /* A soma dos itens e o valor do negócio são dois números independentes: o
-       valor é digitado à mão e ninguém o recalcula quando a lista muda. Três
-       produtos somando 300 mil dentro de um negócio que diz valer 80 é o tipo
-       de erro que só aparece na proposta, tarde demais. Enquanto a proposta
-       não existir, o mínimo honesto é apontar a diferença. */
-    const divergencia = Math.abs(soma - (op.valor || 0)) > 0.5
-      ? '<div class="aviso" style="margin-top:10px">A soma dos itens é ' + U.moeda(soma) +
-        ' e o valor do negócio é ' + U.moeda(op.valor) + '. Os dois números são digitados ' +
-        'separadamente — confira qual está certo.</div>'
+    /* Os três números, em linhas separadas. Único e mensal nunca somam entre
+       si — somar seria dizer que 10 mil de implantação e 10 mil por mês são a
+       mesma coisa. O que soma os dois é o total do contrato, e só porque ali o
+       prazo está escrito na conta, à vista, para ser conferido. */
+    const total = function (rot, valor, nota) {
+      return '<tr><td colspan="5" class="right">' + rot +
+        (nota ? ' <span class="tiny muted">' + esc(nota) + '</span>' : '') + '</td>' +
+        '<td class="right">' + valor + '</td><td></td></tr>';
+    };
+
+    const rodape = '<tfoot>' +
+      total('Soma dos itens únicos', U.moeda(t.unico)) +
+      (t.mensal ? total('Soma dos mensais', U.moeda(t.mensal) + '<span class="tiny muted">por mês</span>') : '') +
+      total('<strong>Valor do negócio</strong>',
+        '<strong>' + U.moeda(t.contrato) + '</strong>',
+        t.mensal ? 'único + mensal × ' + t.meses + ' meses' : '') +
+      '</tfoot>';
+
+    const prazo = t.mensal
+      ? '<div class="row" style="margin-top:10px;align-items:center;gap:8px">' +
+        '<span class="small muted">Prazo do contrato:</span>' +
+        '<strong class="small">' + t.meses + ' meses</strong>' +
+        '<button class="btn ghost mini" onclick="App.prazoContrato(\'' + op.id + '\')">Mudar</button>' +
+        '<span class="tiny muted">é por quantos meses o valor mensal entra no valor do negócio</span></div>'
       : '';
 
     return topo +
       '<div class="tabela-rolagem" style="margin-top:10px"><table>' +
-      '<thead><tr><th>Item</th><th class="right">Qtd.</th><th class="right">Preço</th><th class="right">Total</th></tr></thead>' +
-      '<tbody>' + linhas + '</tbody>' +
-      '<tfoot><tr><td colspan="3" class="right"><strong>Soma dos itens</strong></td>' +
-      '<td class="right"><strong>' + U.moeda(soma) + '</strong></td></tr></tfoot>' +
-      '</table></div>' + divergencia + '</div>';
+      '<thead><tr><th>Item</th><th>Cobrança</th><th class="right">Qtd.</th>' +
+      '<th class="right">Preço</th><th class="right">Desc.</th><th class="right">Total</th><th></th></tr></thead>' +
+      '<tbody>' + linhas + '</tbody>' + rodape + '</table></div>' +
+      prazo + '</div>';
   }
 
   function abaEmail(op) {
@@ -3481,6 +3521,7 @@
         '<td>' + esc(p.categoria || '—') + '</td>' +
         '<td>' + esc(p.unidade || '—') + '</td>' +
         '<td class="right">' + (p.precoReferencia ? U.moeda(p.precoReferencia) : '—') + '</td>' +
+        '<td>' + (p.tipoCobranca === 'mensal' ? 'Mensal' : 'Único') + '</td>' +
         '<td class="right">' + usos + '</td>' +
         '<td class="right" style="white-space:nowrap">' +
           (global.IADAuth.ehGestor()
@@ -3490,7 +3531,7 @@
             ? '<button class="btn ghost mini" onclick="App.excluirItemCatalogo(\'produtos\',\'' + p.id + '\')">Excluir</button>'
             : '') + '</td></tr>';
     }).join('');
-    return tabela(['Produto', 'SKU', 'Categoria', 'Unidade', 'Preço de referência', 'Em uso', ''], linhas, 'Nenhum produto cadastrado.');
+    return tabela(['Produto', 'SKU', 'Categoria', 'Unidade', 'Preço de referência', 'Cobrança', 'Em uso', ''], linhas, 'Nenhum produto cadastrado.');
   }
 
   function listaUsuarios() {

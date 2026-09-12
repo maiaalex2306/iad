@@ -1531,7 +1531,12 @@ dialog.conversa { width: min(560px, 94vw); }
   color: var(--muted); font-weight: 600;
 }
 .ficha-campo .val { font-size: .88rem; font-weight: 600; overflow-wrap: anywhere; }
-.ficha-campo .val .muted, .ficha-campo .val .tiny { font-weight: 400; }
+/* A nota embaixo do valor, e não colada nele: "R$ 260.000somado dos itens"
+   é uma frase que ninguém consegue ler na primeira passada. */
+.ficha-campo .val .muted { font-weight: 400; }
+.ficha-campo .val .tiny { display: block; font-weight: 400; line-height: 1.35; }
+/* Mesma regra dentro das tabelas: a nota fica embaixo do número. */
+td .tiny { display: block; line-height: 1.35; }
 
 /* A barra de abas. Rola de lado no celular em vez de quebrar em duas linhas:
    oito abas empilhadas empurrariam o conteúdo para fora da primeira tela, que

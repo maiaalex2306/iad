@@ -88,6 +88,10 @@ create table if not exists public.oportunidades (
   conta_id             text,
   titulo               text not null,
   valor                numeric default 0,
+  /* Soma dos itens mensais. Nunca somada ao valor único — o valor do negócio é
+     unico + mensal * prazo_contrato_meses, com o prazo à vista na conta. */
+  valor_mensal         numeric default 0,
+  prazo_contrato_meses int default 12,
   etapa                text default 'Prospecção',
   etapa_desde          date,
   tipo                 text default 'Novo negócio',
@@ -149,6 +153,8 @@ create table if not exists public.produtos (
   categoria      text default '',
   unidade        text default '',
   preco_referencia numeric default 0,
+  /* unico ou mensal: só o padrão que o item leva ao entrar num negócio. */
+  tipo_cobranca  text default 'unico',
   descricao      text default '',
   ativo          boolean default true,
   criado_em      date default current_date,

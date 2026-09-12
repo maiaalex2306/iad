@@ -395,6 +395,22 @@
     { nome: 'Não informada', categoria: 'outra' }
   ];
 
+  /* ---------------- Como se cobra ----------------
+
+     O campo que muda todo o resto. Sem ele, 10 mil de implantação e 10 mil por
+     mês são o mesmo número dentro do sistema — e não são a mesma coisa em
+     lugar nenhum do mundo. Por isso os dois nunca somam na tela: aparecem em
+     linhas separadas, e o total do contrato é a conta explícita entre eles. */
+  const RECORRENCIAS = [
+    { id: 'unico', rotulo: 'Único', nota: 'cobrado uma vez' },
+    { id: 'mensal', rotulo: 'Mensal', nota: 'cobrado todo mês' }
+  ];
+
+  /* Por quantos meses o mensal é contado no valor do negócio. Doze porque é o
+     prazo de contrato mais comum, e porque um número redondo é fácil de
+     conferir — o campo fica à vista na oportunidade, para ser trocado. */
+  const PRAZO_CONTRATO_PADRAO = 12;
+
   const CATEGORIAS_ARQUIVO = [
     'Business case', 'Critérios de avaliação', 'Proposta', 'Contrato',
     'Referência / case', 'Dados do cliente', 'Ata de reunião', 'Outro'
@@ -508,7 +524,7 @@
     DESFECHOS_RENOMEADOS, MOTIVOS_PERDA, MOTIVOS_DESISTENCIA, MOTIVOS_NUTRICAO, PRAZOS_NUTRICAO,
     NIVEIS_DA_ESCADA, NOTA_MAXIMA, IAD_MAXIMO, IAD_MADURO,
     FORCAS, FORCA_MINIMA_DO_DEGRAU, TIPOS_TAREFA, TIPOS_TAREFA_RENOMEADOS, CATEGORIAS_ARQUIVO,
-    CATEGORIAS_FONTE, FONTES_PADRAO,
+    CATEGORIAS_FONTE, FONTES_PADRAO, RECORRENCIAS, PRAZO_CONTRATO_PADRAO,
     PERFIS, PERFIS_MOBILIZADORES, ESTADOS_INSIGHT,
     RELACOES_CONTA, TIPOS_OPORTUNIDADE, FECHAMENTO_REUNIAO,
     CANAIS, FAIXAS_EVIDENCIA, ATIVIDADES_QUE_NAO_CONTAM

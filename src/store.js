@@ -78,6 +78,35 @@
     });
   }
 
+  /* A linha de item nasceu com três campos: produto, quantidade e preço. Sem
+     id não dá para editar nem excluir uma linha específica, e sem o nome e o
+     preço congelados a linha muda sozinha quando o catálogo muda.
+
+     O que esta migração NÃO faz é recalcular o valor do negócio. A carteira
+     que já existe tem valor digitado à mão, e mexer nele aqui trocaria dezenas
+     de números sem ninguém pedir. O valor só passa a ser calculado a partir do
+     momento em que alguém mexe na lista. */
+  function completarItens(dados) {
+    (dados.oportunidades || []).forEach(function (op) {
+      if (op.prazoContratoMeses == null) {
+        op.prazoContratoMeses = (global.IADPlaybook && global.IADPlaybook.PRAZO_CONTRATO_PADRAO) || 12;
+      }
+      if (op.valorMensal == null) op.valorMensal = 0;
+      (op.itens || []).forEach(function (i) {
+        if (!i.id) i.id = uid('itm');
+        if (i.nome == null) {
+          const p = (dados.produtos || []).find(function (x) { return x.id === i.produtoId; });
+          i.nome = p ? p.nome : '';
+          if (i.precoTabela == null) i.precoTabela = p ? (Number(p.precoReferencia) || 0) : 0;
+        }
+        if (i.precoTabela == null) i.precoTabela = Number(i.precoUnitario) || 0;
+        if (i.recorrencia == null) i.recorrencia = 'unico';
+        if (i.desconto == null) i.desconto = 0;
+        if (i.quantidade == null) i.quantidade = 1;
+      });
+    });
+  }
+
   function estadoVazio() {
     return {
       versao: VERSAO, tenants: [], usuarios: [],
@@ -175,6 +204,7 @@
     }
     semearFontes(dados);
     amarrarFontes(dados);
+    completarItens(dados);
     /* Tarefa nasce planejada (marquei para fazer) ou registrada (aconteceu e
        eu anotei depois). As duas concluídas contam igual no funil e não contam
        igual na metodologia: a primeira mostra disciplina de planejamento, a
@@ -756,6 +786,10 @@
       fechamentoPrevisto: daquiADias(PRAZO_PADRAO_DE_FECHAMENTO),
       adiamentos: 0,
       itens: [],
+      /* O que o mensal soma no valor do negócio. Fica na oportunidade e não no
+         item porque prazo é do contrato, não de cada linha. */
+      prazoContratoMeses: (global.IADPlaybook && global.IADPlaybook.PRAZO_CONTRATO_PADRAO) || 12,
+      valorMensal: 0,
       proximoCompromisso: null,
       insight: { texto: '', estado: 'nenhum', atualizadoEm: null },
       dims: { problema: 0, prioridade: 0, impacto: 0, criterios: 0, stakeholders: 0, consenso: 0, risco: 0, processo: 0 },
@@ -910,6 +944,116 @@
     op.proximoCompromisso = compromisso && compromisso.data
       ? Object.assign({ registradoEm: hoje() }, compromisso)
       : null;
+    salvar();
+    return op;
+  }
+
+  /* ---------- Itens da oportunidade ----------
+
+     Duas tabelas, e a confusão entre elas é o erro clássico. O CATÁLOGO é o
+     que a empresa vende: uma lista só, do gestor, com preço de referência. Os
+     ITENS são o que ESTE negócio leva: quantidade, preço negociado e desconto,
+     que são de cada negociação e de mais ninguém.
+
+     Por isso a linha congela `nome` e `precoTabela` no dia em que entra. Sem
+     congelar, mexer no catálogo reescreve o passado: o gestor sobe o preço em
+     março e a proposta enviada em janeiro passa a dizer outra coisa. */
+  function itemNovo(dados) {
+    const p = dados.produtoId ? produto(dados.produtoId) : null;
+    return {
+      id: uid('itm'),
+      produtoId: dados.produtoId || '',
+      nome: dados.nome || (p ? p.nome : ''),
+      quantidade: Number(dados.quantidade) || 1,
+      precoTabela: p ? (Number(p.precoReferencia) || 0) : 0,
+      precoUnitario: dados.precoUnitario != null
+        ? (Number(dados.precoUnitario) || 0)
+        : (p ? (Number(p.precoReferencia) || 0) : 0),
+      recorrencia: dados.recorrencia || (p && p.tipoCobranca) || 'unico',
+      desconto: Number(dados.desconto) || 0
+    };
+  }
+
+  function totalDoItem(i) {
+    const bruto = (Number(i.precoUnitario) || 0) * (Number(i.quantidade) || 0);
+    return bruto * (1 - (Number(i.desconto) || 0) / 100);
+  }
+
+  /* O único e o mensal nunca somam entre si. O que soma os dois é o total do
+     contrato, e só porque ali o prazo está explícito na conta. */
+  function totaisDaOportunidade(op) {
+    const itens = (op && op.itens) || [];
+    let unico = 0, mensal = 0;
+    itens.forEach(function (i) {
+      if (i.recorrencia === 'mensal') mensal += totalDoItem(i);
+      else unico += totalDoItem(i);
+    });
+    const padrao = (global.IADPlaybook && global.IADPlaybook.PRAZO_CONTRATO_PADRAO) || 12;
+    const meses = Number(op && op.prazoContratoMeses) || padrao;
+    return { unico: unico, mensal: mensal, meses: meses,
+             contrato: unico + mensal * meses, temItens: itens.length > 0 };
+  }
+
+  /* Sem item nenhum o valor continua sendo o que a pessoa digitou. É o que
+     protege a carteira que já existe: recalcular tudo na migração zeraria
+     dezenas de negócios que nunca tiveram lista de produtos. */
+  function recalcularValor(op) {
+    if (!op) return;
+    const t = totaisDaOportunidade(op);
+    if (!t.temItens) return;
+    op.valor = t.contrato;
+    op.valorMensal = t.mensal;
+  }
+
+  function itensDaOportunidade(opId) {
+    const op = oportunidade(opId);
+    return (op && op.itens) || [];
+  }
+
+  function adicionarItem(opId, dados) {
+    const op = oportunidade(opId);
+    if (!op) return null;
+    op.itens = op.itens || [];
+    const item = itemNovo(dados || {});
+    if (!item.nome) return null;
+    op.itens.push(item);
+    recalcularValor(op);
+    salvar();
+    return item;
+  }
+
+  function atualizarItem(opId, itemId, mudancas) {
+    const op = oportunidade(opId);
+    if (!op) return null;
+    const item = (op.itens || []).find(function (i) { return i.id === itemId; });
+    if (!item) return null;
+    Object.assign(item, mudancas);
+    item.quantidade = Number(item.quantidade) || 1;
+    item.precoUnitario = Number(item.precoUnitario) || 0;
+    item.desconto = Number(item.desconto) || 0;
+    recalcularValor(op);
+    salvar();
+    return item;
+  }
+
+  function removerItem(opId, itemId) {
+    const op = oportunidade(opId);
+    if (!op) return false;
+    const antes = (op.itens || []).length;
+    op.itens = (op.itens || []).filter(function (i) { return i.id !== itemId; });
+    if (op.itens.length === antes) return false;
+    /* Tirar o último item devolve o valor para o campo digitado, e não para
+       zero: zerar um negócio porque alguém apagou uma linha seria estrago. */
+    recalcularValor(op);
+    salvar();
+    return true;
+  }
+
+  function definirPrazoContrato(opId, meses) {
+    const op = oportunidade(opId);
+    if (!op) return null;
+    op.prazoContratoMeses = Math.max(1, Number(meses) || 1);
+    recalcularValor(op);
     salvar();
     return op;
   }
@@ -1323,6 +1467,8 @@
     daquiADias, PRAZO_PADRAO_DE_FECHAMENTO,
     dados, contexto, tenantDeTrabalho, visivel, diagnostico,
     fonte, origemDaOportunidade,
+    totaisDaOportunidade, totalDoItem, itensDaOportunidade,
+    adicionarItem, atualizarItem, removerItem, definirPrazoContrato,
     criarConta, criarContato, criarOportunidade, atualizarOportunidade, vincularStakeholder,
     pontuar, registrarEvento, removerEvento, definirCompromisso, definirInsight,
     registrarRecusa, recusas, recusasPorCampanha, limparRecusas, excluirRecusa,
