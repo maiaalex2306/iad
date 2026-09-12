@@ -200,6 +200,12 @@
   --dead:        var(--acp-dead);
   --radius:      var(--acp-radius);
   --shadow:      var(--acp-shadow);
+  /* O balão de ajuda passa a usar o lilás da própria marca: o mesmo fundo do
+     item selecionado, com o roxo profundo por tinta. #4A1078 sobre #F3ECFA dá
+     12,6:1 — o balão é o texto mais confortável do app. */
+  --dica-fundo:  var(--acp-brand-soft);
+  --dica-tinta:  var(--acp-brand-dark);
+  --dica-borda:  #E0D0F2;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

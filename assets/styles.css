@@ -13,6 +13,13 @@
   --warn: #b8860b;
   --risk: #d4761a;
   --dead: #b32d2d;
+  /* O balão de ajuda: lilás bem fraco com tinta roxa escura. Era marinho
+     sólido com texto branco, que é o desenho de aviso — e ajuda não é aviso.
+     Claro, ele explica sem parecer que alguma coisa deu errado. Medido:
+     11,9:1, bem acima do 4,5:1 que o texto normal exige. */
+  --dica-fundo: #f2edfb;
+  --dica-tinta: #35225c;
+  --dica-borda: #ddd0f2;
   --radius: 14px;
   --shadow: 0 1px 2px rgba(16, 32, 47, .06), 0 6px 20px rgba(16, 32, 47, .06);
   --safe-b: env(safe-area-inset-bottom, 0px);
@@ -22,6 +29,7 @@
   :root {
     --navy: #0a1f3a; --navy-2: #1b4f86; --orange: #ff7a29; --orange-soft: #2a1a0c;
     --bg: #0b1220; --surface: #131c2b; --line: #26344a; --text: #e8eef6; --muted: #94a6bd;
+    --dica-fundo: #241c3a; --dica-tinta: #e7dffa; --dica-borda: #3d3060;
     --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
   }
 }
@@ -758,10 +766,13 @@ dialog.caixa-ficha { width: min(520px, 94vw); }
   z-index: 200;
   max-width: 300px;
   padding: 9px 12px 10px;
-  background: var(--navy);
-  color: #fff;
+  background: var(--dica-fundo);
+  color: var(--dica-tinta);
+  border: 1px solid var(--dica-borda);
   border-radius: 8px;
-  box-shadow: 0 6px 24px rgba(16, 32, 47, .26);
+  /* Sombra de verdade, porque fundo claro sobre fundo claro precisa dela para
+     existir — no marinho a própria cor já separava o balão da página. */
+  box-shadow: 0 4px 18px rgba(16, 32, 47, .16);
   font-size: .78rem;
   line-height: 1.42;
   pointer-events: none;
@@ -770,7 +781,7 @@ dialog.caixa-ficha { width: min(520px, 94vw); }
 }
 .balao-ajuda.visivel { opacity: 1; }
 .balao-ajuda strong { display: block; font-size: .8rem; margin-bottom: 2px; }
-.balao-ajuda span { display: block; opacity: .88; }
+.balao-ajuda span { display: block; opacity: .92; }
 @media (prefers-reduced-motion: reduce) { .balao-ajuda { transition: none; } }
 
 /* ---------- Ajuda pelo contexto ----------
