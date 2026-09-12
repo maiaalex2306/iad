@@ -1516,20 +1516,34 @@
       const op = Store.oportunidade(opId);
       if (!op) return;
       const produtos = Store.catalogoAtivos('produtos');
-      if (!produtos.length) {
+      /* Catálogo vazio é beco sem saída para quem não pode cadastrar. Para o
+         gestor não é: ele entra pelo item avulso e resolve agora. */
+      if (!produtos.length && !A.ehGestor()) {
         alert('Nenhum produto cadastrado.\n\n' +
           'A lista do que a empresa vende fica em Cadastros → Produtos, e só o gestor mexe nela. ' +
-          'Aqui você escolhe quais entram neste negócio.');
+          'Peça a ele para cadastrar o que você precisa vender.');
         return;
       }
+      const primeiro = produtos[0];
       U.formulario('Adicionar produto ou serviço', camposDoItem(produtos), {
-        produtoId: produtos[0].id,
+        produtoId: primeiro ? primeiro.id : AVULSO,
+        nome: '',
         quantidade: 1,
-        precoUnitario: produtos[0].precoReferencia || 0,
-        recorrencia: produtos[0].tipoCobranca || 'unico',
+        precoUnitario: primeiro ? (primeiro.precoReferencia || 0) : 0,
+        recorrencia: (primeiro && primeiro.tipoCobranca) || 'unico',
         desconto: 0
       }, function (d) {
-        Store.adicionarItem(opId, d);
+        const avulso = d.produtoId === AVULSO;
+        if (avulso && !String(d.nome || '').trim()) {
+          alert('Dê um nome ao item avulso.');
+          return;
+        }
+        Store.adicionarItem(opId, {
+          produtoId: avulso ? '' : d.produtoId,
+          nome: avulso ? d.nome : '',
+          quantidade: d.quantidade, precoUnitario: d.precoUnitario,
+          recorrencia: d.recorrencia, desconto: d.desconto
+        });
         render();
       }, ligarPrecoDoProduto(produtos));
     },
@@ -1540,10 +1554,14 @@
       if (!item) return;
       const produtos = Store.catalogoAtivos('produtos');
       U.formulario('Editar o item', camposDoItem(produtos, item), item, function (d) {
-        Store.atualizarItem(opId, itemId, {
+        const mudancas = {
           quantidade: d.quantidade, precoUnitario: d.precoUnitario,
           recorrencia: d.recorrencia, desconto: d.desconto
-        });
+        };
+        /* O nome só viaja quando o formulário perguntou por ele — o do
+           catálogo nem aparece ali, e mandar undefined apagaria a linha. */
+        if (d.nome != null && String(d.nome).trim()) mudancas.nome = String(d.nome).trim();
+        Store.atualizarItem(opId, itemId, mudancas);
         render();
       });
     },
@@ -6247,6 +6265,7 @@
   }
 
   const NOVA_CONTA = '__nova_empresa__';
+  const AVULSO = '__item_avulso__';
 
   /* Depois de a IA ler o material, a empresa que ela achou já existe ou não.
      Existindo, escolhemos — o vendedor não precisa procurar num select o nome
@@ -6576,18 +6595,39 @@
      já existe é apagar uma e criar outra — e assim fica claro que o preço de
      tabela congelado é o do produto certo. */
   function camposDoItem(produtos, item) {
-    const escolha = item
+    /* A saída de emergência, e só para o gestor. Um frete, uma hora extra, uma
+       taxa que ninguém cadastrou: sem isto o negócio trava numa lista que o
+       vendedor não pode mexer. Com isto, quem responde pelo catálogo resolve
+       na hora — e a linha nasce marcada como fora do catálogo, para que a
+       exceção continue parecendo exceção. */
+    const podeAvulso = A.ehGestor();
+    /* Um avulso com nome errado continua editável, porque o nome dele é só um
+       texto deste negócio. O item que veio do catálogo, não: trocar o nome ali
+       seria dizer que a linha é outro produto sem trocar o preço congelado. */
+    const avulsoEmEdicao = item && !item.produtoId && podeAvulso;
+    const escolha = avulsoEmEdicao
+      ? { id: 'nome', rotulo: 'Nome do item avulso',
+          dica: 'Fica só neste negócio, fora do catálogo da empresa.' }
+      : item
       ? { tipo: 'aviso', rotulo: 'Produto ou serviço: ' + item.nome +
           (item.precoTabela ? ' · tabela ' + U.moeda(item.precoTabela) + ' quando entrou' : '') }
       : { id: 'produtoId', rotulo: 'Produto ou serviço', tipo: 'select',
           opcoes: produtos.map(function (p) {
             return { valor: p.id, rotulo: p.nome +
               (p.precoReferencia ? ' — ' + U.moeda(p.precoReferencia) : '') };
-          }),
-          dica: 'A lista da empresa, de Cadastros → Produtos. Escolher traz o preço de tabela como sugestão.' };
+          }).concat(podeAvulso ? [{ valor: AVULSO, rotulo: '— item avulso (digitar o nome) —' }] : []),
+          dica: podeAvulso
+            ? 'A lista da empresa, de Cadastros → Produtos. O item avulso vale para o que não está nela e não vai virar catálogo — frete, taxa, hora extra.'
+            : 'A lista da empresa, de Cadastros → Produtos. Falta alguma coisa aqui? Peça ao gestor, que é quem cadastra.' };
+
+    const avulso = item || !podeAvulso ? [] : [
+      { id: 'nome', rotulo: 'Nome do item avulso',
+        dica: 'Fica só neste negócio. Se for vender de novo, vale mais cadastrar em Cadastros → Produtos.' }
+    ];
 
     return [
-      escolha,
+      escolha
+    ].concat(avulso).concat([
       { id: 'quantidade', rotulo: 'Quantidade', tipo: 'number', largura: 'metade' },
       { id: 'precoUnitario', rotulo: 'Valor unitário', tipo: 'moeda', largura: 'metade',
         dica: 'O preço negociado. Sai do catálogo e vira desta oportunidade.' },
@@ -6597,7 +6637,7 @@
         }),
         dica: 'Único e mensal nunca somam entre si na tela.' },
       { id: 'desconto', rotulo: 'Desconto (%)', tipo: 'number', largura: 'metade' }
-    ];
+    ]);
   }
 
   /* Trocar o produto troca a sugestão de preço e de cobrança. Sem isto a
@@ -6609,12 +6649,22 @@
       const preco = dlg.querySelector('[name="precoUnitario"]');
       const rec = dlg.querySelector('[name="recorrencia"]');
       if (!sel || !preco) return;
-      sel.addEventListener('change', function () {
+      const ajustar = function () {
+        /* O nome só aparece quando é avulso: um campo de nome ao lado de um
+           produto escolhido da lista é uma pergunta sem resposta certa. */
+        U.mostrarCampos(dlg, ['nome'], sel.value === AVULSO);
         const p = produtos.find(function (x) { return x.id === sel.value; });
-        if (!p) return;
+        if (!p) {
+          /* Avulso nasce zerado e único: herdar o preço do item anterior é o
+             jeito silencioso de mandar uma proposta errada. */
+          if (sel.value === AVULSO) { preco.value = ''; if (rec) rec.value = 'unico'; }
+          return;
+        }
         preco.value = U.paraCampoMoeda(p.precoReferencia || 0);
         if (rec) rec.value = p.tipoCobranca || 'unico';
-      });
+      };
+      sel.addEventListener('change', ajustar);
+      ajustar();
     };
   }
 
