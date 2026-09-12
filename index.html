@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>IAD CRM — Gestão comercial orientada à decisão</title>
+<meta name="description" content="CRM que administra decisões de compra, evidências do cliente e buying groups — não apenas etapas e atividades.">
+<meta name="theme-color" content="#4A1078">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="IAD CRM">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="assets/styles.css">
+<link rel="stylesheet" href="assets/paleta-acp.css">
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div>
+      <div class="marca">IAD <span>CRM</span></div>
+      <div class="sub">O funil organiza. A decisão fecha.</div>
+    </div>
+    <div class="espaco"></div>
+    <div class="quem-caixa">
+      <button id="quem" class="quem" onclick="App.menuUsuario(event)" aria-haspopup="true" aria-expanded="false"
+              title="Sua conta: empresa ativa, troca de conta, senha e sair"></button>
+      <div id="menu-quem" class="menu-quem" hidden></div>
+    </div>
+    <button class="chamar-iad" onclick="App.conversar()" data-ajuda-titulo="Falar com a IaD" data-ajuda="Pergunte com suas palavras — tarefas do dia, qual negócio está melhor, quem sumiu — e a resposta sai dos seus dados, não do modelo." title="Falar com a IaD"><svg class="rosto-iad" width="22" height="22" viewBox="0 0 64 64" role="img" aria-label="IaD"><circle class="antena-fio" cx="32" cy="8" r="3"/><path class="antena" d="M32 11 V17"/><rect class="cabeca" x="10" y="17" width="44" height="38" rx="13"/><circle class="olho" cx="24" cy="34" r="4"/><circle class="olho" cx="40" cy="34" r="4"/><path class="boca" d="M24 44 Q32 50 40 44"/><circle class="luz" cx="32" cy="8" r="1.6"/></svg></button>
+    <button onclick="App.ir('#/playbook')" data-ajuda-titulo="O método" data-ajuda="A teoria inteira: como uma tarefa vira avanço, o que conta como evidência em cada uma das oito decisões, e o que fazer em cada canal." title="O método">❓</button>
+    <button onclick="App.sair()" data-ajuda-titulo="Sair" data-ajuda="Encerra a sessão neste aparelho. Os dados sincronizados continuam no servidor." title="Sair">⏻</button>
+  </header>
+  <nav class="tabs"></nav>
+  <div class="col"><div id="barra-admin"></div><main id="conteudo"></main></div>
+</div>
+
+<script src="src/config.js"></script>
+  <script src="src/playbook.js"></script>
+<script src="src/store.js"></script>
+<script src="src/auth.js"></script>
+<script src="src/engine.js"></script>
+<script src="src/arquivos.js"></script>
+<script src="src/csv.js"></script>
+<script src="src/integracoes.js"></script>
+<script src="src/nuvem.js"></script>
+<script src="src/documentos.js"></script>
+  <script src="src/ia.js"></script>
+<script src="src/ui.js"></script>
+  <script src="src/ajuda.js"></script>
+<script src="src/graficos.js"></script>
+<script src="src/seed.js"></script>
+<script src="src/whatsapp.js"></script>
+<script src="src/conversa.js"></script>
+<script src="src/views.js"></script>
+<script src="src/app.js"></script>
+</body>
+</html>

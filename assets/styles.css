@@ -1,0 +1,1510 @@
+/* IAD CRM — mobile-first. O mesmo CSS serve celular, tablet e desktop. */
+:root {
+  --navy: #0d2b4e;
+  --navy-2: #14406f;
+  --orange: #ef6407;
+  --orange-soft: #fff1e6;
+  --bg: #f4f6f9;
+  --surface: #ffffff;
+  --line: #dfe5ec;
+  --text: #10202f;
+  --muted: #5d7085;
+  --ok: #1a7f4b;
+  --warn: #b8860b;
+  --risk: #d4761a;
+  --dead: #b32d2d;
+  /* O balão de ajuda: lilás bem fraco com tinta roxa escura. Era marinho
+     sólido com texto branco, que é o desenho de aviso — e ajuda não é aviso.
+     Claro, ele explica sem parecer que alguma coisa deu errado. Medido:
+     11,9:1, bem acima do 4,5:1 que o texto normal exige. */
+  --dica-fundo: #f2edfb;
+  --dica-tinta: #35225c;
+  --dica-borda: #ddd0f2;
+  --radius: 14px;
+  --shadow: 0 1px 2px rgba(16, 32, 47, .06), 0 6px 20px rgba(16, 32, 47, .06);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --navy: #0a1f3a; --navy-2: #1b4f86; --orange: #ff7a29; --orange-soft: #2a1a0c;
+    --bg: #0b1220; --surface: #131c2b; --line: #26344a; --text: #e8eef6; --muted: #94a6bd;
+    --dica-fundo: #241c3a; --dica-tinta: #e7dffa; --dica-borda: #3d3060;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+h1, h2, h3, h4 { margin: 0 0 .4em; line-height: 1.25; }
+h1 { font-size: 1.35rem; letter-spacing: -.01em; }
+h2 { font-size: 1.05rem; }
+h3 { font-size: .95rem; }
+p { margin: 0 0 .8em; }
+a { color: var(--navy-2); }
+button, input, select, textarea { font: inherit; color: inherit; }
+
+/* ---------- layout ---------- */
+.app { display: flex; flex-direction: column; min-height: 100dvh; }
+.topbar {
+  position: sticky; top: 0; z-index: 50; display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px; background: var(--navy); color: #fff;
+  padding-top: calc(12px + env(safe-area-inset-top, 0px));
+}
+.topbar .marca { font-weight: 800; letter-spacing: .02em; }
+.topbar .marca span { color: var(--orange); }
+.topbar .sub { font-size: .72rem; opacity: .75; display: none; }
+.topbar .espaco { flex: 1; }
+.topbar button {
+  background: rgba(255,255,255,.12); border: 0; color: #fff; padding: 7px 12px;
+  border-radius: 999px; font-size: .8rem; cursor: pointer;
+}
+.topbar button:hover { background: rgba(255,255,255,.22); }
+
+main { flex: 1; min-width: 0; padding: 16px; padding-bottom: calc(84px + var(--safe-b)); max-width: 1680px; width: 100%; margin: 0 auto; }
+
+nav.tabs {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 40;
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  background: var(--surface); border-top: 1px solid var(--line);
+  padding-bottom: var(--safe-b);
+}
+nav.tabs a {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 9px 2px; font-size: .66rem; color: var(--muted); text-decoration: none;
+}
+nav.tabs a .ico { font-size: 1.15rem; line-height: 1; }
+nav.tabs a.ativo { color: var(--orange); font-weight: 700; }
+
+@media (min-width: 900px) {
+  .topbar .sub { display: block; }
+  .app { flex-direction: row; }
+  nav.tabs {
+    position: sticky; top: 0; height: 100dvh; width: 220px; border-top: 0;
+    border-right: 1px solid var(--line); grid-template-columns: 1fr;
+    align-content: start; gap: 2px; padding: 78px 10px 10px;
+  }
+  nav.tabs a { flex-direction: row; justify-content: flex-start; gap: 10px; font-size: .88rem; padding: 10px 12px; border-radius: 10px; }
+  nav.tabs a.ativo { background: var(--orange-soft); }
+  .topbar { position: fixed; left: 0; right: 0; }
+  main { padding: 86px 28px 40px; }
+  .app > .col { flex: 1; min-width: 0; }
+}
+
+/* ---------- componentes ---------- */
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); }
+.card + .card { margin-top: 14px; }
+.grid { display: grid; gap: 12px; }
+.grid.k2 { grid-template-columns: repeat(2, 1fr); }
+.grid.k3 { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.grid.k4 { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+@media (min-width: 1400px) {
+  .grid.k2 { grid-template-columns: repeat(2, 1fr); }
+  .mapa-decisao { grid-template-columns: repeat(8, 1fr); }
+}
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.espaco { flex: 1; }
+.muted { color: var(--muted); }
+.small { font-size: .82rem; }
+.tiny { font-size: .72rem; }
+.right { text-align: right; }
+.sec-titulo { display: flex; align-items: baseline; gap: 10px; margin: 22px 0 10px; }
+.sec-titulo h2 { margin: 0; }
+
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+.kpi .rot { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.kpi .val { font-size: 1.5rem; font-weight: 800; letter-spacing: -.02em; margin-top: 2px; }
+.kpi .obs { font-size: .74rem; color: var(--muted); }
+
+.pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px; font-size: .72rem; font-weight: 700; border: 1px solid var(--line); background: var(--bg); }
+.pill.ok { color: var(--ok); border-color: rgba(26,127,75,.35); background: rgba(26,127,75,.1); }
+.pill.warn { color: var(--warn); border-color: rgba(184,134,11,.35); background: rgba(184,134,11,.1); }
+.pill.risk { color: var(--risk); border-color: rgba(212,118,26,.35); background: rgba(212,118,26,.1); }
+.pill.dead { color: var(--dead); border-color: rgba(179,45,45,.35); background: rgba(179,45,45,.1); }
+.pill.navy { color: #fff; background: var(--navy); border-color: var(--navy); }
+
+/* Linha bloqueada: some do olhar sem sumir da tela. Quem administra precisa
+   continuar enxergando quem bloqueou — é como se desbloqueia — mas a linha não
+   pode competir com as ativas na hora de bater o olho na lista. */
+tr.bloqueada > td { opacity: .55; }
+tr.bloqueada > td:last-child { opacity: 1; }
+
+/* Subsegmentos, oportunidades e personas são listas de dez a quinze itens.
+   Em parágrafo corrido ninguém lê; em etiquetas o olho encontra o item certo
+   sem ler o resto — e é para consulta de relance que o cadastro existe. */
+/* Nome próprio: .etiqueta já existe, escopado na barra do administrador. Um
+   .etiqueta genérico aqui vazaria border e color para lá. */
+.etiquetas { display: flex; flex-wrap: wrap; gap: 4px; }
+.etiquetas > span {
+  display: inline-block; padding: 2px 7px; border-radius: 5px;
+  font-size: .7rem; line-height: 1.5;
+  border: 1px solid var(--line); background: var(--bg); color: var(--muted);
+}
+.pill.orange { color: #fff; background: var(--orange); border-color: var(--orange); }
+
+button.btn {
+  background: var(--navy); color: #fff; border: 0; border-radius: 10px;
+  padding: 10px 14px; font-weight: 600; cursor: pointer;
+}
+button.btn.alt { background: var(--orange); }
+button.btn.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+button.btn.mini { padding: 6px 10px; font-size: .78rem; border-radius: 8px; }
+button.btn:disabled { opacity: .45; cursor: not-allowed; }
+
+label.campo { display: block; margin-bottom: 10px; }
+label.campo span { display: block; font-size: .74rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 4px; }
+input, select, textarea {
+  width: 100%; padding: 10px 12px; border: 1px solid var(--line);
+  border-radius: 10px; background: var(--bg);
+}
+textarea { min-height: 78px; resize: vertical; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--navy-2); outline-offset: 1px; }
+
+.lista { display: flex; flex-direction: column; gap: 10px; }
+.item {
+  display: block; width: 100%; text-align: left; background: var(--surface);
+  border: 1px solid var(--line); border-left: 4px solid var(--line);
+  border-radius: var(--radius); padding: 13px 14px; cursor: pointer; box-shadow: var(--shadow);
+}
+.item:hover { border-color: var(--navy-2); }
+.item.g-real { border-left-color: var(--ok); }
+.item.g-oculto { border-left-color: var(--navy-2); }
+.item.g-falso { border-left-color: var(--risk); }
+.item.g-zumbi { border-left-color: var(--dead); }
+.item.g-construcao { border-left-color: var(--warn); }
+.item .tit { font-weight: 700; }
+
+/* Tarefa vencida. O laranja claro é para achar o cartão de longe; a tarja
+   embaixo diz o que é, porque cor sozinha não informa nem serve a quem não
+   distingue tons. */
+.item.com-atraso, .kanban .mini.com-atraso { background: var(--orange-soft); overflow: hidden; }
+.tarja-atraso {
+  display: block; margin: 10px -14px -13px; padding: 6px 14px;
+  border-top: 1px solid rgba(239,100,7,.35);
+  background: rgba(239,100,7,.12); color: var(--orange);
+  font-size: .76rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .04em; border-radius: 0 0 var(--radius) var(--radius);
+}
+/* No kanban a tarja fica acima das setas, então não sangra para baixo. */
+.kanban .mini .tarja-atraso {
+  margin: 8px -10px 0; padding: 5px 10px; font-size: .7rem;
+  border-bottom: 1px solid rgba(239,100,7,.35); border-radius: 0;
+}
+
+.barra { height: 8px; background: var(--line); border-radius: 999px; overflow: hidden; }
+.barra > i { display: block; height: 100%; background: var(--navy-2); }
+.barra.alt > i { background: var(--orange); }
+
+/* pontuação 0/1/2 */
+.dim { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.dim:last-child { border-bottom: 0; }
+.dim .cab { display: flex; align-items: center; gap: 8px; }
+.dim .nome { font-weight: 700; flex: 1; }
+
+/* O que sustenta a nota. Fechado por padrão: oito listas abertas viram uma
+   página de rolagem em que não se acha nada. */
+.dim details.provas > summary {
+  cursor: pointer; list-style: none;
+  font-size: .78rem; color: var(--muted);
+  padding: 6px 0 0; user-select: none;
+}
+.dim details.provas > summary::-webkit-details-marker { display: none; }
+.dim details.provas > summary::before { content: '▸ '; }
+.dim details.provas[open] > summary::before { content: '▾ '; }
+.dim details.provas > ul { list-style: none; margin: 4px 0 0; padding: 0; }
+.dim li.prova {
+  border-left: 2px solid var(--line);
+  padding: 4px 0 4px 10px; margin: 6px 0;
+}
+/* A fala do cliente é o conteúdo; o resto é procedência. A citação some se
+   vier num tamanho de nota de rodapé, que é o que ela era antes. */
+.dim li.prova .fala { font-size: .85rem; line-height: 1.35; }
+
+.dim .ja-tem .rotulo, .dim .falta-dim { font-size: .78rem; }
+.dim .ja-tem .rotulo { color: var(--muted); margin-top: 6px; font-weight: 700; }
+/* O que falta é instrução para a próxima conversa, não registro do passado.
+   A cor e a borda separam as duas coisas sem precisar de um título extra. */
+.dim .falta-dim {
+  margin-top: 8px; padding: 8px 10px;
+  border-left: 2px solid var(--warn);
+  background: color-mix(in srgb, var(--warn) 7%, transparent);
+  border-radius: 0 6px 6px 0; line-height: 1.5;
+}
+.notas { display: flex; gap: 6px; }
+/* Cinco botões em vez de três: mais estreitos, para caber no celular sem
+   empurrar o nome da decisão para a linha de baixo. */
+.notas button {
+  width: 30px; height: 32px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--bg); cursor: pointer; font-weight: 700; color: var(--muted);
+}
+/* A cor conta a mesma história da escada: vermelho é não saber, âmbar é
+   suposição nossa, e só o que veio do cliente fica verde — cada vez mais
+   forte conforme a origem melhora. */
+.notas button.on0 { background: var(--dead); border-color: var(--dead); color: #fff; }
+.notas button.on1 { background: var(--warn); border-color: var(--warn); color: #fff; }
+.notas button.on2 { background: color-mix(in srgb, var(--ok) 55%, var(--warn)); border-color: transparent; color: #fff; }
+.notas button.on3 { background: var(--ok); border-color: var(--ok); color: #fff; }
+.notas button.on4 { background: var(--navy); border-color: var(--navy); color: #fff; }
+
+/* A escada de cinco degraus, sempre visível sob a decisão. O degrau atual
+   marcado, os anteriores esmaecidos: a pessoa vê onde está e o que vem. */
+.dim .escada { margin-top: 8px; }
+.dim .escada .degrau {
+  display: flex; gap: 8px; align-items: baseline;
+  font-size: .74rem; line-height: 1.4; color: var(--muted); padding: 2px 0;
+}
+.dim .escada .degrau .n {
+  flex: none; width: 18px; text-align: center; border-radius: 4px;
+  font-weight: 700; background: var(--line); color: var(--muted);
+}
+.dim .escada .degrau.feito .n { background: color-mix(in srgb, var(--ok) 22%, transparent); color: var(--ok); }
+.dim .escada .degrau.aqui { color: var(--text); }
+.dim .escada .degrau.aqui .n { background: var(--navy); color: #fff; }
+
+.mapa { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.pessoa { border: 1px solid var(--line); border-radius: 12px; padding: 10px; background: var(--surface); }
+.pessoa .nome { font-weight: 700; font-size: .88rem; }
+.pessoa .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+.dot.favoravel { background: var(--ok); }
+.dot.neutro { background: var(--warn); }
+.dot.resistente { background: var(--dead); }
+.dot.nao_acessado { background: var(--muted); opacity: .5; }
+
+.timeline { border-left: 2px solid var(--line); padding-left: 14px; margin-left: 6px; }
+.evento { position: relative; padding: 8px 0; }
+.evento::before { content: ''; position: absolute; left: -21px; top: 14px; width: 10px; height: 10px; border-radius: 50%; background: var(--ok); }
+.evento.at::before { background: var(--muted); opacity: .45; }
+.evento.pt::before { background: var(--navy-2); }
+.evento.sis::before { background: var(--warn); }
+.evento .quando { font-size: .72rem; color: var(--muted); }
+
+/* Delta da semana: a resposta antes da pergunta ser feita. */
+.faixa-delta {
+  margin-top: 12px; padding: 9px 13px; border-radius: 10px; font-size: .86rem;
+  background: rgba(26,127,75,.09); border: 1px solid rgba(26,127,75,.25); color: var(--ok);
+}
+.faixa-delta.parado { background: var(--bg); border-color: var(--line); color: var(--muted); }
+
+.grafico { margin: 6px 0 4px; }
+.grafico svg { display: block; max-width: 100%; }
+
+.tarefas { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.tarefa-linha { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--line); }
+.tarefa-linha:last-child { border-bottom: 0; }
+.tarefa-linha .quadro {
+  width: 17px; height: 17px; flex: 0 0 auto; border: 2px solid var(--rule-strong, var(--muted));
+  border-radius: 5px; background: transparent; cursor: pointer;
+}
+.tarefa-linha .quadro:hover { background: var(--ok); border-color: var(--ok); }
+.atrasado { color: var(--dead); font-weight: 700; }
+.subiu { color: var(--ok); font-weight: 700; }
+
+.lista-arquivos { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.arquivo { border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: var(--surface); }
+
+.notas button.bloqueado { opacity: .45; border-style: dashed; }
+
+dialog {
+  border: 0; border-radius: 16px; padding: 0; width: min(680px, 94vw);
+  background: var(--surface); color: var(--text); box-shadow: 0 20px 60px rgba(0,0,0,.35);
+}
+dialog::backdrop { background: rgba(6, 14, 24, .55); }
+dialog .corpo { padding: 18px; max-height: 82dvh; overflow: auto; }
+
+/* Duas colunas para o que anda junto — cidade e UF, telefone e site. O grid
+   fica no corpo do diálogo e cada campo escolhe se ocupa uma coluna ou as
+   duas; abaixo de 560px vira coluna única, porque no celular meia largura é
+   um campo estreito demais para caber um CNPJ. */
+dialog .corpo { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; align-content: start; }
+/* minmax(0, 1fr) e não 1fr: coluna de grid também nasce com mínimo automático,
+   e conteúdo largo — uma etiqueta comprida, um e-mail — estica a coluna além
+   do diálogo em vez de quebrar dentro dela. */
+dialog .corpo { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+dialog .corpo > * { min-width: 0; }
+dialog .corpo > * { grid-column: 1 / -1; }
+dialog .corpo > label.campo.meia { grid-column: span 1; }
+@media (max-width: 560px) { dialog .corpo > label.campo.meia { grid-column: 1 / -1; } }
+
+.secao-form {
+  grid-column: 1 / -1; margin: 16px 0 8px; padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+.secao-form:first-child { margin-top: 0; }
+.secao-form span {
+  display: block; font-size: .72rem; text-transform: uppercase; letter-spacing: .09em;
+  font-weight: 700; color: var(--navy-2);
+}
+.secao-form em { display: block; font-style: normal; font-size: .75rem; color: var(--muted); margin-top: 2px; }
+/* O método na hora de criar a tarefa. Fica com a cara de um aviso, e não de
+   um campo: não é para preencher, é para ler antes de escolher o que falar. */
+.metodo-tarefa {
+  grid-column: 1 / -1; margin: 0 0 12px; padding: 10px 12px; border-radius: 10px;
+  background: var(--bg); border: 1px solid var(--line); border-left: 3px solid var(--orange);
+}
+.metodo-tarefa .rotulo {
+  display: block; font-size: .68rem; text-transform: uppercase; letter-spacing: .09em;
+  font-weight: 700; color: var(--orange);
+}
+.metodo-tarefa p { margin: 6px 0 0; font-size: .78rem; line-height: 1.45; }
+.metodo-tarefa .pergunta { font-weight: 600; color: var(--navy-2); }
+.metodo-tarefa .conselho { color: var(--text); }
+.metodo-tarefa .conselho em { color: var(--muted); font-style: normal; }
+.metodo-tarefa .conta { color: var(--muted); }
+.metodo-tarefa .conta strong { color: var(--text); }
+
+.nota-form {
+  grid-column: 1 / -1; margin: 0 0 12px; padding: 8px 11px; border-radius: 9px;
+  background: var(--bg); border: 1px solid var(--line);
+  font-size: .78rem; color: var(--muted);
+}
+
+/* Documentos carregados. Cada um mostra nome e tamanho, e sai com um clique —
+   quem anexou o arquivo errado precisa poder tirá-lo sem fechar o formulário. */
+.anexos-ia { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.anexos-ia:empty { margin-top: 0; }
+.anexos-ia .anexo {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 4px 3px 9px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--surface);
+  font-size: .74rem; max-width: 100%;
+}
+.anexos-ia .anexo em { font-style: normal; color: var(--muted); font-size: .7rem; }
+.anexos-ia .anexo.com-erro { border-color: rgba(179,45,45,.45); }
+.anexos-ia .anexo.com-erro em { color: var(--dead); }
+.anexos-ia .anexo .sai {
+  border: 0; background: transparent; color: var(--muted); cursor: pointer;
+  font-size: .95rem; line-height: 1; padding: 2px 5px; border-radius: 999px;
+}
+.anexos-ia .anexo .sai:hover { background: var(--bg); color: var(--text); }
+
+/* No lugar da caixa da IA, quando ela não responde. Não é botão desligado: é
+   uma linha que diz o que houve e onde olhar. */
+.ia-fora {
+  margin: 0 0 14px; padding: 9px 12px; border-radius: 10px;
+  border: 1px dashed var(--line); background: var(--bg);
+  font-size: .78rem; color: var(--muted);
+}
+.ia-fora a { color: var(--navy-2); }
+
+/* Pessoas achadas no material, para marcar quem entra. Ficam dentro da caixa
+   do assistente porque é uma proposta dele, não um campo do formulário. */
+.contatos-ia:not(:empty) { margin-top: 10px; padding-top: 9px; border-top: 1px dashed var(--line); }
+.contatos-ia > .rotulo {
+  display: block; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--navy-2); font-weight: 600; margin-bottom: 6px;
+}
+/* min-width: 0 nos textos. Item de flex nasce com min-width automático, que
+   é o tamanho do conteúdo — e um e-mail longo empurra a linha para fora da
+   caixa em vez de quebrar. O texto vazava para fora do diálogo. */
+.pessoa-ia { display: flex; gap: 8px; align-items: flex-start; padding: 4px 0; cursor: pointer; }
+/* width: auto porque a regra geral dá 100% a todo input — desenhada para
+   campo de texto. Num checkbox isso vira uma caixa de 600px que empurra o
+   texto para fora do diálogo, que foi exatamente o que apareceu na tela. */
+.pessoa-ia input { margin-top: 3px; flex: 0 0 auto; width: auto; }
+.pessoa-ia span { font-size: .8rem; line-height: 1.35; min-width: 0; overflow-wrap: anywhere; }
+.pessoa-ia em { display: block; font-style: normal; font-size: .72rem; color: var(--muted); }
+
+/* A empresa que a IA achou: reconhecida, ou oferecida para cadastrar junto. */
+.achou-empresa {
+  margin: 0 0 12px; padding: 8px 11px; border-radius: 9px;
+  background: rgba(26,127,75,.08); border: 1px solid rgba(26,127,75,.3);
+  font-size: .78rem; color: var(--text);
+}
+.empresa-nova-ia {
+  display: flex; gap: 9px; align-items: flex-start; cursor: pointer;
+  margin: 0 0 12px; padding: 9px 11px; border-radius: 9px;
+  background: var(--orange-soft); border: 1px solid rgba(239,100,7,.35);
+}
+.empresa-nova-ia input { margin-top: 3px; flex: 0 0 auto; width: auto; }
+.empresa-nova-ia span { font-size: .78rem; line-height: 1.4; min-width: 0; overflow-wrap: anywhere; }
+.empresa-nova-ia em { display: block; font-style: normal; font-size: .72rem; color: var(--muted); margin-top: 2px; }
+dialog .rodape { display: flex; gap: 8px; justify-content: flex-end; padding: 12px 18px; border-top: 1px solid var(--line); }
+
+table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); }
+th { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.tabela-rolagem { overflow-x: auto; }
+
+input.busca { margin-bottom: 12px; }
+td .tiny { display: block; }
+
+/* ---------- Acesso ----------
+   A tela de entrada não usa a moldura do app: sem barra superior e sem menu,
+   ela ocupa a janela inteira. Antes o cartão herdava o recuo do topo, que a
+   barra fixa do desktop exigia, e acabava escondido embaixo dela. */
+.sem-sessao .topbar, .sem-sessao nav.tabs, .sem-sessao #barra-admin { display: none; }
+.sem-sessao .app { display: block; }
+.sem-sessao main { padding: 0; max-width: none; }
+
+.acesso { display: grid; grid-template-columns: 1fr; min-height: 100dvh; }
+
+/* O lado escuro só aparece onde há largura sobrando: no celular ele viraria
+   uma parede de texto antes do campo de senha. */
+.acesso-painel { display: none; }
+.acesso-forma {
+  display: flex; align-items: center; justify-content: center;
+  padding: 32px 22px calc(32px + var(--safe-b));
+  background: var(--bg);
+}
+.cartao-acesso {
+  width: 100%; max-width: 392px; background: var(--surface); border: 1px solid var(--line);
+  border-radius: 18px; padding: 30px 28px 26px; box-shadow: var(--shadow);
+}
+.marca-acesso { font-size: 1.4rem; font-weight: 800; letter-spacing: .02em; }
+.marca-acesso span { color: var(--orange); }
+.cartao-acesso h2 { font-size: 1.15rem; }
+.cartao-acesso .campo { margin-bottom: 13px; }
+.cartao-acesso .campo span {
+  display: block; font-size: .7rem; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--muted); margin-bottom: 5px;
+}
+.cartao-acesso .campo input, .cartao-acesso .campo select {
+  width: 100%; padding: 11px 12px; border: 1px solid var(--line);
+  border-radius: 10px; background: var(--bg);
+}
+.cartao-acesso .campo input:focus, .cartao-acesso .campo select:focus {
+  outline: 2px solid var(--orange); outline-offset: 1px; background: var(--surface);
+}
+
+@media (min-width: 940px) {
+  .acesso { grid-template-columns: 1.02fr .98fr; }
+  .acesso-painel {
+    display: flex; flex-direction: column; justify-content: center; gap: 22px;
+    padding: 48px 5vw; background: var(--navy); color: #fff;
+    max-height: 100dvh; overflow-y: auto;   /* texto longo em tela baixa rola */
+  }
+  .acesso-painel .marca-acesso { font-size: 1.9rem; color: #fff; }
+  .acesso-painel .lema { font-size: 1rem; opacity: .8; margin: 6px 0 0; max-width: 34ch; }
+
+  /* A tese: a pergunta que o método responde, antes de qualquer característica. */
+  .acesso-painel .tese {
+    font-size: 1.06rem; line-height: 1.5; margin: 0; max-width: 42ch;
+    padding-left: 14px; border-left: 3px solid var(--orange);
+  }
+
+  /* As oito, por extenso: torna concreto o que "oito decisões" quer dizer. */
+  .acesso-painel .chips { display: flex; flex-wrap: wrap; gap: 6px; max-width: 46ch; }
+  .acesso-painel .chip {
+    font-size: .72rem; font-weight: 600; letter-spacing: .01em;
+    padding: 4px 10px; border-radius: 999px;
+    background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.14);
+  }
+
+  .acesso-painel ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 15px; max-width: 46ch; }
+  .acesso-painel li { display: grid; grid-template-columns: 28px 1fr; gap: 12px; align-items: start; }
+  .acesso-painel .num {
+    width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center;
+    background: rgba(255,255,255,.12); color: var(--orange); font-weight: 800; font-size: .8rem;
+  }
+  .acesso-painel li strong { display: block; font-size: .9rem; margin-bottom: 1px; }
+  .acesso-painel li span.diz { font-size: .8rem; line-height: 1.45; opacity: .72; }
+
+  .acesso-painel .fecho {
+    font-size: .84rem; line-height: 1.5; margin: 0; max-width: 44ch;
+    opacity: .62; padding-top: 16px; border-top: 1px solid rgba(255,255,255,.14);
+  }
+  .acesso-forma .marca-acesso, .acesso-forma .lema-mobile { display: none; }
+}
+
+.mono-destaque {
+  font-family: ui-monospace, Menlo, monospace; font-weight: 700; font-size: 1.05rem;
+  letter-spacing: .16em; background: var(--bg); padding: 2px 8px; border-radius: 6px;
+}
+
+.quem { display: flex; flex-direction: column; line-height: 1.2; margin-right: 6px; text-align: right; }
+.quem .nome { font-size: .82rem; font-weight: 600; }
+.quem .onde { font-size: .68rem; opacity: .7; }
+
+/* Barra do administrador: só ele escolhe empresa e usuário. */
+.barra-admin:empty { display: none; }
+.barra-admin {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 9px 16px; background: var(--navy-2); color: #fff;
+}
+.barra-admin .etiqueta {
+  font-size: .66rem; text-transform: uppercase; letter-spacing: .1em;
+  background: rgba(255,255,255,.18); padding: 3px 9px; border-radius: 999px;
+}
+.barra-admin label { display: flex; align-items: center; gap: 6px; font-size: .76rem; }
+.barra-admin select {
+  width: auto; min-width: 140px; padding: 5px 9px; border-radius: 8px;
+  border: 1px solid rgba(255,255,255,.28); background: rgba(255,255,255,.12); color: #fff;
+}
+.barra-admin select option { color: var(--text); background: var(--surface); }
+@media (min-width: 900px) { .barra-admin { padding-top: 78px; } }
+
+/* ---------- Kanban ---------- */
+.kanban { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 8px; align-items: flex-start; }
+.kanban .coluna {
+  flex: 1 1 0; min-width: 176px; background: var(--bg);
+  border: 1px solid var(--line); border-radius: 12px; padding: 9px;
+}
+.kanban .coluna header { display: flex; flex-direction: column; gap: 1px; margin-bottom: 8px; padding: 0 2px; }
+.kanban .mais {
+  width: 22px; height: 22px; border-radius: 7px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--muted); cursor: pointer; font-size: .95rem; line-height: 1;
+}
+.kanban .mais:hover { background: var(--orange); border-color: var(--orange); color: #fff; }
+.kanban .coluna header strong { font-size: .84rem; }
+.kanban .cartoes { display: flex; flex-direction: column; gap: 8px; min-height: 72px; }
+.kanban .mini {
+  background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--line);
+  border-radius: 10px; padding: 10px; cursor: pointer; box-shadow: var(--shadow);
+}
+.kanban .mini:hover { border-color: var(--navy-2); }
+.kanban .mini.g-real { border-left-color: var(--ok); }
+.kanban .mini.g-oculto { border-left-color: var(--navy-2); }
+.kanban .mini.g-falso { border-left-color: var(--risk); }
+.kanban .mini.g-zumbi { border-left-color: var(--dead); }
+.kanban .mini.g-construcao { border-left-color: var(--warn); }
+.kanban .mini .titulo { font-weight: 700; font-size: .86rem; line-height: 1.25; }
+.kanban .rodape-mini { display: flex; gap: 4px; margin-top: 8px; }
+.kanban .seta {
+  flex: 1; border: 1px solid var(--line); background: var(--bg); color: var(--muted);
+  border-radius: 7px; padding: 3px 0; cursor: pointer; font-size: .8rem; line-height: 1;
+}
+.kanban .seta:hover { background: var(--navy); color: #fff; border-color: var(--navy); }
+
+/* ---------- Painel gráfico ---------- */
+.filtros { display: flex; flex-direction: column; gap: 8px; margin: 10px 0 16px; }
+.grupo-filtro { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.grupo-filtro .rot {
+  font-size: .66rem; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--muted); margin-right: 4px; min-width: 62px;
+}
+
+.grafico { margin: 4px 0; overflow-x: auto; }
+.grafico svg { display: block; }
+.grafico text { font-family: inherit; font-variant-numeric: tabular-nums; }
+
+.legenda { display: flex; flex-wrap: wrap; gap: 12px; margin: 4px 0 10px; font-size: .74rem; color: var(--muted); }
+.item-legenda { display: inline-flex; align-items: center; gap: 5px; }
+.item-legenda i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+
+.kpi.bom { border-left: 3px solid var(--ok); }
+.kpi.atencao { border-left: 3px solid var(--risk); }
+.kpi.ruim { border-left: 3px solid var(--dead); }
+
+/* Matriz oportunidade × decisão */
+.matriz { display: flex; flex-direction: column; gap: 3px; min-width: 460px; }
+.matriz-linha {
+  display: grid; grid-template-columns: minmax(120px, 1.6fr) repeat(8, 1fr) 34px;
+  gap: 3px; align-items: center; background: transparent; border: 0;
+  padding: 3px 0; text-align: left; color: var(--text); cursor: pointer; width: 100%;
+}
+.matriz-linha:hover { background: var(--bg); }
+.matriz-linha.cabecalho { cursor: default; }
+.matriz-linha .rotulo { display: flex; flex-direction: column; min-width: 0; padding-right: 8px; }
+.matriz-linha .rotulo strong { font-size: .82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.matriz-linha .rotulo em { font-size: .68rem; color: var(--muted); font-style: normal; }
+.matriz-linha .col { font-size: .62rem; color: var(--muted); text-align: center; text-transform: uppercase; letter-spacing: .04em; }
+.matriz-linha .fim { font-size: .76rem; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.cel { display: block; height: 20px; border-radius: 4px; background: var(--line); }
+.cel.m1 { background: var(--warn); }
+/* Declarado é meio caminho: cor entre o âmbar da suposição e o verde do que
+   foi verificado. 3 e 4 são o que veio do cliente e resistiu. */
+.cel.m2 { background: color-mix(in srgb, var(--ok) 55%, var(--warn)); }
+.cel.m3 { background: var(--ok); }
+.cel.m4 { background: var(--navy); }
+.cel.sem-prova { background: var(--risk); }
+.item-legenda i.cel { height: 11px; }
+.matriz-rolagem { overflow-x: auto; }
+
+/* Tiles da tela Hoje */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; margin: 4px 0 12px; }
+.tile {
+  display: flex; flex-direction: column; gap: 1px; padding: 11px 12px; cursor: pointer;
+  border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface);
+  text-align: left; box-shadow: var(--shadow); color: var(--text);
+}
+.tile .qtd { font-size: 1.6rem; font-weight: 800; line-height: 1; letter-spacing: -.02em; }
+.tile .rot { font-size: .76rem; font-weight: 600; }
+.tile .val { font-size: .68rem; color: var(--muted); }
+.tile.dead { border-left: 4px solid var(--dead); } .tile.dead .qtd { color: var(--dead); }
+.tile.warn { border-left: 4px solid var(--risk); } .tile.warn .qtd { color: var(--risk); }
+.tile.ok { border-left: 4px solid var(--ok); } .tile.ok .qtd { color: var(--ok); }
+.tile.todos { border-left: 4px solid var(--navy-2); } .tile.todos .qtd { color: var(--navy-2); }
+.tile.ativo { outline: 2px solid var(--navy-2); outline-offset: 1px; }
+
+.linha-avanco { display: flex; align-items: center; gap: 8px; margin: 9px 0 2px; flex-wrap: wrap; }
+.linha-avanco .iad { font-size: 1rem; font-weight: 800; letter-spacing: -.02em; }
+.linha-avanco .iad .de { font-size: .7rem; font-weight: 600; color: var(--muted); }
+.foco .motivo { margin-top: 8px; font-size: .87rem; }
+
+/* ---------- Avanço da decisão ---------- */
+.destaque-avanco { border-top: 3px solid var(--orange); }
+
+.medidor { display: flex; align-items: center; gap: 16px; margin: 14px 0 16px; }
+.medidor .numero { font-size: 2.1rem; font-weight: 800; letter-spacing: -.03em; line-height: 1; }
+.medidor .numero .de { font-size: .95rem; font-weight: 600; color: var(--muted); }
+.medidor .trilho { flex: 1; min-width: 0; }
+.medidor .legenda { margin-top: 6px; }
+
+/* O mapa: as 8 decisões de relance, cor e símbolo dizendo o estado. */
+.mapa-decisao { display: grid; grid-template-columns: repeat(auto-fit, minmax(108px, 1fr)); gap: 8px; }
+.celula {
+  display: flex; flex-direction: column; gap: 2px; align-items: flex-start;
+  padding: 9px 10px; border-radius: 11px; cursor: pointer; text-align: left;
+  border: 1px solid var(--line); background: var(--bg); color: var(--text);
+}
+.celula:hover { border-color: var(--navy-2); }
+.celula .marca { font-size: .85rem; line-height: 1; height: 14px; font-weight: 700; }
+.celula .rot { font-size: .82rem; font-weight: 700; line-height: 1.2; }
+.celula .estado { font-size: .68rem; color: var(--muted); }
+.celula.q0 { border-style: dashed; opacity: .8; }
+.celula.q1 { border-color: var(--warn); background: rgba(184,134,11,.09); }
+.celula.q1 .marca { color: var(--warn); }
+.celula.q2 { border-color: color-mix(in srgb, var(--ok) 55%, var(--warn)); background: color-mix(in srgb, var(--ok) 8%, transparent); }
+.celula.q2 .marca { color: color-mix(in srgb, var(--ok) 55%, var(--warn)); }
+.celula.q3 { border-color: var(--ok); background: rgba(26,127,75,.11); }
+.celula.q3 .marca { color: var(--ok); }
+.celula.q4 { border-color: var(--navy); background: color-mix(in srgb, var(--navy) 10%, transparent); }
+.celula.q4 .marca { color: var(--navy); }
+.celula.sem-prova { border-color: var(--risk); background: rgba(212,118,26,.1); border-style: dashed; }
+
+/* Campo de senha com o olho: revela o que foi digitado sem guardar nada. */
+.campo-senha { position: relative; display: block; }
+.campo-senha input { width: 100%; padding-right: 42px; }
+.campo-senha .olho {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  width: 34px; height: 34px; border: 0; background: transparent;
+  cursor: pointer; font-size: 1rem; line-height: 1; border-radius: 8px; opacity: .65;
+}
+.campo-senha .olho:hover, .campo-senha .olho:focus-visible { opacity: 1; background: var(--bg); }
+
+/* Enquanto a IA lê o negócio que acabou de mudar de etapa. É discreto de
+   propósito: a etapa já foi gravada, isto aqui é só o aviso de que a leitura
+   está a caminho. */
+.pill.lendo {
+  border-color: var(--orange); color: var(--orange); background: var(--orange-soft);
+}
+
+/* A lista de contatos da empresa, aberta de dentro do negócio. */
+.contato-linha { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.contato-linha:last-child { border-bottom: 0; }
+/* `topo`, e não `quem`: .quem já é a etiqueta de usuário do cabeçalho, com
+   text-align direita — o nome do contato saía alinhado à direita por herança
+   de um nome de classe repetido. */
+.contato-linha .topo { display: flex; align-items: center; gap: 8px; }
+.contato-linha .canais { margin-top: 3px; overflow-wrap: anywhere; }
+.contato-linha .canais a { color: var(--navy-2); font-weight: 600; }
+
+/* A lupa: um botão pequeno colado ao select, que abre a ficha do que está
+   escolhido. Fica dentro do campo para ninguém confundir com uma ação do
+   formulário — ela não muda nada, só mostra. */
+.campo-lupa { position: relative; display: block; }
+.campo-lupa select { width: 100%; padding-right: 44px; }
+.campo-lupa .lupa {
+  position: absolute; right: 26px; top: 50%; transform: translateY(-50%);
+  width: 26px; height: 26px; border: 1px solid var(--line); background: var(--surface);
+  color: var(--navy-2); cursor: pointer; font-size: .82rem; font-weight: 700;
+  line-height: 1; border-radius: 999px; padding: 0;
+}
+.campo-lupa .lupa:hover, .campo-lupa .lupa:focus-visible {
+  border-color: var(--orange); color: var(--orange); background: var(--orange-soft);
+}
+
+/* A ficha que a lupa abre: leitura, duas colunas de rótulo e valor. */
+dialog.caixa-ficha { width: min(520px, 94vw); }
+.ficha { display: flex; flex-direction: column; gap: 2px; }
+.linha-ficha {
+  display: flex; gap: 10px; align-items: baseline;
+  padding: 7px 0; border-bottom: 1px solid var(--line); font-size: .88rem;
+}
+.linha-ficha:last-child { border-bottom: 0; }
+.linha-ficha .rotulo {
+  flex: 0 0 122px; font-size: .72rem; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--muted);
+}
+.linha-ficha > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.linha-ficha a { color: var(--navy-2); font-weight: 600; }
+
+@media (max-width: 420px) {
+  .linha-ficha { flex-direction: column; gap: 2px; }
+  .linha-ficha .rotulo { flex: none; }
+}
+
+/* Antes de sincronizar, para qual empresa vai. Mandar dado para a empresa
+   errada é silencioso e chato de desfazer — então a resposta fica à vista. */
+.aviso-empresa {
+  font-size: .82rem; line-height: 1.45; color: var(--text);
+  background: var(--orange-soft); border-left: 3px solid var(--orange);
+  padding: 10px 13px; border-radius: 4px; margin: 0 0 12px;
+}
+
+/* Dicas do insight: o que fazer agora, montado com os dados do negócio.
+   O ponto de exclamação marca o que não espera a próxima semana. */
+.dicas {
+  display: grid; gap: 7px;
+  margin-top: 14px; padding-top: 13px;
+  border-top: 1px solid var(--line);
+}
+.dicas-rot {
+  font-size: .66rem; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--muted);
+}
+.dica {
+  display: grid; grid-template-columns: 18px 1fr; gap: 8px;
+  align-items: start; font-size: .82rem; line-height: 1.45; color: var(--text);
+}
+.dica .sino {
+  width: 18px; height: 18px; border-radius: 5px; display: grid; place-items: center;
+  font-size: .7rem; font-weight: 800; background: var(--bg); color: var(--muted);
+}
+.dica.urgente .sino { background: var(--orange); color: #fff; }
+.dica.urgente { font-weight: 600; }
+
+/* Balão flutuante da ajuda de contexto (src/ajuda.js). Fica no body, então
+   nenhuma caixa da tela o corta, e a posição vem do JS. */
+.balao-ajuda {
+  position: absolute;
+  z-index: 200;
+  max-width: 320px;
+  padding: 9px 12px 10px;
+  background: var(--dica-fundo);
+  color: var(--dica-tinta);
+  border: 1px solid var(--dica-borda);
+  border-radius: 8px;
+  /* Sombra de verdade, porque fundo claro sobre fundo claro precisa dela para
+     existir — no marinho a própria cor já separava o balão da página. */
+  box-shadow: 0 4px 18px rgba(16, 32, 47, .16);
+  font-size: .78rem;
+  line-height: 1.42;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .1s ease;
+}
+.balao-ajuda.visivel { opacity: 1; }
+.balao-ajuda strong { display: block; font-size: .8rem; font-weight: 800; margin-bottom: 2px; }
+.balao-ajuda > span { display: block; opacity: .92; }
+
+/* As linhas com rótulo, que antes moravam no balão desenhado dentro do botão.
+   Mesmo conteúdo, mesma hierarquia, agora dentro do único balão que existe. */
+.balao-ajuda .rot {
+  display: block; margin-top: 9px; font-size: .62rem; font-weight: 700;
+  letter-spacing: .1em; text-transform: uppercase; opacity: .62;
+}
+.balao-ajuda .rot + .linha { margin-top: 1px; opacity: .92; }
+/* O degrau em que a decisão está agora. Sem cor nova: o mesmo roxo do balão,
+   cheio, contra os outros que estão apagados. */
+.balao-ajuda .linha.agora { opacity: 1; font-weight: 700; }
+.balao-ajuda .alerta {
+  display: block; margin-top: 10px; padding-top: 9px;
+  border-top: 1px solid var(--dica-borda);
+  font-weight: 700; opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) { .balao-ajuda { transition: none; } }
+
+/* ---------- Ajuda pelo contexto ----------
+   O nome da decisão não diz o que ela quer saber, e ninguém abre o Playbook no
+   meio de uma pontuação. O balão responde ali mesmo.
+
+   Só onde existe ponteiro: no toque, o dedo que abriria o balão é o mesmo que
+   registra a evidência, e o balão ficaria preso na tela. */
+/* O balão desenhado dentro do próprio botão foi embora: as 120 linhas que
+   viviam aqui redesenhavam, com outra cor e outro posicionamento, o mesmo
+   balão flutuante que já existia — e o flutuante ainda fazia melhor a parte
+   difícil, que é virar para cima ou para a esquerda quando encostaria na
+   borda. Quem precisar de linha com rótulo declara data-ajuda-linhas. */
+.celula.sem-prova .marca { color: var(--risk); }
+
+/* A mesma leitura, do tamanho de uma linha, para comparar negócios na lista. */
+.tira { display: inline-flex; gap: 3px; }
+.tira i { width: 15px; height: 6px; border-radius: 2px; background: var(--line); }
+.tira i.t1 { background: var(--warn); }
+.tira i.t2 { background: color-mix(in srgb, var(--ok) 55%, var(--warn)); }
+.tira i.t3 { background: var(--ok); }
+.tira i.t4 { background: var(--navy); }
+.tira i.sem-prova { background: var(--risk); }
+
+/* O que estava combinado na tarefa, recolhido. A descrição some depois que a
+   tarefa é criada, e é justamente ela que diz o que era para fazer — a conversa
+   do LinkedIn, o roteiro que alguém escreveu. */
+.detalhe-tarefa > summary {
+  cursor: pointer; list-style: none;
+  font-size: .72rem; color: var(--muted);
+  padding: 0 0 6px 26px; user-select: none;
+}
+.detalhe-tarefa > summary::-webkit-details-marker { display: none; }
+.detalhe-tarefa > summary::before { content: '▸ '; }
+.detalhe-tarefa[open] > summary::before { content: '▾ '; }
+.detalhe-tarefa pre {
+  margin: 0 0 10px 26px; padding: 8px 10px;
+  border-left: 2px solid var(--line); background: var(--bg);
+  border-radius: 0 6px 6px 0;
+  font: inherit; font-size: .76rem; line-height: 1.5;
+  white-space: pre-wrap; word-break: break-word; color: var(--muted);
+}
+
+/* O endereço da ponte, para copiar. Quebra em qualquer ponto porque URL com
+   chave e identificador não cabe numa linha e cortar esconde justamente o fim,
+   que é a parte que muda de empresa para empresa. */
+.endereco-ponte {
+  margin: 0; padding: 10px 12px;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+  font: inherit; font-size: .78rem; line-height: 1.5;
+  white-space: pre-wrap; word-break: break-all; user-select: all;
+}
+
+/* ---------- O que falta ---------- */
+ol.lacunas { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.lacuna { display: flex; gap: 11px; padding: 11px 0; border-top: 1px solid var(--line); }
+.lacuna:first-child { border-top: 0; padding-top: 0; }
+.lacuna .ordem {
+  flex: 0 0 24px; height: 24px; border-radius: 50%; background: var(--navy); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-size: .76rem; font-weight: 700;
+}
+.lacuna .conteudo { flex: 1; min-width: 0; }
+.lacuna p { margin: 4px 0; }
+
+/* ---------- Blocos recolhíveis ---------- */
+details.bloco {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow); margin-top: 14px; overflow: hidden;
+}
+details.bloco > summary {
+  display: flex; align-items: baseline; gap: 10px; padding: 14px 16px;
+  cursor: pointer; list-style: none; font-weight: 700;
+}
+details.bloco > summary::-webkit-details-marker { display: none; }
+details.bloco > summary::after { content: '▾'; margin-left: auto; color: var(--muted); font-size: .8rem; }
+details.bloco[open] > summary::after { content: '▴'; }
+details.bloco > summary:hover { background: var(--bg); }
+details.bloco > summary .resumo { font-size: .78rem; font-weight: 400; color: var(--muted); }
+details.bloco > .corpo { padding: 0 16px 16px; }
+details.bloco .card { border: 0; box-shadow: none; padding: 0; background: transparent; }
+details.bloco .card + .card { margin-top: 16px; }
+
+/* Hoje: uma linha por negócio, faixa lateral pela urgência. */
+.lista-foco { display: flex; flex-direction: column; gap: 10px; }
+.foco {
+  background: var(--surface); border: 1px solid var(--line);
+  border-left: 4px solid var(--line); border-radius: var(--radius);
+  padding: 13px 14px; box-shadow: var(--shadow);
+}
+.foco.u1 { border-left-color: var(--muted); }
+.foco.u2 { border-left-color: var(--warn); }
+.foco.u3 { border-left-color: var(--dead); }
+
+button.btn.voz { margin-top: 6px; }
+
+.aviso { border-left: 3px solid var(--orange); background: var(--orange-soft); padding: 10px 12px; border-radius: 8px; font-size: .86rem; }
+.vazio { text-align: center; color: var(--muted); padding: 30px 10px; }
+
+/* ---------- assistente de preenchimento ----------
+   A caixa é visualmente diferente do resto do formulário de propósito: o que
+   sai dela é palpite, e palpite tem que parecer palpite até alguém confirmar. */
+.caixa-ia {
+  border: 1px dashed var(--navy-2); border-radius: 12px;
+  padding: 12px 13px; margin-bottom: 14px; background: var(--bg);
+}
+.caixa-ia > .rotulo {
+  display: block; font-size: .74rem; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--navy-2); font-weight: 600; margin-bottom: 6px;
+}
+.caixa-ia textarea { min-height: 84px; background: var(--surface); }
+.caixa-ia .linha { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.caixa-ia .linha button.btn.voz { margin-top: 0; }
+.caixa-ia .estado { font-size: .78rem; color: var(--muted); flex: 1 1 140px; }
+.caixa-ia .rodape-ia { margin: 8px 0 0; font-size: .74rem; color: var(--muted); }
+
+label.campo.sugerido > span::after { content: ' · sugerido'; color: var(--orange); letter-spacing: 0; }
+label.campo.sugerido input,
+label.campo.sugerido select,
+label.campo.sugerido textarea {
+  border-color: var(--orange); background: var(--orange-soft);
+}
+label.campo .origem {
+  display: block; margin-top: 4px; font-size: .75rem; line-height: 1.4;
+  color: var(--muted); font-style: italic;
+}
+
+/* ---------- revisão do que o assistente leu ----------
+   Lista de propostas, não de fatos: cada linha vem com a frase que a originou
+   para dar para conferir sem reabrir o documento. */
+dialog.revisao-ia { width: min(680px, 96vw); }
+.achados { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.achado {
+  border: 1px solid var(--line); border-left: 4px solid var(--navy-2);
+  border-radius: 12px; padding: 12px 13px; background: var(--surface);
+}
+.achado .linha-achado {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; cursor: pointer; margin: 0;
+}
+.achado .linha-achado input[type="checkbox"] { width: auto; margin: 0; flex: none; }
+.achado .linha-achado strong { flex: 1 1 200px; }
+.achado .origem {
+  margin: 7px 0 0; font-size: .8rem; line-height: 1.45; font-style: italic; color: var(--muted);
+  border-left: 2px solid var(--line); padding-left: 9px;
+}
+.achado .compromisso { margin: 6px 0 0; color: var(--risk); }
+
+/* Transcrição da conversa dentro de um evento do histórico: quebras de linha
+   preservadas, porque quem falou e o que falou só se lê uma fala por linha. */
+.evento .transcricao {
+  white-space: pre-wrap; margin-top: 5px; line-height: 1.5;
+  border-left: 2px solid var(--line); padding-left: 9px;
+}
+.achado .conversa {
+  margin: 7px 0 0; font-size: .78rem; line-height: 1.5; color: var(--muted);
+  border-left: 2px solid var(--line); padding-left: 9px; white-space: pre-wrap;
+}
+.achado .conversa b { color: var(--text); font-weight: 600; }
+
+.achado .escolhas { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+.achado .campo.mini { flex: 1 1 190px; margin-bottom: 0; }
+
+/* O "mais próximo" é um botão dentro do rótulo do campo: aceitar a sugestão
+   num clique, em vez de abrir a lista e comparar de novo. */
+.achado .campo.mini .pill.mini {
+  padding: 1px 8px; font-size: .68rem; cursor: pointer; font-weight: 700;
+  color: var(--navy); border-color: var(--navy);
+}
+.achado .campo.mini .pill.mini:disabled { opacity: .5; cursor: default; }
+.achado .campo.mini .origem { font-style: normal; }
+
+.achado .campo.mini select { padding: 7px 9px; font-size: .82rem; }
+.achado:has(input[data-ev]:not(:checked)),
+.achado:has(input[data-ct]:not(:checked)) { opacity: .5; border-left-color: var(--line); }
+
+/* Tarefa concluída: o quadro vira marca, não botão — não há o que clicar. */
+.tarefa-linha .quadro.feito {
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--ok); border-color: var(--ok); background: transparent; cursor: default;
+}
+.tarefa-linha .btn.mini { flex: none; }
+
+/* ---------- Tela de Tarefas ----------
+   A lista onde o vendedor trabalha. Duas decisões de layout que não são
+   estéticas: a tabela rola sozinha na horizontal (nove colunas não cabem no
+   celular, e a página inteira rolando de lado é pior que a tabela rolando),
+   e a barra de lote é grudenta — some da vista rolar dez linhas e perder o
+   botão que se ia clicar. */
+.filtros-tarefa { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0 8px; }
+.filtros-tarefa .campo.mini { flex: 0 1 180px; margin-bottom: 0; }
+.filtros-tarefa .campo.mini input,
+.filtros-tarefa .campo.mini select { padding: 7px 10px; font-size: .84rem; background: var(--surface); }
+.filtros-tarefa .campo.mini.cresce { flex: 1 1 240px; }
+
+.tipos-tarefa { margin: 0 0 8px; }
+.tipos-tarefa > summary { cursor: pointer; font-size: .8rem; color: var(--muted); padding: 4px 0; }
+.tipos-tarefa .row { flex-wrap: wrap; gap: 6px 14px; padding: 6px 0 2px; }
+.caixa-tipo { display: inline-flex; align-items: center; gap: 5px; font-size: .82rem; cursor: pointer; }
+
+.chips { flex-wrap: wrap; gap: 6px; margin: 0 0 10px; min-height: 0; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 6px 3px 10px;
+  border: 1px solid var(--line); border-radius: 999px; background: var(--surface);
+  font-size: .74rem; font-weight: 600; color: var(--text);
+}
+.chip button {
+  border: 0; background: none; color: var(--muted); cursor: pointer;
+  font-size: .8rem; line-height: 1; padding: 2px 4px; border-radius: 999px;
+}
+.chip button:hover { color: var(--dead); background: var(--bg); }
+
+.resumo-tarefas { padding: 12px 16px; margin-bottom: 12px; }
+.resumo-tarefas > summary { cursor: pointer; list-style: none; }
+.resumo-tarefas > summary::-webkit-details-marker { display: none; }
+.resumo-tarefas > summary::after { content: ' ▾'; color: var(--muted); }
+.resumo-tarefas[open] > summary::after { content: ' ▴'; }
+.kpis-tarefa { flex-wrap: wrap; gap: 20px; margin-top: 12px; }
+.kpi-tarefa { display: flex; flex-direction: column; gap: 2px; min-width: 110px; }
+.kpi-tarefa strong { font-size: 1.35rem; line-height: 1.1; }
+
+.barra-lote {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  background: var(--navy); color: #fff; padding: 10px 14px; border-radius: 10px 10px 0 0;
+  font-size: .84rem;
+}
+.barra-lote .link { color: #cfe0ff; }
+.barra-lote .link.verde { color: #7ee2a8; }
+.link {
+  border: 0; background: none; cursor: pointer; font: inherit; font-weight: 700;
+  color: var(--navy); padding: 2px 0; text-decoration: none;
+}
+.link:hover { text-decoration: underline; }
+.lote-tudo {
+  background: var(--bg); border: 1px solid var(--line); border-top: 0;
+  padding: 8px 14px; font-size: .8rem;
+}
+
+.tabela-tarefas th { white-space: nowrap; font-size: .72rem; text-transform: uppercase; letter-spacing: .3px; color: var(--muted); }
+.tabela-tarefas td { vertical-align: middle; }
+.tabela-tarefas .col-marca { width: 34px; }
+/* Numa tabela de largura automática, a coluna que sabe quebrar é a que
+   encolhe: título e descrição viravam uma tira de noventa pixels enquanto
+   Data e Valor, que não quebram, ficavam largas. A tarefa é o assunto da
+   tela — ela manda na largura. E a descrição fica em uma linha só, porque
+   ali ela é lembrete, não leitura: o texto inteiro está ao abrir a tarefa. */
+.tabela-tarefas .col-tarefa { min-width: 240px; }
+.tabela-tarefas .col-tarefa .tiny.muted {
+  display: block; max-width: 520px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tabela-tarefas .col-negocio { min-width: 130px; }
+.tabela-tarefas tr.marcada td { background: rgba(31,74,140,.07); }
+.tabela-tarefas a { color: var(--navy); text-decoration: none; font-weight: 600; }
+.tabela-tarefas a:hover { text-decoration: underline; }
+.tabela-tarefas .tiny.muted { display: block; }
+.nowrap { white-space: nowrap; }
+.icone-tipo { font-size: 1rem; margin-right: 2px; }
+.avatar {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 999px;
+  background: var(--bg); border: 1px solid var(--line);
+  font-size: .7rem; font-weight: 700; color: var(--muted);
+}
+.ordenador {
+  border: 0; background: none; cursor: pointer; font: inherit; color: inherit;
+  text-transform: inherit; letter-spacing: inherit; padding: 0;
+}
+.ordenador.ativo { color: var(--navy); }
+
+.paginacao { align-items: center; gap: 10px; flex-wrap: wrap; margin: 10px 0 24px; }
+.paginacao select { width: auto; flex: 0 0 auto; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font-size: .78rem; }
+
+@media (max-width: 700px) {
+  .filtros-tarefa .campo.mini { flex: 1 1 140px; }
+  .barra-lote { gap: 10px; }
+}
+
+/* Escolha múltipla dentro de um formulário: os produtos e serviços que
+   compõem a oportunidade. Lista de caixas, e não select multiple — em
+   celular, select múltiplo é uma caixinha onde ninguém acerta o segundo item. */
+.campo-multi { display: block; margin-bottom: 10px; }
+.campo-multi > span { display: block; font-size: .74rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 4px; }
+.nota-multi { margin: 0 0 6px; font-size: .76rem; color: var(--muted); line-height: 1.45; }
+.lista-multi {
+  border: 1px solid var(--line); border-radius: 10px; background: var(--bg);
+  max-height: 210px; overflow-y: auto; padding: 4px;
+}
+.item-multi { display: flex; align-items: flex-start; gap: 8px; padding: 6px 8px; border-radius: 8px; cursor: pointer; }
+.item-multi:hover { background: var(--surface); }
+.item-multi input { width: auto; margin-top: 2px; flex: 0 0 auto; }
+.item-multi span { font-size: .86rem; line-height: 1.35; }
+.item-multi em { display: block; font-style: normal; font-size: .74rem; color: var(--muted); }
+
+/* ---------- Pipeline: barra de filtros e gaveta ---------- */
+.filtros-negocio { align-items: flex-end; }
+.filtros-negocio .botao-gaveta { flex: 0 0 auto; margin-bottom: 0; }
+.filtros-negocio .botao-gaveta .btn { white-space: nowrap; padding: 7px 12px; }
+.chip.forte { background: var(--navy); color: #fff; border-color: var(--navy); }
+.faixa { gap: 8px; align-items: center; }
+.faixa input { flex: 1 1 0; }
+
+/* A gaveta é um <dialog> encostado na direita: modal de verdade (fecha no Esc,
+   escurece o fundo) sem inventar uma camada de posicionamento própria. */
+dialog.gaveta {
+  margin: 0 0 0 auto; height: 100%; max-height: 100%;
+  width: min(420px, 100%); max-width: 100%; border-radius: 0;
+  display: flex; flex-direction: column;
+}
+dialog.gaveta form { display: flex; flex-direction: column; height: 100%; }
+/* Uma coluna: a gaveta tem 420px, e a grade de duas colunas que os diálogos
+   usam espremeria cada select em 190px. Ela também é o que fazia a lista de
+   caixas sumir — caixa com rolagem própria dentro de uma grade não empurra a
+   linha, e a lista aparecia com 10px de altura, vazia. */
+dialog.gaveta .corpo { display: block; flex: 1; overflow-y: auto; max-height: none; }
+dialog.gaveta .secao-form { margin-top: 18px; }
+dialog.gaveta .lista-multi { max-height: none; overflow: visible; }
+@media (max-width: 640px) {
+  dialog.gaveta { width: 100%; }
+}
+
+/* ---------- Menu da conta ----------
+   Ancorado no bloco do nome, no topo à direita. Fecha em clique fora, Esc ou
+   escolha — menu que não fecha sozinho é painel atravessado no caminho. */
+.quem-caixa { position: relative; }
+button.quem {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 0;
+  line-height: 1.2; text-align: right; padding: 6px 10px; border-radius: 10px;
+  background: transparent; position: relative;
+}
+button.quem:hover { background: rgba(255,255,255,.14); }
+button.quem .seta { position: absolute; right: -2px; top: 50%; transform: translateY(-50%); font-size: .6rem; opacity: .6; }
+button.quem .nome, button.quem .onde { padding-right: 8px; }
+
+.menu-quem {
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 60;
+  width: min(320px, calc(100vw - 24px));
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: 0 18px 50px rgba(0,0,0,.35); overflow: hidden;
+  max-height: min(76vh, 640px); overflow-y: auto;
+}
+.menu-topo { display: flex; gap: 12px; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.menu-topo strong { display: block; font-size: .9rem; }
+.menu-topo .tiny.muted { display: block; }
+.menu-topo .pill { margin-top: 4px; }
+.avatar.grande { width: 40px; height: 40px; font-size: .82rem; flex: 0 0 auto; background: var(--navy); color: #fff; border-color: var(--navy); }
+
+.menu-secao { padding: 12px 16px 4px; font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.menu-empresa { padding: 2px 16px 0; font-size: .9rem; }
+.menu-nota { margin: 6px 16px 10px; font-size: .74rem; line-height: 1.45; color: var(--muted); }
+.menu-lista { display: flex; flex-direction: column; }
+/* Especificidade de propósito: o menu vive DENTRO da .topbar, e a regra
+   `.topbar button { color:#fff; background:rgba(255,255,255,.12) }` pintava
+   cada item de branco sobre branco — os itens estavam lá, invisíveis. */
+.topbar .menu-quem .menu-item {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 10px 16px; border: 0; border-radius: 0; background: none;
+  color: var(--text); font: inherit; font-size: .86rem; text-align: left; cursor: pointer;
+}
+.topbar .menu-quem .menu-item:hover { background: var(--bg); }
+.topbar .menu-quem .menu-item.ativo { font-weight: 700; }
+.topbar .menu-quem .menu-item .marca-ativa { width: 16px; flex: 0 0 auto; color: var(--navy); text-align: center; }
+.topbar .menu-quem .menu-item.saida { color: var(--dead); border-top: 1px solid var(--line); margin-top: 6px; }
+.topbar .menu-quem .menu-item.saida .marca-ativa { color: var(--dead); }
+.menu-quem .pill { background: var(--bg); color: var(--muted); }
+
+/* Linha do diagnóstico em que há registros guardados e nenhum visível: é
+   exatamente a linha que responde "por que a tela está vazia". */
+.linha-alerta td { background: rgba(179,45,45,.07); }
+
+/* A faixa que explica por que a tela está vazia. Fica entre o topo e o
+   conteúdo, com a mesma largura do conteúdo — e com margem própria, porque a
+   .aviso foi desenhada para viver dentro de um cartão, e sem isto ela
+   encostava na barra e aparecia como um risco laranja de dez pixels. */
+.faixa-aviso { margin: 0 0 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; line-height: 1.5; }
+.faixa-aviso .btn { flex: 0 0 auto; }
+
+
+/* ---------- Aprendizado da carteira: a evolução semanal ----------
+   A seta é o elemento que carrega a tela, e ela não pode significar "subiu":
+   tem de significar "melhorou". Ciclo de vendas caindo é seta verde para
+   baixo, e é por isso que a cor vem do julgamento e o glifo vem do sentido. */
+.tend { font-size: .8em; margin-left: 4px; }
+.tend.subiu { color: var(--ok); }
+.tend.caiu { color: var(--risk); }
+.tend.igual, .tend.muted { color: var(--muted); }
+
+.tabela-evolucao td:first-child { min-width: 250px; }
+.tabela-evolucao td:first-child .tiny.muted { display: block; font-weight: 400; }
+.tabela-evolucao th, .tabela-evolucao td { font-variant-numeric: tabular-nums; }
+/* A semana em curso está incompleta por definição. Marcá-la evita a leitura
+   errada de sempre: "caiu pela metade" quando é quarta-feira. */
+.semana-corrente { background: rgba(31,74,140,.05); }
+.tabela-evolucao th.semana-corrente { border-bottom-color: var(--navy); }
+
+tr.linha-seca td { background: rgba(196,58,58,.05); }
+td.subiu { color: var(--ok); font-weight: 600; }
+
+.duas-colunas-plano { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 12px; }
+@media (max-width: 640px) { .duas-colunas-plano { grid-template-columns: 1fr; gap: 10px; } }
+.coluna-plano h4 { margin: 0 0 4px; font-size: .82rem; text-transform: uppercase; letter-spacing: .04em; }
+.coluna-plano h4.subiu { color: var(--ok); }
+.coluna-plano h4.caiu { color: var(--risk); }
+.coluna-plano ul { margin: 0; padding-left: 1.1em; }
+.coluna-plano li { margin-bottom: 4px; }
+
+.leitura-plano {
+  margin: 12px 0 0; padding: 10px 14px; border-left: 3px solid var(--navy);
+  background: var(--surface-2, rgba(31,74,140,.05)); font-size: .96rem;
+}
+.passos-plano { margin: 0; padding-left: 1.3em; }
+.passos-plano li { margin-bottom: 10px; }
+.passos-plano li .tiny.muted { display: block; margin-top: 2px; }
+
+
+/* ---------- O manual ----------
+   Duas colunas onde a primeira é o nome e a segunda é a explicação. A
+   explicação quebra; o nome não. Sem isto a coluna do nome vira uma tira
+   estreita com uma palavra por linha, que foi exatamente o que aconteceu na
+   tabela de tarefas antes de ganhar largura mínima. */
+/* Os passos do caminho do vendedor. Número à esquerda, texto à direita: a
+   numeração precisa ser lida de relance, porque a pergunta que traz a pessoa
+   aqui é "em que ponto eu estou". */
+.passo-manual { display: flex; gap: 12px; align-items: flex-start; padding: 12px 0; border-top: 1px solid var(--line); }
+.passo-manual:first-of-type { border-top: 0; }
+.passo-manual .numero {
+  flex: 0 0 28px; height: 28px; border-radius: 999px;
+  background: var(--navy); color: #fff; font-weight: 700; font-size: 13px;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.tabela-manual td { vertical-align: top; padding-top: 12px; padding-bottom: 12px; }
+.tabela-manual td.rotulo-manual { min-width: 150px; width: 200px; }
+.tabela-manual td.onde-manual { min-width: 140px; width: 190px; }
+.tabela-manual td .tiny.muted { display: block; margin-top: 4px; }
+.tabela-manual code {
+  background: var(--surface-2, rgba(31,74,140,.07)); border-radius: 3px;
+  padding: 1px 5px; font-size: .85em; color: var(--orange, #d95f18);
+}
+.indice-manual ol { margin: 6px 0 0; padding-left: 1.3em; columns: 2; column-gap: 28px; }
+@media (max-width: 640px) { .indice-manual ol { columns: 1; } }
+.indice-manual li { margin-bottom: 4px; break-inside: avoid; }
+.indice-manual a { color: var(--navy); text-decoration: none; font-weight: 500; }
+.indice-manual a:hover { text-decoration: underline; }
+
+.escada-manual { display: flex; flex-direction: column; gap: 0; margin-top: 12px; }
+.escada-manual > div {
+  display: grid; grid-template-columns: 2em 1fr; gap: 14px; align-items: start;
+  padding: 10px 0; border-top: 1px solid var(--line);
+}
+.escada-manual > div:last-child { border-bottom: 1px solid var(--line); }
+.nota-manual { font-size: 1.3rem; font-weight: 700; line-height: 1.15; }
+.nota-manual.n0 { color: var(--muted); }
+.nota-manual.n1 { color: var(--warn); }
+.nota-manual.n2 { color: color-mix(in srgb, var(--ok) 55%, var(--warn)); }
+.nota-manual.n3 { color: var(--ok); }
+.nota-manual.n4 { color: var(--navy); }
+.escada-manual .tiny.muted { display: block; }
+
+
+/* A barra de marcar em lote da importação do LH. Fica grudada acima da lista
+   e não rola com ela: o botão que comanda vinte linhas precisa continuar à
+   mão depois da terceira. */
+.barra-marcar {
+  position: sticky; top: 0; z-index: 2;
+  gap: 8px; align-items: center;
+  padding: 8px 0; margin: 10px 0 2px;
+  background: var(--surface, #fff);
+  border-bottom: 1px solid var(--line);
+}
+
+
+/* ---------- Manual: como o IAD anda ---------- */
+.caminho-iad { margin: 10px 0 0; padding-left: 1.3em; }
+.caminho-iad li { margin-bottom: 7px; }
+.nivel-linha { display: block; margin-bottom: 5px; font-size: .9rem; line-height: 1.45; }
+.nivel-linha b { margin-right: 6px; font-size: .95rem; }
+
+/* A ordem de trabalho das oito. Rola no celular em vez de quebrar em duas
+   linhas desalinhadas — a sequência só significa alguma coisa em fila. */
+.ordem-decisao {
+  display: flex; align-items: center; gap: 6px; flex-wrap: nowrap;
+  overflow-x: auto; padding: 12px 2px; margin-top: 6px;
+}
+.passo-ordem {
+  display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: 5px 12px 5px 6px; background: var(--surface); font-size: .84rem; font-weight: 600;
+}
+.passo-ordem b {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: var(--navy-2); color: #fff; font-size: .72rem;
+}
+.seta-ordem { color: var(--muted); flex: none; }
+
+.limpa-manual { margin: 6px 0 0; padding-left: 1.2em; }
+.limpa-manual li { margin-bottom: 5px; }
+
+/* As faixas do índice. O número grande à esquerda é a âncora de leitura:
+   quem abre esta seção está com um IAD na cabeça e quer achar a linha dele. */
+.escada-iad > div { grid-template-columns: 5.2em 1fr; }
+.faixa-iad {
+  font-weight: 700; font-size: 1rem; letter-spacing: -.01em;
+  font-variant-numeric: tabular-nums;
+}
+.faixa-iad.f0 { color: var(--muted); }
+.faixa-iad.f1 { color: var(--warn); }
+.faixa-iad.f2 { color: var(--ok); }
+.faixa-iad.f3 { color: var(--navy-2); }
+
+
+/* ---------- Manual: a IA no dia de quem vende ----------
+   Duas vozes na mesma célula, e elas precisam se distinguir sem cor: o que a
+   IA faz vem primeiro, em corpo normal; o que fica com o vendedor vem depois,
+   recuado, atrás de um traço. Quem lê em diagonal vê só a primeira. */
+.faz-ia { display: block; margin-bottom: 6px; }
+.seu-lado {
+  display: block; padding-left: 10px;
+  border-left: 2px solid var(--orange);
+}
+
+/* ---------- A conversa com a IaD ----------
+   A caixa que abre no primeiro acesso do dia. Estreita de propósito: é uma
+   conversa, não um painel — e conversa em coluna larga cansa de ler. */
+dialog.conversa { width: min(560px, 94vw); }
+
+.fala-iad { display: flex; align-items: center; gap: 14px; margin-bottom: 4px; }
+.fala-iad strong { display: block; font-size: 1.05rem; }
+.fala-iad .small { display: block; margin-top: 2px; }
+
+/* O rosto. Herda a paleta em vez de trazer cor própria: trocar o tema troca
+   a IaD junto, e ela não fica sendo a única coisa da tela fora do tom. */
+.rosto-iad { flex: 0 0 auto; }
+.rosto-iad .cabeca { fill: var(--navy); }
+.rosto-iad .olho { fill: var(--surface); }
+.rosto-iad .boca { fill: none; stroke: var(--surface); stroke-width: 3; stroke-linecap: round; }
+.rosto-iad .antena { stroke: var(--navy); stroke-width: 3; stroke-linecap: round; }
+.rosto-iad .antena-fio { fill: var(--orange); }
+.rosto-iad .luz { fill: #fff; }
+
+.sugestoes { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 4px; }
+
+/* A dica ensina a perguntar por uma empresa, com uma conta da própria
+   carteira. Exemplo com nome inventado ensina a escrever errado. */
+.dica-iad { margin: 4px 0 0; font-size: .78rem; color: var(--muted); line-height: 1.5; }
+.dica-iad em { font-style: normal; color: var(--text); }
+
+.resposta-iad { margin: 12px 0 4px; padding: 12px; border: 1px solid var(--line);
+  border-radius: var(--radius); background: var(--bg); }
+.resposta-iad.vazia { background: transparent; }
+.resposta-iad .resumo { margin: 0 0 8px; font-weight: 600; }
+.resposta-iad ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.resposta-iad li.sem-ir { padding: 6px 0; color: var(--muted); font-size: .88rem; }
+
+/* A linha inteira é o botão. Alvo grande no celular, e a resposta continua
+   parecendo texto até o dedo chegar nela. */
+.resposta-iad li button {
+  display: block; width: 100%; text-align: left; border: 0; background: transparent;
+  color: var(--text); font: inherit; font-size: .88rem; padding: 7px 8px;
+  border-radius: 9px; cursor: pointer;
+}
+.resposta-iad li button:hover { background: var(--surface); }
+.resposta-iad > button.btn { margin-top: 10px; }
+
+.pensando { margin: 12px 0 4px; color: var(--muted); font-size: .88rem; }
+
+/* O botão do topo, para chamar a IaD de volta depois de fechada. */
+.topbar .chamar-iad { display: inline-flex; align-items: center; }
+.topbar .chamar-iad .rosto-iad { display: block; }
+
+/* ---------- As conversas do WhatsApp ----------
+   A tarja azul é irmã da laranja e de propósito: mesmo mecanismo, mesmo lugar,
+   outro assunto. A laranja diz que VOCÊ está devendo; esta diz que o CLIENTE
+   falou. As duas podem aparecer juntas no mesmo cartão, e nessa ordem — a
+   dívida primeiro, a notícia boa embaixo. */
+.tarja-conversa {
+  margin: 8px -10px 0; padding: 5px 10px;
+  background: var(--navy); color: #fff;
+  font-size: .72rem; font-weight: 600; letter-spacing: .02em;
+  border-top: 1px solid rgba(255,255,255,.15);
+}
+.item .tarja-conversa { margin: 8px -14px -14px; border-radius: 0 0 var(--radius) var(--radius); }
+
+.lista-conversas { display: grid; gap: 8px; }
+.conversa-linha { text-align: left; width: 100%; }
+.conversa-linha.nova { border-left: 3px solid var(--navy); }
+.conversa-linha .previa {
+  color: var(--muted);
+  /* Uma linha só: a prévia serve para reconhecer a conversa, não para lê-la. */
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pill.novas { background: var(--navy); color: #fff; }
+
+.bloco-conversas { border-left: 3px solid var(--navy); }
+
+/* O fio da conversa. Rolagem própria e altura limitada: seis meses de
+   histórico numa página sem limite deixaria o botão de registrar a
+   quilômetros do topo. */
+.fio {
+  display: grid; gap: 8px; margin-top: 12px;
+  max-height: 58dvh; overflow-y: auto; padding-right: 4px;
+}
+.balao {
+  max-width: 78%; padding: 8px 11px; border-radius: 12px;
+  background: var(--bg); border: 1px solid var(--line);
+}
+.balao.meu { margin-left: auto; background: var(--orange-soft); border-color: transparent; }
+/* O que veio na carga dos 6 meses. Mais apagado porque é passado: está ali
+   para consulta, não para ação. */
+.balao.antigo { opacity: .72; }
+.balao .quem { color: var(--muted); margin-bottom: 2px; }
+.balao .texto { font-size: .9rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.balao .quando { color: var(--muted); margin-top: 3px; text-align: right; }
+
+@media (max-width: 560px) { .balao { max-width: 88%; } }
+
+/* A linha entre o passado importado e a conversa viva. */
+.marco-fio { display: flex; align-items: center; gap: 8px; margin: 4px 0; color: var(--muted); }
+.marco-fio::before, .marco-fio::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+.marco-fio span { font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; }
+
+/* O carimbo de versão no alto do manual. Discreto, mas sempre no mesmo lugar:
+   é a primeira coisa que se pergunta quando alguma coisa parece errada. */
+.carimbo-versao {
+  display: inline-flex; flex-direction: column; align-items: flex-end; gap: 1px;
+  padding: 5px 10px; border: 1px solid var(--line); border-radius: 9px;
+  background: var(--surface); white-space: nowrap;
+}
+.carimbo-versao strong { font-size: .82rem; }
+.carimbo-versao span { font-size: .7rem; color: var(--muted); }
+
+/* A explicação que fica embaixo do campo. Diferente do placeholder, que some
+   no primeiro caractere — e por isso não serve para o que a pessoa precisa
+   saber justamente enquanto digita. */
+.campo .dica-campo {
+  display: block; margin-top: 4px; font-size: .72rem;
+  color: var(--muted); line-height: 1.45; font-weight: 400;
+}
+
+/* O símbolo do WhatsApp. O verde da marca onde ele identifica o canal; a cor
+   de quem está em volta onde ele é só um adorno de link. */
+.ico-zap { fill: #25D366; flex: 0 0 auto; vertical-align: -2px; }
+.ico-zap.herdado { fill: currentColor; }
+.titulo-zap { display: inline-flex; align-items: center; gap: 9px; }
+.link-zap { display: inline-flex; align-items: center; gap: 4px; }
+
+/* ---------- A ficha e as abas do cockpit ----------
+   O cabeçalho do negócio era uma linha de texto corrido com sete informações
+   separadas por ponto. Em rótulo e valor, cada campo se acha pelo nome — e o
+   que está vazio aparece vazio, em vez de sumir e deixar a dúvida. */
+.ficha {
+  display: grid; gap: 10px 18px; margin-top: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+.ficha-campo { display: grid; gap: 1px; min-width: 0; }
+.ficha-campo .rot {
+  font-size: .68rem; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--muted); font-weight: 600;
+}
+.ficha-campo .val { font-size: .88rem; font-weight: 600; overflow-wrap: anywhere; }
+/* A nota embaixo do valor, e não colada nele: "R$ 260.000somado dos itens"
+   é uma frase que ninguém consegue ler na primeira passada. */
+.ficha-campo .val .muted { font-weight: 400; }
+.ficha-campo .val .tiny { display: block; font-weight: 400; line-height: 1.35; }
+/* Mesma regra dentro das tabelas: a nota fica embaixo do número. */
+td .tiny { display: block; line-height: 1.35; }
+
+/* A barra de abas. Rola de lado no celular em vez de quebrar em duas linhas:
+   oito abas empilhadas empurrariam o conteúdo para fora da primeira tela, que
+   é exatamente o que as abas vieram resolver. */
+.abas-cockpit {
+  display: flex; gap: 2px; margin: 16px 0 0;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto; scrollbar-width: none;
+}
+.abas-cockpit::-webkit-scrollbar { display: none; }
+.abas-cockpit .aba {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 14px; border: 0; background: none; cursor: pointer;
+  font: inherit; font-size: .84rem; font-weight: 600; color: var(--muted);
+  white-space: nowrap; border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.abas-cockpit .aba:hover { color: var(--text); }
+.abas-cockpit .aba.ativa { color: var(--navy-2); border-bottom-color: var(--orange); }
+/* O número na aba é o que faz a aba fechada continuar avisando. Sem ele,
+   esconder as tarefas atrás de um clique esconderia também o atraso. */
+.abas-cockpit .conta {
+  min-width: 18px; padding: 0 5px; border-radius: 9px;
+  background: var(--line); color: var(--text);
+  font-size: .68rem; font-weight: 700; text-align: center;
+}
+.abas-cockpit .conta.zap { background: var(--navy); color: #fff; }
+.abas-cockpit .aba.ativa .conta { background: var(--orange); color: #fff; }
+
+.corpo-aba { margin-top: 14px; }
+
+/* O lápis da ficha. Texto sublinhado em quatro campos deixava a ficha com cara
+   de rodapé de página cheio de links; o lápis diz a mesma coisa sem competir
+   com o valor, que é o que se veio ler. Apagado em repouso e cheio quando o
+   ponteiro chega — e nunca escondido, porque em celular não há ponteiro. */
+.btn-lapis {
+  border: 0; background: none; padding: 2px; margin-left: 6px; cursor: pointer;
+  color: var(--muted); opacity: .55; vertical-align: -1px;
+  line-height: 0; border-radius: 5px;
+}
+.ficha-campo:hover .btn-lapis { opacity: .9; }
+.btn-lapis:hover, .btn-lapis:focus-visible { color: var(--orange); opacity: 1; background: var(--bg); }
+/* Alvo de toque decente no celular sem engordar o desenho. */
+@media (pointer: coarse) { .btn-lapis { padding: 6px; margin-left: 2px; } }
