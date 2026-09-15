@@ -4,8 +4,38 @@ O que este documento resolve: a conversa do vendedor com o cliente acontece no
 WhatsApp e morre lá. O CRM não sabe que ela existiu, e o que o cliente disse —
 que é a única coisa que move as oito decisões — fica num aparelho.
 
-Nada aqui foi executado ainda. Este é o plano, na ordem em que ele tem de
-acontecer.
+---
+
+## Onde estamos — conferido em 15/09/2026
+
+Esta seção existe porque o documento dizia "nada aqui foi executado ainda"
+muito depois de metade ter sido executada. Plano que não sabe o que já
+aconteceu faz refazer passo pronto, e refazer passo pronto é o jeito mais
+rápido de perder a confiança no plano. **Atualize isto junto com o que fizer.**
+
+| Passo | Situação |
+|---|---|
+| App criado no portfólio da ACP ("IaD CrM") | ✅ feito |
+| Banco: `nuvem/whatsapp.sql` rodado, tabelas e RLS de pé | ✅ feito |
+| Os quatro segredos da função | ✅ feito (07 e 11/09) |
+| Função `whatsapp` publicada | ✅ feito |
+| **Verify JWT desligado** | ✅ feito |
+| Webhook: URL de callback e token preenchidos | ✅ feito |
+| Campos `messages`, `smb_message_echoes`, `history` assinados | ✅ feito |
+| Teste do painel disparado contra a função | ✅ feito |
+| Verificação do portfólio empresarial | ⏳ em processamento na Meta |
+| **Registro como Provedor de Tecnologia** | ⬜ o próximo passo |
+| Publicar o app (sair de "Em desenvolvimento") | ⬜ falta |
+| Conectar o número (Embedded Signup + Coexistence) | ⬜ falta — é o último |
+| Cadastrar o `phone_number_id` em `whatsapp_numeros` | ⬜ falta — só depois de conectar |
+
+Em resumo: **o lado de cá está pronto e provado.** O que falta é tudo na Meta,
+e nesta ordem — Provedor de Tecnologia, verificação aprovada, app publicado, e
+só então o número.
+
+Enquanto o app estiver "Em desenvolvimento", a própria Meta avisa na tela de
+Webhooks que só chegam webhooks de teste: conversa real não entra, nem de
+administrador, nem de testador.
 
 ---
 
