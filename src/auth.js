@@ -277,6 +277,12 @@
       t.nome = linha.nome || t.nome || 'Empresa sem nome';
       t.cnpj = linha.cnpj || t.cnpj || '';
       if (linha.ativo !== undefined) t.ativo = linha.ativo !== false;
+      /* A ponte do Linked Helper vem junto: é o que faz a configuração existir
+         em qualquer computador. Vazio do servidor não apaga o que está aqui —
+         banco atrás do app devolve a coluna inexistente como indefinida, e
+         isso não é ordem de esquecer a ponte deste aparelho. */
+      if (linha.ponte_url) t.ponteUrl = linha.ponte_url;
+      if (linha.ponte_chave) t.ponteChave = linha.ponte_chave;
     });
     Store.salvar();
     return novas;

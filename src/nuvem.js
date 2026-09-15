@@ -343,6 +343,16 @@
     });
   }
 
+  /* A ponte do Linked Helper é da empresa, não do aparelho: é o que faz a
+     configuração existir em qualquer computador em que alguém entre. Passa por
+     função no banco porque quem pode mudar é quem administra ou quem gerencia
+     aquela empresa — o vendedor enxerga, não configura. */
+  function definirPonteDaEmpresa(id, url, chave) {
+    return chamar('/rest/v1/rpc/definir_ponte_da_empresa', {
+      metodo: 'POST', corpo: { p_id: id, p_url: url || '', p_chave: chave || '' }
+    });
+  }
+
   function definirDadosDoPerfil(id, nome, whatsapp) {
     return chamar('/rest/v1/rpc/definir_dados_do_perfil', {
       metodo: 'POST', corpo: { p_id: id, p_nome: nome, p_whatsapp: whatsapp || '' }
@@ -632,8 +642,9 @@
         (faltando.length === 1 ? 'falta a coluna ' : 'faltam as colunas ') +
         faltando.join(', ') + '.\n\n' +
         'Nada foi perdido — os registros continuam neste aparelho. ' +
-        'Rode o arquivo de correção mais recente da pasta nuvem/ no SQL Editor ' +
-        'do Supabase e sincronize de novo.';
+        'Rode nuvem/correcao-16-tudo-em-dia.sql no SQL Editor do Supabase ' +
+        'e sincronize de novo. Ele junta tudo o que está pendente e pode ser ' +
+        'repetido sem estragar nada.';
     }
     return falhas.map(function (f) { return f.tabela + ': ' + f.erro; }).join(' — ');
   }
@@ -867,7 +878,7 @@
     guardarPerfilNaSessao, empurrar, puxar, sincronizar, ultimaSincronizacao,
     perfisDaNuvem, empresasDaNuvem, souAdminNaNuvem, existeEmpresa,
     definirEmpresaDoPerfil, definirPapelDoPerfil, salvarMeuNome,
-    definirBloqueioDoPerfil, definirBloqueioDaEmpresa,
+    definirBloqueioDoPerfil, definirBloqueioDaEmpresa, definirPonteDaEmpresa,
     sincronizarNaEntrada, definirDadosDaEmpresa, definirDadosDoPerfil, minhaSituacao, comoOServidorMeVe, primeirasLinhas, ondeEstaoOsRegistros,
     convitesDaNuvem, convidar, removerConvite, recuperarSenha, criarEmpresa, chamarFuncao,
     mensagensWhatsapp, marcarLidasWhatsapp, vincularWhatsapp,

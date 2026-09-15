@@ -12,6 +12,12 @@ create table if not exists public.tenants (
   nome        text not null,
   cnpj        text default '',
   ativo       boolean default true,
+  /* A ponte do Linked Helper é da empresa, não do aparelho: é o que faz a
+     configuração existir em qualquer computador em que alguém entre. Uma por
+     empresa — mesmo worker, endereço próprio —, senão duas empresas dividem o
+     balde e a primeira a buscar leva a prospecção da outra. */
+  ponte_url   text not null default '',
+  ponte_chave text not null default '',
   criado_em   timestamptz default now()
 );
 

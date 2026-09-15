@@ -554,6 +554,21 @@
          explicando por quê, e conclui que o sistema perdeu a carteira dele. */
       avisoSincronizacao = '';
       return N.sincronizarNaEntrada().then(function (r) {
+        /* O envio falhar calado foi o defeito que produziu dois computadores
+           com carteiras diferentes: um com 41 negociações, outro com 27, e
+           nada na tela. `sincronizarNaEntrada` engole o erro da subida de
+           propósito — quem acabou de entrar precisa ver a carteira mesmo que o
+           envio tenha falhado —, mas engolir não é esconder. Este é o aviso
+           mais grave da tela, e vem antes de qualquer outro: significa que o
+           trabalho deste aparelho NÃO está no servidor, e que abrir noutro
+           computador vai mostrar menos do que aqui. */
+        if (r && r.erroAoEnviar) {
+          avisoSincronizacao = 'O que está neste aparelho não subiu para o servidor. ' +
+            r.erroAoEnviar + '\n\nAté isso ser resolvido, outro computador vai mostrar ' +
+            'uma carteira menor que esta — e esta é a boa.';
+          render();
+          return;
+        }
         /* Se algo ficou retido, é carteira de outra empresa neste navegador.
            Dizer isso agora evita a conclusão errada — "sincronizei e não subiu
            tudo" — e a pior de todas, sincronizar de novo achando que resolve. */
@@ -3374,9 +3389,21 @@
         { id: 'url', rotulo: 'Endereço da ponte', placeholder: 'https://ponte-iad.seu-subdominio.workers.dev/' },
         { id: 'token', rotulo: 'Chave de leitura' }
       ], I.config(), function (d) {
-        I.salvarConfig(d);
-        leads = null;
-        render();
+        /* Gravar virou promessa porque agora a ponte vai para o servidor, e o
+           servidor pode recusar — banco atrás do app, sem internet, papel sem
+           permissão. Guardar no aparelho e dizer "pronto" nesse caso seria
+           repetir o defeito de origem: a configuração parece feita e não
+           chega ao computador seguinte. */
+        Promise.resolve(I.salvarConfig(d)).then(function (r) {
+          leads = null;
+          if (r && r.naEmpresa && !r.naNuvem) {
+            avisoSincronizacao = 'A ponte foi guardada neste aparelho, mas não subiu para o servidor' +
+              (r.erro ? ': ' + r.erro : '.') +
+              ' Nos outros computadores ela ainda não vai aparecer. ' +
+              'Rode nuvem/correcao-16-tudo-em-dia.sql no Supabase e configure de novo.';
+          }
+          render();
+        });
       });
     },
 

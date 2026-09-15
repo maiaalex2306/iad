@@ -12,7 +12,24 @@
 
   const CHAVE = 'iad-crm:ponte:v1';
 
-  function config() {
+  /* ---------- onde a ponte mora ----------
+
+     Morava só aqui, no localStorage deste navegador. A intenção era boa — a
+     chave de leitura é segredo e segredo não devia viajar junto com a carteira
+     — mas o preço apareceu no uso: reiniciar o computador e abrir noutro
+     perfil dava um app sem ponte, sem botão de importar e sem explicação. Cada
+     máquina virava uma instalação diferente do mesmo sistema.
+
+     Agora a ponte é da EMPRESA, não do aparelho: mora na linha da empresa, no
+     servidor, e desce com ela em qualquer lugar em que alguém entre. Quem já
+     enxerga a carteira daquela empresa já enxerga tudo o que a ponte traria —
+     a chave de leitura não amplia o acesso de ninguém que não o tivesse.
+
+     O localStorage continua existindo, como retaguarda: vale quando não há
+     empresa ainda, quando o banco está atrás do app (as colunas novas não
+     existem lá) e quando não há internet. Ler prefere a empresa; gravar grava
+     nos dois. */
+  function doAparelho() {
     try {
       return JSON.parse(localStorage.getItem(CHAVE)) || { url: '', token: '' };
     } catch (e) {
@@ -20,8 +37,46 @@
     }
   }
 
+  /* A linha da empresa que está lendo. `empresaAtual()` (mais abaixo) é quem
+     decide QUAL é — e recusa quando o administrador está em "Todas as
+     empresas", porque aí não há uma. A ponte segue a mesma regra do balde, e
+     tem de seguir: sem saber de qual empresa se fala, não dá para dizer qual
+     ponte é a dela. */
+  function linhaDaEmpresa() {
+    const Store = global.IADStore;
+    const id = empresaAtual();
+    if (!Store || !id) return null;
+    return (Store.obter().tenants || []).filter(function (t) { return t.id === id; })[0] || null;
+  }
+
+  function config() {
+    const t = linhaDaEmpresa();
+    if (t && t.ponteUrl) return { url: t.ponteUrl, token: t.ponteChave || '' };
+    return doAparelho();
+  }
+
+  /* Grava nos três lugares que importam, e nesta ordem: o aparelho primeiro,
+     porque é o único que não pode falhar; a empresa na cópia local, para a
+     tela mudar agora; o servidor por último, que é o que faz a configuração
+     chegar aos outros computadores. A ida ao servidor pode falhar — banco
+     atrás do app, sem internet — e falhar ali não desfaz o resto. */
   function salvarConfig(nova) {
-    localStorage.setItem(CHAVE, JSON.stringify({ url: nova.url || '', token: nova.token || '' }));
+    const url = String(nova.url || '').trim();
+    const token = String(nova.token || '').trim();
+    localStorage.setItem(CHAVE, JSON.stringify({ url: url, token: token }));
+
+    const t = linhaDaEmpresa();
+    if (!t) return Promise.resolve({ naEmpresa: false });
+    t.ponteUrl = url;
+    t.ponteChave = token;
+    global.IADStore.salvar();
+
+    const N = global.IADNuvem;
+    if (!N || !N.conectado() || !N.definirPonteDaEmpresa) return Promise.resolve({ naEmpresa: true, naNuvem: false });
+    return N.definirPonteDaEmpresa(t.id, url, token).then(
+      function () { return { naEmpresa: true, naNuvem: true }; },
+      function (e) { return { naEmpresa: true, naNuvem: false, erro: e.message }; }
+    );
   }
 
   function configurada() {
