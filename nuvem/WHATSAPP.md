@@ -40,8 +40,65 @@ Por isso conectar o número é o **último** passo, nunca o primeiro.
 
 Feita por você, no painel da Meta. Não envolve código.
 
-1. Conta **Meta Business**.
-2. Criar um aplicativo com o produto **WhatsApp**.
+### As duas decisões, tomadas em 15/09/2026
+
+Estão escritas aqui porque são caras de refazer e fáceis de esquecer.
+
+**Quem é o dono do app: a ACP.** A ACP opera o IAD para a Bio Water Care.
+Então é **um app só**, no portfólio empresarial da ACP, atendendo as duas
+empresas — e não um app por empresa.
+
+Isso funciona porque o isolamento não depende da Meta: cada número conectado
+vira uma linha em `whatsapp_numeros` apontando para a empresa dona, e o RLS
+faz o resto. Uma linha para o número da Bio Water Care, outra para o da ACP;
+a conversa de uma nunca aparece na carteira da outra. O que se ganha é tempo:
+verifica-se **um** portfólio, uma vez, em vez de dois.
+
+O que se aceita em troca: perante a Meta, quem responde pelo app é a ACP. Se
+um dia a Bio Water Care precisar de portfólio próprio, a separação exige
+refazer a conexão do número — e refazer a conexão significa perder o histórico
+de 6 meses, que só é enviado uma vez.
+
+**Qual trilha: Tech Provider com Coexistence.** O assistente da Meta oferece
+duas, e a que ele abre por padrão não é a nossa:
+
+| | Integrar com API | Tech Provider + Coexistence |
+|---|---|---|
+| O número | migra para a API | continua no celular, funcionando |
+| Histórico | não vem | 6 meses, uma vez só |
+| Quem atende | só o sistema | celular e sistema, juntos |
+| Exige | nada além do app | registro como Provedor de Tecnologia |
+
+Escolhemos a segunda. O vendedor continua atendendo pelo WhatsApp do celular
+dele, como sempre fez, e o CRM enxerga a conversa — inclusive o que ele mesmo
+escreveu, pelo evento `smb_message_echoes`. A primeira trilha tiraria o número
+do celular, que é o oposto do que este projeto quer.
+
+**Cuidado com o atalho:** a tela "Visão geral" do caso de uso WhatsApp abre com
+a trilha "Integrar com API" selecionada e três etapas de 30 minutos. Seguir
+por ali conecta o número pela via errada. A nossa porta é
+**"Torne-se um parceiro" → "Torne-se um Provedor de Tecnologia"**, no menu da
+esquerda.
+
+### Onde clicar
+
+| O quê | Onde |
+|---|---|
+| Portfólio empresarial, e a verificação dele | <https://business.facebook.com/settings> — a verificação fica no Centro de Segurança |
+| Lista de apps, criar app | <https://developers.facebook.com/apps> |
+| App ID e App Secret | dentro do app → Configurações → Básico |
+| Tech Provider | dentro do app → caso de uso WhatsApp → Torne-se um parceiro |
+| Webhook e token de verificação | dentro do app → WhatsApp → Configuração |
+| Pedir as permissões | dentro do app → Revisão do app → Permissões |
+| O que a Meta está cobrando de você | menu de cima → **Ações necessárias** |
+
+A Meta renomeia esses menus com frequência. Os domínios são estáveis; os nomes
+internos mudam de tradução e de lugar. Procure pela função, não pelo nome.
+
+### A lista
+
+1. Conta **Meta Business** — portfólio da **ACP**.
+2. Criar um aplicativo com o produto **WhatsApp**. *(feito: "IaD CrM")*
 3. Registrar-se como **Tech Provider**. O Coexistence roda dentro do Embedded
    Signup, e o Embedded Signup exige Tech Provider ou Solution Partner. Não dá
    para começar sem e virar depois sem refazer a conexão.
@@ -51,6 +108,9 @@ Feita por você, no painel da Meta. Não envolve código.
    app para análise ou acessar dados de gente de fora da sua empresa — que é
    exatamente o que uma conversa de cliente é. Leva dias, não minutos, e por
    isso é a primeira coisa a começar, não a última.
+6. **Tirar o app do modo "Em desenvolvimento".** Nesse modo ele só enxerga
+   dados de quem tem papel nele. Conversa de cliente real não entra enquanto
+   ele não estiver ativo, e ativar depende dos passos 3 e 5.
 
 O App Secret nunca entra no repositório nem no navegador. Ele vive como
 segredo da Edge Function, pela mesma razão que a `service_role` e a chave da
