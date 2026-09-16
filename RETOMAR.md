@@ -1,0 +1,126 @@
+# Onde paramos — 15/09/2026, fim da noite
+
+Este arquivo existe para a próxima sessão começar sabendo o que já aconteceu.
+Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
+feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
+obedecido.
+
+Publicado agora: **v176**, commit `badb44f`, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v176, o aparelho
+está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
+
+---
+
+## 1. O bloqueio principal: o banco está atrás do aplicativo
+
+**Sintoma que apareceu:** um perfil do Chrome mostrava 41 negociações, outro
+mostrava 27. Mesmo login, mesma empresa.
+
+**Causa:** o envio para o servidor é por tabela, e uma coluna que existe no app
+e não existe no banco derruba a tabela inteira. Seis correções (10 a 15) nunca
+foram rodadas, então a carteira grande nunca subiu. E o erro da subida era
+engolido sem aparecer na tela — dois aparelhos, duas verdades, nenhuma
+pergunta.
+
+**Corrigido no código (v176):** a falha de envio agora é o aviso mais grave da
+tela, e diz com todas as letras que outro computador vai mostrar menos.
+
+**Falta fazer, e é o primeiro passo de tudo:**
+
+1. Supabase → SQL Editor → rodar `nuvem/correcao-16-tudo-em-dia.sql` inteiro.
+   Ele junta as correções 10 a 15 mais as colunas da ponte, é repetível, e
+   termina imprimindo `ok` ou `FALTA` linha a linha.
+2. Abrir o app **no perfil que tem as 41 negociações**, forçar recarregamento,
+   e ir em Configuração → Nuvem → **Sincronizar**. É isso que manda a carteira
+   boa para o servidor.
+3. Ainda nesse perfil, reconfigurar a ponte em Configuração → Linked Helper.
+   Agora ela sobe para a empresa.
+4. Abrir o outro perfil: deve baixar 41 e já vir com a ponte.
+
+> Ordem importa: sincronizar a partir do perfil errado não apaga nada (a
+> proteção de vazio-sobre-cheio segura), mas perde tempo.
+
+---
+
+## 2. WhatsApp
+
+O estado detalhado está em `nuvem/WHATSAPP.md`, seção **"Onde estamos"**. Em
+uma linha: **o lado de cá está pronto e provado com dado real passando**; o que
+falta é tudo na Meta.
+
+Provado em 15/09 com o webhook de teste do painel: Meta assinou → função
+conferiu o HMAC → caiu no `WA_TENANT_PADRAO` → gravou no Postgres → RLS deixou
+ler → apareceu na tela Conversas com o aviso "Sem dono" correto.
+
+**Decisões tomadas** (não reabrir sem motivo novo):
+
+- **A ACP opera o IAD para a Bio Water Care.** Um app só, no portfólio da ACP,
+  atendendo as duas. O isolamento é por `whatsapp_numeros` → empresa, não pela
+  Meta.
+- **Trilha Tech Provider + Coexistence**, não "Integrar com API". O vendedor
+  continua atendendo pelo celular dele.
+
+**Fila na Meta:** Provedor de Tecnologia → verificação do portfólio (estava em
+processamento) → publicar o app (sair de "Em desenvolvimento") → conectar o
+número → cadastrar o `phone_number_id`.
+
+**Limpeza pendente:** `delete from public.mensagens_whatsapp;` para tirar a
+conversa de teste ("test user name") da tela do vendedor.
+
+---
+
+## 3. O que está na minha fila, e ainda não fiz
+
+Nenhum destes foi construído. Estão aqui para não se perderem.
+
+| O quê | Por que importa |
+|---|---|
+| **Tela para cadastrar o `phone_number_id`** | hoje só existe em SQL, e é preciso justamente no minuto seguinte à conexão do número, quando a janela do histórico de 6 meses está aberta |
+| **Telefone estrangeiro formatado errado** | `16315551181` (EUA) aparece como "(16) 31555-1181". A regra olha o comprimento, e número dos EUA tem 11 dígitos como celular brasileiro |
+| **`IA_MODELO_RAPIDO` igual a `IA_MODELO`** | os dois segredos têm o mesmo digest, então a triagem paga preço de modelo bom |
+| **Fase 5 — responder pelo IAD** | adiada de propósito; hoje responde-se pelo celular e o eco volta |
+| **Propostas e E-mail** | as abas existem marcadas como "por construir". Decisão parada em "estuda tudo e depois vamos pensar" |
+
+---
+
+## 4. Segurança — pendências suas, nenhuma resolvida
+
+Estas não mudaram e continuam valendo:
+
+- **Rotacionar os valores das duas chaves da ponte.** Mudar o tipo para Secret
+  no Cloudflare impede ler daqui para a frente; não invalida o que já vazou no
+  histórico público do repositório.
+- **Trocar a senha de `maia.alex.2306@gmail.com`** — ela circulou.
+- **Ligar 2FA.**
+- **Adicionar um segundo administrador no portfólio da Meta.** Hoje há uma
+  pessoa só; perder essa conta é perder o app, a WABA e os números.
+- **Corrigir o webhook do Linked Helper da Bio Water Care**, que aponta para o
+  balde da ACP, e resgatar os leads que caíram lá.
+- **Apagar as Edge Functions de lixo**: `hyper-action`, `quick-action`,
+  `rapid-api`, `hyper-task`.
+
+Nunca me mande nenhum desses segredos. Eu não preciso deles para ajudar.
+
+---
+
+## 5. Regras deste projeto que valem sempre
+
+- A `service_role` (`sb_secret_`) só existe como segredo de Edge Function.
+  Nunca em `src/config.js`, nunca em arquivo do repositório, nunca no
+  navegador, nunca numa mensagem.
+- A chave publicável (anon) em `src/config.js` é segura por desenho — o RLS é
+  que protege o dado.
+- **Nunca renomear o sentido de uma coluna que já tem dado dentro.** Cria-se
+  uma coluna companheira e migra-se por correspondência de nome achatado.
+- Versão do app e nome do cache do service worker andam juntos, no mesmo
+  commit: `src/config.js` e `sw.js`.
+- Verificar no navegador antes de publicar. A verificação de sintaxe não pega
+  colisão de nome de função — só abrir o app pega.
+
+---
+
+## 6. PR e rotina
+
+PR #1 (`maiaalex2306/iad#1`) segue aberto, `clean`, deploy verde. Há um
+check-in automático de hora em hora que confere estado, CI e conflito, e fica
+em silêncio quando não há novidade.
