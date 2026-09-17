@@ -5,7 +5,7 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v176**, commit `badb44f`, em <https://maiaalex2306.github.io/iad/>
+Publicado agora: **v177**, em <https://maiaalex2306.github.io/iad/>
 O carimbo da versão fica no alto do **Manual**. Se não disser v176, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
@@ -39,6 +39,29 @@ tela, e diz com todas as letras que outro computador vai mostrar menos.
 
 > Ordem importa: sincronizar a partir do perfil errado não apaga nada (a
 > proteção de vazio-sobre-cheio segura), mas perde tempo.
+
+---
+
+## 1-B. O caso da Rosa (AcP) — 17/09
+
+**O que ela via:** faixa dizendo que o servidor não devolveu nada e que há 303
+registros no aparelho, e o Pipeline com 0 negociações.
+
+**O que isso significa, junto:** os 303 estão guardados aqui e nenhum é da AcP.
+Quem não é administrador só enxerga a própria empresa — então guardados 303,
+visíveis 0. E o servidor está vazio para a AcP porque a carteira boa nunca
+subiu (é o bloqueio da seção 1, que continua de pé).
+
+**Corrigido em v177:** quando a descida recusava por vazio-sobre-cheio, o
+resultado da subida era jogado fora — o aviso de "não subiu" e o de "são de
+outra empresa" morriam calados, e sobrava o conselho errado ("sincronize"),
+que nesse caso nunca funciona. Agora a faixa diz qual dos três casos é, e
+nomeia a empresa dona dos registros.
+
+**O que falta do lado de lá:** a seção 1 inteira, na ordem. E, para a ponte do
+LH da AcP, conferir para qual balde as campanhas entregam — a leitura dela
+respondeu 200 com lista vazia, então o balde `e=<id da AcP>` está vazio, não
+inacessível.
 
 ---
 

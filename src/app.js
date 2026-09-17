@@ -233,6 +233,54 @@
      já morreu. Guardar a mensagem faria a segunda desaparecer justamente para
      quem fechou e abriu o app tentando resolver. Então ela é recalculada do
      que está guardado, toda vez. */
+  /* Por que o servidor está vazio para esta conta, dito com nome.
+
+     A faixa de vazio-sobre-cheio dizia o numero de registros deste aparelho e
+     mandava sincronizar. Quando sincronizar não é o conserto, esse conselho
+     custa o dia de quem o segue: a gestora entrou na AcP, viu 303 registros
+     anunciados na faixa e um pipeline zerado, e sincronizou — e nada mudou,
+     porque aqueles registros são de outra empresa e nenhum login desta os
+     manda para cima.
+
+     Este texto separa os tres casos. A subida falhou (banco atras do app), a
+     subida recusou registros de outra empresa, ou nao ha nem uma coisa nem
+     outra e aí sincronizar é mesmo o caminho. Os dois primeiros o app já sabia
+     e não contava. */
+  function deOutraEmpresaAqui() {
+    const d = Store.diagnostico();
+    if (!d.usuario || d.filtrosDoAdmin) return null;
+    const meu = String(d.meuTenantId || '');
+    const nome = function (id) {
+      const t = (d.empresasEspelhadas || []).filter(function (x) { return x.id === id; })[0];
+      return (t && t.nome) || id;
+    };
+    let quantos = 0;
+    const nomes = [];
+    Object.keys(d.registrosPorEmpresa || {}).forEach(function (id) {
+      if (id === meu || id === '(sem empresa)') return;
+      quantos += d.registrosPorEmpresa[id];
+      nomes.push(nome(id));
+    });
+    return quantos ? { quantos: quantos, nomes: nomes } : null;
+  }
+
+  function conselhoDoVazio(e) {
+    const subida = e && e.subida;
+    if (subida && subida.erroAoEnviar) {
+      return 'E sincronizar não resolve enquanto isto não for resolvido: a subida já foi ' +
+        'tentada agora e falhou. ' + subida.erroAoEnviar;
+    }
+    const fora = deOutraEmpresaAqui();
+    if ((subida && subida.retidos) || fora) {
+      const quantos = (subida && subida.retidos) || fora.quantos;
+      const onde = fora && fora.nomes.length ? ' Eles são de ' + fora.nomes.join(' e ') + '.' : '';
+      return quantos + ' registro(s) deste aparelho não sobem por este login.' + onde +
+        ' Sincronizar não os manda nem os torna visíveis: quem entra por esta empresa ' +
+        'não enxerga a carteira de outra. Entre com o login da empresa dona deles.';
+    }
+    return 'Sincronize para mandar esta carteira ao servidor.';
+  }
+
   function faixaDeAviso() {
     if (avisoSincronizacao) {
       return '<div class="aviso faixa-aviso">' + U.esc(avisoSincronizacao) +
@@ -591,7 +639,7 @@
            duas vezes ("não consegui trazer" + "não baixei de propósito") faz a
            pessoa achar que houve falha quando houve proteção. */
         avisoSincronizacao = (e && e.vazioSobreCheio)
-          ? e.message + ' Sincronize para mandar esta carteira ao servidor.'
+          ? e.message + ' ' + conselhoDoVazio(e)
           : 'Não consegui trazer os dados do servidor: ' +
             (e && e.message ? e.message : 'erro desconhecido') +
             ' — o que está na tela é a última cópia baixada neste aparelho.';
@@ -3247,7 +3295,7 @@
         render();
       }, function (e) {
         avisoSincronizacao = (e && e.vazioSobreCheio)
-          ? e.message
+          ? e.message + ' ' + conselhoDoVazio(e)
           : 'Ainda não consegui trazer os dados: ' +
             (e && e.message ? e.message : 'erro desconhecido') +
             ' — o que está na tela é a última cópia baixada neste aparelho.';

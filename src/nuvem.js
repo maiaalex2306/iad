@@ -843,6 +843,22 @@
         localStorage.setItem('iad-crm:nuvem-ultima', new Date().toISOString());
         return { enviados: subida.enviados, retidos: subida.retidos,
           erroAoEnviar: subida.erroAoEnviar, recebidos: recebidos };
+      }, function (e) {
+        /* A descida falhando NÃO apaga o que a subida descobriu.
+
+           Era o mesmo defeito de origem, um andar acima: a subida engole o
+           erro de propósito, guarda em `erroAoEnviar`, e quem lê isso é o
+           ramo de sucesso. Quando a descida recusava por vazio-sobre-cheio, o
+           ramo de sucesso nunca rodava e a notícia mais grave da tela morria
+           calada — exatamente a combinação mais provável, porque as duas têm
+           a mesma causa: servidor sem a carteira desta empresa.
+
+           A pessoa ficava com "sincronize para mandar esta carteira" como
+           único conselho, sem saber que sincronizar já tinha sido tentado e
+           tinha falhado, ou que aqueles registros são de outra empresa e
+           nunca vão subir por este login. */
+        e.subida = subida;
+        throw e;
       });
     });
   }
