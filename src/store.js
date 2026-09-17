@@ -255,30 +255,71 @@
     return dados;
   }
 
+  /* O navegador deixou de guardar carteira.
+
+     Enquanto o `localStorage` foi a verdade e o servidor uma cópia, tudo o
+     que deu errado nesta semana veio daí: o depósito é do NAVEGADOR, não do
+     login, então a carteira de uma empresa aparecia no aparelho de outra; o
+     envio podia falhar calado e dois computadores mostravam números
+     diferentes; e a proteção contra gravar vazio por cima gerava faixas,
+     cópias de segurança e botões de restaurar que ofereciam a carteira
+     alheia. Cada um desses foi corrigido em separado, e o cano continuava
+     furado no mesmo lugar.
+
+     Agora a memória é a única cópia local, e ela morre com a aba. O que
+     estava guardado de antes é apagado na primeira abertura — inclusive a
+     carteira de outra empresa que tenha ficado ali. */
   function carregar() {
     try {
-      const bruto = localStorage.getItem(CHAVE);
-      if (bruto) {
-        const dados = JSON.parse(bruto);
-        const migrado = dados && dados.versao <= VERSAO ? migrar(dados) : null;
-        if (migrado) estado = migrado;
-      }
+      localStorage.removeItem(CHAVE);
+      localStorage.removeItem(CHAVE_ANTES);
     } catch (e) {
-      console.warn('Falha ao carregar estado local:', e);
+      console.warn('Não consegui limpar o depósito antigo:', e);
     }
     return estado;
   }
 
+  /* Guardar deixou de ser escrever no navegador: é avisar quem leva ao
+     servidor. `silencio` existe porque a descida também chama `salvar` para
+     acordar a tela — e mandar de volta o que acabou de chegar seria um laço. */
+  let aoMudar = null;
+  let silencio = false;
+
+  function quandoMudar(fn) { aoMudar = fn; }
+
+  function semSincronizar(fn) {
+    silencio = true;
+    try { fn(); } finally { silencio = false; }
+  }
+
   function salvar() {
-    try {
-      localStorage.setItem(CHAVE, JSON.stringify(estado));
-    } catch (e) {
-      console.warn('Falha ao salvar estado local:', e);
-      if (String(e.name).indexOf('Quota') !== -1) {
-        alert('O armazenamento do navegador encheu. Exporte um backup em Configuração → Backup e apague anexos antigos.');
-      }
-    }
     ouvintes.forEach(function (fn) { fn(estado); });
+    if (!silencio && aoMudar) aoMudar();
+  }
+
+  /* As exclusões precisam viajar.
+
+     O envio sempre foi `upsert`: manda linha por linha e atualiza o que já
+     existe. Apagar nunca chegou ao servidor — e enquanto o navegador mandava
+     isso passava despercebido, porque a cópia local já estava sem o registro.
+     Com o servidor mandando, a oportunidade excluída voltaria na primeira
+     recarga. Ficam aqui, fora do estado, para não serem varridas quando a
+     carteira é substituída pela do servidor. */
+  const exclusoes = [];
+
+  function registrarExclusao(tabela, id) {
+    if (!tabela || !id) return;
+    exclusoes.push({ tabela: tabela, id: String(id) });
+  }
+
+  function exclusoesPendentes() { return exclusoes.slice(); }
+
+  function esquecerExclusoes(quais) {
+    (quais || []).forEach(function (x) {
+      for (let i = exclusoes.length - 1; i >= 0; i--) {
+        if (exclusoes[i].tabela === x.tabela && exclusoes[i].id === x.id) exclusoes.splice(i, 1);
+      }
+    });
   }
 
   /* ---------- a cópia de antes ----------
@@ -293,7 +334,16 @@
      só, a última: não é histórico, é o passo atrás. */
   const CHAVE_ANTES = 'iad-crm:estado:antes-de-baixar';
 
+  /* A cópia de segurança era carteira guardada no navegador, e é justamente
+     isso que acabou. Ela existia para um mundo em que o local podia ser a
+     única cópia; agora o servidor é, e guardar uma segunda verdade aqui
+     recriaria o problema que esta mudança resolve. Fica como função morta
+     para não quebrar quem a chama. */
   function guardarCopiaDeSeguranca(porque) {
+    return false;
+  }
+
+  function guardarCopiaDeSegurancaAntiga(porque) {
     try {
       const movimento = (estado.contas || []).length + (estado.oportunidades || []).length;
       if (!movimento) return false;   /* não vale a pena guardar o nada */
@@ -1124,8 +1174,13 @@
     return item;
   }
 
+  const TABELA_DO_CATALOGO = {
+    segmentos: 'segmentos', tiposTarefa: 'tipos_tarefa', produtos: 'produtos', fontes: 'fontes'
+  };
+
   function removerDoCatalogo(nome, id) {
     estado[nome] = catalogo(nome).filter(function (i) { return i.id !== id; });
+    if (TABELA_DO_CATALOGO[nome]) registrarExclusao(TABELA_DO_CATALOGO[nome], id);
     salvar();
   }
 
@@ -1365,6 +1420,7 @@
 
   function excluirTarefa(id) {
     estado.tarefas = estado.tarefas.filter(function (t) { return t.id !== id; });
+    registrarExclusao('tarefas', id);
     salvar();
   }
 
@@ -1454,7 +1510,13 @@
 
   function excluirOportunidade(id) {
     estado.oportunidades = estado.oportunidades.filter(function (o) { return o.id !== id; });
+    /* As tarefas do negócio saem junto, e cada uma precisa da própria ordem de
+       apagar: o servidor não sabe que elas pertenciam a ele. */
+    (estado.tarefas || []).forEach(function (t) {
+      if (t.oportunidadeId === id) registrarExclusao('tarefas', t.id);
+    });
     estado.tarefas = estado.tarefas.filter(function (t) { return t.oportunidadeId !== id; });
+    registrarExclusao('oportunidades', id);
     salvar();
   }
 
@@ -1478,6 +1540,7 @@
   global.IADStore = {
     uid, hoje, carregar, salvar, inscrever, obter, substituir, estadoVazio,
     guardarCopiaDeSeguranca, copiaDeSeguranca, restaurarCopiaDeSeguranca, descartarCopiaDeSeguranca,
+    quandoMudar, semSincronizar, registrarExclusao, exclusoesPendentes, esquecerExclusoes,
     moverRegistros, esquecerEmpresa,
     conta, contato, oportunidade, tarefa, contatosDaConta, tarefasDaOportunidade,
     daquiADias, PRAZO_PADRAO_DE_FECHAMENTO,

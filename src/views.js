@@ -19,6 +19,27 @@
     recadoAcesso = recado || '';
   }
 
+  /* A tela de quando o servidor não respondeu.
+
+     Com o navegador guardando carteira, isto era uma faixa em cima do que
+     havia sido baixado da última vez. Agora não há "da última vez": o
+     aparelho não guarda nada, então ou o servidor responde ou não há app. É
+     mais honesto — e evita a pior das telas, a que mostra menu, pipeline
+     vazio e nenhuma explicação. */
+  function semServidor(motivo) {
+    return '<div class="card" style="max-width:640px;margin:40px auto">' +
+      '<h1 style="margin-top:0">Sem conexão com o servidor</h1>' +
+      '<p>O IAD guarda a carteira no servidor, e não neste computador. Sem falar com ele ' +
+      'não há o que mostrar — e mostrar uma tela vazia seria pior, porque pareceria que ' +
+      'a sua carteira sumiu. Ela não sumiu: está lá.</p>' +
+      '<p class="small muted">O que o servidor respondeu: ' + esc(motivo || 'sem detalhe') + '</p>' +
+      '<div class="row" style="margin-top:14px">' +
+      '<button class="btn" onclick="location.reload()">Tentar de novo</button></div>' +
+      '<p class="tiny muted" style="margin-top:14px">Se isto continuar com a internet funcionando, ' +
+      'o problema é do servidor ou da sua permissão nele — não do aparelho, e trocar de ' +
+      'computador não vai adiantar.</p></div>';
+  }
+
   function acesso() {
     const A = global.IADAuth;
     const naNuvem = global.IADNuvem.mandaNoAcesso();
@@ -971,8 +992,7 @@
     return '<div class="card"><h1>Bem-vindo ao IAD CRM</h1>' +
       '<p>Este CRM não mede o que o vendedor fez. Mede o que mudou na decisão do comprador.</p>' +
       '<p class="small muted">Comece com dados de demonstração para entender o modelo, cadastre sua primeira conta ou importe sua carteira de uma planilha.</p>' +
-      '<div class="row"><button class="btn alt" onclick="App.carregarDemo()" data-ajuda-titulo="Demonstração" data-ajuda="Carrega uma carteira fictícia com os cinco grupos de pipeline, para treinar a leitura do modelo. Substitui o que está aqui.">Carregar demonstração</button>' +
-      '<button class="btn ghost" onclick="App.novaConta()" data-ajuda-titulo="Primeira empresa" data-ajuda="Cadastre a empresa. Depois vêm os contatos e a oportunidade — ou faça tudo de uma vez pelo botão + Oportunidade.">Criar primeira conta</button>' +
+      '<div class="row"><button class="btn" onclick="App.novaConta()" data-ajuda-titulo="Primeira empresa" data-ajuda="Cadastre a empresa. Depois vêm os contatos e a oportunidade — ou faça tudo de uma vez pelo botão + Oportunidade.">Criar primeira conta</button>' +
       '<button class="btn ghost" onclick="App.ir(\'#/dados\')" data-ajuda-titulo="Importar planilha" data-ajuda="Traz empresas, contatos ou oportunidades de um CSV. Os modelos ficam em Configuração → Importar planilha.">Importar planilha</button></div></div>';
   }
 
@@ -5424,10 +5444,16 @@
       avisoDeExportacao(est) +
       '<p class="tiny muted" id="uso-anexos">Anexos: calculando…</p></div>' +
 
-      '<div class="card"><h2>Demonstração</h2>' +
-      '<p class="small muted">Carrega uma carteira fictícia com os grupos de pipeline para treinar a leitura do modelo.</p>' +
-      '<div class="row"><button class="btn ghost" onclick="App.carregarDemo()" data-ajuda-titulo="Demonstração" data-ajuda="Carrega uma carteira fictícia com os cinco grupos de pipeline, para treinar a leitura do modelo. Substitui o que está aqui.">Carregar demonstração</button>' +
-      '<button class="btn ghost" onclick="App.limpar()" data-ajuda-titulo="Apagar tudo" data-ajuda="Apaga a carteira deste aparelho. Não apaga o que já foi sincronizado no servidor, nem os acessos.">Apagar tudo</button></div></div>';
+      /* "Carregar demonstração" e "Apagar tudo" saíram daqui.
+
+         Os dois nasceram quando o navegador era a verdade e mexer nele não
+         saía do aparelho. Agora toda alteração sobe na hora: carregar a
+         demonstração publicaria empresas fictícias na carteira real da
+         empresa, e apagar tudo esvaziaria a tela sem tocar no servidor, que
+         é o pior dos dois mundos — assusta e não resolve. Quem quiser
+         recomeçar a carteira usa nuvem/zerar-carteira-da-empresa.sql, que
+         apaga onde os dados de fato moram. */
+      '';
   }
 
   /* ---------- não conformidades das campanhas do Linked Helper ----------
@@ -6280,6 +6306,7 @@
   }
 
   global.IADViews = {
+    semServidor,
     hoje, painel, pipeline, tarefas, cockpit, revisao, contas, cadastros, playbook, dados, itemArquivo, listaLeads,
     revisaoDaImportacao, recusaDoCliente, resumoDaLeitura, planoDaIA, definirPlano, planoGuardado,
     marcarLendo, estaLendo, revisaoDasNotas, respostaDaConversa,

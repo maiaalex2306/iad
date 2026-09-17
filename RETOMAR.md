@@ -5,9 +5,37 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v179**, em <https://maiaalex2306.github.io/iad/>
+Publicado agora: **v180**, em <https://maiaalex2306.github.io/iad/>
 O carimbo da versão fica no alto do **Manual**. Se não disser v176, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
+
+---
+
+## 0. A mudança de fundo — v180, 17/09
+
+**O navegador não guarda mais carteira.** O servidor é a única fonte.
+
+Tudo o que deu errado nesta semana saiu da decisão oposta: o `localStorage`
+era a verdade e o servidor uma cópia. O depósito é do NAVEGADOR e não do
+login, então a carteira de uma empresa aparecia no aparelho de outra; o envio
+podia falhar calado e dois computadores mostravam números diferentes; e a
+proteção contra gravar vazio por cima gerou faixas, cópias de segurança e
+botões que ofereciam a carteira alheia. Corrigi cada um em separado por dois
+dias, e o cano continuava furado no mesmo lugar.
+
+Agora: a memória é a única cópia local e morre com a aba; abrir o app baixa do
+servidor (e sem servidor a tela é "Sem conexão", não uma tela vazia); cada
+alteração sobe na hora, com faixa que não sai enquanto não subir; excluir
+finalmente chega ao servidor — o envio sempre foi só `upsert`, e apagar nunca
+viajava. O que estava guardado de antes é apagado na primeira abertura, em
+qualquer aparelho.
+
+Saíram: "Carregar demonstração" e "Apagar tudo" (publicariam ficção ou
+esvaziariam a tela sem tocar no servidor) e a cópia de segurança local.
+
+**O que isso custa:** sem internet o app não abre. Foi decisão do Alexandre,
+consciente. E cada alteração manda a carteira inteira — tudo bem no tamanho de
+hoje, vai precisar virar envio por tabela quando crescer.
 
 ---
 

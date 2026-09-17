@@ -723,6 +723,19 @@
       return UUID.test(dele) ? dele : perfil.tenant_id;
     };
 
+    /* Apagar vai na frente. O envio é `upsert`, então uma linha excluída aqui
+       e ainda presente lá voltaria na descida seguinte como se nada tivesse
+       acontecido — e com o servidor mandando isso é a diferença entre excluir
+       e não excluir. */
+    const paraApagar = Store.exclusoesPendentes();
+    const exclusoes = paraApagar.length
+      ? Promise.all(paraApagar.map(function (x) {
+          return chamar('/rest/v1/' + x.tabela + '?id=eq.' + encodeURIComponent(x.id), {
+            metodo: 'DELETE', cabecalhos: { Prefer: 'return=minimal' }
+          }).then(function () { return { ok: x }; }, function (e) { return { erro: e.message, tabela: x.tabela }; });
+        }))
+      : Promise.resolve([]);
+
     let retidos = 0;
     const envios = TABELAS.map(function (t) {
       const minhas = (estado[t.local] || []).filter(daEmpresa);
@@ -742,15 +755,23 @@
       );
     });
 
-    return Promise.all(envios).then(function (resultados) {
-      const falhas = resultados.filter(function (r) { return r.erro; });
-      if (falhas.length) {
-        throw new Error(explicarFalhas(falhas));
-      }
-      return {
-        enviados: resultados.reduce(function (s, r) { return s + r.enviados; }, 0),
-        retidos: retidos
-      };
+    return exclusoes.then(function (saidas) {
+      /* Só esquece o que o servidor confirmou ter apagado: o que falhou fica
+         na fila e tenta de novo no próximo envio. */
+      Store.esquecerExclusoes(saidas.filter(function (r) { return r.ok; }).map(function (r) { return r.ok; }));
+      const erroAoApagar = saidas.filter(function (r) { return r.erro; });
+
+      return Promise.all(envios).then(function (resultados) {
+        const falhas = resultados.filter(function (r) { return r.erro; })
+          .concat(erroAoApagar.map(function (r) { return { tabela: r.tabela + ' (apagar)', erro: r.erro }; }));
+        if (falhas.length) {
+          throw new Error(explicarFalhas(falhas));
+        }
+        return {
+          enviados: resultados.reduce(function (s, r) { return s + r.enviados; }, 0),
+          retidos: retidos
+        };
+      });
     });
   }
 
@@ -807,10 +828,13 @@
         throw e;
       }
 
-      /* O passo atrás, guardado antes de escrever. */
-      Store.guardarCopiaDeSeguranca('antes de baixar do servidor');
-      resultados.forEach(function (r) { estado[r.local] = r.linhas; });
-      Store.salvar();
+      /* Escrever o que acabou de chegar não pode disparar um envio de volta:
+         seria um laço, e um laço que reescreve o servidor com a cópia que ele
+         mesmo mandou. */
+      Store.semSincronizar(function () {
+        resultados.forEach(function (r) { estado[r.local] = r.linhas; });
+        Store.salvar();
+      });
       return resultados.reduce(function (s, r) { return s + r.linhas.length; }, 0);
     });
   }

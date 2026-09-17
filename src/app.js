@@ -65,6 +65,11 @@
   /* Falha da última sincronização, para a tela poder dizer o que houve. */
   let avisoSincronizacao = '';
 
+  /* Por que a tela está sem nada para mostrar. Com o servidor sendo a única
+     fonte, "não consegui falar com ele" não é um aviso em cima da carteira
+     velha — não existe carteira velha. É a tela inteira. */
+  let semServidor = '';
+
   function render() {
     const conteudo = document.getElementById('conteudo');
     let logado = A.atual();
@@ -93,6 +98,15 @@
        de Conversas. Por isso a busca acontece uma vez por sessão, aqui, e não
        ao abrir aquela tela. */
     if (logado && W && W.disponivel() && !W.carregadas()) pintarConversas();
+
+    /* Com sessão de nuvem viva e servidor mudo, a tela é "sem conexão" — não a
+       de login. Pedir a senha de novo a quem já está autenticado é a mensagem
+       mais confusa possível: sugere que a conta sumiu. */
+    if (semServidor && global.IADNuvem.conectado()) {
+      document.body.classList.remove('sem-sessao');
+      conteudo.innerHTML = V.semServidor(semServidor);
+      return;
+    }
 
     document.body.classList.toggle('sem-sessao', !logado);
     if (!logado) {
@@ -282,6 +296,19 @@
   }
 
   function faixaDeAviso() {
+    /* O envio que não foi. É o aviso mais grave que existe na tela: quer
+       dizer que o que a pessoa acabou de fazer NÃO está no servidor, e como
+       o navegador não guarda nada, recarregar perde. Fica por cima de
+       qualquer outro e não sai sozinho. */
+    const sinc = global.IADSincronia && global.IADSincronia.estado();
+    if (sinc && sinc.situacao === 'erro') {
+      return '<div class="aviso faixa-aviso erro-grave">' +
+        '<strong>A sua última alteração não foi salva no servidor.</strong> ' +
+        U.esc(sinc.recado) +
+        ' Enquanto isto não for resolvido, o que está na tela existe só aqui — e recarregar perde.' +
+        '<button class="btn mini" onclick="App.tentarSalvarDeNovo()">Tentar salvar de novo</button>' +
+        '<button class="btn ghost mini" onclick="App.descartarAlteracao()">Descartar e recarregar</button></div>';
+    }
     if (avisoSincronizacao) {
       return '<div class="aviso faixa-aviso">' + U.esc(avisoSincronizacao) +
         '<button class="btn ghost mini" onclick="App.tentarBaixarDeNovo()">Tentar de novo</button></div>';
@@ -599,59 +626,31 @@
         });
       }
 
-      /* Subir o que está aqui e trazer o que existe lá — nesta ordem. Subir
-         primeiro é o que impede a descida de apagar trabalho que ainda não
-         tinha ido para o servidor; falhar aqui não impede de usar o app com a
-         cópia local.
+      return baixarDoServidor();
+    });
+  }
 
-         O que não pode é falhar calado. Quem acabou de entrar com outra conta
-         fica olhando a cópia da conta anterior — ou nenhuma — sem nada na tela
-         explicando por quê, e conclui que o sistema perdeu a carteira dele. */
-      avisoSincronizacao = '';
-      return N.sincronizarNaEntrada().then(function (r) {
-        /* O envio falhar calado foi o defeito que produziu dois computadores
-           com carteiras diferentes: um com 41 negociações, outro com 27, e
-           nada na tela. `sincronizarNaEntrada` engole o erro da subida de
-           propósito — quem acabou de entrar precisa ver a carteira mesmo que o
-           envio tenha falhado —, mas engolir não é esconder. Este é o aviso
-           mais grave da tela, e vem antes de qualquer outro: significa que o
-           trabalho deste aparelho NÃO está no servidor, e que abrir noutro
-           computador vai mostrar menos do que aqui. */
-        if (r && r.erroAoEnviar) {
-          avisoSincronizacao = 'O que está neste aparelho não subiu para o servidor. ' +
-            r.erroAoEnviar + '\n\nAté isso ser resolvido, outro computador vai mostrar ' +
-            'uma carteira menor que esta — e esta é a boa.';
-          render();
-          return;
-        }
-        /* Se algo ficou retido, é carteira de outra empresa neste navegador.
-           Dizer isso agora evita a conclusão errada — "sincronizei e não subiu
-           tudo" — e a pior de todas, sincronizar de novo achando que resolve. */
-        if (r && r.retidos) {
-          avisoSincronizacao = r.retidos + ' registro(s) deste aparelho são de outra empresa e ' +
-            'não foram enviados. Eles continuam aqui: entre com o login daquela empresa para mandá-los.';
-          render();
-          return;
-        }
-        /* Baixar zero registros de movimento não é o mesmo que não baixar, e
-           na tela era: as duas davam um pipeline vazio e calado. Quando as
-           tabelas de configuração vêm cheias e as de trabalho vêm vazias, a
-           resposta é do servidor — permissão ou carimbo de empresa —, e é isso
-           que a faixa diz, em vez de deixar a pessoa concluir que o app perdeu
-           a carteira dela. */
-        avisoSincronizacao = '';
-        render();
-      }, function (e) {
-        /* A recusa por vazio-sobre-cheio já se explica sozinha, e explicar
-           duas vezes ("não consegui trazer" + "não baixei de propósito") faz a
-           pessoa achar que houve falha quando houve proteção. */
-        avisoSincronizacao = (e && e.vazioSobreCheio)
-          ? e.message + ' ' + conselhoDoVazio(e)
-          : 'Não consegui trazer os dados do servidor: ' +
-            (e && e.message ? e.message : 'erro desconhecido') +
-            ' — o que está na tela é a última cópia baixada neste aparelho.';
-        render();
-      });
+  /* Entrar é baixar, e recarregar também.
+
+     Não há mais nada para subir aqui: o que a pessoa faz sobe na hora
+     (src/sincronia.js), e o navegador não guarda carteira entre uma sessão e
+     outra. Baixar, por isso, deixou de ser opcional — sem o servidor não
+     existe cópia local para cair de volta, e falhar aqui é tela de "sem
+     conexão", não uma faixa em cima de dados velhos.
+
+     Vale para os dois caminhos: quem acaba de entrar e quem recarrega a
+     página com a sessão ainda válida. O segundo é o caso comum, e era
+     justamente o que dependia do depósito local. */
+  function baixarDoServidor() {
+    const N = global.IADNuvem;
+    if (!N.conectado() || !A.atual()) return Promise.resolve();
+    avisoSincronizacao = '';
+    return N.puxar().then(function () {
+      semServidor = '';
+      render();
+    }, function (e) {
+      semServidor = (e && e.message) || 'não consegui falar com o servidor';
+      render();
     });
   }
 
@@ -684,7 +683,13 @@
       const u = N.sessao().user;
       A.espelharDaNuvem(u, perfil);
       if (antes.papel !== perfil.papel || antes.tenant_id !== perfil.tenant_id) render();
-    }).catch(function () {});
+    }).catch(function (e) {
+      /* Sessão válida e servidor mudo. Antes isto era engolido porque havia
+         carteira no aparelho para mostrar; agora não há, e cair na tela de
+         login faria a pessoa achar que a conta dela deixou de existir. */
+      semServidor = (e && e.message) || 'não consegui falar com o servidor';
+      render();
+    });
 
     /* A função do assistente é publicada à mão, num passo separado do login.
        Perguntamos ao servidor se ela existe antes de oferecer a caixa ✨.
@@ -3298,6 +3303,17 @@
 
     /* O botão do aviso de sincronização. Repete só a descida — quem acabou de
        entrar quer ver a carteira, não empurrar a cópia local por cima dela. */
+    tentarSalvarDeNovo: function () {
+      global.IADSincronia.tentarDeNovo();
+      render();
+    },
+
+    descartarAlteracao: function () {
+      if (!U.confirmar('Descartar o que você mudou desde a última gravação e recarregar do servidor?\n\n' +
+        'Isso não tem volta: o que não subiu se perde.')) return;
+      global.IADSincronia.descartarERecarregar();
+    },
+
     tentarBaixarDeNovo: function () {
       avisoSincronizacao = 'Baixando de novo…';
       render();
@@ -6916,6 +6932,10 @@
 
   document.addEventListener('DOMContentLoaded', function () {
     Store.carregar();
+    /* Cada alteração passa a subir sozinha, e o estado do envio aparece na
+       tela sem ninguém precisar perguntar. */
+    global.IADSincronia.ligar();
+    global.IADSincronia.aoMudar(function () { render(); });
     global.IADAjuda.ligar();
     montarNav();
 
@@ -6933,6 +6953,7 @@
       return A.garantirAdministrador();
     }).then(function (adm) {
       render();
+      baixarDoServidor();
       if (chegouPeloLink) pedirSenhaNova(chegouPeloLink.trim());
       /* A senha sorteada aparece uma vez, aqui, porque não existe em lugar
          nenhum além deste aparelho: se ninguém anotar, ninguém entra. */
