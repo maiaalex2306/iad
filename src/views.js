@@ -5378,6 +5378,32 @@
       '<button class="btn alt" onclick="App.instalar()" data-ajuda-titulo="Instalar" data-ajuda="Cria um ícone próprio no computador ou celular. O app passa a abrir em janela separada e a funcionar sem internet.">Instalar aplicativo</button></div>';
   }
 
+  /* O número embaixo do Backup conta o que você enxerga; o arquivo leva tudo.
+
+     Num aparelho com a carteira de outra empresa dentro, essa diferença é a
+     que apaga trabalho: a linha diz "0 contas · 0 oportunidades", quem lê
+     conclui que não há nada a salvar, e o passo seguinte — baixar o vazio do
+     servidor por cima — leva junto os registros que ninguém viu. Aconteceu de
+     ter 377 registros da Bio Water Care num login da AcP anunciando zero.
+
+     Exportar é justamente o resgate certo nesse caso, porque `Store.exportar`
+     grava o estado inteiro, sem filtro de empresa. Faltava dizer isso onde a
+     decisão é tomada. */
+  function avisoDeExportacao(est) {
+    const tudo = Store.obter();
+    const some = function (fonte) {
+      return (fonte.contas || []).length + (fonte.contatos || []).length +
+        (fonte.oportunidades || []).length + (fonte.tarefas || []).length;
+    };
+    const guardados = some(tudo);
+    const escondidos = guardados - some(est);
+    if (escondidos <= 0) return '';
+    return '<p class="tiny" style="margin-top:6px">Esse número é o que <strong>você</strong> enxerga. ' +
+      'Há mais ' + escondidos + ' registro(s) guardados neste aparelho, de outra empresa, ' +
+      'invisíveis para este login — e <strong>o arquivo exportado leva todos</strong>. ' +
+      'Exporte antes de apagar ou substituir qualquer coisa aqui.</p>';
+  }
+
   function configDados(est) {
     return '<div class="card"><h2>Importar planilha</h2>' +
       '<p class="small muted">Traga a carteira que já existe. Importe nesta ordem: empresas, depois contatos, depois oportunidades — contatos e oportunidades precisam da empresa já cadastrada.</p>' +
@@ -5395,6 +5421,7 @@
       '<button class="btn ghost" onclick="App.importar()" data-ajuda-titulo="Importar" data-ajuda="Substitui a carteira deste aparelho pelo conteúdo do arquivo. Suas contas de acesso são preservadas.">Importar JSON</button></div>' +
       '<p class="tiny muted" style="margin-top:10px">' + est.contas.length + ' contas · ' + est.contatos.length + ' contatos · ' +
       est.oportunidades.length + ' oportunidades · ' + est.tarefas.length + ' tarefas.</p>' +
+      avisoDeExportacao(est) +
       '<p class="tiny muted" id="uso-anexos">Anexos: calculando…</p></div>' +
 
       '<div class="card"><h2>Demonstração</h2>' +
