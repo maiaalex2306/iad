@@ -5,7 +5,7 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v177**, em <https://maiaalex2306.github.io/iad/>
+Publicado agora: **v179**, em <https://maiaalex2306.github.io/iad/>
 O carimbo da versão fica no alto do **Manual**. Se não disser v176, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
@@ -57,6 +57,13 @@ resultado da subida era jogado fora — o aviso de "não subiu" e o de "são de
 outra empresa" morriam calados, e sobrava o conselho errado ("sincronize"),
 que nesse caso nunca funciona. Agora a faixa diz qual dos três casos é, e
 nomeia a empresa dona dos registros.
+
+**Depois (v178/v179):** o cartão Backup passou a avisar que o arquivo exportado
+leva também os registros invisíveis de outra empresa; "Apagar tudo" passou a
+guardar cópia antes (era o botão mais destrutivo e o único sem passo atrás); e
+a faixa que oferece "restaurar essa cópia" parou de oferecer a carteira de
+outra empresa — ela ofereceu 72 empresas e 73 negociações da BWC para a
+gestora da AcP, logo depois de um "Apagar tudo" deliberado.
 
 **O que falta do lado de lá:** a seção 1 inteira, na ordem. E, para a ponte do
 LH da AcP, conferir para qual balde as campanhas entregam — a leitura dela

@@ -316,10 +316,17 @@
        botões, e o pipeline vazio se explica sozinho. */
     if (!copia) return '';
 
+    /* E a cópia tem de ser DESTA empresa. Uma cópia cheia da carteira de
+       outra companhia não é resgate nenhum: restaurá-la devolve registros que
+       quem está olhando não enxerga, e desfaz um "Apagar tudo" que foi
+       deliberado. Foi o que a faixa fez com a gestora da AcP, oferecendo 72
+       empresas e 73 negociações da Bio Water Care como se fossem dela. */
+    if (!copia.minhasContas && !copia.minhasOportunidades) return '';
+
     return '<div class="aviso faixa-aviso">O servidor respondeu e não devolveu nenhuma empresa nem oportunidade ' +
       'para esta conta — só as listas de configuração. ' +
       'Existe uma cópia deste aparelho de ' + U.esc(U.data(copia.em)) + ', com ' +
-      copia.contas + ' empresa(s) e ' + copia.oportunidades + ' negociação(ões). ' +
+      copia.minhasContas + ' empresa(s) e ' + copia.minhasOportunidades + ' negociação(ões) desta empresa. ' +
       '<button class="btn mini" onclick="App.restaurarCopiaLocal()">Restaurar essa cópia</button>' +
       '<button class="btn ghost mini" onclick="App.verDiagnostico()">Ver o diagnóstico</button></div>';
   }
@@ -2973,6 +2980,10 @@
 
     limpar: function () {
       if (!U.confirmar('Apagar todos os dados deste dispositivo? Os anexos permanecem.')) return;
+      /* O botão mais destrutivo do app era o único sem passo atrás: baixar do
+         servidor guardava cópia antes de escrever, e "Apagar tudo" não
+         guardava nada. Ficava ao contrário de como deveria ser. */
+      Store.guardarCopiaDeSeguranca('antes de apagar tudo deste aparelho');
       Store.limpar();
       location.hash = '#/hoje';
       render();
@@ -3376,8 +3387,15 @@
     restaurarCopiaLocal: function () {
       const c = Store.copiaDeSeguranca();
       if (!c) { alert('Não há cópia guardada neste aparelho.'); return; }
+      /* Quantos vêm de fora da sua empresa. Restaurar sem saber disso enche o
+         aparelho de registros invisíveis, que é como a carteira de uma empresa
+         acaba dentro do navegador de outra. */
+      const deFora = (c.contas - c.minhasContas) + (c.oportunidades - c.minhasOportunidades);
       if (!U.confirmar('Restaurar a cópia de ' + U.data(c.em) + '?\n\n' +
         c.contas + ' empresa(s), ' + c.oportunidades + ' negociação(ões) e ' + c.tarefas + ' tarefa(s).\n\n' +
+        (deFora
+          ? deFora + ' desses registros são de OUTRA empresa e vão voltar invisíveis para você.\n\n'
+          : '') +
         'Ela volta para este aparelho. Para ficar no servidor também, sincronize depois.')) return;
       if (Store.restaurarCopiaDeSeguranca()) {
         avisoSincronizacao = '';

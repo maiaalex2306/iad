@@ -313,10 +313,26 @@
       if (!bruto) return null;
       const c = JSON.parse(bruto);
       if (!c || !c.estado) return null;
+      /* Quanto desta cópia é da empresa de quem está olhando.
+
+         Sem esta conta, oferecer a cópia é oferecer a carteira de outra
+         empresa: o aparelho da Rosa guardou uma cópia com 72 empresas e 73
+         negociações da Bio Water Care, e a faixa ofereceu "restaurar essa
+         cópia" para uma gestora da AcP que nunca enxergaria nenhuma delas.
+         Aceitar teria trazido de volta tudo o que ela acabou de apagar de
+         propósito, e ainda invisível.
+
+         `visivel` só olha o registro e quem está logado — serve tanto para o
+         que está guardado quanto para o que está dentro da cópia. */
+      const meus = function (lista) {
+        return (lista || []).filter(function (r) { return visivel(r, false); }).length;
+      };
       return { em: c.em, porque: c.porque || '',
         contas: (c.estado.contas || []).length,
         oportunidades: (c.estado.oportunidades || []).length,
-        tarefas: (c.estado.tarefas || []).length };
+        tarefas: (c.estado.tarefas || []).length,
+        minhasContas: meus(c.estado.contas),
+        minhasOportunidades: meus(c.estado.oportunidades) };
     } catch (e) { return null; }
   }
 
