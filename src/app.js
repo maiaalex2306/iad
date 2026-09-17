@@ -612,20 +612,6 @@
          servidor que faz o "trocar de empresa" ter o que trocar. Falhar aqui
          não impede nada: ele fica com a empresa do próprio perfil, que é o
          que tinha antes. */
-      if (A.ehAdmin()) {
-        N.empresasDaNuvem().then(function (lista) {
-          if (A.espelharEmpresas(lista)) render();
-        }, function (e) {
-          /* Falhar aqui deixava o administrador com uma empresa só na lista e
-             nenhuma explicação — o mesmo silêncio de sempre, no lugar em que
-             ele mais atrapalha, que é o de trocar de empresa. */
-          avisoSincronizacao = 'Não consegui listar as empresas do servidor: ' +
-            (e && e.message ? e.message : 'erro desconhecido') +
-            ' — a troca de empresa fica só com a sua.';
-          render();
-        });
-      }
-
       return baixarDoServidor();
     });
   }
@@ -641,10 +627,42 @@
      Vale para os dois caminhos: quem acaba de entrar e quem recarrega a
      página com a sessão ainda válida. O segundo é o caso comum, e era
      justamente o que dependia do depósito local. */
+  /* A linha da empresa desce para todo mundo, não só para quem administra.
+
+     Era chamada dentro de um `if (A.ehAdmin())`, porque a lista de empresas
+     servia para o administrador trocar de empresa. Só que é nessa mesma linha
+     que mora a ponte do Linked Helper — e a gestora, que nunca a baixava,
+     ficava sem ponte e sem o botão de importar. Na máquina de quem tinha
+     configurado, tudo funcionava, porque a configuração antiga ainda estava no
+     navegador dele: o mesmo login, duas telas diferentes, e o defeito
+     invisível justamente para quem podia percebê-lo.
+
+     O RLS já resolve o recorte: `tenants_leitura` devolve a própria empresa
+     para todos e todas as empresas para quem administra. Perguntar para todo
+     mundo não amplia o acesso de ninguém. */
+  function espelharEmpresaDoServidor() {
+    const N = global.IADNuvem;
+    return N.empresasDaNuvem().then(function (lista) {
+      A.espelharEmpresas(lista);
+      render();
+    }, function (e) {
+      /* Para quem administra isto também alimenta a troca de empresa, e falhar
+         calado ali já custou caro antes. Para os demais é só a ponte, que se
+         explica sozinha na tela de Configuração. */
+      if (A.ehAdmin()) {
+        avisoSincronizacao = 'Não consegui listar as empresas do servidor: ' +
+          (e && e.message ? e.message : 'erro desconhecido') +
+          ' — a troca de empresa fica só com a sua.';
+        render();
+      }
+    });
+  }
+
   function baixarDoServidor() {
     const N = global.IADNuvem;
     if (!N.conectado() || !A.atual()) return Promise.resolve();
     avisoSincronizacao = '';
+    espelharEmpresaDoServidor();
     return N.puxar().then(function () {
       semServidor = '';
       render();
@@ -3502,14 +3520,13 @@
            permissão. Guardar no aparelho e dizer "pronto" nesse caso seria
            repetir o defeito de origem: a configuração parece feita e não
            chega ao computador seguinte. */
-        Promise.resolve(I.salvarConfig(d)).then(function (r) {
+        Promise.resolve(I.salvarConfig(d)).then(function () {
           leads = null;
-          if (r && r.naEmpresa && !r.naNuvem) {
-            avisoSincronizacao = 'A ponte foi guardada neste aparelho, mas não subiu para o servidor' +
-              (r.erro ? ': ' + r.erro : '.') +
-              ' Nos outros computadores ela ainda não vai aparecer. ' +
-              'Rode nuvem/correcao-16-tudo-em-dia.sql no Supabase e configure de novo.';
-          }
+          render();
+        }, function (e) {
+          /* Recusar é melhor que guardar pela metade. A ponte que existe num
+             computador só é o defeito, não a solução de emergência. */
+          alert('A ponte NÃO foi configurada.\n\n' + e.message);
           render();
         });
       });

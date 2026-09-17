@@ -10,7 +10,6 @@
 (function (global) {
   'use strict';
 
-  const CHAVE = 'iad-crm:ponte:v1';
 
   /* ---------- onde a ponte mora ----------
 
@@ -29,14 +28,6 @@
      empresa ainda, quando o banco está atrás do app (as colunas novas não
      existem lá) e quando não há internet. Ler prefere a empresa; gravar grava
      nos dois. */
-  function doAparelho() {
-    try {
-      return JSON.parse(localStorage.getItem(CHAVE)) || { url: '', token: '' };
-    } catch (e) {
-      return { url: '', token: '' };
-    }
-  }
-
   /* A linha da empresa que está lendo. `empresaAtual()` (mais abaixo) é quem
      decide QUAL é — e recusa quando o administrador está em "Todas as
      empresas", porque aí não há uma. A ponte segue a mesma regra do balde, e
@@ -49,34 +40,50 @@
     return (Store.obter().tenants || []).filter(function (t) { return t.id === id; })[0] || null;
   }
 
+  /* A ponte é da empresa, e só.
+
+     Havia um plano B no aparelho, para o caso de o banco estar atrás do app
+     ou faltar internet. Ele fazia o que todo plano B silencioso faz: escondia
+     a falha de quem podia consertá-la. Na máquina de quem configurou, a ponte
+     aparecia — vinda do navegador dele —, e na máquina da gestora, noutra
+     cidade, não aparecia nada. Mesmo login, duas telas, e nenhum sinal de que
+     a configuração nunca tinha chegado à empresa.
+
+     Sem plano B, as duas máquinas contam a mesma história: ou a empresa tem
+     ponte e todo mundo tem, ou ninguém tem e alguém precisa configurar. */
   function config() {
     const t = linhaDaEmpresa();
     if (t && t.ponteUrl) return { url: t.ponteUrl, token: t.ponteChave || '' };
-    return doAparelho();
+    return { url: '', token: '' };
   }
 
-  /* Grava nos três lugares que importam, e nesta ordem: o aparelho primeiro,
-     porque é o único que não pode falhar; a empresa na cópia local, para a
-     tela mudar agora; o servidor por último, que é o que faz a configuração
-     chegar aos outros computadores. A ida ao servidor pode falhar — banco
-     atrás do app, sem internet — e falhar ali não desfaz o resto. */
+  /* Gravar é gravar no servidor. Não dar certo lá é não ter dado certo —
+     antes isto guardava no aparelho de qualquer jeito e dizia "pronto", que é
+     como a ponte passou a existir num computador só. */
   function salvarConfig(nova) {
     const url = String(nova.url || '').trim();
     const token = String(nova.token || '').trim();
-    localStorage.setItem(CHAVE, JSON.stringify({ url: url, token: token }));
 
     const t = linhaDaEmpresa();
-    if (!t) return Promise.resolve({ naEmpresa: false });
-    t.ponteUrl = url;
-    t.ponteChave = token;
-    global.IADStore.salvar();
+    if (!t) {
+      return Promise.reject(new Error('Escolha a empresa no alto da tela antes de configurar a ponte. ' +
+        'Cada empresa tem a própria, e em "Todas as empresas" eu não sei qual estou configurando.'));
+    }
 
     const N = global.IADNuvem;
-    if (!N || !N.conectado() || !N.definirPonteDaEmpresa) return Promise.resolve({ naEmpresa: true, naNuvem: false });
-    return N.definirPonteDaEmpresa(t.id, url, token).then(
-      function () { return { naEmpresa: true, naNuvem: true }; },
-      function (e) { return { naEmpresa: true, naNuvem: false, erro: e.message }; }
-    );
+    if (!N || !N.conectado() || !N.definirPonteDaEmpresa) {
+      return Promise.reject(new Error('Sem conexão com o servidor. A ponte é da empresa e mora lá — ' +
+        'guardar só neste computador faria a configuração existir para você e para mais ninguém.'));
+    }
+
+    return N.definirPonteDaEmpresa(t.id, url, token).then(function () {
+      /* A cópia local muda só depois que o servidor aceitou, para a tela nunca
+         mostrar uma ponte que o resto da equipe não tem. */
+      t.ponteUrl = url;
+      t.ponteChave = token;
+      global.IADStore.salvar();
+      return { naEmpresa: true, naNuvem: true };
+    });
   }
 
   function configurada() {
