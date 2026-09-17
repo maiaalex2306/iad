@@ -181,8 +181,16 @@
      está em organization_1. */
   function empregoAtual(plano) {
     return {
+      /* Os nomes que o Linked Helper usa mudam com a ação e com a versão, e
+         `chave()` já achata maiúsculas, espaços e sublinhados — então
+         `company_name`, `companyName` e `Company Name` são a mesma entrada.
+         O que não é a mesma coisa é o sufixo numérico: `company_name_1` não
+         casava com `company_name`, e bastava isso para a empresa sumir e o
+         nome da pessoa virar razão social. */
       nome: primeiro(plano, ['company_name', 'company', 'current_company',
-        'organization_name', 'organization_1']),
+        'organization_name', 'organization_1',
+        'company_name_1', 'current_company_name', 'organization_name_1',
+        'current_organization', 'company_1', 'employer', 'employer_name']),
       cargo: primeiro(plano, ['organization_title_1', 'current_company_position',
         'position', 'title', 'job_title']),
       site: primeiro(plano, ['organization_website_1']),

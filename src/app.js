@@ -961,7 +961,11 @@
     __contaCandidata: function (lead) { return contaCandidata(lead); },
     __contaJaExistente: function (lead) { return contaJaExistente(lead); },
     __oportunidadeJaExistente: function (contaId, lead) { return oportunidadeJaExistente(contaId, lead); },
-    __mesmoNomeDeEmpresa: function (a, b) { return mesmoNomeDeEmpresa(a, b); }
+    __mesmoNomeDeEmpresa: function (a, b) { return mesmoNomeDeEmpresa(a, b); },
+    /* O caminho que transforma um lead em conta, contato e negociação. Exposto
+       porque é onde o nome da empresa é decidido, e foi lá que o nome da
+       pessoa acabou virando razão social. */
+    __importarUmLead: function (lead, segmento) { return importarUmLead(lead, segmento); }
   };
 
   const App = {
@@ -3665,6 +3669,12 @@
           });
           const feitos = escolhidos.map(function (l) {
             const i = lista.indexOf(l);
+            /* A empresa digitada entra como se tivesse vindo do LinkedIn: daí
+               para a frente tudo já funciona — o nome da conta, o título da
+               negociação e, principalmente, o encontro com a conta que já
+               existe, que é feito por nome. */
+            const digitada = dlg.querySelector('[data-empresa="' + i + '"]');
+            if (digitada && digitada.value.trim()) l.empresa = digitada.value.trim();
             const escolha = dlg.querySelector('[data-segmento="' + i + '"]');
             const papel = dlg.querySelector('[data-papel="' + i + '"]');
             if (papel) l.papelSugerido = papel.value;
@@ -4755,7 +4765,11 @@
      em branco para o vendedor completar depois — melhor um campo vazio do que
      um palpite virando fato no painel. */
   function importarUmLead(lead, segmento) {
-    const nome = lead.empresa || ('Contato ' + (lead.nome || 'do LinkedIn'));
+    /* Sem empresa, a conta ainda precisa de um nome — e o que ela NÃO pode é
+       ter cara de empresa. "Contato Fabio Alves" parecia razão social num
+       relatório por empresa; isto aqui diz o que é: uma pessoa cuja empresa
+       ninguém informou ainda. */
+    const nome = lead.empresa || ((lead.nome || 'Pessoa do LinkedIn') + ' (empresa não informada)');
     if (segmento) Store.criarNoCatalogo('segmentos', { nome: segmento });
 
     /* ---------- a empresa ---------- */

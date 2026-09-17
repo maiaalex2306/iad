@@ -5827,6 +5827,33 @@
       '</span></label>';
   }
 
+  /* O que a ponte entregou, com os nomes originais dos campos.
+
+     "Não veio empresa" e "veio com um nome de campo que o app não conhece"
+     produzem a mesma tela vazia e têm correções opostas — uma é digitar, a
+     outra é ensinar o app a ler. Adivinhar qual das duas custou uma rodada
+     inteira e dezessete negociações batizadas com o nome da pessoa.
+
+     Isto mostra o que chegou de verdade. Se a empresa estiver aí embaixo com
+     outro nome de campo, a correção é no código e eu preciso saber o nome. */
+  function camposRecebidos(l) {
+    const d = l && l.bruto;
+    if (!d || typeof d !== 'object') return '';
+    const linhas = Object.keys(d).filter(function (k) {
+      const v = d[k];
+      return v != null && typeof v !== 'object' && String(v).trim() !== '';
+    }).map(function (k) {
+      return '<tr><td class="tiny"><code>' + esc(k) + '</code></td>' +
+        '<td class="tiny">' + esc(String(d[k]).slice(0, 80)) + '</td></tr>';
+    }).join('');
+    if (!linhas) return '';
+    return '<details style="margin:6px 0 0"><summary class="tiny muted">' +
+      'Ver os campos que a ponte entregou para este lead</summary>' +
+      '<p class="tiny muted" style="margin:6px 0">Se a empresa estiver aqui com outro nome de campo, ' +
+      'me mande esta lista: o conserto é o app passar a ler esse nome.</p>' +
+      '<table class="tabela mini">' + linhas + '</table></details>';
+  }
+
   function revisaoDaImportacao(leads, avisoSegmento, quantosDescartados) {
     const linhas = leads.map(function (l, i) {
       const duvida = motivoDeDuvida(l);
@@ -5848,6 +5875,23 @@
         'title="Tira este lead da ponte para sempre. Ele não volta na próxima busca.">Excluir</button>' +
         '</label>' +
         '<div class="row escolhas">' +
+          /* Empresa, quando o LinkedIn não mandou uma.
+
+             Antes o app inventava sozinho: a conta nascia chamada "Contato
+             Fabio Alves" e a negociação "Fabio Alves — origem LH". O nome da
+             pessoa no lugar do nome da empresa não é um rótulo feio — é um
+             dado errado, que vira relatório por empresa errado e conta
+             duplicada quando a empresa de verdade aparecer depois.
+
+             Perguntar aqui é o único momento em que sai barato: quem está
+             olhando o lead tem o LinkedIn dele aberto ao lado. Em branco,
+             importa mesmo assim, e o nome diz que falta — em vez de fingir
+             que a empresa é a pessoa. */
+          (!l.empresa
+            ? '<label class="campo mini"><span>Empresa — o app não reconheceu</span>' +
+              '<input type="text" data-empresa="' + i + '" placeholder="onde ' +
+              esc(l.nome || 'esta pessoa') + ' trabalha"></label>'
+            : '') +
           '<label class="campo mini"><span>Segmento' + rotuloDaSugestao(l) + '</span>' +
           '<select data-segmento="' + i + '">' + opcoesSegmento(l.segmentoSugerido) + '</select>' +
           motivoDoSegmento(l, i) + '</label>' +
@@ -5856,6 +5900,7 @@
           '<label class="campo mini"><span>Papel na compra' + (l.papelSugerido ? ' \u00b7 sugerido' : '') + '</span>' +
           '<select data-papel="' + i + '">' + opcoesPapel(l.papelSugerido) + '</select></label>' +
         '</div>' +
+        (!l.empresa ? camposRecebidos(l) : '') +
         (jaNoCRM(l)
           ? '<p class="tiny" style="margin:6px 0 0"><b>Já está no CRM</b> em ' + esc(jaNoCRM(l)) +
             ' — este lead ATUALIZA o que existe, não cria negócio novo.</p>'
