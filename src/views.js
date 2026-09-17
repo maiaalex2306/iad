@@ -1507,11 +1507,16 @@
     /* A ponte é a fila de espera: o Linked Helper entrega lá e o lead fica
        guardado 30 dias. O botão vive aqui, e não em Configuração, porque é aqui
        que o vendedor está quando pensa em pipeline. */
+    /* O botão não some mais. Sumir é a pior das três opções: quem procura por
+       ele conclui que o app perdeu a função, e não há nada na tela dizendo
+       que falta uma empresa escolhida ou uma ponte configurada. Ele fica, e
+       quando não dá para usar, diz por quê. */
     const importar = global.IADIntegracoes.configurada()
       ? '<button class="btn mini" onclick="App.importarLeads()"' +
         ' data-ajuda-titulo="Importar do Linked Helper" data-ajuda="Traz quem respondeu no LinkedIn.' +
         ' Você confere a lista e importa de uma vez: empresa, contato, oportunidade e a resposta como evidência.">Importar LH</button>'
-      : '';
+      : '<button class="btn ghost mini" onclick="App.porQueSemPonteLH()"' +
+        ' data-ajuda-titulo="Importar do Linked Helper" data-ajuda="A ponte não está disponível agora. Clique para saber por quê.">Importar LH</button>';
 
     return '<div class="row"><h1>Pipeline</h1><span class="espaco"></span>' + alternar + importar +
       '<button class="btn alt mini" onclick="App.novaOportunidade()" data-ajuda-titulo="Nova oportunidade" data-ajuda="Cria o negócio. Se a empresa ainda não existir, escolha &quot;+ Cadastrar nova empresa&quot; no próprio campo: você cadastra e volta para cá, sem perder o que digitou.">+ Oportunidade</button></div>' +
@@ -5623,7 +5628,12 @@
         '<button class="btn ghost mini" onclick="App.resgatarBaldeAntigo()" data-ajuda-titulo="Resgatar de outro balde" data-ajuda="Quando o endereço no Linked Helper foi montado sem identificador de empresa, ou com o identificador de outra, as respostas caem num balde que esta empresa não olha. Este botão lê o balde que você escolher e traz o conteúdo para a empresa escolhida agora.">Resgatar de outro balde</button>' : '') + '</div>' +
       (c.url
         ? '<p class="tiny muted" style="margin:8px 0 0">Ponte: ' + esc(c.url) + '</p>'
-        : '<p class="small muted" style="margin:8px 0 0">Quando alguém responde no LinkedIn, o Linked Helper dispara um webhook. Como este app roda no navegador, ele não tem endereço para receber: quem recebe é uma ponte, e o app busca de lá. O código da ponte está na pasta <code>ponte/</code> do projeto.</p>') +
+        : (global.IADIntegracoes.porQueSemPonte() === 'sem-empresa'
+            ? '<div class="aviso" style="margin:8px 0 0">Escolha uma empresa no alto da tela. ' +
+              'A ponte é de cada empresa, e em "Todas as empresas" eu não sei qual mostrar — nem qual ' +
+              'balde ler, porque ler o errado traria a prospecção de outra.</div>'
+            : '') +
+          '<p class="small muted" style="margin:8px 0 0">Quando alguém responde no LinkedIn, o Linked Helper dispara um webhook. Como este app roda no navegador, ele não tem endereço para receber: quem recebe é uma ponte, e o app busca de lá. O código da ponte está na pasta <code>ponte/</code> do projeto.</p>') +
       avisoDeTarefasDoLH() +
       '<div id="caixa-linkedhelper"></div></div>';
   }

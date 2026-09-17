@@ -3536,6 +3536,24 @@
       });
     },
 
+    /* O que responder a quem clica em "Importar LH" sem ponte. Duas causas,
+       duas frases, dois caminhos — em vez de um botão que não existia. */
+    porQueSemPonteLH: function () {
+      const motivo = global.IADIntegracoes.porQueSemPonte();
+      if (motivo === 'sem-empresa') {
+        alert('Escolha uma empresa no alto da tela antes.\n\n' +
+          'A ponte do Linked Helper é de cada empresa: em "Todas as empresas" eu não sei qual balde ' +
+          'ler, e ler o errado traria a prospecção de outra.');
+        return;
+      }
+      alert('Esta empresa ainda não tem ponte configurada.\n\n' +
+        'Vá em Configuração → Linked Helper → Configurar ponte e informe o endereço e a chave de ' +
+        'leitura. A configuração fica na empresa, então vale para todo mundo dela, em qualquer computador.');
+      App.ir('#/dados');
+      V.definirAbaConfig('lh');
+      render();
+    },
+
     buscarLeads: function () {
       const alvo = document.getElementById('caixa-linkedhelper');
       if (alvo) alvo.innerHTML = '<div class="tiny muted" style="margin-top:10px">Buscando…</div>';

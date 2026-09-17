@@ -91,6 +91,26 @@
     return !!c.url;
   }
 
+  /* Por que não há ponte — porque "não há" tem duas causas e correções
+     opostas, e some o mesmo botão nas duas.
+
+     Uma é o recorte: administrador em "Todas as empresas" não tem UMA
+     empresa, e a ponte é de empresa. Some o botão, e o conserto é escolher a
+     empresa no alto da tela. A outra é a empresa não ter ponte configurada, e
+     o conserto é configurar.
+
+     Enquanto havia cópia no navegador, nenhuma das duas aparecia — o plano B
+     escondia as duas. Tirar o plano B sem dizer o motivo trocou um defeito
+     silencioso por um botão que some sem explicação, que é a mesma doença. */
+  function porQueSemPonte() {
+    const Store = global.IADStore;
+    if (!Store || !Store.contexto) return 'sem-empresa';
+    const ctx = Store.contexto();
+    if (!ctx.usuario) return 'sem-empresa';
+    if (!empresaAtual()) return 'sem-empresa';
+    return config().url ? '' : 'nao-configurada';
+  }
+
   /* "Head line", "head_line" e "headline" são o mesmo campo: comparamos sem
      separadores para não depender da grafia que o Linked Helper usar. */
   function chave(nome) { return String(nome).toLowerCase().replace(/[^a-z0-9]/g, ''); }
@@ -483,7 +503,7 @@
     });
   }
 
-  global.IADIntegracoes = { config, salvarConfig, configurada, buscar, marcarProcessados, testarPonte,
+  global.IADIntegracoes = { config, salvarConfig, configurada, porQueSemPonte, buscar, marcarProcessados, testarPonte,
     normalizar, empresaAtual, nomeDaEmpresaAtual, enderecoDeEntrada,
     buscarNoBalde, marcarNoBalde };
 })(window);
