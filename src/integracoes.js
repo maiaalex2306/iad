@@ -425,7 +425,50 @@
     });
   }
 
-  global.IADIntegracoes = { config, salvarConfig, configurada, buscar, marcarProcessados,
+  /* Provar o endereço antes de ele ir para o Linked Helper.
+
+     O endereço tem três partes e duas delas são digitadas à mão numa tela
+     que não é esta: a chave de escrita e o identificador da empresa. Errar
+     qualquer uma produz um endereço que PARECE certo — e o erro só aparece
+     semanas depois, quando alguém pergunta por que não chegou lead nenhum.
+     Foi o que aconteceu com a Bio Water Care.
+
+     Aqui o app faz o caminho inteiro, agora: grava um lead de teste com a
+     chave de escrita, lê de volta com a chave de leitura no balde desta
+     empresa, e apaga o que gravou. Se as três partes não estiverem certas,
+     um dos três passos falha e diz qual. O que sobra depois do teste é
+     nada — o lead de teste sai junto. */
+  function testarPonte(chaveDeEscrita, empresaId) {
+    const c = config();
+    if (!c.url) return Promise.reject(new Error('Configure o endereço da ponte em Configuração → Linked Helper.'));
+    if (!chaveDeEscrita) return Promise.reject(new Error('Digite a chave de escrita para testar.'));
+
+    const marca = 'IAD-TESTE-' + Date.now();
+    return fetch(enderecoDeEntrada(chaveDeEscrita, empresaId), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ full_name: marca, company_name: 'Teste da ponte do IAD' })
+    }).then(function (r) {
+      if (r.status === 401) {
+        throw new Error('A ponte recusou a CHAVE DE ESCRITA. Confira o valor de CHAVE_ESCRITA no Cloudflare.');
+      }
+      if (!r.ok) throw new Error('A ponte respondeu ' + r.status + ' ao gravar.');
+      return r.json();
+    }).then(function () {
+      /* Ler de volta usa a OUTRA chave, a de leitura — então este passo prova
+         a segunda metade da ponte, a que o app usa todo dia. */
+      return buscarNoBalde(empresaId);
+    }).then(function (lista) {
+      const achado = (lista || []).filter(function (i) { return i.nome === marca; })[0];
+      if (!achado) {
+        throw new Error('Gravou, mas o lead de teste não apareceu no balde desta empresa. ' +
+          'O identificador da empresa no endereço não é o que o app lê.');
+      }
+      return marcarNoBalde([achado.id], empresaId).then(function () { return { ok: true }; });
+    });
+  }
+
+  global.IADIntegracoes = { config, salvarConfig, configurada, buscar, marcarProcessados, testarPonte,
     normalizar, empresaAtual, nomeDaEmpresaAtual, enderecoDeEntrada,
     buscarNoBalde, marcarNoBalde };
 })(window);

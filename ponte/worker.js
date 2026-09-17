@@ -73,6 +73,41 @@ const json = (dados, status) => new Response(JSON.stringify(dados), {
   headers: { 'content-type': 'application/json; charset=utf-8', ...CORS }
 });
 
+/* Chaves por empresa, e por que elas não são secrets separados.
+
+   Até aqui o par de chaves era do WORKER: as duas empresas que passam por
+   esta ponte usavam a mesma chave de escrita e a mesma de leitura, e o que
+   separava uma da outra era só o `e=` na URL. Quem tivesse a chave de leitura
+   de uma conseguia ler o balde da outra trocando o identificador — o
+   isolamento existia por combinação, não por credencial.
+
+   Um secret por empresa (CHAVE_ESCRITA_ACP, CHAVE_LEITURA_ACP, …) obrigaria a
+   mexer no worker a cada empresa nova, que é exatamente a manutenção que
+   ninguém faz. Um secret só, com um mapa dentro, resolve as duas coisas: cada
+   empresa ganha o próprio par e criar a próxima é editar um JSON.
+
+   CHAVES_POR_EMPRESA, no Cloudflare, é assim:
+
+     {
+       "3325b557-cdb3-4ea9-b82d-aae86ff04fd4": {
+         "escrita": "...", "leitura": "..."
+       },
+       "26506113-....": { "escrita": "...", "leitura": "..." }
+     }
+
+   Empresa sem entrada no mapa continua valendo as chaves antigas — é o que
+   deixa a troca acontecer sem derrubar quem já estava entregando, e é o que
+   mantém o balde antigo (sem `e=`) alcançável para resgate. */
+function chavesDoBalde(bucket, ambiente) {
+  let mapa = {};
+  try { mapa = JSON.parse(ambiente.CHAVES_POR_EMPRESA || '{}'); } catch (e) { mapa = {}; }
+  const dela = (bucket && mapa[bucket]) || null;
+  return {
+    escrita: (dela && dela.escrita) || ambiente.CHAVE_ESCRITA,
+    leitura: (dela && dela.leitura) || ambiente.CHAVE_LEITURA
+  };
+}
+
 export default {
   async fetch(requisicao, ambiente) {
     const url = new URL(requisicao.url);
@@ -81,7 +116,8 @@ export default {
 
     /* 1. Entrada: o Linked Helper posta aqui, com a chave de escrita na URL. */
     if (requisicao.method === 'POST' && url.searchParams.get('k')) {
-      if (url.searchParams.get('k') !== ambiente.CHAVE_ESCRITA) return json({ erro: 'chave de escrita inválida' }, 401);
+      const esperada = chavesDoBalde(balde(url), ambiente).escrita;
+      if (url.searchParams.get('k') !== esperada) return json({ erro: 'chave de escrita inválida' }, 401);
 
       /* Lemos como texto primeiro: se vier algo que não é JSON, guardamos o
          conteúdo cru em vez de perder a entrega. */
@@ -108,7 +144,7 @@ export default {
 
     /* Daqui para baixo é o app, que usa a chave de leitura. */
     const token = url.searchParams.get('token') || requisicao.headers.get('x-token');
-    if (token !== ambiente.CHAVE_LEITURA) return json({ erro: 'não autorizado' }, 401);
+    if (token !== chavesDoBalde(balde(url), ambiente).leitura) return json({ erro: 'não autorizado' }, 401);
 
     /* 2. Leitura: o app busca o que chegou e ainda não foi processado. */
     if (requisicao.method === 'GET') {

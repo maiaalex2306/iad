@@ -3145,11 +3145,37 @@
             '<pre class="endereco-ponte">' + U.esc(url) + '</pre>' +
             '<div class="row" style="margin-top:8px">' +
             '<button type="button" class="btn mini" data-copiar>Copiar endereço</button>' +
+            (chave && !pareceUrl
+              ? '<button type="button" class="btn ghost mini" data-testar>Testar este endereço</button>'
+              : '') +
             '<span class="tiny muted" data-aviso></span></div>' +
+            '<div data-veredito></div>' +
             '<p class="tiny muted" style="margin:10px 0 0">Três partes: o <strong>endereço da ponte</strong> (o app ' +
             'já sabe, veio de Configuração → Linked Helper), a <strong>chave de escrita</strong> em <code>k=</code>, ' +
             'e o <strong>identificador desta empresa</strong> em <code>e=</code> — é ele que separa a prospecção ' +
             'dela da das outras.</p>';
+
+          /* Provar antes de colar. O endereço só é conferível fazendo o
+             caminho inteiro — gravar com uma chave, ler com a outra —, e sem
+             isso a descoberta de que ele está errado leva semanas e chega
+             como "não entrou lead nenhum". */
+          const botaoTeste = caixa.querySelector('[data-testar]');
+          if (botaoTeste) botaoTeste.addEventListener('click', function () {
+            const alvo = caixa.querySelector('[data-veredito]');
+            botaoTeste.disabled = true;
+            alvo.innerHTML = '<p class="tiny muted" style="margin:8px 0 0">Gravando um lead de teste, lendo de volta e apagando…</p>';
+            I.testarPonte(campo.value.trim(), tenantId).then(function () {
+              botaoTeste.disabled = false;
+              alvo.innerHTML = '<div class="aviso" style="margin-top:8px">' +
+                '<strong>A ponte aceitou, guardou e devolveu.</strong> As duas chaves estão certas e o ' +
+                'identificador da empresa também. Pode colar este endereço no Linked Helper. ' +
+                'O lead de teste já foi apagado.</div>';
+            }, function (e) {
+              botaoTeste.disabled = false;
+              alvo.innerHTML = '<div class="aviso faixa-aviso" style="margin-top:8px">' +
+                '<strong>Não fechou:</strong> ' + U.esc(e.message) + '</div>';
+            });
+          });
 
           caixa.querySelector('[data-copiar]').addEventListener('click', function () {
             const aviso = caixa.querySelector('[data-aviso]');
