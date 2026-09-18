@@ -1228,6 +1228,19 @@ td.subiu { color: var(--ok); font-weight: 600; }
   background: var(--navy); color: #fff; font-weight: 700; font-size: 13px;
   display: flex; align-items: center; justify-content: center;
 }
+/* A mesma marca, quando ela guarda uma PALAVRA em vez de um número — "manhã",
+   "depois", "uma vez por semana". O círculo de 28px foi feito para um dígito:
+   com texto dentro, a palavra quebra em duas linhas e transborda. Aqui ela
+   vira etiqueta: largura conforme o conteúdo, altura de uma linha só, e uma
+   coluna fixa para que todas comecem alinhadas — a leitura desce pela coluna
+   da esquerda, que é o que faz a rotina parecer uma rotina. */
+.passo-manual .numero.quando {
+  flex: 0 0 94px; width: 94px; height: auto; min-height: 22px;
+  border-radius: 999px; padding: 3px 8px;
+  font-size: 11px; font-weight: 700; letter-spacing: .01em;
+  text-align: center; line-height: 1.25; white-space: normal;
+}
+@media (max-width: 560px) { .passo-manual .numero.quando { flex-basis: 74px; width: 74px; font-size: 10px; } }
 
 .tabela-manual td { vertical-align: top; padding-top: 12px; padding-bottom: 12px; }
 .tabela-manual td.rotulo-manual { min-width: 150px; width: 200px; }

@@ -4099,7 +4099,9 @@
     ['m-oito', 'As oito decisões'],
     ['m-regua', 'A régua: cinco degraus'],
     ['m-caminho', 'O caminho do vendedor, passo a passo'],
+    ['m-dia', 'O dia do vendedor: o que alimentar, o que você recebe'],
     ['m-lh', 'A integração com o Linked Helper'],
+    ['m-sinais', 'Sinais: o que o comprador faz sozinho'],
     ['m-avanco', 'Como o IAD anda'],
     ['m-faixas', 'O que o número diz'],
     ['m-etapas', 'O que cada etapa pede'],
@@ -4572,6 +4574,292 @@
       '</ul>' +
       '<p class="small">A ponte guarda cada entrega por <strong>trinta dias</strong>. O que ninguém importar ' +
       'nesse prazo se apaga sozinho.</p>' +
+      '</div>';
+  }
+
+  /* ---------------- Manual: o dia do vendedor ----------------
+
+     O manual já tinha "O caminho do vendedor", que é o ciclo de UM negócio,
+     do primeiro contato ao desfecho. Faltava o outro corte, que é o que a
+     pessoa realmente vive: o DIA, com trinta negócios ao mesmo tempo.
+
+     E faltava, principalmente, a tabela do fim. A pergunta que um vendedor
+     faz sobre qualquer CRM é "o que eu ganho por alimentar isto?", e um
+     sistema que não responde isso em uma tela é um sistema que vai ser
+     preenchido pela metade. */
+  function manualDoDia() {
+    const bloco = function (hora, titulo, corpo) {
+      return '<div class="passo-manual"><div class="numero quando">' +
+        esc(hora) + '</div><div><strong>' + esc(titulo) + '</strong>' + corpo + '</div></div>';
+    };
+
+    const troca = function (alimenta, volta, onde) {
+      return '<tr><td><strong>' + alimenta + '</strong></td><td class="small">' + volta +
+        '</td><td class="small muted" style="white-space:nowrap">' + esc(onde) + '</td></tr>';
+    };
+
+    return '<div class="card" id="m-dia"><h2>O dia do vendedor: o que alimentar, o que você recebe</h2>' +
+
+      '<p class="small muted">O caminho do vendedor, mais adiante, conta o ciclo de <em>um</em> ' +
+      'negócio. Esta seção conta o <em>dia</em> — com trinta negócios ao mesmo tempo, que é a ' +
+      'situação real.</p>' +
+
+      '<h3>A rotina</h3>' +
+
+      bloco('de manhã', 'Abra em Hoje e trabalhe a lista de cima para baixo',
+        '<p class="small" style="margin:4px 0 0">Hoje traz o que vence hoje, o que está atrasado e ' +
+        'o que o cliente mandou e você ainda não leu. É a única tela que você precisa abrir para ' +
+        'saber o que fazer. O que está atrasado vem primeiro, e negócio com mensagem nova de ' +
+        'cliente sobe para o topo.</p>' +
+        '<p class="tiny muted" style="margin:4px 0 0">Onde: <strong>⚡ Hoje</strong></p>') +
+
+      bloco('antes da conversa', 'Antes de falar com alguém, abra a negociação e leia duas coisas',
+        '<p class="small" style="margin:4px 0 0"><strong>Próximos passos</strong>, no alto da aba ' +
+        'Decisão, diz qual das oito decisões precisa acontecer agora e sugere o que dizer em cada ' +
+        'canal. <strong>Sinais</strong> diz o que essa pessoa andou fazendo sem você — e se aparecer ' +
+        '<span class="pill risk">É a hora</span>, é porque ela se mexeu e o registro ficou para trás.</p>' +
+        '<p class="tiny muted" style="margin:4px 0 0">Onde: cockpit da negociação → abas ' +
+        '<strong>Decisão</strong> e <strong>Sinais</strong></p>') +
+
+      bloco('durante', 'A conversa acontece fora daqui',
+        '<p class="small" style="margin:4px 0 0">E vale a regra que não tem exceção: o que ' +
+        '<strong>nós</strong> fazemos não move nada. Mandar proposta, cobrar retorno, mover etapa — ' +
+        'é trabalho, e trabalho não é avanço. Só o cliente move o índice.</p>') +
+
+      bloco('logo depois', 'Conclua a tarefa contando o que aconteceu — este é o momento que sustenta tudo',
+        '<p class="small" style="margin:4px 0 0">Quatro modos, do mais completo ao mais rápido: ' +
+        'colar a ata (ou anexar o Word, o PDF, a transcrição), responder quatro perguntas fechadas, ' +
+        'registrar uma evidência direta, ou marcar que nada aconteceu — o que também é informação. ' +
+        'Se você fechar a janela sem contar, a tarefa continua aberta: é mais honesto do que fechada ' +
+        'e vazia.</p>' +
+        '<p class="small" style="margin:6px 0 0"><strong>É aqui que o índice anda.</strong> Uma ' +
+        'reunião bem contada costuma mover três ou quatro das oito decisões de uma vez.</p>' +
+        '<p class="tiny muted" style="margin:4px 0 0">Onde: <strong>Concluir</strong>, na tarefa</p>') +
+
+      bloco('sempre', 'Marque a próxima tarefa antes de fechar a negociação',
+        '<p class="small" style="margin:4px 0 0">E diga qual decisão ela pretende provocar. Esse campo ' +
+        'é o que transforma agenda em método: sem ele você marca reuniões, com ele você marca reuniões ' +
+        '<em>para alguma coisa</em>. Negociação sem próximo passo com data vira alerta no dia seguinte.</p>' +
+        '<p class="tiny muted" style="margin:4px 0 0">Onde: <strong>+ Tarefa</strong>, em qualquer tela</p>') +
+
+      bloco('ao enviar algo', 'Documento que você enviar, mande por link rastreado',
+        '<p class="small" style="margin:4px 0 0">Proposta, apresentação, estudo de caso. Um link por ' +
+        'pessoa. Custa quinze segundos e devolve a única informação que ninguém consegue perguntar: ' +
+        'se ele abriu, quando, e se voltou.</p>' +
+        '<p class="tiny muted" style="margin:4px 0 0">Onde: cockpit → <strong>Sinais</strong> → ' +
+        '<strong>Link rastreado</strong></p>') +
+
+      bloco('ao perceber algo', 'Sinal que você percebeu, anote na hora',
+        '<p class="small" style="margin:4px 0 0">Ele visitou seu perfil, curtiu a publicação, mudou ' +
+        'de cargo, apareceu numa notícia. Dez segundos. Daqui a três semanas é isso que vai dizer se ' +
+        'a conta estava esquentando ou esfriando.</p>' +
+        '<p class="tiny muted" style="margin:4px 0 0">Onde: cockpit → <strong>Sinais</strong> → ' +
+        '<strong>Registrar sinal</strong></p>') +
+
+      bloco('uma vez na semana', 'Uma vez por semana, passe na Revisão e no Painel',
+        '<p class="small" style="margin:4px 0 0"><strong>Revisão</strong> junta o que precisa de ' +
+        'decisão sua: negócio parado, nutrição vencida, negociação sem tarefa. <strong>Painel</strong> ' +
+        'mostra a carteira lida pela decisão e, no fim, o Aprendizado — o que está funcionando na sua ' +
+        'mão e o que não está.</p>' +
+        '<p class="tiny muted" style="margin:4px 0 0">Onde: <strong>🔄 Revisão</strong> e ' +
+        '<strong>📊 Painel</strong></p>') +
+
+      '<h3>O que você alimenta, e o que volta</h3>' +
+      '<p class="small muted">A pergunta justa sobre qualquer CRM é "o que eu ganho por preencher ' +
+      'isto?". Esta é a resposta, linha por linha.</p>' +
+      '<div class="tabela-rolagem"><table><thead><tr>' +
+      '<th style="width:26%">Você alimenta</th><th>Você recebe de volta</th><th>Onde aparece</th>' +
+      '</tr></thead><tbody>' +
+
+      troca('Conclusão da tarefa, com o que aconteceu',
+        'As oito decisões relidas, o IAD atualizado, a Idade da Evidência zerada e o negócio ' +
+        'reclassificado — de <em>Em construção</em> para <em>Negócio real</em>, ou o contrário. ' +
+        'É a única coisa que faz o índice andar.',
+        'Cockpit → Decisão · Pipeline') +
+
+      troca('A decisão que a tarefa pretende provocar',
+        'O Aprendizado passa a dizer qual canal rende qual decisão <em>na sua mão</em> — e não em ' +
+        'média. É o que separa "WhatsApp funciona" de "WhatsApp fecha Prioridade e não fecha Impacto".',
+        'Painel → Aprendizado') +
+
+      troca('Quem é quem na empresa, com papel e posição',
+        'Cobertura do grupo comprador, alerta de venda dependente de uma pessoa só, aviso de proposta ' +
+        'sem acesso ao decisor econômico, e a lista de quem está contra.',
+        'Cockpit → Decisão · Contatos') +
+
+      troca('Valor e previsão de fechamento',
+        'Previsão por mês, o que está travando a receita, e o contador de adiamentos — que a partir ' +
+        'do segundo vira sinal, não detalhe.',
+        'Painel · Pipeline') +
+
+      troca('Links rastreados nos documentos que envia',
+        'Quem abriu, quando, e quem <em>voltou</em>. E, de brinde, gente da empresa que você nem ' +
+        'sabia que estava envolvida — porque o documento foi encaminhado.',
+        'Cockpit → Sinais') +
+
+      troca('Sinais que você percebeu',
+        'O aviso <span class="pill risk">É a hora</span> quando o comportamento dele passa na frente ' +
+        'do seu registro. Sobe para os riscos críticos do Painel com ⏱.',
+        'Cockpit → Sinais · Painel') +
+
+      troca('Nada — cai sozinho',
+        'Respostas de WhatsApp viram sinal; respostas de campanha do Linked Helper viram empresa, ' +
+        'contato e negociação com um clique; aberturas de documento viram sinal.',
+        'Conversas · Configuração → Buscar respostas') +
+
+      '</tbody></table></div>' +
+
+      '<h3>O mínimo, se o dia apertar</h3>' +
+      '<p class="small">Se der para fazer só três coisas: <strong>conclua as tarefas contando o que ' +
+      'aconteceu</strong>, <strong>marque a próxima com data</strong> e <strong>mande documento por ' +
+      'link rastreado</strong>. As três primeiras linhas da tabela acima saem daí, e elas são as que ' +
+      'sustentam o resto.</p>' +
+      '<p class="small muted">O que nunca vale a pena: concluir tarefa em lote sem contar nada. O ' +
+      'funil anda, nenhuma das oito decisões anda, e o sistema marca essa diferença — ela aparece ' +
+      'depois no Aprendizado como trabalho que não virou avanço.</p>' +
+      '</div>';
+  }
+
+  /* ---------------- Manual: sinais e link rastreado ----------------
+
+     A seção existe por uma razão específica: sinal é a primeira coisa deste
+     app que NÃO mexe no índice, e quem não entender isso vai promover tudo a
+     evidência no primeiro dia e estragar a régua. Então a regra vem antes da
+     funcionalidade, e o "por que" vem antes do "como". */
+  function manualDosSinais() {
+    const linha = function (o, quem, peso, obs) {
+      return '<tr><td><strong>' + esc(o) + '</strong></td><td>' + esc(quem) + '</td>' +
+        '<td style="white-space:nowrap">' + esc(peso) + '</td>' +
+        '<td class="small">' + obs + '</td></tr>';
+    };
+
+    const passo = function (n, titulo, texto) {
+      return '<div class="passo-manual"><div class="numero">' + n + '</div>' +
+        '<div><strong>' + esc(titulo) + '</strong>' +
+        '<p class="small" style="margin:4px 0 0">' + texto + '</p></div></div>';
+    };
+
+    return '<div class="card" id="m-sinais"><h2>Sinais: o que o comprador faz sozinho</h2>' +
+
+      '<p>As oito decisões medem o que <strong>você registrou</strong>. Sinal mede o que ' +
+      '<strong>ele fez</strong>. São dois relógios diferentes, e é a distância entre eles que ' +
+      'interessa.</p>' +
+
+      '<p class="small">Evidência é o cliente decidindo alguma coisa, com palavras dele, e alguém ' +
+      'de cá anotando. Sinal é comportamento: respondeu, abriu, voltou, mudou de cargo. ' +
+      'Não é a mesma coisa e o app não trata como se fosse.</p>' +
+
+      '<div class="aviso" style="margin:14px 0"><strong>A regra que não tem exceção:</strong> ' +
+      'sinal não mexe no IAD, não zera a Idade da Evidência, não muda a saúde nem o grupo do ' +
+      'negócio. Um clique não é um problema reconhecido. Se sinal contasse como decisão, o IAD ' +
+      'viraria um contador de cliques — que é o que todo CRM já é, e o motivo de nenhum deles ' +
+      'saber dizer se o negócio existe de verdade.</div>' +
+
+      '<h3>O que o sinal faz, então</h3>' +
+      '<p class="small">Uma coisa só, e é a que faltava: dizer <strong>quando</strong> a conversa ' +
+      'tem hora. Quando aparece um sinal forte e a sua última evidência está velha, o app mostra ' +
+      'a faixa <span class="pill risk">É a hora</span> com a frase <em>"o comportamento está N dias ' +
+      'à frente do registro"</em>.</p>' +
+      '<p class="small">Duas condições, as duas necessárias: sinal de peso 2 ou 3 nos últimos 21 dias ' +
+      '<strong>e</strong> evidência parada há mais de 14 dias, com o sinal mais novo que ela. Sem a ' +
+      'segunda, o aviso tocaria em toda conta ativa — e aviso que toca sempre é aviso que se desliga ' +
+      'na primeira semana.</p>' +
+      '<p class="small muted">Esse alerta também sobe para o Painel, nos riscos críticos, com ⏱ em vez ' +
+      'de ⚠. É o único aviso deste app que é boa notícia.</p>' +
+
+      '<h3>De onde vêm os sinais</h3>' +
+      '<div class="tabela-rolagem"><table><thead><tr>' +
+      '<th>Origem</th><th>Quem alimenta</th><th>Peso</th><th>Como funciona</th>' +
+      '</tr></thead><tbody>' +
+      linha('WhatsApp', 'sozinho', '2 a 3',
+        'Toda vez que o app busca as conversas, quem respondeu vira sinal. Um por conversa por ' +
+        '<em>dia</em>, não por mensagem. Quem escreveu sem você ter falado antes conta como ' +
+        '<em>procurou sozinho</em>, que vale mais. Conversa que não casou com nenhum contato não ' +
+        'vira sinal — sinal sem pessoa é um telefone com uma data.') +
+      linha('Link rastreado', 'sozinho', '3',
+        'Abrir um documento que você mandou é o sinal mais forte da lista, e <em>voltar</em> a ele ' +
+        'é mais forte ainda. Explicado abaixo.') +
+      linha('Anotado à mão', 'você', '1 a 3',
+        'Tudo o mais: visitou seu perfil, curtiu, respondeu e-mail, entrou no site, participou de ' +
+        'evento, mudou de cargo, indicou você para alguém. <strong>Sinais</strong> → ' +
+        '<strong>Registrar sinal</strong>. Vinte e três tipos, agrupados por canal.') +
+      '</tbody></table></div>' +
+      '<p class="tiny muted">Peso 1 é atenção (passou perto), 2 é interesse (gastou tempo), ' +
+      '3 é intenção (fez o que só faz quem está considerando). Três degraus e não dez porque ' +
+      'ninguém sabe dizer se abrir um e-mail vale 2 ou 3 numa escala até dez.</p>' +
+
+      '<h3>O link rastreado, em detalhe</h3>' +
+      '<p class="small">O IAD não guarda a sua proposta, e não deve: ela já está no Drive, no ' +
+      'SharePoint, no anexo. O que faltava não era um lugar para o arquivo — era saber ' +
+      '<strong>quando o cliente abriu</strong>.</p>' +
+      '<p class="small">Então o app pede à ponte um <strong>desvio</strong>: um endereço curto que ' +
+      'passa por ela e segue para o seu documento. Quem recebe clica e vê o arquivo de sempre, sem ' +
+      'perceber nada. Você fica sabendo que ele viu.</p>' +
+
+      passo(1, 'Você abre a negociação e vai em Sinais → Link rastreado',
+        'Cola o endereço do documento — o mesmo que você mandaria —, dá um nome ' +
+        '(<em>"Proposta v2"</em>) e escolhe <strong>para quem</strong> é este link.') +
+      passo(2, 'O app devolve um endereço curto',
+        'Algo como <code>…/r/Kd8fPqR2mXnTvB3yHs7wLc</code>. Copie e mande no lugar do link ' +
+        'original, por onde você já mandaria: e-mail, WhatsApp, LinkedIn.') +
+      passo(3, 'O cliente clica e vê o documento',
+        'A ponte anota a passagem e o encaminha na mesma hora. Ele não vê tela intermediária, não ' +
+        'faz login, não percebe diferença nenhuma.') +
+      passo(4, 'A abertura aparece aqui como sinal',
+        'Na próxima vez que você abrir o app. Na primeira vez sai como <em>"Abriu o documento"</em>; ' +
+        'da segunda em diante, <em>"Voltou ao documento"</em> — e ninguém volta a uma proposta por acaso.') +
+
+      '<div class="aviso" style="margin:14px 0"><strong>Um link por pessoa, e é o ponto todo.</strong> ' +
+      'Com um link só para a empresa inteira, "alguém abriu" não diz quem, e Stakeholders e Consenso ' +
+      'continuam sendo palpite. Com um link por pessoa, a proposta aberta por alguém que nunca esteve ' +
+      'numa reunião é o grupo comprador aparecendo sozinho — a descoberta mais cara que este app ' +
+      'consegue entregar de graça. Emita um para cada pessoa que vai receber o documento.</div>' +
+
+      '<h3>O que a abertura te conta</h3>' +
+      '<div class="tabela-rolagem"><table><tbody>' +
+      '<tr><td class="rotulo-manual"><strong>Quem</strong></td><td class="small">A pessoa para quem ' +
+      'você emitiu aquele link. Por isso o link é individual.</td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>O quê</strong></td><td class="small">O nome que você ' +
+      'deu ao documento. Aparece no sinal: <em>"Abriu o documento: Proposta v2"</em>.</td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>Quando</strong></td><td class="small">Data e hora, no ' +
+      'seu fuso.</td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>De novo?</strong></td><td class="small">A segunda ' +
+      'abertura do mesmo link vira <em>"Voltou ao documento"</em>. É o sinal de maior peso que ' +
+      'existe aqui.</td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>Era robô?</strong></td><td class="small">O verificador ' +
+      'de links da caixa corporativa abre tudo antes da pessoa ver. Esses são reconhecidos e ' +
+      'descartados — senão o app anunciaria "é a hora" por causa de um antivírus.</td></tr>' +
+      '</tbody></table></div>' +
+
+      '<p class="small muted" style="margin-top:10px"><strong>O que não é guardado:</strong> IP, ' +
+      'navegador, cidade, nada que identifique a máquina. Você já sabe quem abriu, porque foi você ' +
+      'que emitiu o link para aquela pessoa; o resto seria dado pessoal a mais, sem utilidade e com ' +
+      'obrigação legal junto. O link também não carrega o identificador da sua empresa — ele vai ' +
+      'para fora, e o que vai para fora não leva nada de dentro.</p>' +
+      '<p class="small muted">O link vale 90 dias. Depois disso ele para de funcionar e quem clicar ' +
+      'vê "link não encontrado" — vale reemitir se a negociação se arrastar.</p>' +
+
+      '<h3>Promover a evidência</h3>' +
+      '<p class="small">Debaixo de cada sinal há um botão <strong>Promover a evidência</strong>. Ele ' +
+      'é a única porta entre o que se observa e a régua, e ele é humano de propósito: quem diz que ' +
+      'abrir a proposta três vezes comprova <em>Prioridade</em> é uma pessoa que conhece a conta, não ' +
+      'uma tabela de pesos.</p>' +
+      '<p class="small">Ao promover, você escolhe qual das oito aquilo comprova. A evidência entra no ' +
+      'histórico, zera a Idade da Evidência e o "É a hora" some — porque o registro alcançou o ' +
+      'comportamento. A força entra como <em>relato</em>, que é o que ela é: comportamento observado ' +
+      'não é o cliente dizendo com palavras dele.</p>' +
+      '<p class="small muted">Promova quando o comportamento realmente comprovar alguma coisa — não ' +
+      'por ele ter acontecido. Promover tudo é a maneira mais rápida de fazer o IAD mentir.</p>' +
+
+      '<h3>Testando que está funcionando</h3>' +
+      '<p class="small">Emita um link para você mesmo — escolha qualquer contato, cole o endereço de ' +
+      'um documento seu —, abra o link no celular e depois recarregue o IAD. O sinal tem de aparecer ' +
+      'na aba <strong>Sinais</strong> daquela negociação. Abra de novo e recarregue: a segunda ' +
+      'passagem vira <em>"Voltou ao documento"</em>. Se aparecer, está tudo de pé: ponte, desvio, ' +
+      'colheita e sincronização.</p>' +
+      '<p class="tiny muted">Se o botão disser que a ponte não conhece links rastreados, o worker do ' +
+      'Cloudflare está desatualizado. Se o sinal não aparecer, confira em Configuração → Linked Helper ' +
+      'se a ponte está configurada para esta empresa.</p>' +
       '</div>';
   }
 
@@ -5228,8 +5516,12 @@
 
     return '<div class="row" style="align-items:flex-start">' +
       '<div><h1 style="margin:0">Manual do IAD CRM</h1>' +
+      /* Dizia "funciona offline: está tudo guardado no aparelho" — verdade até a
+         v180 e mentira desde então. O aparelho não guarda mais carteira: o
+         servidor é a única fonte, e sem conexão o app nem abre. Frase errada no
+         alto do manual é pior do que frase nenhuma, porque ela é acreditada. */
       '<p class="small muted" style="margin:4px 0 14px">O método e o sistema, na mesma tela. ' +
-      'Funciona offline: está tudo guardado no aparelho.</p></div>' +
+      'A carteira mora no servidor: ela é a mesma em qualquer aparelho em que você entrar.</p></div>' +
       '<span class="espaco"></span>' +
       (v.numero ? '<div class="carimbo-versao"><strong>' + esc(v.numero) + '</strong>' +
         (v.data ? '<span>' + esc(U.data(v.data)) + '</span>' : '') + '</div>' : '') +
@@ -5243,7 +5535,9 @@
 
       manualDasOito() +
       manualDoCaminho() +
+      manualDoDia() +
       manualDoLinkedHelper() +
+      manualDosSinais() +
       manualDaRegua() +
       manualDoAvanco() +
       manualDasFaixas() +

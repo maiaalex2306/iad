@@ -5,8 +5,8 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v185**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v185, o aparelho
+Publicado agora: **v186**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v186, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -131,6 +131,29 @@ rastreado" responde que a ponte ainda não conhece links rastreados.
 **Onde está:** rotas em `ponte/worker.js`; cliente em `src/integracoes.js`
 (`emitirLink`, `aberturas`, `colherAberturas`); diálogo em `src/app.js`
 (`linkRastreado`); botão na aba Sinais em `src/views.js`.
+
+**Feito pelo Alexandre em 18/09:** o SQL rodou e o worker foi publicado.
+
+---
+
+## 0-D. Duas seções novas no Manual — v186, 18/09
+
+- **O dia do vendedor: o que alimentar, o que você recebe** (`m-dia`). O manual
+  já tinha "O caminho do vendedor", que é o ciclo de UM negócio. Faltava o
+  outro corte: o dia, com trinta negócios ao mesmo tempo. Termina com a tabela
+  que responde a pergunta que todo vendedor faz sobre qualquer CRM — *o que eu
+  ganho por preencher isto?* — em três colunas: alimenta / recebe / onde.
+- **Sinais: o que o comprador faz sozinho** (`m-sinais`). A regra antes da
+  funcionalidade, porque quem não entender que sinal não é evidência vai
+  promover tudo no primeiro dia e estragar a régua. Inclui o passo a passo do
+  link rastreado e um teste que o próprio vendedor faz sozinho.
+
+Também corrigido o subtítulo do Manual, que dizia *"funciona offline: está tudo
+guardado no aparelho"* — verdade até a v180 e mentira desde então.
+
+E `.passo-manual .numero` ganhou a variante `.quando`: o círculo de 28px foi
+feito para um dígito, e com uma palavra dentro ("uma vez na semana") o texto
+transbordava.
 
 ---
 
