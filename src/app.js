@@ -2531,7 +2531,11 @@
 
        O que a pessoa recebe é o relatório do que mudou, com uma porta para
        ajustar. Ler não é trabalho; preencher é. */
-    aplicarLeituraDaIA: function (opId, resultado, textoParaNotas, depois) {
+    /* `silencioso` existe por causa do e-mail: a análise roda em lote, no
+       fundo, sem ninguém olhando, e uma janela de resumo por mensagem seria
+       trinta janelas na cara de quem só abriu o app. Nesse modo o resumo volta
+       para quem chamou, em vez de virar tela. */
+    aplicarLeituraDaIA: function (opId, resultado, textoParaNotas, depois, silencioso) {
       const op = Store.oportunidade(opId);
       if (!op) return;
 
@@ -2609,8 +2613,16 @@
          entrado — é ela que enxerga se a prova existe. */
       if (resultado.decisoes && resultado.decisoes.length) {
         const mudancas = aplicarNotasDaIA(opId, resultado.decisoes);
+        if (silencioso) {
+          if (depois) depois(base, mudancas);
+          return;
+        }
         render();
         mostrarResumo(opId, base, mudancas, resultado.decisoes, depois, '');
+        return;
+      }
+      if (silencioso) {
+        if (depois) depois(base, []);
         return;
       }
       /* Só quando não vieram — função antiga publicada, ou resposta sem elas —
@@ -6163,14 +6175,217 @@
      ter, não é pré-requisito para ver a carteira. */
   function pintarEmails(forcar) {
     if (!Mail || !Mail.disponivel()) return;
-    Mail.carregar(forcar).then(function () {
+    return Mail.carregar(forcar).then(function () {
       return Mail.carregarCaixas(forcar);
-    }).then(function () { render(); }, function (e) {
+    }).then(function () {
+      render();
+      /* A análise vem depois do render: a tela aparece na hora e o assistente
+         trabalha no fundo. `analisandoAgora` evita o laço — pintarEmails é
+         chamado de novo no fim da análise. */
+      if (!analisandoAgora()) analisarEmailsNovos(false);
+    }, function (e) {
       console.warn('Não consegui buscar os e-mails:', e);
     });
   }
 
   App.recarregarEmails = function () { pintarEmails(true); };
+
+  function analisandoAgora() { return analisando; }
+
+  /* ---------------- a análise dos e-mails recebidos ----------------
+
+     Todo e-mail que chega do cliente passa pelo assistente: ele separa o que o
+     CLIENTE disse, propõe uma evidência por decisão afetada, relê as oito, e
+     quando ficou combinado que NÓS faríamos alguma coisa, a tarefa nasce.
+
+     Isso acontece uma vez por mensagem e a marca fica no servidor, não na
+     memória — o app abre em vários aparelhos, e marcar só aqui faria o segundo
+     computador reanalisar a caixa inteira, com evidência repetida no histórico
+     e a mesma tarefa nascendo todo dia.
+
+     Quatro travas, e cada uma existe por um motivo:
+
+       1. só entrada, e só com negociação casada — analisar e-mail sem saber a
+          que negócio pertence é gastar chamada para jogar fora o resultado;
+       2. resposta automática e remetente de máquina ficam de fora, marcados
+          como analisados sem gastar chamada nenhuma: "estou de férias" não
+          move decisão;
+       3. um punhado por rodada, em fila, nunca em paralelo — o provedor tem
+          limite e o gesto do vendedor não pode competir com um lote de fundo;
+       4. três tentativas e para. Assistente fora do ar não pode virar um laço
+          que consome cota a cada abertura do app. */
+  const POR_RODADA = 5;
+  const TENTATIVAS_DE_ANALISE = 3;
+  let analisando = false;
+  let analise = { quando: '', lidos: 0, evidencias: 0, tarefas: 0, erro: '', fila: 0 };
+
+  App.estadoDaAnalise = function () { return analise; };
+
+  /* Remetente de máquina e resposta automática. A lista é curta de propósito:
+     ela não precisa pegar todos, precisa pegar os que chegam às dezenas. */
+  const DE_MAQUINA = /(^|[.@])(no-?reply|nao-?responda|naoresponda|mailer-daemon|postmaster|notifica|notification|bounce|newsletter)/i;
+  const AUTOMATICA = /(^|\s)(out of (the )?office|automatic reply|resposta autom[áa]tica|ausência do escrit[óo]rio|auto[- ]?reply|undeliverable|delivery status notification)/i;
+
+  function ehRuido(m) {
+    if (DE_MAQUINA.test(String(m.de || ''))) return true;
+    if (AUTOMATICA.test(String(m.assunto || ''))) return true;
+    /* Abaixo de 60 caracteres o próprio assistente recusa por texto curto.
+       Gastar a chamada para ouvir isso é desperdício com passo extra. */
+    return String(m.corpo || '').trim().length < 60;
+  }
+
+  function paraAnalisar() {
+    if (!Mail || !Mail.carregadas()) return [];
+    const porThread = {};
+    Mail.conversas().forEach(function (c) {
+      if (c.op) porThread[c.chave] = c.op;
+    });
+    return Mail.todas().filter(function (m) {
+      if (m.direcao !== 'entrada') return false;
+      if (m.analisada_em) return false;
+      if ((m.analise_tentativas || 0) >= TENTATIVAS_DE_ANALISE) return false;
+      return !!porThread[String(m.thread || m.id || '')];
+    }).map(function (m) {
+      return { m: m, op: porThread[String(m.thread || m.id || '')] };
+    }).sort(function (a, b) {
+      return String(a.m.enviada_em || '').localeCompare(String(b.m.enviada_em || ''));
+    });
+  }
+
+  /* O cliente pediu alguma coisa: isso vira tarefa, com data.
+
+     Só quando o dono do combinado somos NÓS. O que ficou para o cliente fazer
+     já é o próximo compromisso da negociação, e transformá-lo em tarefa nossa
+     encheria a agenda de coisas que não dependem de nós — que é como uma lista
+     de tarefas perde credibilidade. */
+  function tarefaDoCompromisso(op, m, resultado) {
+    const evidencias = (resultado && resultado.evidencias) || [];
+    const dela = evidencias.filter(function (e) {
+      return e.compromissoTexto && String(e.compromissoDono || '') === 'nos';
+    })[0];
+    if (!dela) return null;
+
+    const contato = m.contato_id ? Store.contato(m.contato_id)
+      : (Mail.contatoDoEndereco(Mail.endereco(m.de)) || null);
+    const quem = contato ? contato.nome : (m.de_nome || m.de || 'o cliente');
+    const primeiro = String(quem).split(' ')[0];
+    const conta = Store.conta(op.contaId);
+
+    return Store.criarTarefa({
+      oportunidadeId: op.id,
+      contatoId: contato ? contato.id : null,
+      titulo: primeiro + (conta ? ' da ' + conta.nome : '') + ': ' + dela.compromissoTexto,
+      descricao: 'Pedido no e-mail "' + (m.assunto || 'sem assunto') + '", de ' +
+        String(m.enviada_em || '').slice(0, 10) + '.',
+      tipo: 'E-mail',
+      decisaoAlvo: dela.dimensao || '',
+      vencimento: dela.compromissoData || Store.daquiADias(3),
+      origem: 'email'
+    });
+  }
+
+  function analisarUm(item) {
+    const m = item.m, op = item.op;
+    const N = global.IADNuvem;
+
+    if (ehRuido(m)) {
+      /* Marcado como analisado sem gastar chamada: não é evidência e não pode
+         voltar à fila amanhã. */
+      return N.marcarEmailAnalisado(m.id, { ignorado: 'ruido' }).catch(function () {});
+    }
+
+    const resumo = E.resumo(op);
+    const contexto = IA.contextoDaOportunidade(op);
+    contexto.tarefa = {
+      titulo: 'E-mail recebido: ' + (m.assunto || 'sem assunto'),
+      tipoTarefa: 'E-mail',
+      contato: m.de_nome || m.de || '',
+      quando: String(m.enviada_em || '').slice(0, 10)
+    };
+
+    const texto = 'E-MAIL RECEBIDO\nDe: ' + (m.de_nome || '') + ' <' + (m.de || '') + '>\n' +
+      'Assunto: ' + (m.assunto || '') + '\n\n' + String(m.corpo || '');
+
+    return N.contarTentativaDeAnalise(m.id, (m.analise_tentativas || 0) + 1)
+      .catch(function () {})
+      .then(function () { return IA.analisarReuniao(texto, contexto, op, resumo); })
+      .then(function (r) {
+        if (!r || r.erro) {
+          return N.marcarEmailAnalisado(m.id, null, (r && r.erro) || 'sem resposta').catch(function () {});
+        }
+        return new Promise(function (resolve) {
+          App.aplicarLeituraDaIA(op.id, r, texto, function (base, mudancas) {
+            const tarefa = tarefaDoCompromisso(op, m, r);
+            analise.evidencias += (base && base.evidencias) || 0;
+            if (tarefa) analise.tarefas++;
+            N.marcarEmailAnalisado(m.id, {
+              evidencias: (base && base.evidencias) || 0,
+              pessoas: (base && base.pessoas) || 0,
+              notas: (mudancas || []).map(function (x) { return x.nome + ' ' + x.de + '→' + x.para; }),
+              tarefa: tarefa ? tarefa.titulo : ''
+            }).catch(function () {});
+            resolve();
+          }, true);
+        });
+      }, function (e) {
+        return N.marcarEmailAnalisado(m.id, null, (e && e.message) || 'falhou').catch(function () {});
+      });
+  }
+
+  /* Em fila, um de cada vez. Em paralelo, cinco chamadas simultâneas batem no
+     limite do provedor e voltam todas com erro — e aí as cinco contam
+     tentativa sem terem sido lidas. */
+  function analisarEmailsNovos(comAviso) {
+    if (analisando) return Promise.resolve(0);
+    if (!Mail || !IA || !IA.disponivel || !IA.disponivel()) {
+      if (comAviso) alert('O assistente não está no ar. Veja Configuração → Assistente de IA.');
+      return Promise.resolve(0);
+    }
+    const fila = paraAnalisar();
+    analise.fila = fila.length;
+    if (!fila.length) {
+      if (comAviso) alert('Nenhum e-mail novo para analisar.');
+      return Promise.resolve(0);
+    }
+
+    analisando = true;
+    /* Zerado a cada rodada, e não acumulado: com as tentativas de reenvio o
+       número acumulado dizia "6 lidos" para três e-mails, que é pior do que
+       não mostrar número nenhum. */
+    analise = { quando: analise.quando, lidos: 0, evidencias: 0, tarefas: 0, erro: '', fila: fila.length };
+    const lote = fila.slice(0, POR_RODADA);
+    let feito = 0;
+
+    return lote.reduce(function (corrente, item) {
+      return corrente.then(function () {
+        return analisarUm(item).then(function () { feito++; });
+      });
+    }, Promise.resolve()).then(function () {
+      analisando = false;
+      analise.quando = new Date().toISOString();
+      analise.lidos = feito;
+      Mail.esquecer();
+      return pintarEmails(true);
+    }).then(function () {
+      if (comAviso) {
+        alert(feito + ' e-mail(s) analisado(s).\n\n' +
+          analise.evidencias + ' evidência(s) registrada(s) e ' + analise.tarefas + ' tarefa(s) criada(s).' +
+          (analise.fila > POR_RODADA
+            ? '\n\nAinda faltam ' + (analise.fila - feito) + '. Clique de novo para continuar — vou de ' +
+              POR_RODADA + ' em ' + POR_RODADA + ' para não estourar o limite do assistente.'
+            : ''));
+      }
+      return feito;
+    }, function (e) {
+      analisando = false;
+      analise.erro = (e && e.message) || 'falhou';
+      console.warn('Análise dos e-mails falhou:', e);
+      if (comAviso) alert('A análise falhou: ' + analise.erro);
+      return 0;
+    });
+  }
+
+  App.analisarEmails = function () { analisarEmailsNovos(true); };
 
   App.abrirConversa = function (chave) {
     V.definirConversa(chave);

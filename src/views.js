@@ -2433,6 +2433,34 @@
         : '') + '</div>';
   }
 
+  /* O estado da análise dos e-mails.
+
+     Fica à vista pelo mesmo motivo da linha da colheita dos sinais: trabalho
+     que acontece no fundo e não se anuncia é indistinguível de trabalho que
+     não aconteceu. Aqui a pessoa vê que o assistente passou, o que ele achou,
+     e quanto ainda falta — porque a análise vai de cinco em cinco para não
+     estourar o limite do provedor, e quem não sabe disso acha que travou. */
+  function linhaDaAnalise() {
+    const A = global.App;
+    if (!A || !A.estadoDaAnalise) return '';
+    const a = A.estadoDaAnalise() || {};
+    const botao = '<button class="btn ghost mini" onclick="App.analisarEmails()" ' +
+      'data-ajuda-titulo="Analisar agora" ' +
+      'data-ajuda="Manda o assistente ler os e-mails recebidos que ainda não passaram por ele. Cada mensagem é lida uma vez só: depois fica marcada, e nem este aparelho nem outro a lê de novo.">Analisar agora</button>';
+
+    if (a.erro) {
+      return '<div class="aviso" style="margin-top:10px">O assistente falhou: ' + esc(a.erro) +
+        '<div class="row" style="margin-top:8px">' + botao + '</div></div>';
+    }
+    const texto = a.quando
+      ? 'Assistente passou às ' + String(a.quando).slice(11, 16) + ' — ' + (a.lidos || 0) +
+        ' e-mail(s) lido(s), ' + (a.evidencias || 0) + ' evidência(s) e ' + (a.tarefas || 0) + ' tarefa(s).' +
+        (a.fila > (a.lidos || 0) ? ' Faltam ' + (a.fila - a.lidos) + '.' : '')
+      : 'Os e-mails recebidos são lidos pelo assistente ao abrir o app.';
+    return '<div class="row" style="margin-top:10px;gap:8px">' +
+      '<span class="tiny muted">' + esc(texto) + '</span><span class="espaco"></span>' + botao + '</div>';
+  }
+
   function abaEmail(op) {
     const M = global.IADEmail;
     const topo = function (miolo) {
@@ -2445,7 +2473,8 @@
             '<button class="btn mini" onclick="App.escreverEmail(\'' + op.id + '\')">Escrever</button>') +
         '</div>' +
         '<p class="tiny muted" style="margin:8px 0 0">O que foi escrito de verdade, dos dois lados. ' +
-        'Mensagem não é evidência: o que vira avanço é o que você registra a partir dela.</p></div>' + miolo;
+        'O assistente lê o que chega e transforma em evidência; o que ficou para você fazer vira tarefa.</p>' +
+        linhaDaAnalise() + '</div>' + miolo;
     };
 
     if (!M || !M.disponivel()) {

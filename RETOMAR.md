@@ -5,8 +5,8 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v189**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v189, o aparelho
+Publicado agora: **v190**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v190, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -310,6 +310,57 @@ corretos.
 2. O Alexandre gerar a senha de aplicativo na conta Google (exige 2FA ligada).
 3. **A Edge Function do transporte** — a que lê o IMAP e manda pelo SMTP. É o
    próximo pedaço, e é o único que toca na credencial.
+
+---
+
+## 0-H. O e-mail recebido vira evidência e tarefa — v190, 18/09
+
+**O pedido do Alexandre:** todo e-mail recebido tem de ser analisado pela IA,
+promover as mudanças, chegar a criar a tarefa — *"Ana da Suzano pediu os
+dados…"* — e depois ficar marcado como analisado, para não reanalisar sempre.
+
+**A máquina de analisar já existia:** é a mesma que lê ata de reunião
+(`IA.analisarReuniao` + `App.aplicarLeituraDaIA`). O que faltava era o gatilho,
+a marca e a tarefa.
+
+**O que foi construído:**
+
+- **`nuvem/correcao-19-analise-do-email.sql`** — `analisada_em`, `analise`
+  (jsonb com o que concluiu), `analise_erro` e `analise_tentativas` em
+  `emails`; `ultimo_uid` e `pastas` em `caixas_email`. São duas marcas
+  diferentes e as duas precisam existir: a primeira impede **reanalisar**, a
+  segunda impede **rebaixar** a caixa inteira a cada rodada do IMAP.
+- **`aplicarLeituraDaIA` ganhou modo silencioso.** A análise roda em lote, no
+  fundo; uma janela de resumo por mensagem seria trinta janelas na cara de
+  quem só abriu o app. No silêncio o resumo volta para quem chamou.
+- **A tarefa nasce do compromisso**, e só quando o dono somos **nós**. O que
+  ficou para o cliente fazer já é o próximo compromisso da negociação;
+  transformá-lo em tarefa nossa encheria a agenda de coisas que não dependem
+  de nós — que é como uma lista de tarefas perde credibilidade. O título sai
+  como *"Ana da Suzano: Mandar os dados de consumo e a memória de cálculo do
+  ROI"*, com a data do combinado e a decisão-alvo.
+
+**Quatro travas, cada uma com um motivo:**
+
+1. Só entrada, e só com negociação casada — analisar e-mail sem saber a que
+   negócio pertence é gastar chamada para jogar o resultado fora.
+2. Resposta automática, remetente de máquina (`no-reply`, `mailer-daemon`…) e
+   corpo com menos de 60 caracteres são marcados como analisados **sem gastar
+   chamada nenhuma**. "Estou de férias" não move decisão.
+3. Cinco por rodada, em fila, nunca em paralelo: o provedor tem limite, e cinco
+   chamadas simultâneas voltam todas com erro — e aí as cinco contam tentativa
+   sem terem sido lidas.
+4. Três tentativas e para. Assistente fora do ar não pode virar um laço que
+   consome cota a cada abertura do app.
+
+**Testado no navegador, com os quatro casos:** o e-mail de verdade da Ana subiu
+Prioridade de 0 para 2, zerou a Idade da Evidência (90 → 2 dias), gravou a
+evidência e **criou a tarefa**; os três de ruído foram marcados sem chamada; e a
+**segunda rodada não reanalisou nada** — fila 0, IAD parado em 4, uma tarefa só.
+
+**Onde está:** `analisarEmailsNovos`, `analisarUm`, `tarefaDoCompromisso` e
+`ehRuido` em `src/app.js`; `marcarEmailAnalisado` e `contarTentativaDeAnalise`
+em `src/nuvem.js`; `linhaDaAnalise` em `src/views.js`.
 
 ---
 

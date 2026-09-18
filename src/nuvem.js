@@ -315,6 +315,30 @@
     }).then(function (linhas) { return (linhas && linhas[0]) || null; });
   }
 
+  /* A marca de "já passou pelo assistente". Vai para o servidor, e não para a
+     memória, porque a análise é cara e o app abre em vários aparelhos: marcar
+     só aqui faria o segundo computador reanalisar a caixa inteira. */
+  function marcarEmailAnalisado(id, analise, erro) {
+    const corpo = erro
+      ? { analise_erro: String(erro).slice(0, 500) }
+      : { analisada_em: new Date().toISOString(), analise: analise || {}, analise_erro: '' };
+    return chamar('/rest/v1/emails?id=eq.' + encodeURIComponent(id), {
+      metodo: 'PATCH',
+      cabecalhos: { prefer: 'return=minimal' },
+      corpo: corpo
+    });
+  }
+
+  /* Contar as tentativas é o que impede o laço. Assistente fora do ar deixaria
+     o mesmo e-mail sendo tentado a cada abertura do app, para sempre. */
+  function contarTentativaDeAnalise(id, quantas) {
+    return chamar('/rest/v1/emails?id=eq.' + encodeURIComponent(id), {
+      metodo: 'PATCH',
+      cabecalhos: { prefer: 'return=minimal' },
+      corpo: { analise_tentativas: quantas }
+    });
+  }
+
   function marcarLidosEmail(ids) {
     const lista = (ids || []).filter(Boolean);
     if (!lista.length) return Promise.resolve(null);
@@ -982,6 +1006,7 @@
     convitesDaNuvem, convidar, removerConvite, recuperarSenha, criarEmpresa, chamarFuncao,
     mensagensWhatsapp, marcarLidasWhatsapp, vincularWhatsapp,
     emailsDaNuvem, vincularEmail, enfileirarEmail, marcarLidosEmail,
+    marcarEmailAnalisado, contarTentativaDeAnalise,
     caixasDeEmail, salvarCaixaDeEmail,
     empresaParecida, achatarNome, porFormato, explicarFalhas,
     adotarTokens,
