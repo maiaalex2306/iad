@@ -182,3 +182,103 @@ mexer no motor.
 3. **A linha do tempo unificada** com o WhatsApp.
 4. **Mandar**, com `Reply-To` de volta e autenticação de domínio.
 5. **A API do Gmail**, se e quando a receita justificar a auditoria anual.
+
+---
+
+## 8. Revisão de 18/09/2026 — o que mudou depois de conversar com o Alexandre
+
+A seção 1 continua certa no diagnóstico e **errada na conclusão**, por três
+coisas que eu não tinha considerado quando a escrevi.
+
+### 8.1 O app interno existe, e não serve aqui
+
+Aplicativo publicado como **interno** num Google Workspace — só para usuários
+da própria organização — **não passa pela verificação nem pela auditoria
+anual**. Escopo restrito incluído. Ou seja, para uma empresa ler a própria
+caixa, a API do Gmail é de graça.
+
+Só que isso cobre **uma organização**. O Alexandre pretende vender o IAD para
+empresas que ele não administra, e cada uma precisaria do próprio projeto no
+Google Cloud, feito pelo TI dela. Em empresa industrial isso é semana de
+espera e "não" em metade das vezes.
+
+**Conclusão:** o app interno é uma saída para quem usa o CRM dentro de casa.
+Não é arquitetura de produto vendido.
+
+### 8.2 Ler é caro; MANDAR não é
+
+A assimetria que muda a ordem das obras:
+
+| | Google | Microsoft |
+|---|---|---|
+| **Ler** a caixa | escopo restrito → verificação **+ auditoria anual paga** | consentimento do administrador, sem auditoria |
+| **Mandar** | escopo sensível → verificação, **sem** auditoria | consentimento do administrador, sem auditoria |
+
+Mandar pela API é barato de autorizar dos dois lados. Ler é caro só no Google.
+Isso inverte a intuição de que receber vem antes de enviar.
+
+*(Confirmar as classificações antes de comprometer orçamento — elas mudam.)*
+
+### 8.3 Cópia oculta manual está morta; regra de encaminhamento não
+
+O defeito da 1.1 é real: depende de a pessoa lembrar, e o que ela esquece não
+entra. Mas a cópia oculta **manual** não é a única forma sem autorização.
+
+**Regra de encaminhamento**, criada pelo próprio vendedor na caixa dele, uma
+vez: *"mensagens vindas de `suzano.com.br`, `klabin.com.br`… encaminhe para
+este endereço"*. Gmail e Outlook permitem isso a qualquer usuário, **sem
+administrador**. Depois de criada, ninguém pensa mais nisso.
+
+Duas vantagens que nenhum outro cano tem:
+
+- Funciona em **qualquer provedor e qualquer domínio**, no dia um, sem
+  verificação, sem auditoria, sem TI.
+- O IAD recebe **só o que a regra manda**. A caixa pessoal nunca passa por ele
+  — que é a melhor resposta de LGPD possível, melhor até que a da seção 5.
+
+O IAD conhece os domínios da carteira, então pode **gerar a regra pronta para
+colar** e avisar quando ela ficar desatualizada — mesma ideia do link
+rastreado, que também é "copie isto e cole lá".
+
+### 8.4 Onde a mensagem entra: a ponte que já existe
+
+O Cloudflare roteia e-mail de graça e entrega direto para um Worker. **É o
+mesmo Worker da ponte** que já recebe os leads do Linked Helper e já faz os
+links rastreados, já com chave por empresa e balde por empresa.
+
+Nenhuma infraestrutura nova, nenhum custo novo, nenhum serviço a mais para
+manter. **Falta só um domínio** com DNS no Cloudflare — não pode ser o do
+Workspace, cujo MX aponta para o Google.
+
+### 8.5 Mandar, em dois níveis
+
+1. **Sem configuração:** o IAD manda do domínio dele com `Reply-To` para o
+   vendedor. Funciona para qualquer pessoa, hoje. Custo: o cliente vê um
+   remetente estranho, o que num e-mail de venda pesa.
+2. **Com dois registros de DNS** (SPF e DKIM) publicados pelo cliente: o
+   e-mail sai do domínio dele de verdade, com entrega boa. Configuração **por
+   domínio**, não por pessoa — uma vez, vale para a equipe inteira. É o mesmo
+   pedido que qualquer ferramenta de vendas faz, e o TI reconhece; é uma ordem
+   de grandeza menor que o pedido do OAuth.
+
+E o principal: **se o IAD manda, ele controla o `Message-ID`** — então a
+resposta casa com a negociação sem adivinhação nenhuma, mesmo vindo de
+endereço que ninguém cadastrou. Enviar não é só mais uma funcionalidade: é o
+que torna o receber preciso.
+
+### 8.6 A ordem revisada
+
+O miolo não depende do cano, e é a maior parte do trabalho:
+
+1. **O miolo** — tabela das mensagens, casamento por endereço e por
+   `Message-ID`, a aba E-mail, a IA lendo e propondo evidência. Serve a
+   qualquer cano, não se joga fora em hipótese nenhuma.
+2. **Receber por encaminhamento**, pela ponte do Cloudflare.
+3. **Mandar**, começando pelo `Reply-To` e subindo para SPF/DKIM por domínio.
+4. **Microsoft Graph**, no primeiro cliente que pedir — é o mais barato dos
+   dois.
+5. **Gmail**, quando a receita pagar a auditoria (ou app interno, para quem
+   usar o CRM dentro de casa).
+
+**Bloqueio atual:** o domínio para o Cloudflare receber. Sem ele, o item 2 não
+começa.
