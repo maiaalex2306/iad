@@ -980,7 +980,21 @@
     modoPipeline: function (modo) { V.definirModoPipeline(modo); render(); },
     abaCadastro: function (aba) { V.definirAbaCadastro(aba); render(); },
     abaConfig: function (aba) { V.definirAbaConfig(aba); render(); },
-    abaCockpit: function (aba) { V.definirAbaCockpit(aba); render(); },
+    /* Abrir a aba de Sinais busca as aberturas.
+
+       Antes a colheita só rodava no boot, e isso produziu o sintoma que o
+       Alexandre relatou: ele emitiu o link, a pessoa clicou, ele foi olhar a
+       aba — e nada. A abertura estava na ponte o tempo todo; ninguém tinha ido
+       buscar. Recarregar a página resolvia, o que é a pior instrução que um
+       app pode dar.
+
+       Aqui a busca acontece onde a pergunta é feita. É de graça quando não há
+       nada, e a tela se repinta sozinha quando há. */
+    abaCockpit: function (aba) {
+      V.definirAbaCockpit(aba);
+      render();
+      if (aba === 'sinais') colherAberturas();
+    },
 
     /* A Configuração virou abas, e o diagnóstico foi para a última delas.
        Mandar para `#/dados` e deixar na aba de sincronizar seria mandar a
@@ -1665,6 +1679,48 @@
           fonte: 'manual'
         });
         render();
+      });
+    },
+
+    buscarAberturas: function () { colherAberturas(true); },
+
+    estadoDaColheita: function () { return estadoDaColheita(); },
+
+    /* O diagnóstico cru da ponte. "Cliquei e não apareceu nada" tem três
+       causas com consertos diferentes, e esta tela separa as três: se a ponte
+       não viu nada, o problema é o link ou o clique; se viu e marcou robô, é a
+       lista de robôs; se viu e está lá como gente, é a colheita. */
+    verAberturasNaPonte: function () {
+      const Integ = global.IADIntegracoes;
+      const motivo = Integ && Integ.porQueSemPonte();
+      if (motivo) {
+        alert(motivo === 'sem-empresa'
+          ? 'Escolha uma empresa no alto da tela antes: cada uma tem o próprio balde na ponte.'
+          : 'A ponte ainda não está configurada para esta empresa.');
+        return;
+      }
+      Integ.diagnosticoDasAberturas().then(function (d) {
+        if (!d.total) {
+          alert('A ponte não tem nenhuma abertura guardada.\n\n' +
+            'Quer dizer que nenhum clique chegou nela desde a última colheita. ' +
+            'Confira se o link que você mandou é mesmo o endereço ".../r/..." que o app gerou — ' +
+            'e lembre que as que já viraram sinal saem da ponte depois de colhidas.');
+          return;
+        }
+        const linhas = d.itens.slice(0, 20).map(function (a) {
+          const quem = a.contatoId ? (Store.contato(a.contatoId) || {}).nome : '';
+          return (a.robo ? '[descartada: parece robô] ' : '[conta como gente] ') +
+            String(a.quando || '').replace('T', ' ').slice(0, 16) +
+            (quem ? ' — ' + quem : '') + (a.titulo ? ' — ' + a.titulo : '');
+        });
+        alert('A ponte tem ' + d.total + ' abertura(s) guardada(s): ' +
+          d.gente + ' de gente, ' + d.robos + ' descartada(s) por parecerem robô.\n\n' +
+          linhas.join('\n') +
+          '\n\nAs de gente viram sinal na próxima colheita. As de robô ficam aqui até expirarem ' +
+          'em 30 dias — se alguma delas for uma pessoa de verdade, me avise: é a lista de robôs que ' +
+          'precisa de ajuste.');
+      }, function (e) {
+        alert('Não consegui falar com a ponte: ' + e.message);
       });
     },
 
@@ -5907,14 +5963,46 @@
      botão. Falha em silêncio de propósito — ponte fora do ar não pode
      atrapalhar quem só quer ver a carteira, e o que não foi colhido hoje
      continua lá amanhã: a baixa só acontece depois de gravar. */
-  function colherAberturas() {
+  /* O estado da última colheita fica à vista na aba de Sinais. Colheita que
+     falha em silêncio é indistinguível de colheita que não achou nada, e as
+     duas mandam a pessoa fazer coisas opostas. */
+  let colheitaEmCurso = false;
+  let colheita = { quando: '', erro: '', novos: 0 };
+
+  function estadoDaColheita() { return colheita; }
+
+  function colherAberturas(comAviso) {
     const Integ = global.IADIntegracoes;
-    if (!Integ || !Integ.colherAberturas || Integ.porQueSemPonte()) return Promise.resolve(0);
+    if (!Integ || !Integ.colherAberturas) return Promise.resolve(0);
+
+    const motivo = Integ.porQueSemPonte();
+    if (motivo) {
+      colheita = { quando: '', novos: 0,
+        erro: motivo === 'sem-empresa'
+          ? 'Escolha uma empresa no alto da tela: cada uma tem o próprio balde na ponte.'
+          : 'A ponte ainda não está configurada para esta empresa.' };
+      if (comAviso) { render(); alert(colheita.erro); }
+      return Promise.resolve(0);
+    }
+
+    if (colheitaEmCurso) return Promise.resolve(0);
+    colheitaEmCurso = true;
+
     return Integ.colherAberturas().then(function (n) {
-      if (n) render();
+      colheitaEmCurso = false;
+      colheita = { quando: new Date().toISOString(), erro: '', novos: n };
+      if (n || comAviso) render();
+      if (comAviso && !n) {
+        alert('A ponte não tem nenhuma abertura nova.\n\n' +
+          'Se alguém clicou no link agora há pouco, use "O que a ponte viu" para ver o que chegou lá — ' +
+          'inclusive o que foi descartado por parecer robô.');
+      }
       return n;
     }, function (e) {
+      colheitaEmCurso = false;
+      colheita = { quando: new Date().toISOString(), erro: (e && e.message) || 'falhou', novos: 0 };
       console.warn('Não consegui buscar as aberturas na ponte:', e);
+      if (comAviso) { render(); alert('Não consegui falar com a ponte: ' + colheita.erro); }
       return 0;
     });
   }

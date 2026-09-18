@@ -565,10 +565,36 @@
 
       /* A baixa vem depois de gravar, nunca antes: se a ponte esquecesse
          primeiro e o app falhasse em seguida, a abertura sumiria dos dois
-         lados. */
-      return marcarAberturas(lista.map(function (a) { return a.id; })).then(function () {
+         lados.
+
+         E dá baixa só no que VIROU sinal. O que foi marcado como robô fica na
+         ponte até expirar sozinho em 30 dias — era o que o estudo já dizia e o
+         código fazia o contrário: marcava tudo, e uma abertura de gente
+         classificada como robô por engano sumia dos dois lados para sempre,
+         sem deixar como conferir. Custa quase nada guardar; custa caro
+         descobrir que a lista de robôs errou e não ter mais o registro. */
+      return marcarAberturas(emOrdem.map(function (a) { return a.id; })).then(function () {
         return (S.sinais() || []).length - antes;
       });
+    });
+  }
+
+  /* O que a ponte tem AGORA, sem filtrar robô e sem dar baixa em nada.
+
+     Existe porque o silêncio é o pior sintoma possível: "cliquei e não
+     apareceu nada" pode ser a ponte não ter registrado, o clique ter sido
+     classificado como robô, ou a colheita nem ter rodado — e as três têm
+     conserto diferente. Isto separa as três em um clique. */
+  function diagnosticoDasAberturas() {
+    return aberturas().then(function (lista) {
+      return {
+        total: lista.length,
+        gente: lista.filter(function (a) { return !a.robo; }).length,
+        robos: lista.filter(function (a) { return a.robo; }).length,
+        itens: lista.slice().sort(function (x, y) {
+          return String(y.quando || '').localeCompare(String(x.quando || ''));
+        })
+      };
     });
   }
 
@@ -630,7 +656,7 @@
   }
 
   global.IADIntegracoes = { config, salvarConfig, configurada, porQueSemPonte, buscar, marcarProcessados, testarPonte,
-    emitirLink, aberturas, marcarAberturas, colherAberturas,
+    emitirLink, aberturas, marcarAberturas, colherAberturas, diagnosticoDasAberturas,
     normalizar, empresaAtual, nomeDaEmpresaAtual, enderecoDeEntrada,
     buscarNoBalde, marcarNoBalde };
 })(window);

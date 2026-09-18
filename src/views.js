@@ -2204,6 +2204,37 @@
       '</div>';
   }
 
+  /* A linha da colheita das aberturas.
+
+     Existe por causa de um sintoma real: o link foi emitido, a pessoa clicou,
+     e a aba não mostrou nada — porque a busca só rodava no boot do app. O
+     silêncio parecia defeito do rastreio e era falta de ida à ponte.
+
+     Agora a busca acontece ao abrir esta aba, e esta linha diz quando foi a
+     última e o que ela achou. Colheita que falha calada é indistinguível de
+     colheita que não achou nada, e as duas pedem coisas opostas de quem lê. */
+  function linhaDaColheita() {
+    const A = global.App;
+    if (!A || !A.estadoDaColheita) return '';
+    const c = A.estadoDaColheita() || {};
+    const botoes =
+      '<button class="btn ghost mini" onclick="App.buscarAberturas()">Buscar aberturas agora</button>' +
+      '<button class="btn ghost mini" onclick="App.verAberturasNaPonte()" ' +
+      'data-ajuda-titulo="O que a ponte viu" ' +
+      'data-ajuda="Mostra o que chegou à ponte sem filtrar nada, inclusive os cliques descartados por parecerem robô. É o que separa a ponte não ter visto de a ponte ter visto e o app ter descartado.">O que a ponte viu</button>';
+
+    if (c.erro) {
+      return '<div class="aviso" style="margin-top:10px">' + esc(c.erro) +
+        '<div class="row" style="margin-top:8px">' + botoes + '</div></div>';
+    }
+    const quando = c.quando
+      ? 'Aberturas conferidas na ponte às ' + String(c.quando).slice(11, 16) +
+        (c.novos ? ' — ' + c.novos + ' nova(s).' : ' — nada novo.')
+      : 'As aberturas de documento são buscadas ao abrir esta aba.';
+    return '<div class="row" style="margin-top:10px;gap:8px">' +
+      '<span class="tiny muted">' + esc(quando) + '</span><span class="espaco"></span>' + botoes + '</div>';
+  }
+
   function abaSinais(op) {
     const lista = Store.sinaisDaOportunidade ? Store.sinaisDaOportunidade(op) : [];
     const topo = '<div class="card"><div class="row"><h2 style="margin:0">Sinais do comprador</h2>' +
@@ -2215,7 +2246,8 @@
           '<button class="btn mini" onclick="App.registrarSinal(\'' + op.id + '\')">Registrar sinal</button>') +
       '</div>' +
       '<p class="tiny muted" style="margin:8px 0 0">O que ele fez sozinho: respondeu, abriu, voltou, mudou de cargo. ' +
-      'Nada aqui mexe no IAD nem na Idade da Evidência — de propósito. Um clique não é um problema reconhecido.</p></div>';
+      'Nada aqui mexe no IAD nem na Idade da Evidência — de propósito. Um clique não é um problema reconhecido.</p>' +
+      linhaDaColheita() + '</div>';
 
     if (!lista.length) {
       return topo + quadroDoMomento(op) +

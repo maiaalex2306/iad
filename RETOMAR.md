@@ -5,8 +5,8 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v187**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v187, o aparelho
+Publicado agora: **v188**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v188, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -217,6 +217,43 @@ que leva à sobrevivente. A linha no servidor fica com um id velho e inofensivo.
 `src/arquivos.js`; `juntarComOutra` e `juntarOportunidades` em `src/app.js`;
 `filaDeDuplicatas`, `juntarNaNegociacao` e o botão da barra em `src/views.js`;
 `marcarNegociacaoParalela` em `src/app.js`.
+
+---
+
+## 0-F. A colheita das aberturas só rodava no boot — v188, 18/09
+
+**Sintoma do Alexandre:** emitiu um link rastreado, a pessoa clicou, e não
+apareceu nada na aba Sinais. Ele acabou registrando à mão.
+
+**Causa:** `colherAberturas()` era chamada só depois de `puxar()`, no boot e na
+entrada. A abertura estava na ponte o tempo todo; ninguém tinha ido buscar.
+Recarregar a página resolvia — que é a pior instrução que um app pode dar.
+
+**Consertos:**
+
+1. **Abrir a aba de Sinais busca.** `App.abaCockpit('sinais')` dispara a
+   colheita. A busca acontece onde a pergunta é feita.
+2. **O estado fica à vista.** Uma linha no cartão diz quando foi a última
+   colheita e o que ela achou, com os botões **Buscar aberturas agora** e
+   **O que a ponte viu**. Colheita que falha calada é indistinguível de
+   colheita que não achou nada, e as duas pedem coisas opostas de quem lê.
+   Quando não dá para colher — sem empresa escolhida, ponte não configurada —
+   a linha vira aviso com o motivo, em vez de silêncio.
+3. **A baixa deixou de apagar o que foi descartado.** Era um defeito de
+   verdade e contradizia o próprio estudo: `colherAberturas` marcava TODAS as
+   aberturas como processadas, robôs inclusive, e a ponte as apagava. Uma
+   abertura de gente classificada como robô por engano sumia dos dois lados
+   para sempre. Agora a baixa vai só no que virou sinal; o resto fica na ponte
+   até expirar em 30 dias.
+4. **`diagnosticoDasAberturas()`** mostra o que a ponte tem, sem filtrar e sem
+   dar baixa. "Cliquei e não apareceu nada" tem três causas com consertos
+   diferentes — a ponte não viu, viu e marcou robô, ou a colheita não rodou —
+   e este botão separa as três.
+
+**Onde está:** `diagnosticoDasAberturas` e a baixa corrigida em
+`src/integracoes.js`; `colherAberturas`, `buscarAberturas`,
+`verAberturasNaPonte` e o gatilho da aba em `src/app.js`; `linhaDaColheita` em
+`src/views.js`.
 
 ---
 
