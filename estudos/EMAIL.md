@@ -282,3 +282,50 @@ O miolo não depende do cano, e é a maior parte do trabalho:
 
 **Bloqueio atual:** o domínio para o Cloudflare receber. Sem ele, o item 2 não
 começa.
+
+### 8.7 O cadastro do usuário: o que já nasce pronto
+
+Pergunta do Alexandre: quando o usuário for cadastrado, já dá para configurar o
+e-mail dele? Sim — e vale separar o que o IAD faz sozinho do que depende de
+alguém tocar numa caixa de e-mail, que é a parte que ninguém automatiza de
+fora.
+
+**Automático no cadastro.** O convite já traz o endereço da pessoa, então no
+momento em que ela entra:
+
+- o endereço de recebimento dela já existe (`nome.a3f2@<domínio-do-iad>`);
+- **enviar já funciona** no nível 1 (do domínio do IAD, com `Reply-To` para
+  ela). Ela manda e-mail pelo CRM no primeiro minuto, sem configurar nada.
+
+**Depende de ação, e há dois caminhos para a mesma coisa:**
+
+| quem faz | o que faz | cobre |
+|---|---|---|
+| o próprio vendedor | regra de encaminhamento na caixa dele | só ele |
+| o TI da empresa | regra de roteamento na organização | todos de uma vez |
+
+Para uma empresa que vai pôr dez vendedores no IAD, o segundo caminho é muito
+melhor. O app deve aceitar os dois e não presumir nenhum.
+
+**O passo que mata esse tipo de recurso, e como resolver.** O Gmail exige
+confirmar o endereço de destino antes de encaminhar para lá: manda um código
+para ele. Como o domínio de recebimento é nosso, **o IAD lê esse código e
+mostra na tela**. A pessoa confirma sem precisar de acesso a caixa nenhuma.
+Sem isso, metade das pessoas trava aí e desiste — e o recurso inteiro morre
+num passo que não é dela.
+
+**A chave é o DOMÍNIO, não o tenant.** Enviar como o próprio endereço (SPF +
+DKIM) é configuração por domínio. Então o primeiro usuário do `acp.tec.br`
+dispara o pedido ao TI e, **do segundo em diante, é automático**. Vale o mesmo
+para a regra de roteamento no recebimento.
+
+Isso precisa de estado guardado por domínio, e não na tabela de empresas: o
+Alexandre mesmo tem `biosolvit.com` e `biopartners.com.br`, duas configurações
+para a mesma pessoa. Uma tabela `dominios_email` com o estado de cada um
+(recebimento verificado, DKIM publicado, quando, por quem) é o lugar certo.
+
+**Na tela:** um cartão no perfil de cada usuário, sempre visível, com dois
+estados — *Recebendo* e *Enviando como você*. Verde com a data, ou vermelho
+com o passo a passo e o que copiar. Configuração escondida atrás de um menu é
+configuração que ninguém faz; estado à vista é o que faz a pessoa perguntar ao
+TI.
