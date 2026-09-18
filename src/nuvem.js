@@ -280,6 +280,64 @@
      O teto de 2000 existe porque a carga de histórico traz 6 meses de uma vez:
      sem limite, o primeiro acesso depois de conectar o número puxaria tudo de
      uma vez para dentro do navegador. As mais recentes são as que importam. */
+  /* ---------------- e-mail ----------------
+
+     Mesmo desenho do WhatsApp, e pelo mesmo motivo: conversa não cabe no
+     estado que o navegador carrega inteiro. Ela vive no servidor, o app lê o
+     que precisa, e o casamento com contato e negociação acontece na hora. */
+  function emailsDaNuvem(quantos) {
+    return chamar('/rest/v1/emails?select=*&order=enviada_em.desc&limit=' + (quantos || 1000));
+  }
+
+  /* O vínculo vale para a CONVERSA inteira, não para a linha: quem casou uma
+     vez casou a thread, e as respostas seguintes já nascem no lugar certo. */
+  function vincularEmail(thread, contatoId, contaId, oportunidadeId) {
+    return chamar('/rest/v1/emails?thread=eq.' + encodeURIComponent(thread), {
+      metodo: 'PATCH',
+      cabecalhos: { prefer: 'return=minimal' },
+      corpo: { contato_id: contatoId || null, conta_id: contaId || null,
+               oportunidade_id: oportunidadeId || null }
+    });
+  }
+
+  /* Enfileirar é gravar a mensagem com estado 'fila'. Quem manda de verdade é
+     a função do servidor, que tem a senha de aplicativo; o navegador nunca vê
+     credencial nenhuma e nunca fala com servidor de e-mail.
+
+     O id é gerado aqui e é o Message-ID de verdade que vai no cabeçalho. É ele
+     que faz a resposta do cliente voltar amarrada à negociação sem adivinhação
+     — e é por isso que ele nasce do nosso lado, e não do servidor de e-mail. */
+  function enfileirarEmail(dados) {
+    return chamar('/rest/v1/emails', {
+      metodo: 'POST',
+      cabecalhos: { prefer: 'return=representation' },
+      corpo: [dados]
+    }).then(function (linhas) { return (linhas && linhas[0]) || null; });
+  }
+
+  function marcarLidosEmail(ids) {
+    const lista = (ids || []).filter(Boolean);
+    if (!lista.length) return Promise.resolve(null);
+    const alvo = lista.map(function (i) { return '"' + String(i).replace(/"/g, '') + '"'; }).join(',');
+    return chamar('/rest/v1/emails?id=in.(' + encodeURIComponent(alvo) + ')', {
+      metodo: 'PATCH',
+      cabecalhos: { prefer: 'return=minimal' },
+      corpo: { lida: true }
+    });
+  }
+
+  function caixasDeEmail() {
+    return chamar('/rest/v1/caixas_email?select=*&order=criado_em.asc');
+  }
+
+  function salvarCaixaDeEmail(caixa) {
+    return chamar('/rest/v1/caixas_email?on_conflict=dono_id,endereco', {
+      metodo: 'POST',
+      cabecalhos: { prefer: 'resolution=merge-duplicates,return=representation' },
+      corpo: [caixa]
+    }).then(function (linhas) { return (linhas && linhas[0]) || null; });
+  }
+
   function mensagensWhatsapp(quantas) {
     return chamar('/rest/v1/mensagens_whatsapp?select=*&order=enviada_em.desc&limit=' +
       (quantas || 2000));
@@ -923,6 +981,8 @@
     sincronizarNaEntrada, definirDadosDaEmpresa, definirDadosDoPerfil, minhaSituacao, comoOServidorMeVe, primeirasLinhas, ondeEstaoOsRegistros,
     convitesDaNuvem, convidar, removerConvite, recuperarSenha, criarEmpresa, chamarFuncao,
     mensagensWhatsapp, marcarLidasWhatsapp, vincularWhatsapp,
+    emailsDaNuvem, vincularEmail, enfileirarEmail, marcarLidosEmail,
+    caixasDeEmail, salvarCaixaDeEmail,
     empresaParecida, achatarNome, porFormato, explicarFalhas,
     adotarTokens,
     trocarMinhaSenha,

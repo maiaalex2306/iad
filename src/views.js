@@ -2081,7 +2081,9 @@
        dois meses atrás não é aviso, é histórico, e um contador que soma tudo
        nunca zera — deixa de ser aviso no dia seguinte. */
     const sinaisAgora = E.sinaisRecentes ? E.sinaisRecentes(op).length : 0;
-    const contagem = { tarefas: abertas, whatsapp: novas, sinais: sinaisAgora };
+    const M = global.IADEmail;
+    const emailsNovos = (M && M.carregadas()) ? M.naoLidasDaOp(op.id) : 0;
+    const contagem = { tarefas: abertas, whatsapp: novas, sinais: sinaisAgora, email: emailsNovos };
 
     return '<div class="abas-cockpit">' + ABAS_COCKPIT.map(function (a) {
       const n = contagem[a[0]];
@@ -2375,12 +2377,97 @@
       prazo + '</div>';
   }
 
+  /* ---------------- A aba de E-mail ----------------
+
+     A conversa por e-mail é onde a venda B2B acontece, e até aqui ela morria
+     na caixa de uma pessoa: invisível para o gestor, perdida quando ele sai, e
+     ausente de qualquer leitura da carteira.
+
+     A tela mostra a conversa do jeito que ela aconteceu — a mais recente em
+     cima, cada mensagem com quem escreveu e quando — e tem uma porta só para o
+     que importa: transformar o que o cliente escreveu em evidência. O botão
+     que faz isso é o mesmo de sempre, o da tarefa com relato, porque canal
+     novo que inventa caminho próprio para mexer nas oito é canal que vai
+     divergir do método na terceira semana. */
+  function corpoCurto(t, limite) {
+    const texto = String(t || '').replace(/\s+/g, ' ').trim();
+    const max = limite || 220;
+    return texto.length > max ? texto.slice(0, max) + '…' : texto;
+  }
+
+  function mensagemDeEmail(m) {
+    const meu = m.direcao === 'saida';
+    const quando = String(m.enviada_em || '').replace('T', ' ').slice(0, 16);
+    const quem = meu ? 'você' : (m.de_nome || m.de || '');
+    const estado = m.estado === 'fila' ? '<span class="pill warn mini">na fila</span>'
+      : m.estado === 'erro' ? '<span class="pill dead mini">não saiu</span>' : '';
+    return '<div class="card" style="padding:12px;margin-top:8px' +
+      (meu ? ';border-left:3px solid var(--line)' : '') + '">' +
+      '<div class="row"><strong>' + esc(quem) + '</strong>' + estado +
+      '<span class="espaco"></span><span class="tiny muted">' + esc(quando) + '</span></div>' +
+      (m.assunto ? '<div class="small" style="margin-top:4px">' + esc(m.assunto) + '</div>' : '') +
+      '<p class="small muted" style="margin:6px 0 0;white-space:pre-wrap">' +
+      esc(corpoCurto(m.corpo, 600)) + '</p>' +
+      (m.erro ? '<p class="tiny atrasado" style="margin:6px 0 0">' + esc(m.erro) + '</p>' : '') +
+      '</div>';
+  }
+
+  function conversaDeEmail(c, op) {
+    const ultima = c.ultima || {};
+    return '<div class="card"><div class="row">' +
+      '<div class="cresce"><strong>' + esc(c.assunto) + '</strong>' +
+      '<div class="tiny muted">' + esc((c.contato && c.contato.nome) || c.deNome || c.deQuem) +
+      ' · ' + c.mensagens.length + ' mensagem(ns) · última em ' +
+      esc(String(ultima.enviada_em || '').replace('T', ' ').slice(0, 16)) + '</div></div>' +
+      (c.naoLidas ? '<span class="pill navy">' + c.naoLidas + ' nova(s)</span>' : '') +
+      '</div>' +
+      c.mensagens.slice().reverse().map(mensagemDeEmail).join('') +
+      (op && !op.desfecho
+        ? '<div class="row" style="margin-top:10px">' +
+          '<button class="btn mini" onclick="App.escreverEmail(\'' + op.id + '\',\'' +
+          esc(c.chave) + '\')">Responder</button>' +
+          '<button class="btn alt mini" onclick="App.novaTarefa(\'' + op.id + '\',\'\',{situacao:\'feita\',tipo:\'E-mail\'})" ' +
+          'data-ajuda-titulo="Virou evidência?" ' +
+          'data-ajuda="Abre a conclusão de tarefa com o canal já preenchido. Cole o que o cliente escreveu e o assistente separa o que move cada uma das oito decisões.">Registrar o que o cliente disse</button>' +
+          '</div>'
+        : '') + '</div>';
+  }
+
   function abaEmail(op) {
-    return porVir('E-mail',
-      'Os e-mails deste negócio, do jeito que a conversa aconteceu: quem escreveu, quando, e o que foi combinado.',
-      ['Cada negócio ganha um endereço próprio de cópia oculta. Você põe esse endereço em cópia ao escrever para o cliente e o e-mail entra aqui sozinho, amarrado à pessoa certa.',
-       'O casamento é pelo Message-ID antes de qualquer outra coisa — é a única marca que a resposta carrega do original, e é a mesma que impede o e-mail de entrar duas vezes.',
-       'O estudo está em estudos/EMAIL.md. Nada disso foi construído ainda.']);
+    const M = global.IADEmail;
+    const topo = function (miolo) {
+      return '<div class="card"><div class="row"><h2 style="margin:0">E-mail</h2>' +
+        '<span class="espaco"></span>' +
+        (op.desfecho ? ''
+          : '<button class="btn ghost mini" onclick="App.configurarEmail()" ' +
+            'data-ajuda-titulo="Minha caixa" ' +
+            'data-ajuda="Liga a sua caixa ao IAD com uma senha de aplicativo. Ela fica no servidor, criptografada, e nunca passa pelo navegador — você revoga no Google quando quiser.">Minha caixa</button>' +
+            '<button class="btn mini" onclick="App.escreverEmail(\'' + op.id + '\')">Escrever</button>') +
+        '</div>' +
+        '<p class="tiny muted" style="margin:8px 0 0">O que foi escrito de verdade, dos dois lados. ' +
+        'Mensagem não é evidência: o que vira avanço é o que você registra a partir dela.</p></div>' + miolo;
+    };
+
+    if (!M || !M.disponivel()) {
+      return topo('<div class="vazio">Os e-mails moram no servidor. Entre com a sua conta da nuvem para vê-los.</div>');
+    }
+    if (!M.carregadas()) return topo('<div class="vazio">Buscando os e-mails…</div>');
+    if (M.erro()) return topo('<div class="aviso">' + esc(M.erro()) + '</div>');
+
+    const minhas = M.conversasDaOportunidade(op.id);
+    const semCaixa = !M.minhasCaixas().length;
+
+    const aviso = semCaixa
+      ? '<div class="aviso" style="margin-bottom:10px">Você ainda não ligou uma caixa de e-mail. ' +
+        'Sem isso o IAD não recebe nem manda nada — use <strong>Minha caixa</strong> acima.</div>'
+      : '';
+
+    if (!minhas.length) {
+      return topo(aviso +
+        '<div class="vazio">Nenhuma conversa apontada para este negócio. Uma conversa cai aqui quando o ' +
+        'endereço de quem escreveu bate com o de um contato desta empresa — ou quando você escreve daqui.</div>');
+    }
+    return topo(aviso + minhas.map(function (c) { return conversaDeEmail(c, op); }).join(''));
   }
 
   function abaPropostas(op) {

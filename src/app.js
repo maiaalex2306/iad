@@ -5,7 +5,7 @@
   const P = global.IADPlaybook, Store = global.IADStore, E = global.IADEngine,
     U = global.IADUI, V = global.IADViews, Arq = global.IADArquivos, Csv = global.IADCsv,
     A = global.IADAuth, IA = global.IADIA, C = global.IADConversa,
-    W = global.IADWhatsapp;
+    W = global.IADWhatsapp, Mail = global.IADEmail;
 
   const ROTAS = [
     { hash: '#/hoje', ico: '⚡', nome: 'Hoje', render: V.hoje,
@@ -669,6 +669,9 @@
       /* Depois de baixar, e não antes: a colheita grava sinal, e sinal gravado
          antes do puxar seria apagado pela coleção que desce do servidor. */
       colherAberturas();
+      /* E-mail depende do cadastro para casar: sem contas e contatos na
+         memória, toda conversa cairia como "sem dono". */
+      pintarEmails();
     }, function (e) {
       semServidor = (e && e.message) || 'não consegui falar com o servidor';
       render();
@@ -1679,6 +1682,149 @@
           fonte: 'manual'
         });
         render();
+      });
+    },
+
+    /* ---------------- escrever e-mail ----------------
+
+       O app não fala com servidor de e-mail: ele grava a mensagem com estado
+       "fila" e a função do servidor — a única que tem a senha de aplicativo —
+       manda. O navegador nunca vê credencial nenhuma, que é a mesma regra da
+       chave da IA.
+
+       O identificador da mensagem nasce aqui, e é de propósito: é ele que vai
+       no cabeçalho, é ele que a resposta do cliente devolve, e é por isso que a
+       resposta cai na negociação certa sem ninguém adivinhar. */
+    escreverEmail: function (opId, thread) {
+      const op = Store.oportunidade(opId);
+      if (!op || op.desfecho) return;
+      if (!Mail || !Mail.disponivel()) { alert('Entre com a sua conta da nuvem antes.'); return; }
+
+      const caixa = (Mail.minhasCaixas() || []).filter(function (c) { return c.ativo !== false; })[0];
+      if (!caixa) {
+        alert('Ligue a sua caixa de e-mail antes, em "Minha caixa".\n\n' +
+          'Sem ela o IAD não tem de onde mandar.');
+        return;
+      }
+
+      const comEmail = (op.contaId ? Store.contatosDaConta(op.contaId) : [])
+        .filter(function (c) { return String(c.email || c.emailPessoal || '').trim(); });
+      if (!comEmail.length) {
+        alert('Nenhum contato desta empresa tem e-mail cadastrado. ' +
+          'Cadastre o endereço em Contatos e volte aqui.');
+        return;
+      }
+
+      /* Responder herda o assunto e a conversa: sem isso a resposta abre uma
+         thread nova no cliente de e-mail e a conversa se parte em duas. */
+      const conversa = thread
+        ? Mail.conversas().filter(function (c) { return c.chave === thread; })[0]
+        : null;
+      const ultima = conversa ? conversa.mensagens[conversa.mensagens.length - 1] : null;
+      const assunto = conversa
+        ? (/^re:/i.test(conversa.assunto) ? conversa.assunto : 'Re: ' + conversa.assunto)
+        : op.titulo;
+      const paraPadrao = (conversa && conversa.contato) ? conversa.contato.id : comEmail[0].id;
+
+      U.formulario(conversa ? 'Responder' : 'Escrever para o cliente', [
+        { id: 'contatoId', rotulo: 'Para', tipo: 'select',
+          opcoes: comEmail.map(function (c) {
+            return { valor: c.id, rotulo: c.nome + ' · ' + (c.email || c.emailPessoal) };
+          }) },
+        { id: 'assunto', rotulo: 'Assunto', tipo: 'text' },
+        { id: 'corpo', rotulo: 'Mensagem', tipo: 'textarea', voz: true,
+          dica: 'Sai do seu endereço, com a sua assinatura de sempre no cliente de e-mail dele.' }
+      ], { contatoId: paraPadrao, assunto: assunto, corpo: '' }, function (d) {
+        const quem = Store.contato(d.contatoId);
+        if (!quem) return;
+        const para = String(quem.email || quem.emailPessoal || '').trim();
+        if (!para) { alert('Este contato não tem e-mail.'); return; }
+        if (!String(d.corpo || '').trim()) { alert('A mensagem está vazia.'); return; }
+
+        const dominio = String(caixa.endereco || '').split('@')[1] || 'iad';
+        const id = '<iad-' + Store.uid('msg').replace(/[^a-z0-9]/gi, '') + '@' + dominio + '>';
+
+        global.IADNuvem.enfileirarEmail({
+          id: id,
+          tenant_id: Store.tenantDeTrabalho(),
+          caixa: caixa.endereco,
+          direcao: 'saida',
+          de: caixa.endereco,
+          de_nome: caixa.nome_exibicao || '',
+          para: para,
+          assunto: (d.assunto || '').trim() || op.titulo,
+          corpo: d.corpo,
+          /* Conversa nova começa a thread nela mesma: assim a resposta, que
+             volta citando este id, encontra a conversa já formada. */
+          thread: (conversa && conversa.chave) || id,
+          responde_a: ultima ? ultima.id : '',
+          enviada_em: new Date().toISOString(),
+          contato_id: quem.id,
+          conta_id: op.contaId,
+          oportunidade_id: op.id,
+          estado: 'fila'
+        }).then(function () {
+          Mail.esquecer();
+          pintarEmails(true);
+          alert('Na fila.\n\nO servidor manda em instantes e a mensagem aparece aqui como enviada. ' +
+            'Se der erro, ela fica marcada com o motivo em vez de sumir.');
+        }, function (e) {
+          alert('Não consegui pôr na fila: ' + e.message);
+        });
+      });
+    },
+
+    /* A caixa da pessoa. Aqui NÃO se digita senha: o campo não existe, de
+       propósito. A senha de aplicativo mora num segredo da Edge Function, e
+       navegador que nunca a viu é navegador que não pode vazá-la. */
+    configurarEmail: function () {
+      if (!Mail || !Mail.disponivel()) { alert('Entre com a sua conta da nuvem antes.'); return; }
+      const minha = (Mail.minhasCaixas() || [])[0] || null;
+      const eu = A.atual() || {};
+
+      U.formulario('Minha caixa de e-mail', [
+        { id: 'aviso', tipo: 'aviso',
+          rotulo: 'A senha de aplicativo não se digita aqui, e este campo não existe de propósito: ' +
+            'ela mora num segredo do servidor e o navegador nunca a vê. Aqui fica só o endereço.' },
+        { id: 'endereco', rotulo: 'Seu endereço de e-mail', tipo: 'text' },
+        { id: 'nome_exibicao', rotulo: 'Nome que aparece para quem recebe', tipo: 'text' },
+        { id: 'provedor', rotulo: 'Provedor', tipo: 'select',
+          opcoes: [{ valor: 'gmail', rotulo: 'Gmail / Google Workspace' },
+                   { valor: 'outlook', rotulo: 'Outlook / Microsoft 365' },
+                   { valor: 'outro', rotulo: 'Outro (servidor próprio)' }] },
+        { id: 'imap_servidor', rotulo: 'Servidor de entrada (IMAP)', tipo: 'text', largura: 'metade',
+          dica: 'Só para "Outro". Gmail e Outlook o app já sabe.' },
+        { id: 'smtp_servidor', rotulo: 'Servidor de saída (SMTP)', tipo: 'text', largura: 'metade' }
+      ], {
+        endereco: (minha && minha.endereco) || eu.email || '',
+        nome_exibicao: (minha && minha.nome_exibicao) || eu.nome || '',
+        provedor: (minha && minha.provedor) || 'gmail',
+        imap_servidor: (minha && minha.imap_servidor) || '',
+        smtp_servidor: (minha && minha.smtp_servidor) || ''
+      }, function (d) {
+        const endereco = String(d.endereco || '').trim().toLowerCase();
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(endereco)) {
+          alert('Esse não parece um endereço de e-mail.');
+          return;
+        }
+        global.IADNuvem.salvarCaixaDeEmail({
+          tenant_id: Store.tenantDeTrabalho(),
+          dono_id: ((global.IADNuvem.sessao() || {}).user || {}).id,
+          endereco: endereco,
+          nome_exibicao: (d.nome_exibicao || '').trim(),
+          provedor: d.provedor || 'gmail',
+          imap_servidor: (d.imap_servidor || '').trim(),
+          smtp_servidor: (d.smtp_servidor || '').trim()
+        }).then(function () {
+          pintarEmails(true);
+          alert('Caixa registrada.\n\nFalta a senha de aplicativo, que você gera na sua conta ' +
+            'e eu guardo no segredo do servidor. Me avise quando tiver gerado — ela não se manda ' +
+            'por mensagem, nem para mim.');
+        }, function (e) {
+          alert('Não consegui salvar: ' + e.message +
+            (/relation|schema cache/i.test(e.message)
+              ? '\n\nRode nuvem/correcao-18-emails.sql no Supabase antes.' : ''));
+        });
       });
     },
 
@@ -6011,6 +6157,20 @@
     if (!W) return;
     W.carregar(true).then(colher).then(function () { render(); });
   };
+
+  /* Os e-mails, do mesmo jeito: a tela desenha antes, a resposta chega e
+     repinta. Falhar aqui não pode segurar o resto do app — e-mail é bom de
+     ter, não é pré-requisito para ver a carteira. */
+  function pintarEmails(forcar) {
+    if (!Mail || !Mail.disponivel()) return;
+    Mail.carregar(forcar).then(function () {
+      return Mail.carregarCaixas(forcar);
+    }).then(function () { render(); }, function (e) {
+      console.warn('Não consegui buscar os e-mails:', e);
+    });
+  }
+
+  App.recarregarEmails = function () { pintarEmails(true); };
 
   App.abrirConversa = function (chave) {
     V.definirConversa(chave);

@@ -5,8 +5,8 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v188**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v188, o aparelho
+Publicado agora: **v189**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v189, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -254,6 +254,62 @@ Recarregar a página resolvia — que é a pior instrução que um app pode dar.
 `src/integracoes.js`; `colherAberturas`, `buscarAberturas`,
 `verAberturasNaPonte` e o gatilho da aba em `src/app.js`; `linhaDaColheita` em
 `src/views.js`.
+
+---
+
+## 0-G. E-mail: o miolo — v189, 18/09
+
+**A decisão de arquitetura, tomada com o Alexandre em 18/09:** senha de
+aplicativo, não OAuth.
+
+O estudo tinha descartado o IMAP porque "guardar senha de e-mail de outra
+pessoa é responsabilidade que eu não assumiria". Isso vale para **senha da
+conta** e não para **senha de aplicativo**: ela serve a um programa só, não dá
+acesso ao login nem ao resto da conta Google, e se revoga num clique. Com ela,
+SMTP resolve o enviar e IMAP resolve o receber — **sem domínio, sem DNS, sem
+verificação do Google, sem auditoria anual e sem TI**, que é exatamente o
+requisito "qualquer usuário e qualquer domínio".
+
+O preço, dito em voz alta: a credencial mora num segredo da Edge Function,
+criptografada, e um servidor comprometido expõe caixas de clientes. O OAuth
+continua sendo melhor para cliente grande, e a Microsoft é o caminho mais
+barato dos dois. Ver `estudos/EMAIL.md` §8.
+
+**O que foi construído agora (o miolo, que serve a qualquer transporte):**
+
+- **`nuvem/correcao-18-emails.sql`** — duas tabelas. `emails` (21 colunas) tem
+  como chave primária o **Message-ID**, que é a única marca que atravessa
+  servidores e o que impede a mesma mensagem de entrar duas vezes.
+  `caixas_email` (16 colunas) guarda o endereço e o estado — **a senha não
+  entra ali**, e a política é mais apertada que a das outras tabelas: só o dono
+  e o administrador, porque caixa de e-mail é de uma pessoa, e o gestor que vê
+  a carteira da equipe não vê a configuração de e-mail de cada um.
+- **`src/email.js`** (NEW) — o irmão do `whatsapp.js`. Busca, casa e agrupa por
+  conversa. O casamento tem três camadas: gravado → endereço exato → domínio.
+  **Provedor gratuito está fora da camada de domínio**, numa lista explícita:
+  casar `@gmail.com` com a primeira conta que tiver um contato do Gmail juntaria
+  pessoas que não têm nada a ver umas com as outras, e esse erro não se desfaz
+  sozinho.
+- **A aba E-mail deixou de ser "por construir"** — mostra a conversa como ela
+  aconteceu, com **Escrever**, **Responder** e um botão que leva ao caminho de
+  sempre para virar evidência (tarefa com relato). Contador de não lidas na aba.
+- **Escrever** grava com estado `fila`; quem manda é o servidor. O navegador
+  nunca vê credencial. **O Message-ID nasce no app**, de propósito: é ele que a
+  resposta do cliente devolve, e é por isso que ela cai na negociação certa sem
+  adivinhação.
+
+**Testado no navegador** com o caso real: o e-mail da Ana Luiza casou pelo
+endereço (com nome e maiúsculas no cabeçalho); um endereço novo `@suzano.com.br`
+casou a EMPRESA e caiu na fila de casar a pessoa; um `@gmail.com` desconhecido
+não casou com nada, como tem de ser. A resposta saiu com thread e `responde_a`
+corretos.
+
+**Falta para funcionar de verdade:**
+
+1. Rodar `nuvem/correcao-18-emails.sql`.
+2. O Alexandre gerar a senha de aplicativo na conta Google (exige 2FA ligada).
+3. **A Edge Function do transporte** — a que lê o IMAP e manda pelo SMTP. É o
+   próximo pedaço, e é o único que toca na credencial.
 
 ---
 
