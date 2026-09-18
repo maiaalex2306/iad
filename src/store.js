@@ -118,7 +118,13 @@
          produziu de errado, que é a única coisa capaz de melhorar a próxima. */
       recusas: [],
       /* Leads que alguém mandou nunca mais mostrar. */
-      descartes: []
+      descartes: [],
+      /* Sinais do comprador: ver o comentário de TIPOS_SINAL no playbook.
+         Coleção própria, e não dentro da oportunidade, porque sinal nasce
+         grudado na PESSOA e muitas vezes antes de existir negócio nenhum —
+         guardá-lo dentro da oportunidade seria perder justamente o sinal que
+         chega cedo, que é o mais valioso. */
+      sinais: []
     };
   }
 
@@ -166,6 +172,7 @@
     dados.usuarios = dados.usuarios || [];
     dados.recusas = dados.recusas || [];
     dados.descartes = dados.descartes || [];
+    dados.sinais = dados.sinais || [];
     migrarDescartesParaCampanha(dados);
     migrarParaCincoDegraus(dados);
     migrarDesfechos(dados);
@@ -177,7 +184,7 @@
       dados.tenants.push({ id: uid('ten'), nome: 'Minha empresa', cnpj: '', ativo: true, criadoEm: hoje() });
     }
     const primeiro = dados.tenants[0] ? dados.tenants[0].id : null;
-    ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos', 'fontes', 'recusas', 'descartes']
+    ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos', 'fontes', 'recusas', 'descartes', 'sinais']
       .forEach(function (colecao) {
         (dados[colecao] || []).forEach(function (r) { if (r.tenantId == null) r.tenantId = primeiro; });
       });
@@ -524,7 +531,7 @@
     const ctx = contexto();
     const A = global.IADAuth;
     const u = ctx.usuario;
-    const colecoes = ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos', 'fontes'];
+    const colecoes = ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos', 'fontes', 'sinais'];
 
     const linhas = colecoes.map(function (nome) {
       const todos = estado[nome] || [];
@@ -591,7 +598,7 @@
     const conhecidas = {};
     (estado.tenants || []).forEach(function (t) { conhecidas[String(t.id)] = true; });
 
-    const colecoes = ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos', 'fontes'];
+    const colecoes = ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos', 'fontes', 'sinais'];
     const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
     const conta = {};
@@ -624,7 +631,7 @@
 
   function moverRegistros(deId, paraId) {
     if (!deId || !paraId || deId === paraId) return 0;
-    const colecoes = ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos', 'fontes'];
+    const colecoes = ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos', 'fontes', 'sinais'];
     let mexidos = 0;
     colecoes.forEach(function (nome) {
       (estado[nome] || []).forEach(function (r) {
@@ -636,7 +643,7 @@
   }
 
   function esquecerEmpresa(id) {
-    const usada = ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos', 'fontes']
+    const usada = ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos', 'fontes', 'sinais']
       .some(function (nome) {
         return (estado[nome] || []).some(function (r) { return String(r.tenantId || '') === String(id); });
       });
@@ -661,6 +668,10 @@
       tiposTarefa: porTenant(estado.tiposTarefa),
       produtos: porTenant(estado.produtos),
       fontes: porTenant(estado.fontes),
+      /* Por dono, e não por empresa: sinal é dado de pessoa identificada e
+         segue a mesma regra do contato a que ele pertence. Um vendedor não
+         enxerga o comportamento das contas do colega. */
+      sinais: porDono(estado.sinais),
       config: estado.config
     };
   }
@@ -751,7 +762,7 @@
     /* A padronização vem antes da adoção, e não depois: o tipo que ela
        acrescenta nasce sem empresa e ficaria invisível até o render seguinte. */
     const padronizou = padronizarTiposTarefa(estado);
-    ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos', 'fontes', 'recusas']
+    ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos', 'fontes', 'recusas', 'sinais']
       .forEach(function (colecao) {
         (estado[colecao] || []).forEach(function (r) {
           if (!r.tenantId) { r.tenantId = ctx.tenantId; adotados++; }
@@ -1000,6 +1011,164 @@
         titulo: 'Insight comercial: ' + op.insight.estado
       });
     }
+    salvar();
+    return op;
+  }
+
+  /* ---------------- Sinais do comprador ----------------
+
+     Regra que não se negocia: nada aqui toca em `op.eventos`, em `op.dims` nem
+     em nota nenhuma. Sinal é observação; evidência é decisão comprovada. A
+     ponte entre os dois é `promoverSinal`, e ela só existe porque alguém
+     clicou nela. */
+  function sinal(id) {
+    return (estado.sinais || []).filter(function (s) { return s.id === id; })[0] || null;
+  }
+
+  /* A conta vem de graça quando o contato é conhecido: quem registra o sinal
+     está olhando para a pessoa, não para a árvore de cadastro, e exigir que
+     ele também diga a empresa é o tipo de campo que faz o registro não
+     acontecer. */
+  function criarSinal(dados) {
+    const base = Object.assign({
+      id: uid('sin'), contatoId: null, contaId: null, oportunidadeId: null,
+      canal: 'outro', tipo: 'outro', peso: 1,
+      quando: hoje(), hora: '', titulo: '', detalhe: '',
+      /* De onde veio, quando não foi digitado: 'manual', 'whatsapp', 'ponte'.
+         Serve para não duplicar o que a máquina já traz e para saber, depois,
+         qual canal está realmente alimentando a carteira. */
+      fonte: 'manual',
+      /* Id do registro no sistema de origem. É o que impede o mesmo sinal de
+         entrar duas vezes quando a captura automática roda de novo. */
+      externoId: '',
+      /* Preenchido só quando alguém promove o sinal a evidência. */
+      eventoId: '',
+      criadoEm: hoje()
+    }, carimbo(true), dados);
+
+    const tipo = (global.IADPlaybook.TIPOS_SINAL || []).filter(function (t) {
+      return t.id === base.tipo;
+    })[0];
+    if (tipo) {
+      base.canal = dados.canal || tipo.canal;
+      if (dados.peso == null) base.peso = tipo.peso;
+      if (!base.titulo) base.titulo = tipo.rotulo;
+    }
+
+    if (!base.contaId && base.contatoId) {
+      const c = contato(base.contatoId);
+      if (c) base.contaId = c.contaId;
+    }
+    if (!base.contaId && base.oportunidadeId) {
+      const op = oportunidade(base.oportunidadeId);
+      if (op) base.contaId = op.contaId;
+    }
+
+    estado.sinais = estado.sinais || [];
+    estado.sinais.push(base);
+    salvar();
+    return base;
+  }
+
+  /* Idempotência da captura automática. Sem isto, cada recarga da conversa do
+     WhatsApp criaria de novo os mesmos sinais e a linha do tempo viraria um
+     eco — e o alerta de "comportamento à frente do registro" dispararia com
+     ruído que o próprio app fabricou. */
+  function sinalExterno(fonte, externoId) {
+    if (!fonte || !externoId) return null;
+    return (estado.sinais || []).filter(function (s) {
+      return s.fonte === fonte && String(s.externoId) === String(externoId);
+    })[0] || null;
+  }
+
+  function registrarSinalUnico(dados) {
+    const achado = sinalExterno(dados.fonte, dados.externoId);
+    if (achado) return achado;
+    return criarSinal(dados);
+  }
+
+  function ordenarSinais(lista) {
+    return lista.slice().sort(function (a, b) {
+      const da = String(a.quando || '') + ' ' + String(a.hora || '');
+      const db = String(b.quando || '') + ' ' + String(b.hora || '');
+      return db.localeCompare(da);
+    });
+  }
+
+  function sinais() {
+    return ordenarSinais((estado.sinais || []).filter(function (s) { return visivel(s, true); }));
+  }
+
+  function sinaisDoContato(contatoId) {
+    if (!contatoId) return [];
+    return ordenarSinais((estado.sinais || []).filter(function (s) {
+      return s.contatoId === contatoId && visivel(s, true);
+    }));
+  }
+
+  function sinaisDaConta(contaId) {
+    if (!contaId) return [];
+    return ordenarSinais((estado.sinais || []).filter(function (s) {
+      return s.contaId === contaId && visivel(s, true);
+    }));
+  }
+
+  /* O que conta como sinal DESTA negociação.
+
+     Três caminhos, e o terceiro é o que importa: o sinal amarrado direto na
+     oportunidade, o sinal de alguém do grupo comprador dela, e o sinal da
+     conta que ainda não foi amarrado a negociação nenhuma. Ignorar o terceiro
+     seria jogar fora exatamente o sinal que chega antes de alguém ter tido o
+     trabalho de organizar o cadastro — que é quando ele vale mais. */
+  function sinaisDaOportunidade(op) {
+    if (!op) return [];
+    const doGrupo = {};
+    (op.stakeholders || []).forEach(function (id) { doGrupo[id] = true; });
+    return ordenarSinais((estado.sinais || []).filter(function (s) {
+      if (!visivel(s, true)) return false;
+      if (s.oportunidadeId === op.id) return true;
+      if (s.oportunidadeId) return false;
+      if (s.contatoId && doGrupo[s.contatoId]) return true;
+      return !s.contatoId && !!op.contaId && s.contaId === op.contaId;
+    }));
+  }
+
+  function excluirSinal(id) {
+    const antes = (estado.sinais || []).length;
+    estado.sinais = (estado.sinais || []).filter(function (s) { return s.id !== id; });
+    if (estado.sinais.length === antes) return false;
+    registrarExclusao('sinais', id);
+    salvar();
+    return true;
+  }
+
+  /* Promover é a única porta entre observação e régua, e ela é humana de
+     propósito: quem diz que abrir a proposta três vezes comprova Prioridade é
+     uma pessoa que conhece a conta, não uma tabela de pesos.
+
+     O sinal não morre ao virar evidência: fica marcado com o evento que gerou.
+     Perder o rastro seria perder a resposta para "o que essa evidência tinha
+     de verdade por trás", que é a pergunta que o histórico existe para
+     responder. */
+  function promoverSinal(sinalId, opId, evento) {
+    const s = sinal(sinalId);
+    const op = oportunidade(opId);
+    if (!s || !op) return null;
+    if (s.eventoId) return op;
+
+    const novo = registrarEvento(op.id, Object.assign({
+      tipo: 'decision',
+      data: s.quando || hoje(),
+      titulo: s.titulo || 'Sinal do comprador',
+      descricao: s.detalhe || '',
+      canal: s.canal,
+      sinalId: s.id
+    }, evento || {}));
+    if (!novo) return null;
+
+    const gravado = (op.eventos || [])[0];
+    s.eventoId = gravado ? gravado.id : '';
+    if (!s.oportunidadeId) s.oportunidadeId = op.id;
     salvar();
     return op;
   }
@@ -1550,6 +1719,8 @@
     adicionarItem, atualizarItem, removerItem, definirPrazoContrato,
     criarConta, criarContato, criarOportunidade, atualizarOportunidade, vincularStakeholder,
     pontuar, registrarEvento, removerEvento, definirCompromisso, definirInsight,
+    sinal, sinais, criarSinal, registrarSinalUnico, sinalExterno,
+    sinaisDoContato, sinaisDaConta, sinaisDaOportunidade, excluirSinal, promoverSinal,
     registrarRecusa, recusas, recusasPorCampanha, limparRecusas, excluirRecusa,
     descartarLead, foiDescartado, descartes, desfazerDescarte, chaveDoLead,
     criarTarefa, atualizarTarefa, adiarTarefa, concluirTarefa, excluirTarefa,

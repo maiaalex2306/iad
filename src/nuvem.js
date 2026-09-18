@@ -555,7 +555,8 @@
     { local: 'produtos', remota: 'produtos' },
     { local: 'segmentos', remota: 'segmentos' },
     { local: 'tiposTarefa', remota: 'tipos_tarefa' },
-    { local: 'fontes', remota: 'fontes' }
+    { local: 'fontes', remota: 'fontes' },
+    { local: 'sinais', remota: 'sinais' }
   ];
 
   /* camelCase no app, snake_case no Postgres: a conversão é mecânica. */
@@ -581,7 +582,7 @@
       if (campo.charAt(0) === '_') return;
       const valor = registro[campo];
       if (valor === undefined) return;
-      saida[paraColuna(campo)] = valor === '' && /Em$|previsto$|vencimento$/i.test(campo) ? null : valor;
+      saida[paraColuna(campo)] = valor === '' && /Em$|previsto$|vencimento$|^quando$/i.test(campo) ? null : valor;
     });
     saida.tenant_id = tenantId;
     if (donoId && ('donoId' in registro || 'dono_id' in saida)) saida.dono_id = donoId;

@@ -1610,6 +1610,108 @@
        completo: ali a pessoa procura o que quer mudar entre dez campos, e
        encontrar exige saber o nome que o formulário deu àquilo. Aqui ela já
        apontou para o que quer mudar. */
+    /* ---------------- Sinais do comprador ----------------
+
+       Três ações e uma regra: nenhuma delas mexe em nota. Registrar e excluir
+       são só a linha do tempo; a única que toca na régua é promover, e ela
+       existe justamente para que essa passagem seja um gesto consciente de
+       alguém que conhece a conta. */
+    registrarSinal: function (opId, contatoId) {
+      const op = opId ? Store.oportunidade(opId) : null;
+      if (opId && (!op || op.desfecho)) return;
+
+      /* Os tipos vêm agrupados por canal porque a pessoa pensa no canal
+         primeiro — "foi no WhatsApp" — e só depois no que aconteceu. Uma
+         lista corrida de vinte e três itens obriga a ler todos. */
+      const porCanal = {};
+      (P.TIPOS_SINAL || []).forEach(function (t) {
+        (porCanal[t.canal] = porCanal[t.canal] || []).push({ valor: t.id, rotulo: t.rotulo });
+      });
+      const opcoes = (P.CANAIS_SINAL || []).filter(function (c) {
+        return porCanal[c.id] && porCanal[c.id].length;
+      }).map(function (c) {
+        return { grupo: c.rotulo, opcoes: porCanal[c.id] };
+      });
+
+      /* Só as pessoas da conta: sinal de quem não é dela seria sinal na
+         carteira errada, e é mais fácil errar num select de trezentos nomes
+         do que acertar. */
+      const pessoas = [{ valor: '', rotulo: '— sem pessoa identificada —' }].concat(
+        (op && op.contaId ? Store.contatosDaConta(op.contaId) : []).map(function (c) {
+          return { valor: c.id, rotulo: c.nome + (c.papel ? ' · ' + c.papel : '') };
+        }));
+
+      U.formulario('Registrar sinal do comprador', [
+        { id: 'tipo', rotulo: 'O que ele fez', tipo: 'select', opcoes: opcoes,
+          dica: 'Comportamento dele, não atividade nossa. Enviar proposta não é sinal; ele abrir a proposta é.' },
+        { id: 'contatoId', rotulo: 'Quem', tipo: 'select', opcoes: pessoas, largura: 'metade' },
+        { id: 'quando', rotulo: 'Quando aconteceu', tipo: 'date', largura: 'metade',
+          dica: 'O dia em que ELE fez, não o dia em que você anotou.' },
+        { id: 'detalhe', rotulo: 'O que você viu', tipo: 'textarea',
+          dica: 'Opcional. Uma linha basta — daqui a três semanas é isto que diz se valeu alguma coisa.' }
+      ], { tipo: 'whatsapp_respondeu', contatoId: contatoId || '', quando: Store.hoje() },
+      function (d) {
+        if (!d.tipo) return;
+        Store.criarSinal({
+          tipo: d.tipo,
+          contatoId: d.contatoId || null,
+          contaId: op ? op.contaId : null,
+          oportunidadeId: op ? op.id : null,
+          quando: d.quando || Store.hoje(),
+          detalhe: (d.detalhe || '').trim(),
+          fonte: 'manual'
+        });
+        render();
+      });
+    },
+
+    /* A única porta entre observação e régua, e ela pede a dimensão de
+       propósito: "este comportamento comprova QUAL das oito decisões?" é a
+       pergunta que separa promover de simplesmente registrar mais uma coisa.
+
+       A força fica em 'relato' porque é o que ela é: comportamento observado
+       não é o cliente dizendo com palavras dele, e deixar o app carimbar
+       força maior seria inflar a régua por dentro — exatamente o que este
+       app existe para não fazer. */
+    promoverSinal: function (sinalId, opId) {
+      const s = Store.sinal(sinalId);
+      const op = Store.oportunidade(opId);
+      if (!s || !op || op.desfecho) return;
+      if (s.eventoId) return;
+
+      U.formulario('Promover a evidência', [
+        { id: 'aviso', tipo: 'aviso',
+          rotulo: 'Isto entra no histórico como evidência do cliente e zera a Idade da Evidência. ' +
+            'Faça quando o comportamento realmente comprovar algo — não por ele ter acontecido.' },
+        { id: 'dimensao', rotulo: 'Qual decisão isto comprova', tipo: 'select',
+          opcoes: [{ valor: '', rotulo: '— nenhuma, é só movimento —' }].concat(
+            (P.DIMENSOES || []).map(function (dim) {
+              return { valor: dim.id, rotulo: dim.nome + ' — ' + dim.pergunta };
+            })) },
+        { id: 'titulo', rotulo: 'Como isto entra no histórico', tipo: 'text' }
+      ], { dimensao: '', titulo: s.titulo || 'Sinal do comprador' }, function (d) {
+        Store.promoverSinal(sinalId, opId, {
+          titulo: (d.titulo || '').trim() || s.titulo || 'Sinal do comprador',
+          dimensao: d.dimensao || '',
+          forca: 'relato'
+        });
+        render();
+      });
+    },
+
+    excluirSinal: function (sinalId) {
+      const s = Store.sinal(sinalId);
+      if (!s) return;
+      if (s.eventoId) {
+        global.alert('Este sinal já virou evidência. Apague a evidência no Histórico — ' +
+          'sumir com o sinal deixaria a evidência sem a origem que a explica.');
+        return;
+      }
+      if (!U.confirmar('Excluir este sinal?')) return;
+      Store.excluirSinal(sinalId);
+      render();
+    },
+
     mudarPrevisao: function (opId) {
       const op = Store.oportunidade(opId);
       if (!op || op.desfecho) return;
@@ -5548,12 +5650,25 @@
      a tela se repinta — o mesmo que Dados faz com os leads da ponte. */
   function pintarConversas(forcar) {
     if (!W || !W.disponivel()) return;
-    W.carregar(forcar).then(function () { render(); });
+    W.carregar(forcar).then(colher).then(function () { render(); });
+  }
+
+  /* A colheita anda junto da busca das conversas, e não num botão.
+
+     Sinal que depende de alguém lembrar de clicar não é captura automática —
+     é mais um campo para preencher, e a carteira que este app atende já tem
+     campos demais. Aqui ela roda sempre que as mensagens chegam, é idempotente
+     pelo par (fonte, externoId) e, quando cria algo, a sincronização de sempre
+     leva para o servidor sem ninguém pedir. */
+  function colher() {
+    if (!W || !W.colherSinais) return;
+    try { W.colherSinais(); }
+    catch (e) { console.warn('Não consegui colher sinais do WhatsApp:', e); }
   }
 
   App.recarregarConversas = function () {
     if (!W) return;
-    W.carregar(true).then(function () { render(); });
+    W.carregar(true).then(colher).then(function () { render(); });
   };
 
   App.abrirConversa = function (chave) {

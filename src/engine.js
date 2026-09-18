@@ -203,6 +203,72 @@
     };
   }
 
+  /* ---------------- Sinais: o relógio do comprador ----------------
+
+     A Idade da Evidência mede o nosso registro. Isto mede o comportamento
+     dele. São dois relógios de propósito, e é a diferença entre os dois que
+     interessa: evidência velha com sinal novo é o comprador andando enquanto
+     o CRM ficou parado — e é exatamente aí que a conversa tem hora marcada.
+
+     Nada disto entra em `iad()`, `saude()` nem `classificar()`. Sinal que
+     mexesse na nota transformaria o IAD num contador de cliques, que é o que
+     todo CRM já é e o motivo de nenhum deles saber dizer se o negócio existe. */
+  function sinaisDaOp(op) {
+    return Store.sinaisDaOportunidade ? Store.sinaisDaOportunidade(op) : [];
+  }
+
+  function sinaisRecentes(op, dias) {
+    const janela = dias || P.JANELA_SINAL;
+    return sinaisDaOp(op).filter(function (s) { return diasEntre(s.quando) <= janela; });
+  }
+
+  function sinaisFortes(op, dias) {
+    return sinaisRecentes(op, dias).filter(function (s) {
+      return (s.peso || 0) >= P.PESO_SINAL_FORTE;
+    });
+  }
+
+  /* Dias desde o último sinal. Sem sinal nenhum devolve null, e não um número
+     grande: "nunca houve sinal" e "o último sinal foi há muito tempo" são
+     coisas diferentes, e enfiar as duas no mesmo inteiro faria a tela mentir
+     para quem acabou de cadastrar a conta. */
+  function idadeDoSinal(op) {
+    const lista = sinaisDaOp(op);
+    if (!lista.length) return null;
+    const maisRecente = lista.reduce(function (max, s) {
+      return String(s.quando) > max ? String(s.quando) : max;
+    }, String(lista[0].quando));
+    return diasEntre(maisRecente);
+  }
+
+  /* A hora certa, com nome e critério.
+
+     Não é "ele clicou, ligue agora". É: o comportamento dele está à frente do
+     que registramos. Duas condições, as duas necessárias — sinal forte dentro
+     da janela E evidência parada há mais tempo do que o sinal. Sem a segunda,
+     isto viraria alerta em toda conta ativa e seria desligado na primeira
+     semana, como todo alerta que toca sempre. */
+  function momento(op) {
+    const idadeEvidencia = evidenceAge(op);
+    const fortes = sinaisFortes(op);
+    if (!fortes.length) return null;
+
+    const idadeSinal = idadeDoSinal(op);
+    if (idadeSinal == null) return null;
+    if (idadeEvidencia <= 14) return null;
+    if (idadeSinal >= idadeEvidencia) return null;
+
+    const maior = fortes.reduce(function (m, s) { return (s.peso || 0) > (m.peso || 0) ? s : m; }, fortes[0]);
+    return {
+      sinais: fortes,
+      principal: maior,
+      idadeSinal: idadeSinal,
+      idadeEvidencia: idadeEvidencia,
+      /* Quantos dias o comprador andou sem que o registro andasse junto. */
+      atraso: idadeEvidencia - idadeSinal
+    };
+  }
+
   function alertas(op) {
     const lista = [];
     const idade = evidenceAge(op);
@@ -237,6 +303,15 @@
       lista.push({ tipo: 'insight', nivel: 'medio', texto: 'Problema comprovado, mas o cliente ainda não adotou nosso reenquadramento.' });
     }
     if (decisionVelocity(op) === 0) lista.push({ tipo: 'velocity', nivel: 'medio', texto: 'Decision Velocity zerada nos últimos 30 dias.' });
+
+    /* O único alerta deste app que aponta para uma oportunidade em vez de
+       um risco: aqui o comprador se mexeu e nós não soubemos usar. */
+    const mom = momento(op);
+    if (mom) {
+      lista.push({ tipo: 'momento', nivel: 'alto',
+        texto: 'Comportamento à frente do registro: ' + mom.principal.titulo +
+          ' há ' + mom.idadeSinal + ' dia(s), com a evidência parada há ' + mom.idadeEvidencia + '. É a hora de falar.' });
+    }
 
     const comp = compromisso(op);
     if (comp && comp.vencido) {
@@ -1069,6 +1144,7 @@
     porMes, porSegmento, porEtapa, matrizDecisoes, distribuicaoEvidencia,
     autoria, compromisso, mobilizadores, bloqueadores, tempoNaEtapa, medianaEtapaGanhos, deltaSemana, curva, historico, lacunas,
     evolucao, rendimentoPorTipoDeTarefa, semanasAte, INDICADORES,
-    stakeholdersDaOp, diasEntre, indiceEtapa, depoisDaProposta, ORDEM_DECISAO, nutricaoVencida
+    stakeholdersDaOp, diasEntre, indiceEtapa, depoisDaProposta, ORDEM_DECISAO, nutricaoVencida,
+    sinaisRecentes, sinaisFortes, idadeDoSinal, momento
   };
 })(window);

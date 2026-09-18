@@ -303,6 +303,100 @@
     return conversas().filter(function (c) { return c.chave === chave; })[0] || null;
   }
 
+  /* ---------------- colheita de sinais ----------------
+
+     O app já via tudo isto passar e jogava fora: a pessoa respondeu, a pessoa
+     procurou sozinha. Não é evidência de decisão — ninguém decidiu nada por
+     ter respondido um "bom dia" — mas é comportamento dela, com data, e é o
+     que diz quando a conversa tem hora.
+
+     Três decisões que valem explicação:
+
+     1. Um sinal por conversa por DIA, e não por mensagem. Quem responde manda
+        seis mensagens seguidas; seis sinais idênticos não dizem seis vezes
+        mais, só afogam a linha do tempo e inflam a tabela.
+
+     2. Conversa sem dono não vira sinal. Sinal existe para grudar numa
+        pessoa; solto, é um número de telefone com uma data, que não ajuda
+        ninguém e ainda apareceria na carteira como se fosse movimento.
+
+     3. A carga de histórico (`origem: 'historico'`) fica de fora. São os seis
+        meses que a Meta entrega de uma vez quando o número é conectado —
+        conversa que aconteceu antes de existirmos aqui. Transformá-la em
+        sinal criaria centenas de linhas velhas de um golpe, e nenhuma delas
+        seria observação nossa.
+
+     A colheita é idempotente pelo par (fonte, externoId): rodar de novo a
+     cada recarga não duplica nada. */
+  function diasDeDiferenca(a, b) {
+    const x = new Date(a), y = new Date(b);
+    return Math.abs(Math.floor((y - x) / 86400000));
+  }
+
+  /* O servidor guarda a hora em UTC; o vendedor vive no fuso dele. Cortar a
+     string ISO daria o dia e a hora de Londres — e a mensagem das 21h de
+     terça viraria sinal de quarta, que é o tipo de erro que ninguém percebe e
+     que desloca a linha do tempo inteira em um dia. */
+  function diaLocal(quando) {
+    const d = new Date(quando);
+    if (isNaN(d)) return '';
+    const p = function (n) { return String(n).padStart(2, '0'); };
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  }
+
+  function horaLocal(quando) {
+    const d = new Date(quando);
+    if (isNaN(d)) return '';
+    const p = function (n) { return String(n).padStart(2, '0'); };
+    return p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+
+  function colherSinais() {
+    if (!Store || !Store.registrarSinalUnico) return 0;
+    /* Quantos nasceram agora se mede contando antes e depois, e não olhando
+       a data do registro devolvido: um sinal criado hoje e recolhido de novo
+       hoje tem a data de hoje e seria contado duas vezes. */
+    const antes = (Store.sinais() || []).length;
+
+    conversas().forEach(function (c) {
+      if (!c.contato) return;
+      const jaNoDia = {};
+
+      c.mensagens.forEach(function (m, i) {
+        if (m.direcao !== 'entrada') return;
+        if (m.origem === 'historico') return;
+
+        const dia = diaLocal(m.enviada_em);
+        if (!dia || jaNoDia[dia]) return;
+        jaNoDia[dia] = true;
+
+        /* Procurar sem ter sido chamado vale mais do que responder, e a
+           diferença entre as duas coisas é se houve algo nosso antes. Sete
+           dias porque resposta que chega uma semana depois já não é resposta:
+           a pessoa voltou por conta própria. */
+        const nosso = c.mensagens.slice(0, i).filter(function (x) {
+          return x.direcao === 'saida';
+        }).pop();
+        const espontanea = !nosso || diasDeDiferenca(nosso.enviada_em, m.enviada_em) > 7;
+
+        Store.registrarSinalUnico({
+          fonte: 'whatsapp',
+          externoId: c.chave + ':' + dia,
+          tipo: espontanea ? 'whatsapp_iniciou' : 'whatsapp_respondeu',
+          contatoId: c.contato.id,
+          contaId: c.contato.contaId || null,
+          oportunidadeId: c.op ? c.op.id : null,
+          quando: dia,
+          hora: horaLocal(m.enviada_em),
+          detalhe: String(m.texto || '').slice(0, 280),
+          tenantId: c.contato.tenantId
+        });
+      });
+    });
+
+    return (Store.sinais() || []).length - antes;
+  }
+
   /* Quantas mensagens novas esperam numa negociação. É o que a tarja azul do
      cartão do pipeline mostra, e o que põe o negócio no topo de Hoje. */
   function naoLidasDaOp(opId) {
@@ -398,6 +492,7 @@
     marcarLidas: marcarLidas, vincular: vincular, comoTexto: comoTexto,
     curto: curto, soDigitos: soDigitos, bonito: bonito,
     candidatos: candidatos, comPais: comPais, ddd: ddd,
-    pareceBrasileiro: pareceBrasileiro
+    pareceBrasileiro: pareceBrasileiro,
+    colherSinais: colherSinais
   };
 })(window);

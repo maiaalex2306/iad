@@ -794,7 +794,8 @@
           '<span class="pill navy">' + U.compacto(x.r.op.valor) + '</span></div>' +
           '<div class="small muted">' + esc((x.r.conta && x.r.conta.nome) || '') + ' · ' + esc(x.r.op.etapa) + '</div>' +
           '<div class="row" style="margin-top:7px;gap:8px">' + tiraDecisao(x.r.op) + '<span class="tiny muted">' + x.r.iad + '/' + P.IAD_MAXIMO + '</span></div>' +
-          '<div class="small" style="margin-top:6px">⚠ ' + esc(x.altos[0].texto) + '</div></button>';
+          '<div class="small" style="margin-top:6px">' +
+          (x.altos[0].tipo === 'momento' ? '⏱ ' : '⚠ ') + esc(x.altos[0].texto) + '</div></button>';
       }).join('');
 
     if (!criticos) return '';
@@ -2031,6 +2032,7 @@
     ['historico', 'Histórico'],
     ['tarefas', 'Tarefas'],
     ['whatsapp', 'WhatsApp'],
+    ['sinais', 'Sinais'],
     ['email', 'E-mail'],
     ['propostas', 'Propostas'],
     ['produtos', 'Produtos'],
@@ -2042,6 +2044,7 @@
     historico: 'Tudo o que aconteceu neste negócio, com evidência do cliente separada de atividade nossa.',
     tarefas: 'O que está combinado e o que venceu. Tarefa concluída sem relato aparece marcada.',
     whatsapp: 'As conversas de WhatsApp que casaram com um contato desta empresa.',
+    sinais: 'O que o comprador fez sozinho: respondeu, abriu, voltou. Não é evidência de decisão — é o que diz QUANDO a conversa tem hora.',
     email: 'Os e-mails trocados dentro deste negócio. Ainda não construído.',
     propostas: 'As propostas enviadas, com valor, validade e resposta. Ainda não construído.',
     produtos: 'O que está sendo vendido, com quantidade e preço.',
@@ -2061,7 +2064,11 @@
     const novas = (W && W.carregadas()) ? W.naoLidasDaOp(op.id) : 0;
     /* O número na aba é o que faz a aba fechada continuar avisando. Sem ele,
        esconder as tarefas atrás de um clique esconderia também o atraso. */
-    const contagem = { tarefas: abertas, whatsapp: novas };
+    /* Na aba de Sinais o número é só o que está DENTRO da janela: sinal de
+       dois meses atrás não é aviso, é histórico, e um contador que soma tudo
+       nunca zera — deixa de ser aviso no dia seguinte. */
+    const sinaisAgora = E.sinaisRecentes ? E.sinaisRecentes(op).length : 0;
+    const contagem = { tarefas: abertas, whatsapp: novas, sinais: sinaisAgora };
 
     return '<div class="abas-cockpit">' + ABAS_COCKPIT.map(function (a) {
       const n = contagem[a[0]];
@@ -2076,7 +2083,7 @@
   function corpoDaAba(op, r) {
     const f = {
       decisao: abaDecisao, historico: abaHistorico, tarefas: abaTarefas,
-      whatsapp: abaWhatsapp, email: abaEmail, propostas: abaPropostas,
+      whatsapp: abaWhatsapp, sinais: abaSinais, email: abaEmail, propostas: abaPropostas,
       produtos: abaProdutos, arquivos: abaArquivos
     }[abaCockpit] || abaDecisao;
     return f(op, r);
@@ -2098,6 +2105,112 @@
   function abaHistorico(op) { return blocoHistorico(op); }
   function abaTarefas(op) { return painelTarefas(op); }
   function abaArquivos(op) { return blocoArquivos(op); }
+
+  /* ---------------- A aba dos Sinais ----------------
+
+     A tela inteira existe para sustentar uma frase: "o comportamento dele está
+     à frente do que registramos". Tudo o mais aqui é contexto para ela.
+
+     Por isso a lista de sinais vem DEPOIS do quadro do momento, e não antes:
+     lista de eventos é o que todo CRM mostra, e ninguém olha. O que ninguém
+     tem é o app dizendo que chegou a hora — e isso precisa estar no alto. */
+  /* `pill.orange` está fora daqui de propósito: na paleta da casa aquela
+     classe quer dizer "esta é a opção escolhida" (o grupo do pipeline, o modo
+     de lista), e não "olhe para isto". Usá-la aqui faria o sinal parecer um
+     filtro ligado. A família do risco é a que já significa atenção nesta
+     tela — mesmo quando a notícia é boa. */
+  const CLASSE_DO_PESO = { 1: '', 2: 'warn', 3: 'risk' };
+  const ROTULO_DO_PESO = { 1: 'atenção', 2: 'interesse', 3: 'intenção' };
+
+  function tipoDoSinal(s) {
+    return (P.TIPOS_SINAL || []).filter(function (t) { return t.id === s.tipo; })[0] || null;
+  }
+
+  function canalDoSinal(s) {
+    const c = (P.CANAIS_SINAL || []).filter(function (x) { return x.id === s.canal; })[0];
+    return c ? c.rotulo : (s.canal || 'Outro');
+  }
+
+  function quemNoSinal(s) {
+    const c = s.contatoId ? Store.contato(s.contatoId) : null;
+    if (c) return c.nome + (c.papel ? ' · ' + c.papel : '');
+    const conta = s.contaId ? Store.conta(s.contaId) : null;
+    return conta ? conta.nome : 'sem pessoa identificada';
+  }
+
+  function linhaDeSinal(s, op) {
+    const peso = Number(s.peso) || 1;
+    const promovido = !!s.eventoId;
+
+    /* Promover só aparece em sinal ainda não promovido e em negócio aberto.
+       Botão que não faz nada ensina a ignorar botões. */
+    const acoes = promovido
+      ? '<span class="pill ok mini">virou evidência</span>'
+      : (op && !op.desfecho
+          ? '<button class="btn ghost mini" onclick="App.promoverSinal(\'' + s.id + '\',\'' + op.id + '\')" ' +
+            'data-ajuda-titulo="Promover a evidência" ' +
+            'data-ajuda="Você decide que este comportamento comprova uma das oito decisões. Só então ele entra na régua e zera a Idade da Evidência.">Promover a evidência</button>'
+          : '');
+
+    return '<div class="card" style="padding:12px">' +
+      '<div class="row">' +
+        '<span class="pill ' + (CLASSE_DO_PESO[peso] || '') + '">' + esc(ROTULO_DO_PESO[peso] || '') + '</span>' +
+        '<strong>' + esc(s.titulo || (tipoDoSinal(s) || {}).rotulo || 'Sinal') + '</strong>' +
+        '<span class="small muted">' + esc(canalDoSinal(s)) + '</span>' +
+        '<span class="espaco"></span>' +
+        '<span class="small muted">' + U.data(s.quando) + (s.hora ? ' ' + esc(s.hora) : '') + '</span>' +
+      '</div>' +
+      '<p class="tiny muted" style="margin:6px 0 0">' + esc(quemNoSinal(s)) +
+        (s.fonte && s.fonte !== 'manual' ? ' · capturado do ' + esc(s.fonte) : ' · anotado à mão') + '</p>' +
+      (s.detalhe ? '<p class="small" style="margin:8px 0 0">' + esc(s.detalhe) + '</p>' : '') +
+      '<div class="row" style="margin-top:8px">' + acoes + '<span class="espaco"></span>' +
+        '<button class="btn ghost mini" onclick="App.excluirSinal(\'' + s.id + '\')">Excluir</button></div>' +
+      '</div>';
+  }
+
+  function quadroDoMomento(op) {
+    const mom = E.momento ? E.momento(op) : null;
+    if (!mom) return '';
+    return '<div class="card" style="border-left:3px solid var(--orange)">' +
+      '<div class="row"><span class="pill risk">É a hora</span>' +
+      '<strong>O comportamento está ' + mom.atraso + ' dia(s) à frente do registro.</strong></div>' +
+      '<p class="small" style="margin:10px 0 0">' +
+      esc(mom.principal.titulo) + ' há ' + mom.idadeSinal + ' dia(s) — e a última evidência do comprador tem ' +
+      mom.idadeEvidencia + ' dia(s). Ele se mexeu e nós não soubemos usar.</p>' +
+      '<p class="tiny muted" style="margin:8px 0 0">Isto não mudou nota nenhuma. Sinal não é decisão: ' +
+      'se você concluir que este comportamento comprova uma das oito, use Promover a evidência abaixo.</p>' +
+      '</div>';
+  }
+
+  function abaSinais(op) {
+    const lista = Store.sinaisDaOportunidade ? Store.sinaisDaOportunidade(op) : [];
+    const topo = '<div class="card"><div class="row"><h2 style="margin:0">Sinais do comprador</h2>' +
+      '<span class="espaco"></span>' +
+      (op.desfecho ? '' : '<button class="btn mini" onclick="App.registrarSinal(\'' + op.id + '\')">Registrar sinal</button>') +
+      '</div>' +
+      '<p class="tiny muted" style="margin:8px 0 0">O que ele fez sozinho: respondeu, abriu, voltou, mudou de cargo. ' +
+      'Nada aqui mexe no IAD nem na Idade da Evidência — de propósito. Um clique não é um problema reconhecido.</p></div>';
+
+    if (!lista.length) {
+      return topo + quadroDoMomento(op) +
+        '<div class="vazio">Nenhum sinal ainda. O WhatsApp alimenta esta lista sozinho quando a conversa ' +
+        'casa com um contato; o resto você anota em Registrar sinal.</div>';
+    }
+
+    const janela = P.JANELA_SINAL;
+    const recentes = lista.filter(function (s) { return E.diasEntre(s.quando) <= janela; });
+    const antigos = lista.filter(function (s) { return E.diasEntre(s.quando) > janela; });
+
+    return topo + quadroDoMomento(op) +
+      (recentes.length
+        ? '<h3 class="small" style="margin:14px 0 8px">Últimos ' + janela + ' dias</h3>' +
+          recentes.map(function (s) { return linhaDeSinal(s, op); }).join('')
+        : '<p class="tiny muted" style="margin:14px 0 8px">Nada nos últimos ' + janela + ' dias.</p>') +
+      (antigos.length
+        ? '<h3 class="small" style="margin:18px 0 8px">Antes disso <span class="muted">(' + antigos.length + ')</span></h3>' +
+          antigos.map(function (s) { return linhaDeSinal(s, op); }).join('')
+        : '');
+  }
 
   function abaWhatsapp(op) {
     const W = global.IADWhatsapp;
@@ -2505,7 +2618,11 @@
     const html = r.alertas.filter(function (a) {
       return ALERTAS_JA_COBERTOS.indexOf(a.tipo) === -1;
     }).map(function (a) {
-      return '<div class="aviso" style="margin-bottom:6px">' + (a.nivel === 'alto' ? '🔴 ' : '🟡 ') + esc(a.texto) + '</div>';
+      /* O sinal do momento é o único aviso desta lista que é boa notícia.
+         Dar a ele a bolinha vermelha dos riscos ensinaria a pessoa a passar
+         o olho e seguir em frente, que é o que se faz com risco repetido. */
+      const marca = a.tipo === 'momento' ? '⏱ ' : (a.nivel === 'alto' ? '🔴 ' : '🟡 ');
+      return '<div class="aviso" style="margin-bottom:6px">' + marca + esc(a.texto) + '</div>';
     }).join('');
     return html ? '<div class="card"><h2>Alertas</h2>' + html + '</div>' : '';
   }

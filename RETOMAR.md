@@ -5,8 +5,8 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v180**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v176, o aparelho
+Publicado agora: **v185**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v185, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -36,6 +36,54 @@ esvaziariam a tela sem tocar no servidor) e a cópia de segurança local.
 **O que isso custa:** sem internet o app não abre. Foi decisão do Alexandre,
 consciente. E cada alteração manda a carteira inteira — tudo bem no tamanho de
 hoje, vai precisar virar envio por tabela quando crescer.
+
+---
+
+## 0-B. Sinais do comprador — v185, 18/09
+
+**A segunda metade do relógio.** Até a v184 o IAD só sabia o que o VENDEDOR
+registrou. A régua das oito decisões mede evidência, e evidência é coisa que
+alguém digita depois de uma conversa. Isso não mudou e não deve mudar.
+
+O que faltava era o que o COMPRADOR faz sozinho: respondeu, abriu, voltou,
+mudou de cargo. O app via esses fatos passarem — na conversa do WhatsApp, na
+campanha — e jogava fora, porque não tinha onde guardar.
+
+Agora tem: a tabela `sinais`, coleção própria, sincronizada como as outras.
+
+**A regra que não se negocia:** sinal NÃO é evidência. Não zera a Idade da
+Evidência, não mexe no IAD, não entra em `saude()` nem em `classificar()`. Um
+clique não é um problema reconhecido, e tratar comportamento como decisão
+transformaria o IAD num contador de cliques — que é o que todo CRM já é, e o
+motivo de nenhum deles saber dizer se o negócio existe.
+
+A ponte entre os dois é **Promover a evidência**, e ela é humana de propósito:
+quem diz que abrir a proposta três vezes comprova Prioridade é uma pessoa que
+conhece a conta. A força entra como `relato`, porque é o que ela é.
+
+**O que o sinal faz de útil**, e é só uma coisa: `E.momento(op)`. Quando há
+sinal forte (peso ≥ 2) dentro de 21 dias E a evidência está parada há mais de
+14 dias E o sinal é mais novo que a evidência, o app diz *"o comportamento
+está N dias à frente do registro"*. Duas condições, as duas necessárias — sem
+a segunda isto tocaria em toda conta ativa e seria desligado na primeira
+semana, como todo alerta que toca sempre.
+
+Esse alerta sai com `tipo: 'momento'` e `nivel: 'alto'`, então aparece no
+cockpit (aba **Sinais**, com contador) e nos riscos críticos do Painel, com ⏱
+em vez de ⚠ — é o único aviso deste app que é boa notícia.
+
+**Captura automática:** o WhatsApp alimenta sozinho (`W.colherSinais()`, roda
+junto com a busca das conversas). Um sinal por conversa por DIA, não por
+mensagem; conversa sem dono não vira sinal; a carga de histórico de 6 meses
+fica de fora. Idempotente pelo par (`fonte`, `externoId`).
+
+**Falta rodar no banco:** `nuvem/correcao-17-sinais.sql`. Até rodar, a tabela
+`sinais` falha no envio e o app avisa qual coluna falta.
+
+**Onde está:** taxonomia em `src/playbook.js` (`TIPOS_SINAL`, 23 tipos em 9
+canais, peso 1–3); CRUD em `src/store.js`; relógio e alerta em `src/engine.js`;
+aba e cartões em `src/views.js`; ações em `src/app.js`; colheita em
+`src/whatsapp.js`.
 
 ---
 

@@ -596,6 +596,87 @@
     { dias: 365, rotulo: 'Em 1 ano' }
   ];
 
+  /* ---------------- Sinais: evidência que chega sem vendedor ----------------
+
+     O IAD sempre mediu a decisão pelo que o vendedor registrou. Isso é a
+     régua, e ela continua sendo a régua: um clique não é um problema
+     reconhecido, e tratar comportamento como evidência de decisão estragaria
+     a única coisa que este app tem de diferente.
+
+     Mas existe uma classe de fato que o app via passar e jogava fora: a pessoa
+     respondeu, abriu, voltou, mudou de cargo. Não é decisão — é intenção antes
+     da decisão, e é justamente o que diz QUANDO a conversa faz sentido.
+
+     Então sinal mora fora de `op.eventos` de propósito. Ele não zera a Idade da
+     Evidência, não move nota nenhuma, não entra no IAD. Ele faz uma coisa só, e
+     é a coisa que faltava: quando há sinal forte e a evidência está velha, o
+     app diz que o registro ficou para trás do comprador — e essa é a hora.
+
+     Quem decide que um sinal virou evidência é uma pessoa, com um clique. A
+     régua continua humana. */
+  const CANAIS_SINAL = [
+    { id: 'whatsapp', rotulo: 'WhatsApp' },
+    { id: 'email', rotulo: 'E-mail' },
+    { id: 'linkedin', rotulo: 'LinkedIn' },
+    { id: 'linkedhelper', rotulo: 'Linked Helper' },
+    { id: 'documento', rotulo: 'Documento' },
+    { id: 'site', rotulo: 'Site' },
+    { id: 'telefone', rotulo: 'Telefone' },
+    { id: 'presencial', rotulo: 'Presencial' },
+    { id: 'outro', rotulo: 'Outro' }
+  ];
+
+  /* O peso é o que separa ruído de intenção, e tem só três degraus porque
+     escala fina aqui é falsa precisão: ninguém sabe dizer se abrir um e-mail
+     vale 2 ou 3 numa escala de 10.
+
+       1 — atenção: a pessoa passou por perto. Sozinho não quer dizer nada.
+       2 — interesse: a pessoa gastou tempo com o assunto.
+       3 — intenção: a pessoa fez algo que só faz quem está considerando.
+
+     `automatico` marca o que o app consegue capturar sozinho hoje; o resto é
+     o vendedor contando o que viu, que continua valendo — sinal anotado à mão
+     é melhor do que sinal perdido. */
+  const TIPOS_SINAL = [
+    { id: 'whatsapp_respondeu', canal: 'whatsapp', peso: 2, automatico: true,
+      rotulo: 'Respondeu no WhatsApp' },
+    { id: 'whatsapp_iniciou', canal: 'whatsapp', peso: 3, automatico: true,
+      rotulo: 'Procurou no WhatsApp sem ser chamado' },
+    { id: 'email_abriu', canal: 'email', peso: 1, rotulo: 'Abriu o e-mail' },
+    { id: 'email_clicou', canal: 'email', peso: 2, rotulo: 'Clicou num link do e-mail' },
+    { id: 'email_respondeu', canal: 'email', peso: 2, rotulo: 'Respondeu o e-mail' },
+    { id: 'email_encaminhou', canal: 'email', peso: 3,
+      rotulo: 'Encaminhou o e-mail para alguém de dentro' },
+    { id: 'linkedin_aceitou', canal: 'linkedin', peso: 1, rotulo: 'Aceitou a conexão' },
+    { id: 'linkedin_engajou', canal: 'linkedin', peso: 1, rotulo: 'Curtiu ou comentou uma publicação' },
+    { id: 'linkedin_visitou', canal: 'linkedin', peso: 2, rotulo: 'Visitou o perfil' },
+    { id: 'linkedin_respondeu', canal: 'linkedin', peso: 2, rotulo: 'Respondeu a mensagem' },
+    { id: 'lh_aceitou', canal: 'linkedhelper', peso: 1, rotulo: 'Aceitou o convite da campanha' },
+    { id: 'lh_respondeu', canal: 'linkedhelper', peso: 2, rotulo: 'Respondeu a campanha' },
+    { id: 'documento_abriu', canal: 'documento', peso: 3, rotulo: 'Abriu o documento que enviamos' },
+    { id: 'documento_reabriu', canal: 'documento', peso: 3, rotulo: 'Voltou ao documento' },
+    { id: 'documento_outro', canal: 'documento', peso: 3,
+      rotulo: 'Outra pessoa da empresa abriu o documento' },
+    { id: 'site_visitou', canal: 'site', peso: 2, rotulo: 'Entrou no nosso site' },
+    { id: 'site_precos', canal: 'site', peso: 3, rotulo: 'Viu a página de preços ou de produto' },
+    { id: 'telefone_retornou', canal: 'telefone', peso: 3, rotulo: 'Retornou a ligação' },
+    { id: 'evento_participou', canal: 'presencial', peso: 2,
+      rotulo: 'Participou de evento, webinar ou visita' },
+    { id: 'mudou_de_cargo', canal: 'outro', peso: 2, rotulo: 'Mudou de cargo ou de empresa' },
+    { id: 'empresa_movimento', canal: 'outro', peso: 1,
+      rotulo: 'Movimento na empresa (notícia, obra, contratação)' },
+    { id: 'indicacao', canal: 'outro', peso: 3, rotulo: 'Nos indicou para alguém' },
+    { id: 'outro', canal: 'outro', peso: 1, rotulo: 'Outro sinal' }
+  ];
+
+  /* Acima disto o sinal conta como forte. Está aqui, e não espalhado em
+     comparações pelo código, porque é o número que decide o alerta. */
+  const PESO_SINAL_FORTE = 2;
+
+  /* Janela do "agora". Depois de 21 dias um sinal já não diz nada sobre hoje —
+     é o mesmo horizonte que a Idade da Evidência usa para virar Risco. */
+  const JANELA_SINAL = 21;
+
   const FAIXAS_EVIDENCIA = [
     { max: 7, rotulo: 'Ativo', classe: 'ok' },
     { max: 14, rotulo: 'Atenção', classe: 'warn' },
@@ -611,6 +692,7 @@
     CATEGORIAS_FONTE, FONTES_PADRAO, RECORRENCIAS, PRAZO_CONTRATO_PADRAO, UNIDADES,
     PERFIS, PERFIS_MOBILIZADORES, ESTADOS_INSIGHT,
     RELACOES_CONTA, TIPOS_OPORTUNIDADE, FECHAMENTO_REUNIAO,
-    CANAIS, FAIXAS_EVIDENCIA, ATIVIDADES_QUE_NAO_CONTAM
+    CANAIS, FAIXAS_EVIDENCIA, ATIVIDADES_QUE_NAO_CONTAM,
+    CANAIS_SINAL, TIPOS_SINAL, PESO_SINAL_FORTE, JANELA_SINAL
   };
 })(window);
