@@ -87,6 +87,53 @@ aba e cartões em `src/views.js`; ações em `src/app.js`; colheita em
 
 ---
 
+## 0-C. Links rastreados — v185, 18/09
+
+**Correção de um erro meu:** eu disse que `src/documentos.js` já era a base
+para rastrear abertura de documento. Não é. Aquele arquivo é um LEITOR — abre
+docx/xlsx/pdf que o vendedor sobe, para extrair texto e mandar à IA. E
+`src/arquivos.js` guarda anexos em IndexedDB, só neste aparelho, sem
+compartilhar com ninguém. **Nunca houve documento que o cliente pudesse
+abrir**, logo não havia o que rastrear.
+
+O caminho certo não é hospedar arquivo (nem deve ser: a proposta já mora no
+Drive do vendedor). É **guardar um desvio**. A ponte do Linked Helper já é
+infraestrutura pública com chave por empresa, então ela ganhou três rotas:
+
+| rota | chave | para quê |
+|---|---|---|
+| `POST /links` | leitura | emite o desvio, devolve `{id, url}` |
+| `GET /r/<id>` | nenhuma | anota a passagem e redireciona (é o cliente que clica) |
+| `GET/POST /aberturas` | leitura | o app busca e dá baixa |
+
+**Um link por PESSOA**, e é o ponto todo: com um link só para a conta,
+"alguém abriu" não diz quem. Com um por pessoa, a proposta aberta por quem
+nunca esteve numa reunião é o comitê de compra aparecendo sozinho.
+
+Decisões que valem lembrar:
+
+- O id do link é aleatório e **não carrega o UUID da empresa**. O link vai
+  para fora; espalhar o identificador desmontaria por fora o isolamento que a
+  ponte constrói por dentro.
+- **Nenhum IP é guardado.** Sabemos de quem é o link porque nós o emitimos.
+- Verificador de link de caixa corporativa é marcado como robô e descartado no
+  app (não na ponte: lá o registro fica, para conferir quando a lista errar).
+- `302` e não `301`: o permanente ficaria no cache do navegador e a VOLTA ao
+  documento — o sinal mais forte da lista — nunca mais chegaria.
+- A baixa vem depois de gravar, nunca antes.
+- 90 dias de validade, contra 30 dos leads: proposta fica mais tempo em cima
+  da mesa, e link morto no meio da negociação é o app estragando a venda.
+
+**Falta publicar:** `ponte/worker.js` no Cloudflare (agora com 336 linhas —
+confira com Ctrl+F por `chaveDoLink`). Enquanto não publicar, o botão "Link
+rastreado" responde que a ponte ainda não conhece links rastreados.
+
+**Onde está:** rotas em `ponte/worker.js`; cliente em `src/integracoes.js`
+(`emitirLink`, `aberturas`, `colherAberturas`); diálogo em `src/app.js`
+(`linkRastreado`); botão na aba Sinais em `src/views.js`.
+
+---
+
 ## 1. O bloqueio principal: o banco está atrás do aplicativo
 
 **Sintoma que apareceu:** um perfil do Chrome mostrava 41 negociações, outro

@@ -2120,6 +2120,15 @@
      filtro ligado. A família do risco é a que já significa atenção nesta
      tela — mesmo quando a notícia é boa. */
   const CLASSE_DO_PESO = { 1: '', 2: 'warn', 3: 'risk' };
+  /* De onde o sinal veio, em português de gente. Importa porque muda o peso
+     do que está escrito: "o app viu" e "alguém anotou" não são a mesma
+     afirmação, e três semanas depois é essa diferença que decide se dá para
+     confiar na linha. */
+  const ORIGEM_DO_SINAL = {
+    manual: 'anotado à mão',
+    whatsapp: 'capturado do WhatsApp',
+    ponte: 'capturado pela ponte'
+  };
   const ROTULO_DO_PESO = { 1: 'atenção', 2: 'interesse', 3: 'intenção' };
 
   function tipoDoSinal(s) {
@@ -2161,7 +2170,7 @@
         '<span class="small muted">' + U.data(s.quando) + (s.hora ? ' ' + esc(s.hora) : '') + '</span>' +
       '</div>' +
       '<p class="tiny muted" style="margin:6px 0 0">' + esc(quemNoSinal(s)) +
-        (s.fonte && s.fonte !== 'manual' ? ' · capturado do ' + esc(s.fonte) : ' · anotado à mão') + '</p>' +
+        ' · ' + esc(ORIGEM_DO_SINAL[s.fonte] || ORIGEM_DO_SINAL.manual) + '</p>' +
       (s.detalhe ? '<p class="small" style="margin:8px 0 0">' + esc(s.detalhe) + '</p>' : '') +
       '<div class="row" style="margin-top:8px">' + acoes + '<span class="espaco"></span>' +
         '<button class="btn ghost mini" onclick="App.excluirSinal(\'' + s.id + '\')">Excluir</button></div>' +
@@ -2186,7 +2195,11 @@
     const lista = Store.sinaisDaOportunidade ? Store.sinaisDaOportunidade(op) : [];
     const topo = '<div class="card"><div class="row"><h2 style="margin:0">Sinais do comprador</h2>' +
       '<span class="espaco"></span>' +
-      (op.desfecho ? '' : '<button class="btn mini" onclick="App.registrarSinal(\'' + op.id + '\')">Registrar sinal</button>') +
+      (op.desfecho ? ''
+        : '<button class="btn ghost mini" onclick="App.linkRastreado(\'' + op.id + '\')" ' +
+          'data-ajuda-titulo="Link rastreado" ' +
+          'data-ajuda="Um endereço que passa pela ponte antes de levar ao seu documento. O arquivo continua onde está; o que você ganha é saber quem abriu, e quando voltou.">Link rastreado</button>' +
+          '<button class="btn mini" onclick="App.registrarSinal(\'' + op.id + '\')">Registrar sinal</button>') +
       '</div>' +
       '<p class="tiny muted" style="margin:8px 0 0">O que ele fez sozinho: respondeu, abriu, voltou, mudou de cargo. ' +
       'Nada aqui mexe no IAD nem na Idade da Evidência — de propósito. Um clique não é um problema reconhecido.</p></div>';

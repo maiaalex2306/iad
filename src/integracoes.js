@@ -446,6 +446,132 @@
     });
   }
 
+  /* ---------------- links rastreados ----------------
+
+     A ponte ganhou duas rotas com caminho próprio (`/links` e `/aberturas`),
+     e o endereço guardado aqui é a raiz dela. Juntar os dois exige cuidado
+     com o que a pessoa digitou: quem colou o endereço com barra no fim e quem
+     colou sem precisam chegar no mesmo lugar, e quem colou com `?token=`
+     grudado não pode acabar com o caminho depois da interrogação. */
+  function enderecoDoCaminho(caminho) {
+    const c = config();
+    if (!c.url) return '';
+    const base = c.url.replace(/[?#].*$/, '').replace(/\/+$/, '');
+    const empresa = empresaAtual();
+    const partes = [];
+    if (c.token) partes.push('token=' + encodeURIComponent(c.token));
+    if (empresa) partes.push('e=' + encodeURIComponent(empresa));
+    return base + caminho + (partes.length ? '?' + partes.join('&') : '');
+  }
+
+  function requisitarCaminho(caminho, metodo, corpo) {
+    const c = config();
+    if (!c.url) return Promise.reject(new Error('Configure o endereço da ponte em Configuração → Linked Helper.'));
+    if (!empresaAtual()) {
+      return Promise.reject(new Error('Escolha uma empresa antes. Cada empresa tem o próprio balde na ponte.'));
+    }
+    return fetch(enderecoDoCaminho(caminho), {
+      method: metodo,
+      headers: corpo ? { 'content-type': 'application/json' } : undefined,
+      body: corpo ? JSON.stringify(corpo) : undefined
+    }).then(function (resposta) {
+      if (resposta.status === 401) throw new Error('A ponte recusou a chave de leitura.');
+      if (resposta.status === 404) {
+        throw new Error('Esta ponte ainda não conhece links rastreados. ' +
+          'Publique o ponte/worker.js novo no Cloudflare.');
+      }
+      if (!resposta.ok) throw new Error('A ponte respondeu ' + resposta.status + '.');
+      return resposta.json();
+    });
+  }
+
+  /* Emite o desvio. O documento continua onde está — no Drive, no anexo, onde
+     o vendedor quiser. O que volta daqui é um endereço que passa pela ponte
+     antes de chegar lá, e é essa passagem que vira sinal. */
+  function emitirLink(dados) {
+    const destino = String((dados && dados.destino) || '').trim();
+    if (!/^https?:\/\//i.test(destino)) {
+      return Promise.reject(new Error('O endereço do documento precisa começar com http:// ou https://.'));
+    }
+    return requisitarCaminho('/links', 'POST', {
+      destino: destino,
+      titulo: (dados.titulo || '').slice(0, 200),
+      contatoId: dados.contatoId || '',
+      oportunidadeId: dados.oportunidadeId || ''
+    });
+  }
+
+  function aberturas() {
+    return requisitarCaminho('/aberturas', 'GET').then(function (corpo) {
+      return (corpo && corpo.itens) || [];
+    });
+  }
+
+  function marcarAberturas(ids) {
+    if (!ids || !ids.length) return Promise.resolve();
+    return requisitarCaminho('/aberturas', 'POST', { marcar: ids }).catch(function (e) {
+      console.warn('Não consegui dar baixa nas aberturas:', e);
+    });
+  }
+
+  /* A colheita: abertura vira sinal, e a ponte esquece o que já virou.
+
+     A primeira abertura de um link é `documento_abriu`; da segunda em diante é
+     `documento_reabriu`, que é o sinal mais forte que este app reconhece —
+     ninguém volta a uma proposta por acaso.
+
+     Abertura marcada como robô é descartada aqui e não na ponte: guardá-la lá
+     custa quase nada e, no dia em que a lista de robôs errar, o registro ainda
+     existe para se conferir. Perder na origem seria perder para sempre. */
+  function colherAberturas() {
+    const S = global.IADStore;
+    if (!S || !S.registrarSinalUnico) return Promise.resolve(0);
+
+    return aberturas().then(function (lista) {
+      if (!lista.length) return 0;
+      const antes = (S.sinais() || []).length;
+      const jaVistos = {};
+      (S.sinais() || []).forEach(function (sin) {
+        if (sin.linkId) jaVistos[sin.linkId] = true;
+      });
+
+      /* Ordenar por data antes de classificar, e não confiar na ordem em que
+         a ponte devolve: as chaves do KV são identificadores aleatórios, e a
+         listagem sai na ordem do nome, não na do relógio. Sem isto, a segunda
+         abertura podia chegar primeiro e ganhar o rótulo de "abriu", enquanto
+         a primeira virava "voltou ao documento" — a leitura exatamente ao
+         contrário, no sinal que este app trata como o mais forte de todos. */
+      const emOrdem = lista.filter(function (a) { return !a.robo; }).sort(function (x, y) {
+        return String(x.quando || '').localeCompare(String(y.quando || ''));
+      });
+
+      emOrdem.forEach(function (a) {
+        const repetida = jaVistos[a.linkId];
+        jaVistos[a.linkId] = true;
+        const quando = String(a.quando || '');
+        S.registrarSinalUnico({
+          fonte: 'ponte',
+          externoId: a.id,
+          tipo: repetida ? 'documento_reabriu' : 'documento_abriu',
+          contatoId: a.contatoId || null,
+          oportunidadeId: a.oportunidadeId || null,
+          quando: quando.slice(0, 10),
+          hora: quando.slice(11, 16),
+          titulo: (repetida ? 'Voltou ao documento' : 'Abriu o documento') +
+            (a.titulo ? ': ' + a.titulo : ''),
+          linkId: a.linkId || ''
+        });
+      });
+
+      /* A baixa vem depois de gravar, nunca antes: se a ponte esquecesse
+         primeiro e o app falhasse em seguida, a abertura sumiria dos dois
+         lados. */
+      return marcarAberturas(lista.map(function (a) { return a.id; })).then(function () {
+        return (S.sinais() || []).length - antes;
+      });
+    });
+  }
+
   function buscar() {
     return requisitar('GET').then(function (corpo) {
       const lista = Array.isArray(corpo) ? corpo : (corpo.itens || corpo.items || corpo.data || []);
@@ -504,6 +630,7 @@
   }
 
   global.IADIntegracoes = { config, salvarConfig, configurada, porQueSemPonte, buscar, marcarProcessados, testarPonte,
+    emitirLink, aberturas, marcarAberturas, colherAberturas,
     normalizar, empresaAtual, nomeDaEmpresaAtual, enderecoDeEntrada,
     buscarNoBalde, marcarNoBalde };
 })(window);

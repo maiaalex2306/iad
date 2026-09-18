@@ -65,6 +65,12 @@ create table if not exists public.sinais (
   fonte           text not null default 'manual',
   externo_id      text not null default '',
 
+  -- Qual link rastreado gerou o sinal. Campo próprio, e não enfiado no
+  -- `detalhe`: detalhe é texto que a pessoa lê. É também o que diz se a
+  -- próxima abertura do mesmo link é uma volta ao documento — o sinal mais
+  -- forte que este app reconhece.
+  link_id         text not null default '',
+
   -- Preenchido quando uma PESSOA decide que aquele sinal comprova uma
   -- decisão. A promoção é humana de propósito: quem diz que abrir a proposta
   -- três vezes comprova Prioridade conhece a conta, e nenhuma tabela de pesos
@@ -105,7 +111,7 @@ create policy sinais_tudo on public.sinais for all
 -- ------------------------------------------------------------------
 -- 4. CONFERÊNCIA
 --
--- Depois de rodar, esta consulta deve devolver uma linha com 18 colunas e a
+-- Depois de rodar, esta consulta deve devolver uma linha com 19 colunas e a
 -- política ligada. Se devolver zero, algo acima não rodou.
 -- ------------------------------------------------------------------
 select

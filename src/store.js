@@ -1041,6 +1041,11 @@
       /* Id do registro no sistema de origem. É o que impede o mesmo sinal de
          entrar duas vezes quando a captura automática roda de novo. */
       externoId: '',
+      /* Qual link rastreado gerou este sinal. Campo próprio, e não enfiado no
+         `detalhe`: detalhe é texto que a pessoa lê, e identificador ali vira
+         "LINK1" aparecendo na tela do vendedor. Também é o que diz se a
+         próxima abertura do mesmo link é uma volta. */
+      linkId: '',
       /* Preenchido só quando alguém promove o sinal a evidência. */
       eventoId: '',
       criadoEm: hoje()

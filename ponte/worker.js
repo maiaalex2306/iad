@@ -39,6 +39,34 @@
      endereço  https://ponte-iad.SEU-SUBDOMINIO.workers.dev/
      chave     CHAVE_LEITURA
    (o identificador da empresa o app preenche sozinho)
+
+   ---------- a ponte também conta quem abriu o documento ----------
+
+   O IAD não hospeda arquivo nenhum, e não deve: a proposta está no Drive do
+   vendedor, onde ele já a guarda. O que faltava não era hospedagem — era
+   saber QUANDO o cliente abriu, que é o sinal de compra mais forte que existe
+   em B2B e o único capaz de revelar o comitê que ninguém apresentou.
+
+   Então a ponte guarda um desvio, não o arquivo:
+
+     POST /links?token=CHAVE_LEITURA&e=EMPRESA   {destino, titulo, contatoId,
+                                                  oportunidadeId}
+          → devolve {id, url}. A url é o endereço curto para mandar ao cliente.
+
+     GET  /r/ID                                   público, sem chave nenhuma.
+          Anota a passagem e redireciona para o destino. Quem clica é o
+          cliente, e cliente não tem credencial.
+
+     GET  /aberturas?token=…&e=…                  o app busca o que chegou.
+     POST /aberturas?token=…&e=…  {marcar:[ids]}  e dá baixa no que virou sinal.
+
+   O identificador do link é aleatório e NÃO carrega o identificador da
+   empresa: o link vai para fora, e espalhar o UUID da empresa desmontaria por
+   fora o isolamento que este arquivo constrói por dentro.
+
+   Nenhuma abertura guarda IP ou qualquer coisa que identifique a máquina.
+   Sabemos de quem é o link porque nós mesmos o emitimos para uma pessoa;
+   coletar mais do que isso seria dado pessoal novo sem necessidade.
 */
 
 /* O identificador vem da URL, que é lugar de dado público e de dado inventado.
@@ -60,6 +88,63 @@ function chaveDoLead(bucket, id) {
 
 function prefixoDoBalde(bucket) {
   return bucket ? 'e:' + bucket + ':lead:' : 'lead:';
+}
+
+/* ---------- links rastreados ----------
+
+   O IAD não hospeda documento nenhum: a proposta está no Drive do vendedor,
+   no anexo do e-mail, onde ele quiser. O que faltava não era hospedagem — era
+   saber QUANDO o cliente abriu. Então a ponte não guarda o arquivo: guarda um
+   desvio. O vendedor manda o link da ponte, a ponte anota a passagem e joga a
+   pessoa no endereço de verdade.
+
+   O identificador do link NÃO carrega o identificador da empresa, e isto é
+   deliberado. O link vai para fora — para o prospect, para a caixa de e-mail
+   dele, para quem ele encaminhar. O UUID da empresa é o que separa um balde
+   do outro nesta ponte; espalhá-lo por aí desmontaria por fora o isolamento
+   que o resto do arquivo constrói. Então o identificador é aleatório e a
+   empresa mora DENTRO do valor, onde só a ponte lê.
+
+   O que NÃO é guardado, de propósito: IP e qualquer coisa que identifique a
+   máquina. Sabemos de quem é o link porque nós mesmos o emitimos para uma
+   pessoa; não precisamos coletar nada além disso, e coletar seria dado
+   pessoal novo sem necessidade nenhuma. */
+function chaveDoLink(id) { return 'link:' + id; }
+
+function chaveDaAbertura(bucket, id) {
+  return bucket ? 'e:' + bucket + ':abertura:' + id : 'abertura:' + id;
+}
+
+function prefixoDasAberturas(bucket) {
+  return bucket ? 'e:' + bucket + ':abertura:' : 'abertura:';
+}
+
+/* 22 caracteres de alfabeto seguro para URL: curto o bastante para caber numa
+   mensagem de WhatsApp sem virar duas linhas, e longo o bastante para não ser
+   adivinhado por quem tentar. */
+function novoIdDeLink() {
+  const alfabeto = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const bytes = crypto.getRandomValues(new Uint8Array(22));
+  let saida = '';
+  for (const b of bytes) saida += alfabeto[b % alfabeto.length];
+  return saida;
+}
+
+/* O verificador de links da caixa de e-mail corporativa abre tudo o que passa
+   por ela, antes de a pessoa ver. Contar isso como abertura faria o app
+   anunciar "é a hora" por causa de um antivírus — o jeito mais rápido de
+   ensinar alguém a não confiar no alerta.
+
+   Não dá para reconhecer todos, e não é o objetivo: os que se anunciam saem
+   daqui marcados, e o app não os transforma em sinal. O que escapar vira um
+   sinal a mais, que é bem menos grave do que perder as aberturas de verdade
+   por excesso de zelo. */
+const ROBOS = /bot|crawler|spider|preview|scanner|monitor|curl|wget|python-requests|okhttp|headless|slackbot|whatsapp|facebookexternalhit|bingpreview|proofpoint|mimecast|barracuda|symantec|forcepoint/i;
+
+function pareceRobo(requisicao) {
+  const ua = String(requisicao.headers.get('user-agent') || '');
+  if (!ua) return true;             /* sem user-agent nenhum não é navegador */
+  return ROBOS.test(ua);
 }
 
 const CORS = {
@@ -114,6 +199,38 @@ export default {
 
     if (requisicao.method === 'OPTIONS') return new Response(null, { headers: CORS });
 
+    /* 0. O desvio. Público, sem chave nenhuma — quem clica é o cliente, e o
+          cliente não tem credencial. É a única rota assim, e por isso ela não
+          lê nem escreve nada além da própria passagem. */
+    const desvio = url.pathname.match(/^\/r\/([A-Za-z0-9]{8,64})$/);
+    if (desvio && (requisicao.method === 'GET' || requisicao.method === 'HEAD')) {
+      const bruto = await ambiente.LEADS.get(chaveDoLink(desvio[1]));
+      if (!bruto) return new Response('Link não encontrado ou expirado.', { status: 404 });
+      const link = JSON.parse(bruto);
+
+      /* HEAD é conferência de link, não leitura: responder o desvio sem
+         registrar nada é o certo. */
+      if (requisicao.method === 'GET') {
+        const id = crypto.randomUUID();
+        await ambiente.LEADS.put(
+          chaveDaAbertura(link.empresa, id),
+          JSON.stringify({
+            id: id, linkId: link.id, titulo: link.titulo || '',
+            contatoId: link.contatoId || '', oportunidadeId: link.oportunidadeId || '',
+            quando: new Date().toISOString(),
+            robo: pareceRobo(requisicao)
+          }),
+          { expirationTtl: 60 * 60 * 24 * 30 }
+        );
+      }
+
+      /* 302 e não 301: o navegador guarda o permanente para sempre e as
+         aberturas seguintes nunca mais chegariam aqui — perderíamos
+         exatamente a informação de que a pessoa VOLTOU ao documento, que é o
+         sinal mais forte da lista. */
+      return new Response(null, { status: 302, headers: { Location: link.destino, 'Cache-Control': 'no-store' } });
+    }
+
     /* 1. Entrada: o Linked Helper posta aqui, com a chave de escrita na URL. */
     if (requisicao.method === 'POST' && url.searchParams.get('k')) {
       const esperada = chavesDoBalde(balde(url), ambiente).escrita;
@@ -145,6 +262,70 @@ export default {
     /* Daqui para baixo é o app, que usa a chave de leitura. */
     const token = url.searchParams.get('token') || requisicao.headers.get('x-token');
     if (token !== chavesDoBalde(balde(url), ambiente).leitura) return json({ erro: 'não autorizado' }, 401);
+
+    /* 1-B. Emitir um link rastreado.
+
+       Autorizado pela chave de LEITURA porque é ela que o app carrega — a de
+       escrita mora dentro da campanha do Linked Helper e não passa por aqui.
+       Quem tem a de leitura já enxerga o balde inteiro da empresa, então isto
+       não abre porta nova para ler nada.
+
+       O que ela passa a permitir é criar um desvio no domínio da ponte, e
+       isso merece ser dito em voz alta: é um redirecionador, e redirecionador
+       serve para disfarçar destino. O destino é limitado a http(s) e quem
+       emite já é de dentro — a mesma pessoa poderia mandar o link ruim
+       direto, sem a ponte. O que a ponte acrescenta é o disfarce do domínio,
+       e o domínio aqui é um `workers.dev`, que não empresta confiança a
+       ninguém. */
+    if (url.pathname === '/links' && requisicao.method === 'POST') {
+      const corpo = await requisicao.json().catch(() => ({}));
+      const destino = String(corpo.destino || '').trim();
+      if (!/^https?:\/\//i.test(destino)) return json({ erro: 'destino precisa ser um endereço http ou https' }, 400);
+      if (destino.length > 2000) return json({ erro: 'destino longo demais' }, 400);
+
+      const id = novoIdDeLink();
+      const link = {
+        id: id, empresa: balde(url), destino: destino,
+        titulo: String(corpo.titulo || '').slice(0, 200),
+        contatoId: String(corpo.contatoId || '').slice(0, 64),
+        oportunidadeId: String(corpo.oportunidadeId || '').slice(0, 64),
+        criadoEm: new Date().toISOString()
+      };
+      /* 90 dias, e não os 30 dos leads: proposta fica em cima da mesa do
+         cliente por mais tempo do que uma resposta de campanha, e link morto
+         no meio da negociação é o app estragando a venda que ele existe para
+         ajudar. */
+      await ambiente.LEADS.put(chaveDoLink(id), JSON.stringify(link), { expirationTtl: 60 * 60 * 24 * 90 });
+
+      return json({ ok: true, id: id, url: url.origin + '/r/' + id });
+    }
+
+    /* 1-C. As aberturas que ainda não viraram sinal. Mesmo desenho dos leads:
+            o app busca, transforma, e avisa o que já processou. */
+    if (url.pathname === '/aberturas' && requisicao.method === 'GET') {
+      const prefixo = prefixoDasAberturas(balde(url));
+      const chaves = [];
+      let cursor;
+      do {
+        const pagina = await ambiente.LEADS.list({ prefix: prefixo, limit: 1000, cursor });
+        chaves.push(...pagina.keys);
+        cursor = pagina.list_complete ? null : pagina.cursor;
+      } while (cursor && chaves.length < 500);
+
+      const itens = await Promise.all(chaves.slice(0, 500).map(async (k) => {
+        const bruto = await ambiente.LEADS.get(k.name);
+        return bruto ? JSON.parse(bruto) : null;
+      }));
+      return json({ itens: itens.filter(Boolean) });
+    }
+
+    if (url.pathname === '/aberturas' && requisicao.method === 'POST') {
+      const corpo = await requisicao.json().catch(() => ({}));
+      const ids = Array.isArray(corpo.marcar) ? corpo.marcar : [];
+      const bucket = balde(url);
+      await Promise.all(ids.map((id) => ambiente.LEADS.delete(chaveDaAbertura(bucket, id))));
+      return json({ ok: true, removidos: ids.length });
+    }
 
     /* 2. Leitura: o app busca o que chegou e ainda não foi processado. */
     if (requisicao.method === 'GET') {

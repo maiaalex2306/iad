@@ -666,6 +666,9 @@
     return N.puxar().then(function () {
       semServidor = '';
       render();
+      /* Depois de baixar, e não antes: a colheita grava sinal, e sinal gravado
+         antes do puxar seria apagado pela coleção que desce do servidor. */
+      colherAberturas();
     }, function (e) {
       semServidor = (e && e.message) || 'não consegui falar com o servidor';
       render();
@@ -1663,6 +1666,93 @@
         });
         render();
       });
+    },
+
+    /* ---------------- link rastreado ----------------
+
+       O IAD não hospeda documento nenhum, e não é para hospedar: a proposta
+       está no Drive do vendedor, no anexo, onde ele já a guarda. O que
+       faltava não era hospedagem — era saber quando o cliente abriu.
+
+       Então o app pede à ponte um desvio: um endereço que passa por ela e
+       segue para o documento de verdade. Quem recebe clica e vê o arquivo de
+       sempre; nós ficamos sabendo que ele viu, e a volta ao documento — o
+       sinal mais forte da lista — aparece sozinha.
+
+       Um link por PESSOA, e é o ponto todo: com um link só para a conta
+       inteira, "alguém abriu" não diz quem, e Consenso e Stakeholders
+       continuam sendo palpite. Com um por pessoa, a proposta aberta por
+       alguém que nunca esteve numa reunião é a descoberta do comitê de compra
+       que ninguém apresentou. */
+    linkRastreado: function (opId, contatoId) {
+      const op = Store.oportunidade(opId);
+      const Integ = global.IADIntegracoes;
+      if (!op || !Integ) return;
+
+      const motivo = Integ.porQueSemPonte();
+      if (motivo) {
+        global.alert(App.porQueSemPonteLH() ||
+          'Configure a ponte em Configuração → Linked Helper antes de criar links rastreados.');
+        return;
+      }
+
+      const pessoas = (op.contaId ? Store.contatosDaConta(op.contaId) : []).map(function (c) {
+        return { valor: c.id, rotulo: c.nome + (c.papel ? ' · ' + c.papel : '') };
+      });
+      if (!pessoas.length) {
+        global.alert('Cadastre ao menos um contato nesta empresa antes: o link é por pessoa, ' +
+          'e é isso que faz a abertura dizer QUEM abriu.');
+        return;
+      }
+
+      U.formulario('Link rastreado do documento', [
+        { id: 'aviso', tipo: 'aviso',
+          rotulo: 'O documento continua onde está. O que este link faz é passar pela ponte antes ' +
+            'de levar até ele — e avisar você quando alguém abrir.' },
+        { id: 'destino', rotulo: 'Endereço do documento', tipo: 'text',
+          dica: 'Cole o link do Drive, do SharePoint, do site — o que você mandaria mesmo.' },
+        { id: 'titulo', rotulo: 'Como chamar isto', tipo: 'text',
+          dica: 'Aparece no sinal quando alguém abrir. "Proposta v2" basta.' },
+        { id: 'contatoId', rotulo: 'Para quem é este link', tipo: 'select', opcoes: pessoas,
+          dica: 'Um link por pessoa. É o que transforma "alguém abriu" em "o diretor financeiro abriu".' }
+      ], { destino: '', titulo: 'Proposta — ' + op.titulo, contatoId: contatoId || pessoas[0].valor },
+      function (d) {
+        Integ.emitirLink({
+          destino: d.destino, titulo: d.titulo,
+          contatoId: d.contatoId, oportunidadeId: op.id
+        }).then(function (r) {
+          const quem = Store.contato(d.contatoId);
+          U.ficha('Link pronto',
+            '<p class="small">Mande este endereço para <strong>' +
+            U.esc((quem && quem.nome) || 'o contato') + '</strong> no lugar do link original:</p>' +
+            '<p style="margin:12px 0"><input class="campo-link" readonly value="' + U.esc(r.url) + '" ' +
+            'style="width:100%;padding:10px;font-family:monospace;font-size:.85rem"></p>' +
+            '<p class="tiny muted">Vale por 90 dias. Cada abertura vira um sinal aqui — e a segunda ' +
+            'vez que a pessoa abrir aparece como "voltou ao documento", que é o sinal mais forte ' +
+            'que este app reconhece.</p>',
+            '<button class="btn alt" type="button" onclick="App.copiarLink(this)">Copiar</button>');
+        }, function (e) {
+          global.alert(e.message);
+        });
+      });
+    },
+
+    copiarLink: function (botao) {
+      const caixa = botao.closest('dialog').querySelector('.campo-link');
+      if (!caixa) return;
+      caixa.select();
+      const pronto = function () { botao.textContent = 'Copiado'; };
+      /* A área de transferência moderna falha em contexto não seguro e em
+         alguns navegadores embutidos. O execCommand é feio e funciona nesses
+         casos — e aqui a alternativa a ele é o vendedor não conseguir mandar
+         o link. */
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(caixa.value).then(pronto, function () {
+          try { document.execCommand('copy'); pronto(); } catch (e) { /* o texto está selecionado */ }
+        });
+        return;
+      }
+      try { document.execCommand('copy'); pronto(); } catch (e) { /* o texto está selecionado */ }
     },
 
     /* A única porta entre observação e régua, e ela pede a dimensão de
@@ -5664,6 +5754,22 @@
     if (!W || !W.colherSinais) return;
     try { W.colherSinais(); }
     catch (e) { console.warn('Não consegui colher sinais do WhatsApp:', e); }
+  }
+
+  /* As aberturas de documento, do mesmo jeito: junto do que já acontece, sem
+     botão. Falha em silêncio de propósito — ponte fora do ar não pode
+     atrapalhar quem só quer ver a carteira, e o que não foi colhido hoje
+     continua lá amanhã: a baixa só acontece depois de gravar. */
+  function colherAberturas() {
+    const Integ = global.IADIntegracoes;
+    if (!Integ || !Integ.colherAberturas || Integ.porQueSemPonte()) return Promise.resolve(0);
+    return Integ.colherAberturas().then(function (n) {
+      if (n) render();
+      return n;
+    }, function (e) {
+      console.warn('Não consegui buscar as aberturas na ponte:', e);
+      return 0;
+    });
   }
 
   App.recarregarConversas = function () {
