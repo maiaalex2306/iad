@@ -5,8 +5,8 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v190**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v190, o aparelho
+Publicado agora: **v191**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v191, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -361,6 +361,102 @@ evidência e **criou a tarefa**; os três de ruído foram marcados sem chamada; 
 **Onde está:** `analisarEmailsNovos`, `analisarUm`, `tarefaDoCompromisso` e
 `ehRuido` em `src/app.js`; `marcarEmailAnalisado` e `contarTentativaDeAnalise`
 em `src/nuvem.js`; `linhaDaAnalise` em `src/views.js`.
+
+---
+
+## 0-I. O transporte: o IAD entra na caixa e manda a resposta — v191, 18/09
+
+Faltava a última peça, e era a única que toca a senha: a Edge Function que
+**entra na caixa de e-mail de verdade**. Sem ela, tudo o que veio antes — as
+tabelas, o casamento, a análise, a tela — estava pronto para mensagens que
+ninguém trazia.
+
+**`nuvem/funcoes/email/` — dois arquivos, de propósito:**
+
+- **`mime.ts` (288 linhas)** é puro: não toca em rede, não toca em senha, não
+  usa nada do Deno. É onde mora toda a parte chata do e-mail — cabeçalho
+  dobrado, acento em `=?UTF-8?B?`, multipart, anexo que não pode virar corpo,
+  HTML para texto, o corte da conversa citada. Sendo puro, ele é **testável
+  fora do servidor**: **26 testes, 26 passando**. É a parte onde os erros se
+  escondem, e agora é a parte com prova.
+- **`index.ts` (500 linhas)** é o transporte: IMAP por TLS, SMTP por TLS,
+  **zero bibliotecas**. Biblioteca de e-mail é alvo clássico exatamente porque
+  quem a comprometesse passaria a ler a correspondência de todos os clientes
+  de todo mundo que a usa. IMAP e SMTP são protocolos de linha, antigos e
+  chatos — não difíceis.
+
+**A leitura não mexe na caixa.** `BODY.PEEK`, e mais nada: não marca como lido,
+não apaga, não move. Se um defeito aqui estragasse a caixa de e-mail de alguém,
+isso não se desfaz.
+
+**Testado contra um servidor de mentira** que fala IMAP e SMTP dentro da
+memória — **33 testes, 33 passando**. Três deles existem porque o código
+original falhava neles:
+
+1. **A armadilha.** Um e-mail cujo *corpo* contém a linha `a3 OK FETCH
+   completed` e um `* 99 FETCH (UID 999 BODY[] {12}` logo abaixo. Com marcas
+   fixas (`a1`, `a2`, `a3`), bastaria um cliente escrever isso — falando de
+   log, o que acontece sozinho — para a leitura parar no meio e o resto da
+   caixa virar lixo, e para uma mensagem inventada entrar no banco. Agora a
+   marca de cada comando é **sorteada na conexão**, e o corpo é pulado pelo
+   **tamanho em bytes** antes de qualquer decisão sobre a mensagem.
+2. **O EHLO de várias linhas.** Resposta de SMTP tem linhas do meio com traço
+   (`250-SIZE`) e só a última com espaço (`250 HELP`). Parar na primeira
+   deixava o resto no socket, e essas linhas apareciam como resposta do
+   comando seguinte — o envio falharia só em servidor que anuncia muita
+   extensão, que é o Gmail.
+3. **A data do IMAP.** `INTERNALDATE` vem como `18-Sep-2026 14:22:01 +0000`,
+   com traços que não são padrão em lugar nenhum. `new Date` disso devolve
+   `NaN` em boa parte dos motores, e `toISOString()` de `NaN` **lança** — uma
+   caixa inteira falharia por causa de um formato de data.
+
+Mais duas travas que não vieram de teste: nada atravessa uma quebra de linha
+para dentro de um cabeçalho (é como um formulário de contato vira disparador de
+spam), e o acumulado do socket é examinado só pelo **fim** — reexaminar a caixa
+inteira a cada 8 KB fazia a leitura de mil mensagens virar trabalho quadrático,
+e a função estouraria o tempo com o servidor respondendo normalmente.
+
+**A senha nunca sai de lá.** Não volta na resposta, não vai para log, não entra
+em mensagem de erro — e há um teste que confere exatamente isso. O que volta é
+o que o servidor de e-mail disse, cortado em 300 caracteres.
+
+**Duas portas, nenhuma aberta:** gente logada roda **só as caixas dela**; o
+agendador roda todas, provando com o segredo `EMAIL_SEGREDO_CRON`. Sem prova
+nenhuma, 401. Um endereço público que lê caixa de e-mail a pedido de qualquer
+um seria o convite para alguém de fora mandar a função trabalhar — e, no
+limite, descobrir quais endereços existem.
+
+**No app:** `App.buscarEmails` e a linha **"Buscar agora"** na aba E-mail. São
+duas linhas ali, e elas dizem coisas diferentes: a de cima responde *chegou?*
+(o transporte) e a de baixo, *foi lido?* (o assistente). Abrir a aba busca
+sozinho, e **escrever uma mensagem dispara o envio na hora** — esperar o
+próximo ciclo depois de clicar em Enviar é a diferença entre o app parecer que
+funciona e o app parecer que engoliu a mensagem. Foi exatamente o que aconteceu
+com a colheita das aberturas, que só rodava no boot.
+
+**`nuvem/correcao-20-caixa-que-envia.sql`** — a coluna `envia`. Pedido do
+Alexandre, e ele tem razão: ele recebe cliente no `@biosolvit.com` e no
+`@biopartners.com.br`, e a resposta sai sempre pelo segundo. Sem a coluna, o
+app pegava a primeira caixa que encontrasse — e a resposta sairia do endereço
+errado, que é o tipo de erro que só se descobre quando o cliente estranha.
+**Conferido no navegador:** com a caixa do biosolvit em primeiro na lista, a
+mensagem saiu com `de: alexandre.maia@biopartners.com.br`.
+
+**`nuvem/CAIXA-DE-EMAIL.md`** — o passo a passo inteiro: senha de aplicativo
+(uma por endereço), publicação dos dois arquivos, os quatro segredos, o
+agendamento com `pg_cron` de 5 em 5 minutos, e a tabela de "o que aparece / o
+que é" para cada falha.
+
+**Falta o Alexandre fazer, nesta ordem:**
+
+1. Rodar `nuvem/correcao-20-caixa-que-envia.sql` (as 18 e 19 antes, se ainda
+   não rodou).
+2. Criar a senha de aplicativo **do `@biosolvit.com` também** — cada endereço
+   tem a sua, e ler a segunda caixa exige a credencial dela.
+3. Publicar a função `email` com os **dois** arquivos e criar os segredos.
+4. Agendar com o `pg_cron`.
+5. Ligar as duas caixas em **Minha caixa**, marcando **Envia** só na do
+   biopartners.
 
 ---
 

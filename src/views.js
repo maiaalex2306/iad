@@ -2461,6 +2461,42 @@
       '<span class="tiny muted">' + esc(texto) + '</span><span class="espaco"></span>' + botao + '</div>';
   }
 
+  /* Duas linhas, duas coisas diferentes, e confundi-las é o que faz a pessoa
+     clicar no botão errado quando some um e-mail:
+
+       o transporte → o servidor de e-mail. Traz o que chegou, manda o que
+                      está na fila. É a Edge Function, com a senha.
+       a análise    → o assistente. Lê o que já chegou e vira evidência,
+                      nota e tarefa.
+
+     Se o transporte não rodou, não há o que analisar; se ele rodou e a
+     análise não, as mensagens estão na tela sem virar nada. A linha de cima
+     responde "chegou?" e a de baixo, "foi lido?". */
+  function linhaDoTransporte() {
+    const A = global.App;
+    if (!A || !A.estadoDoTransporte) return '';
+    const t = A.estadoDoTransporte() || {};
+    const ocupado = A.buscandoEmails && A.buscandoEmails();
+    const botao = '<button class="btn ghost mini"' + (ocupado ? ' disabled' : '') +
+      ' onclick="App.buscarEmails()" ' +
+      'data-ajuda-titulo="Buscar agora" ' +
+      'data-ajuda="Faz o servidor entrar na sua caixa, baixar o que chegou e mandar o que está na fila. Ele já faz isso sozinho de tempo em tempo; este botão só adianta.">' +
+      (ocupado ? 'Buscando…' : 'Buscar agora') + '</button>';
+
+    if (t.erro) {
+      return '<div class="aviso" style="margin-top:10px">A caixa não respondeu: ' + esc(t.erro) +
+        '<div class="row" style="margin-top:8px">' + botao + '</div></div>';
+    }
+    const texto = t.quando
+      ? 'Caixa conferida às ' + String(t.quando).slice(11, 16) +
+        (t.recebidos || t.enviados
+          ? ' — ' + (t.recebidos || 0) + ' recebido(s) e ' + (t.enviados || 0) + ' enviado(s).'
+          : ' — nada novo.')
+      : 'O servidor busca a sua caixa de tempo em tempo e ao abrir esta aba.';
+    return '<div class="row" style="margin-top:10px;gap:8px">' +
+      '<span class="tiny muted">' + esc(texto) + '</span><span class="espaco"></span>' + botao + '</div>';
+  }
+
   function abaEmail(op) {
     const M = global.IADEmail;
     const topo = function (miolo) {
@@ -2474,7 +2510,7 @@
         '</div>' +
         '<p class="tiny muted" style="margin:8px 0 0">O que foi escrito de verdade, dos dois lados. ' +
         'O assistente lê o que chega e transforma em evidência; o que ficou para você fazer vira tarefa.</p>' +
-        linhaDaAnalise() + '</div>' + miolo;
+        linhaDoTransporte() + linhaDaAnalise() + '</div>' + miolo;
     };
 
     if (!M || !M.disponivel()) {
@@ -2484,12 +2520,25 @@
     if (M.erro()) return topo('<div class="aviso">' + esc(M.erro()) + '</div>');
 
     const minhas = M.conversasDaOportunidade(op.id);
-    const semCaixa = !M.minhasCaixas().length;
+    const caixas = M.minhasCaixas() || [];
 
-    const aviso = semCaixa
+    /* As caixas ligadas, com a que envia marcada. Uma linha, e ela responde a
+       pergunta que aparece na primeira vez que alguém recebe em dois
+       endereços: "de qual sai a resposta?". */
+    const aviso = !caixas.length
       ? '<div class="aviso" style="margin-bottom:10px">Você ainda não ligou uma caixa de e-mail. ' +
         'Sem isso o IAD não recebe nem manda nada — use <strong>Minha caixa</strong> acima.</div>'
-      : '';
+      : '<p class="tiny muted" style="margin:0 0 10px">Caixas ligadas: ' +
+        caixas.map(function (c) {
+          return '<button class="pill' + (c.envia !== false ? ' ok' : '') + ' mini" ' +
+            'onclick="App.configurarEmail(\'' + esc(c.endereco) + '\')">' + esc(c.endereco) +
+            (c.envia !== false ? ' · envia' : ' · só recebe') + '</button>';
+        }).join(' ') +
+        ' <button class="btn ghost mini" onclick="App.configurarEmail()">+ Ligar outra</button></p>' +
+        (caixas.filter(function (c) { return c.envia !== false; }).length
+          ? ''
+          : '<div class="aviso" style="margin-bottom:10px">Nenhuma caixa está marcada para enviar. ' +
+            'Clique numa delas acima e marque qual manda os e-mails.</div>');
 
     if (!minhas.length) {
       return topo(aviso +

@@ -997,6 +997,7 @@
       V.definirAbaCockpit(aba);
       render();
       if (aba === 'sinais') colherAberturas();
+      if (aba === 'email') buscarNoServidorDeEmail(false);
     },
 
     /* A Configuração virou abas, e o diagnóstico foi para a última delas.
@@ -1700,10 +1701,21 @@
       if (!op || op.desfecho) return;
       if (!Mail || !Mail.disponivel()) { alert('Entre com a sua conta da nuvem antes.'); return; }
 
-      const caixa = (Mail.minhasCaixas() || []).filter(function (c) { return c.ativo !== false; })[0];
+      /* A caixa que ENVIA, não a primeira que existir.
+
+         Vendedor recebe cliente em mais de um endereço e manda por um só — o
+         Alexandre recebe no biosolvit e no biopartners, e a saída é sempre
+         pelo biopartners. Pegar a primeira da lista faria a resposta ao
+         cliente sair do endereço errado, que é o tipo de erro que só se
+         descobre quando o cliente estranha. */
+      const ativas = (Mail.minhasCaixas() || []).filter(function (c) { return c.ativo !== false; });
+      const caixa = ativas.filter(function (c) { return c.envia !== false; })[0];
       if (!caixa) {
-        alert('Ligue a sua caixa de e-mail antes, em "Minha caixa".\n\n' +
-          'Sem ela o IAD não tem de onde mandar.');
+        alert(ativas.length
+          ? 'Nenhuma das suas caixas está marcada para enviar.\n\n' +
+            'Abra "Minha caixa" e marque qual delas manda os e-mails.'
+          : 'Ligue a sua caixa de e-mail antes, em "Minha caixa".\n\n' +
+            'Sem ela o IAD não tem de onde mandar.');
         return;
       }
 
@@ -1765,7 +1777,10 @@
           estado: 'fila'
         }).then(function () {
           Mail.esquecer();
-          pintarEmails(true);
+          /* Mandar AGORA, e não no próximo ciclo. A mensagem já está gravada:
+             se esta chamada falhar, ela continua na fila e sai sozinha depois
+             — o clique adianta, não é do que o envio depende. */
+          buscarNoServidorDeEmail(false);
           alert('Na fila.\n\nO servidor manda em instantes e a mensagem aparece aqui como enviada. ' +
             'Se der erro, ela fica marcada com o motivo em vez de sumir.');
         }, function (e) {
@@ -1777,9 +1792,12 @@
     /* A caixa da pessoa. Aqui NÃO se digita senha: o campo não existe, de
        propósito. A senha de aplicativo mora num segredo da Edge Function, e
        navegador que nunca a viu é navegador que não pode vazá-la. */
-    configurarEmail: function () {
+    configurarEmail: function (enderecoAlvo) {
       if (!Mail || !Mail.disponivel()) { alert('Entre com a sua conta da nuvem antes.'); return; }
-      const minha = (Mail.minhasCaixas() || [])[0] || null;
+      const todas = Mail.minhasCaixas() || [];
+      const minha = enderecoAlvo
+        ? todas.filter(function (c) { return c.endereco === enderecoAlvo; })[0] || null
+        : null;
       const eu = A.atual() || {};
 
       U.formulario('Minha caixa de e-mail', [
@@ -1794,13 +1812,20 @@
                    { valor: 'outro', rotulo: 'Outro (servidor próprio)' }] },
         { id: 'imap_servidor', rotulo: 'Servidor de entrada (IMAP)', tipo: 'text', largura: 'metade',
           dica: 'Só para "Outro". Gmail e Outlook o app já sabe.' },
-        { id: 'smtp_servidor', rotulo: 'Servidor de saída (SMTP)', tipo: 'text', largura: 'metade' }
+        { id: 'smtp_servidor', rotulo: 'Servidor de saída (SMTP)', tipo: 'text', largura: 'metade' },
+        /* Receber é de todas as caixas; mandar é de uma. Quem recebe cliente
+           em dois endereços quase sempre responde por um só. */
+        { id: 'envia', rotulo: 'Esta caixa também ENVIA?', tipo: 'select',
+          opcoes: [{ valor: 'sim', rotulo: 'Sim — a saída sai por ela' },
+                   { valor: 'nao', rotulo: 'Não — só recebe' }],
+          dica: 'Marque "Sim" em uma só. As outras continuam recebendo normalmente.' }
       ], {
         endereco: (minha && minha.endereco) || eu.email || '',
         nome_exibicao: (minha && minha.nome_exibicao) || eu.nome || '',
         provedor: (minha && minha.provedor) || 'gmail',
         imap_servidor: (minha && minha.imap_servidor) || '',
-        smtp_servidor: (minha && minha.smtp_servidor) || ''
+        smtp_servidor: (minha && minha.smtp_servidor) || '',
+        envia: (minha && minha.envia === false) ? 'nao' : 'sim'
       }, function (d) {
         const endereco = String(d.endereco || '').trim().toLowerCase();
         if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(endereco)) {
@@ -1814,8 +1839,22 @@
           nome_exibicao: (d.nome_exibicao || '').trim(),
           provedor: d.provedor || 'gmail',
           imap_servidor: (d.imap_servidor || '').trim(),
-          smtp_servidor: (d.smtp_servidor || '').trim()
+          smtp_servidor: (d.smtp_servidor || '').trim(),
+          envia: d.envia !== 'nao'
         }).then(function () {
+          /* Uma que envia, e só uma. Marcar a segunda desmarca a primeira
+             sozinho — deixar duas marcadas faria a escolha do remetente
+             depender da ordem em que o servidor devolveu as linhas, que é o
+             mesmo que sortear. */
+          if (d.envia !== 'nao') {
+            (Mail.minhasCaixas() || []).forEach(function (c) {
+              if (c.endereco !== endereco && c.envia !== false) {
+                global.IADNuvem.salvarCaixaDeEmail({
+                  tenant_id: c.tenant_id, dono_id: c.dono_id, endereco: c.endereco, envia: false
+                }).catch(function () {});
+              }
+            });
+          }
           pintarEmails(true);
           alert('Caixa registrada.\n\nFalta a senha de aplicativo, que você gera na sua conta ' +
             'e eu guardo no segredo do servidor. Me avise quando tiver gerado — ela não se manda ' +
@@ -6189,6 +6228,71 @@
   }
 
   App.recarregarEmails = function () { pintarEmails(true); };
+
+  /* ---------------- o transporte ----------------
+
+     `pintarEmails` lê a TABELA. Quem fala com o servidor de e-mail de verdade
+     é a Edge Function: ela entra por IMAP, baixa o que chegou e manda o que
+     está na fila. Só ela tem a senha, e é por isso que o navegador não faz
+     isso sozinho.
+
+     Ela roda sozinha de tempo em tempo. Este botão existe porque esperar o
+     próximo ciclo depois de clicar em "Enviar" é a diferença entre o app
+     parecer que funciona e o app parecer que engoliu a mensagem — foi
+     exatamente o que aconteceu com a colheita das aberturas, que só rodava no
+     boot e fazia o clique do cliente parecer perdido. */
+  let buscando = false;
+  let transporte = { quando: '', recebidos: 0, enviados: 0, erro: '' };
+
+  App.estadoDoTransporte = function () { return transporte; };
+
+  function buscarNoServidorDeEmail(comAviso) {
+    if (!Mail || !Mail.disponivel()) {
+      if (comAviso) alert('Entre com a sua conta da nuvem antes.');
+      return Promise.resolve(null);
+    }
+    if (buscando) return Promise.resolve(null);
+    buscando = true;
+    if (comAviso) render();
+
+    return global.IADNuvem.chamarFuncao('email', {}).then(function (r) {
+      buscando = false;
+      const linhas = (r && r.caixas) || [];
+      transporte = {
+        quando: new Date().toISOString(),
+        recebidos: linhas.reduce(function (t, l) { return t + (l.recebidos || 0); }, 0),
+        enviados: linhas.reduce(function (t, l) { return t + (l.enviados || 0); }, 0),
+        /* O erro da caixa é o da caixa, e aparece com o endereço junto: com
+           duas caixas ligadas, "falhou" sem dizer qual manda a pessoa mexer na
+           configuração certa por sorte. */
+        erro: linhas.filter(function (l) { return l.erro || l.erroAoReceber; })
+          .map(function (l) { return l.caixa + ': ' + (l.erroAoReceber || l.erro); }).join(' · ')
+      };
+      Mail.esquecer();
+      return pintarEmails(true).then(function () {
+        if (comAviso) {
+          alert(transporte.recebidos + ' e-mail(s) novo(s) e ' + transporte.enviados +
+            ' enviado(s).' + (transporte.erro ? '\n\n' + transporte.erro : ''));
+        }
+        return transporte;
+      });
+    }, function (e) {
+      buscando = false;
+      transporte = { quando: new Date().toISOString(), recebidos: 0, enviados: 0,
+        erro: (e && e.message) || 'falhou' };
+      console.warn('Não consegui falar com o servidor de e-mail:', e);
+      if (comAviso) {
+        alert('Não consegui falar com o servidor de e-mail: ' + transporte.erro +
+          '\n\nSe a mensagem fala em EMAIL_SENHAS, falta guardar a senha de aplicativo ' +
+          'desta caixa no segredo da função — veja nuvem/EMAIL.md.');
+      }
+      render();
+      return null;
+    });
+  }
+
+  App.buscarEmails = function () { buscarNoServidorDeEmail(true); };
+  App.buscandoEmails = function () { return buscando; };
 
   function analisandoAgora() { return analisando; }
 

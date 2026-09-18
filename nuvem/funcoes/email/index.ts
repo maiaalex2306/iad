@@ -1,0 +1,500 @@
+/* Supabase Edge Function — email
+   ------------------------------------------------------------------
+   O transporte. É a única parte do sistema que toca a senha da caixa de
+   e-mail, e por isso ela é a mais conservadora de todas:
+
+   1. A senha nunca sai daqui. Não volta na resposta, não vai para log, não
+      entra em mensagem de erro. Erro de autenticação diz "a caixa recusou a
+      senha", e ponto.
+   2. Sem biblioteca. Toda dependência que entrasse aqui passaria a poder ler
+      a correspondência de todos os clientes no dia em que fosse comprometida,
+      e biblioteca de e-mail é alvo clássico exatamente por isso. IMAP e SMTP
+      são protocolos de linha, antigos e chatos — não difíceis.
+   3. Cada caixa é uma conexão isolada. Uma que falha não derruba as outras, e
+      o motivo fica escrito na linha dela.
+
+   O que ela faz, nesta ordem:
+
+     receber  → conecta por IMAP, baixa o que chegou depois do último UID
+                conhecido, grava em `emails` e avança a marca da caixa.
+     enviar   → pega o que está em `emails` com estado 'fila', manda por SMTP
+                e marca 'enviada' — ou 'erro' com o motivo, nunca sumindo.
+
+   O segredo EMAIL_SENHAS é um mapa, no mesmo formato do CHAVES_POR_EMPRESA da
+   ponte:
+
+     {"alexandre.maia@biopartners.com.br":"as16letrasjuntas"}
+
+   Endereço que não estiver no mapa é ignorado com a caixa marcada
+   'sem-credencial' — em vez de tentar, falhar e parecer defeito. */
+
+import { lerMensagem, dataISO } from './mime.ts';
+
+const URL_SUPABASE = Deno.env.get('SUPABASE_URL') || '';
+/* Formatos de chave novo e antigo, na mesma ordem das outras funções: o
+   painel do Supabase recusa segredos com nome começando em SUPABASE_, então
+   IAD_CHAVE_SECRETA é a saída manual. */
+const SERVICE = Deno.env.get('IAD_CHAVE_SECRETA') ||
+  Deno.env.get('SUPABASE_SECRET_KEY') ||
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+const ANON = Deno.env.get('IAD_CHAVE_PUBLICA') ||
+  Deno.env.get('SUPABASE_PUBLISHABLE_KEY') ||
+  Deno.env.get('SUPABASE_ANON_KEY') || '';
+/* Quem agenda a rodada automática prova que é ela com este segredo. Sem ele
+   definido, só chamada de gente logada roda — que é o padrão seguro: um
+   endereço público que lê caixa de e-mail sem prova nenhuma seria o convite
+   para alguém de fora mandar a função trabalhar de graça. */
+const SEGREDO_CRON = Deno.env.get('EMAIL_SEGREDO_CRON') || '';
+
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, content-type, x-cron',
+  'Access-Control-Allow-Methods': 'POST,OPTIONS'
+};
+const json = (dados: unknown, status = 200) =>
+  new Response(JSON.stringify(dados), {
+    status, headers: { 'content-type': 'application/json; charset=utf-8', ...CORS }
+  });
+
+function senhas(): Record<string, string> {
+  try { return JSON.parse(Deno.env.get('EMAIL_SENHAS') || '{}'); } catch (_e) { return {}; }
+}
+
+/* Gmail e Outlook têm endereço conhecido, e obrigar cada vendedor a saber o
+   nome do servidor de IMAP da própria empresa é obrigar a não usar. */
+const SERVIDORES: Record<string, { imap: string; smtp: string }> = {
+  gmail: { imap: 'imap.gmail.com', smtp: 'smtp.gmail.com' },
+  outlook: { imap: 'outlook.office365.com', smtp: 'smtp.office365.com' }
+};
+
+interface Caixa {
+  id: string; tenant_id: string; dono_id: string; endereco: string; nome_exibicao: string;
+  provedor: string; imap_servidor: string; imap_porta: number;
+  smtp_servidor: string; smtp_porta: number; ultimo_uid: number; pastas: string;
+  ativo: boolean; envia: boolean;
+}
+
+/* ---------------- banco ---------------- */
+async function consultar(caminho: string): Promise<any[]> {
+  const r = await fetch(URL_SUPABASE + '/rest/v1/' + caminho, {
+    headers: { apikey: SERVICE, authorization: 'Bearer ' + SERVICE }
+  });
+  if (!r.ok) {
+    console.error('consulta falhou', caminho, r.status);
+    return [];
+  }
+  return await r.json().catch(() => []);
+}
+
+async function alterar(caminho: string, corpo: unknown): Promise<boolean> {
+  const r = await fetch(URL_SUPABASE + '/rest/v1/' + caminho, {
+    method: 'PATCH',
+    headers: {
+      apikey: SERVICE, authorization: 'Bearer ' + SERVICE,
+      'content-type': 'application/json', prefer: 'return=minimal'
+    },
+    body: JSON.stringify(corpo)
+  });
+  if (!r.ok) console.error('patch falhou', caminho, r.status, await r.text().catch(() => ''));
+  return r.ok;
+}
+
+/* resolution=ignore-duplicates porque o Message-ID é a chave primária: a mesma
+   mensagem reentregue pelo servidor vira no-op, não erro. */
+async function gravarEmails(linhas: Record<string, unknown>[]): Promise<number> {
+  if (!linhas.length) return 0;
+  const r = await fetch(URL_SUPABASE + '/rest/v1/emails', {
+    method: 'POST',
+    headers: {
+      apikey: SERVICE, authorization: 'Bearer ' + SERVICE,
+      'content-type': 'application/json',
+      prefer: 'resolution=ignore-duplicates,return=minimal'
+    },
+    body: JSON.stringify(linhas)
+  });
+  if (!r.ok) {
+    console.error('gravar e-mails falhou', r.status, await r.text().catch(() => ''));
+    return 0;
+  }
+  return linhas.length;
+}
+
+/* ---------------- conversa de linha sobre TLS ----------------
+
+   IMAP e SMTP são os dois um diálogo de linhas terminadas em CRLF. O que muda
+   é a gramática. Isto aqui é o encanamento comum: escrever uma linha, ler até
+   achar o que se espera, e nunca ficar esperando para sempre. */
+class Conversa {
+  private conexao: Deno.TlsConn;
+  private leitor: ReadableStreamDefaultReader<Uint8Array>;
+  /* O acumulado como texto latin-1, e não como bytes: aqui ainda não se sabe o
+     charset de nada, e decodificar como UTF-8 cedo demais corromperia o corpo
+     antes de o MIME dizer como lê-lo. Um byte é um caractere, sempre; o
+     mime.ts decodifica depois, com a informação certa. */
+  private buffer = '';
+  private fimDoTempo: number;
+
+  constructor(conexao: Deno.TlsConn, segundos = 30) {
+    this.conexao = conexao;
+    this.leitor = conexao.readable.getReader();
+    this.fimDoTempo = Date.now() + segundos * 1000;
+  }
+
+  async escrever(texto: string): Promise<void> {
+    const w = this.conexao.writable.getWriter();
+    try { await w.write(new TextEncoder().encode(texto)); } finally { w.releaseLock(); }
+  }
+
+  /* Lê mais bytes do socket. O prazo existe porque servidor de e-mail que para
+     de responder no meio deixaria a função presa até o tempo da plataforma
+     acabar — e aí a caixa inteira falharia sem motivo escrito. */
+  private async mais(): Promise<boolean> {
+    if (Date.now() > this.fimDoTempo) throw new Error('o servidor demorou demais');
+    const { value, done } = await this.leitor.read();
+    if (done || !value) return false;
+    /* Em pedaços: fromCharCode com um array de megabytes estoura a pilha. */
+    for (let i = 0; i < value.length; i += 8192) {
+      this.buffer += String.fromCharCode(...value.subarray(i, i + 8192));
+    }
+    return true;
+  }
+
+  /* Só o fim do que chegou. A linha que encerra a resposta é sempre a última,
+     e reexaminar a caixa inteira a cada pedaço de 8 KB transformaria a leitura
+     de mil mensagens em trabalho quadrático — a função estouraria o tempo com
+     o servidor respondendo normalmente. O corte cai depois de uma quebra de
+     linha para o `^` das expressões continuar significando começo de linha de
+     verdade. */
+  private cauda(): string {
+    if (this.buffer.length <= 16384) return this.buffer;
+    const corte = this.buffer.indexOf('\n', this.buffer.length - 16384);
+    return corte < 0 ? '' : this.buffer.slice(corte + 1);
+  }
+
+  async lerAte(pronto: (texto: string) => boolean): Promise<string> {
+    while (!pronto(this.cauda())) {
+      if (!(await this.mais())) break;
+    }
+    const t = this.buffer;
+    this.buffer = '';
+    return t;
+  }
+
+  fechar() {
+    try { this.leitor.releaseLock(); } catch (_e) { /* já solto */ }
+    try { this.conexao.close(); } catch (_e) { /* já fechada */ }
+  }
+}
+
+/* Cabeçalho não aceita quebra de linha: quem conseguisse pôr um \r\n no
+   assunto ou no destinatário escreveria cabeçalhos próprios na mensagem — o
+   jeito clássico de transformar um formulário de contato em disparador de
+   spam. Aqui os valores vêm do banco do próprio cliente, mas a regra vale
+   igual: nada do que veio de fora atravessa uma quebra de linha. */
+function umaLinha(valor: unknown): string {
+  return String(valor == null ? '' : valor).replace(/[\r\n]+/g, ' ').trim();
+}
+
+/* INTERNALDATE vem como "18-Sep-2026 14:22:01 +0000". Os traços no meio da
+   data não são padrão em lugar nenhum, e `new Date` de texto que ele não
+   entende devolve NaN — que viraria exceção na hora de gravar e derrubaria a
+   caixa inteira por causa de um formato de data. */
+function dataDoServidor(valor?: string): string {
+  if (!valor) return '';
+  return dataISO(valor.replace(/^(\d{1,2})-(\w{3})-(\d{4})/, '$1 $2 $3'));
+}
+
+/* ---------------- IMAP ----------------
+
+   Só o necessário: entrar, escolher a pasta, baixar o que é novo. Nada de
+   marcar como lido (BODY.PEEK), nada de apagar, nada de mover. Esta função lê
+   a caixa do vendedor e não mexe nela — se ela mexesse, um defeito aqui
+   estragaria a caixa de e-mail de alguém, e isso não se desfaz. */
+async function lerCaixa(caixa: Caixa, senha: string): Promise<{ mensagens: any[]; maiorUid: number }> {
+  const servidor = caixa.imap_servidor || SERVIDORES[caixa.provedor]?.imap || '';
+  if (!servidor) throw new Error('não sei o servidor de entrada desta caixa');
+
+  const conexao = await Deno.connectTls({ hostname: servidor, port: caixa.imap_porta || 993 });
+  const c = new Conversa(conexao, 40);
+  const mensagens: any[] = [];
+  let maiorUid = Number(caixa.ultimo_uid) || 0;
+
+  try {
+    await c.lerAte((t) => /^\* OK/m.test(t));
+
+    /* A marca de cada comando é sorteada na conexão. Ela é o que diz "a
+       resposta acabou", e corpo de e-mail é texto arbitrário: com marcas fixas
+       (a1, a2, a3), bastaria alguém mandar uma mensagem contendo uma linha
+       "a3 OK" para a leitura parar no meio e o resto da caixa virar lixo. Com
+       seis caracteres sorteados, ninguém tem como escrever a marca de hoje. */
+    const sorteio = 'x' + Math.random().toString(36).slice(2, 8);
+    const comando = async (passo: string, linha: string) => {
+      const marca = sorteio + passo;
+      await c.escrever(marca + ' ' + linha + '\r\n');
+      const re = new RegExp('^' + marca + ' (OK|NO|BAD)', 'm');
+      const resposta = await c.lerAte((t) => re.test(t));
+      const m = re.exec(resposta);
+      if (!m || m[1] !== 'OK') {
+        /* A mensagem do servidor entra, a senha nunca. */
+        const motivo = (new RegExp('^' + marca + ' (?:NO|BAD) (.*)$', 'm').exec(resposta) || [])[1] || '';
+        throw new Error(motivo.slice(0, 160) || 'o servidor recusou ' + linha.split(' ')[0]);
+      }
+      return resposta;
+    };
+
+    /* A senha vai entre aspas porque senha de aplicativo do Google não tem
+       caracteres especiais, mas caixa de servidor próprio tem. */
+    await comando('1', 'LOGIN "' + caixa.endereco.replace(/"/g, '') + '" "' + senha.replace(/"/g, '\\"') + '"');
+
+    const pasta = (caixa.pastas || 'INBOX').split(',')[0].trim() || 'INBOX';
+    await comando('2', 'SELECT "' + pasta.replace(/"/g, '') + '"');
+
+    /* `n:*` devolve a última mensagem mesmo quando n é maior que todos os UIDs
+       — é a pegadinha clássica do IMAP. Por isso o filtro por UID acontece
+       depois, na leitura, e não se confia no servidor para fazê-lo. */
+    const desde = maiorUid + 1;
+    const bruto = await comando('3', 'UID FETCH ' + desde + ':* (UID INTERNALDATE BODY.PEEK[])');
+
+    /* Cada item vem como `* N FETCH (UID u INTERNALDATE "..." BODY[] {tamanho}`
+       seguido de exatamente `tamanho` bytes. É o tamanho que manda: procurar o
+       fim por texto quebraria em qualquer mensagem que contivesse `)` — ou
+       seja, em quase todas. */
+    const re = /\* \d+ FETCH \(([^)]*?)BODY\[\] \{(\d+)\}\r?\n/g;
+    let achado: RegExpExecArray | null;
+    while ((achado = re.exec(bruto)) !== null) {
+      const meta = achado[1] || '';
+      const tamanho = parseInt(achado[2] || '0', 10);
+      const inicio = achado.index + achado[0].length;
+      /* Pular o corpo ANTES de qualquer decisão sobre a mensagem. Se a busca
+         continuasse de onde o cabeçalho acabou, o texto do e-mail entraria na
+         varredura e um `* 2 FETCH (` escrito dentro dele seria lido como
+         mensagem — o que acontece sozinho em qualquer conversa sobre e-mail. */
+      re.lastIndex = inicio + tamanho;
+      const cru = bruto.slice(inicio, inicio + tamanho);
+
+      const uid = parseInt((/UID (\d+)/.exec(meta) || ['', '0'])[1] || '0', 10) || 0;
+      if (uid <= (Number(caixa.ultimo_uid) || 0)) continue;
+      if (uid > maiorUid) maiorUid = uid;
+
+      const bytes = new Uint8Array(cru.length);
+      for (let i = 0; i < cru.length; i++) bytes[i] = cru.charCodeAt(i) & 0xff;
+      const texto = new TextDecoder('latin1').decode(bytes);
+
+      const m = lerMensagem(texto, dataDoServidor((/INTERNALDATE "([^"]+)"/.exec(meta) || [])[1]));
+      if (!m.id) continue;   /* sem Message-ID não há chave e não há dedução */
+      mensagens.push({ ...m, uid });
+    }
+
+    await c.escrever(sorteio + '4 LOGOUT\r\n');
+  } finally {
+    c.fechar();
+  }
+
+  return { mensagens, maiorUid };
+}
+
+/* ---------------- SMTP ----------------
+
+   Porta 465, TLS desde o primeiro byte. A alternativa (587 com STARTTLS)
+   começa a conversa em claro e depois negocia — mais código e uma janela a
+   mais para errar. Gmail e Outlook aceitam as duas; aqui vale a simples. */
+async function mandar(caixa: Caixa, senha: string, msg: any): Promise<void> {
+  const servidor = caixa.smtp_servidor || SERVIDORES[caixa.provedor]?.smtp || '';
+  if (!servidor) throw new Error('não sei o servidor de saída desta caixa');
+
+  const conexao = await Deno.connectTls({ hostname: servidor, port: caixa.smtp_porta === 587 ? 587 : 465 });
+  const c = new Conversa(conexao, 40);
+
+  /* Resposta de SMTP pode ter várias linhas: as do meio vêm com traço
+     (`250-SIZE`) e só a última com espaço (`250 HELP`). Parar na primeira
+     deixaria o resto das linhas no socket, e elas apareceriam como resposta do
+     comando seguinte — o erro que faz o envio falhar só em servidor que
+     anuncia muita extensão. Por isso o espaço na expressão. */
+  const fala = async (linha: string | null, esperado: string) => {
+    if (linha !== null) await c.escrever(linha + '\r\n');
+    const re = new RegExp('^' + esperado + ' ', 'm');
+    const ruim = /^[45]\d\d /m;
+    const r = await c.lerAte((t) => re.test(t) || ruim.test(t));
+    if (!re.test(r)) {
+      const erro = (/^[45]\d\d (.*)$/m.exec(r) || [])[1] || 'recusado';
+      throw new Error(erro.slice(0, 160));
+    }
+    return r;
+  };
+
+  try {
+    await fala(null, '220');
+    await fala('EHLO iad', '250');
+    await fala('AUTH LOGIN', '334');
+    await fala(btoa(caixa.endereco), '334');
+    await fala(btoa(senha), '235');
+    await fala('MAIL FROM:<' + caixa.endereco + '>', '250');
+    for (const destino of String(msg.para || '').split(',').map((x: string) => x.trim()).filter(Boolean)) {
+      await fala('RCPT TO:<' + destino + '>', '250');
+    }
+    await fala('DATA', '354');
+    await c.escrever(montar(caixa, msg) + '\r\n.\r\n');
+    await fala(null, '250');
+    await c.escrever('QUIT\r\n');
+  } finally {
+    c.fechar();
+  }
+}
+
+/* A mensagem, montada à mão.
+
+   O Message-ID é o que o app já gerou e gravou — não se inventa outro aqui. É
+   ele que a resposta do cliente devolve em In-Reply-To, e é por isso que ela
+   volta amarrada à negociação sem ninguém adivinhar. Trocá-lo no envio
+   quebraria justamente isso.
+
+   O corpo vai em base64 porque SMTP tem limite de linha e uma linha com um
+   ponto sozinho encerra a mensagem no meio. Base64 não tem linha longa nem
+   ponto solto — e resolve o acento de graça. */
+function montar(caixa: Caixa, msg: any): string {
+  const nome = String(caixa.nome_exibicao || '').replace(/["\\]/g, '');
+  const de = nome ? '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(nome))) + '?= <' + caixa.endereco + '>'
+    : caixa.endereco;
+  const assunto = '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(umaLinha(msg.assunto)))) + '?=';
+  const corpo = btoa(unescape(encodeURIComponent(String(msg.corpo || '')))).replace(/(.{76})/g, '$1\r\n');
+
+  const cabecalhos = [
+    'From: ' + de,
+    'To: ' + umaLinha(msg.para),
+    'Subject: ' + assunto,
+    'Message-ID: ' + umaLinha(msg.id),
+    'Date: ' + new Date().toUTCString(),
+    'MIME-Version: 1.0',
+    'Content-Type: text/plain; charset="UTF-8"',
+    'Content-Transfer-Encoding: base64'
+  ];
+  if (msg.responde_a) {
+    const respondeA = umaLinha(msg.responde_a);
+    const thread = umaLinha(msg.thread);
+    cabecalhos.push('In-Reply-To: ' + respondeA);
+    /* References carrega a cadeia; sem ela o cliente de e-mail do outro lado
+       abre uma conversa nova e a thread se parte em duas na caixa DELE. */
+    cabecalhos.push('References: ' + (thread && thread !== respondeA
+      ? thread + ' ' + respondeA : respondeA));
+  }
+  return cabecalhos.join('\r\n') + '\r\n\r\n' + corpo;
+}
+
+/* ---------------- a rodada ---------------- */
+async function rodar(donoId?: string): Promise<Record<string, unknown>> {
+  const mapa = senhas();
+  const filtro = donoId ? '&dono_id=eq.' + encodeURIComponent(donoId) : '';
+  const caixas = await consultar('caixas_email?select=*&ativo=is.true' + filtro) as Caixa[];
+
+  const relatorio: Record<string, unknown>[] = [];
+
+  for (const caixa of caixas) {
+    const senha = mapa[String(caixa.endereco || '').toLowerCase()] || mapa[caixa.endereco] || '';
+    if (!senha) {
+      await alterar('caixas_email?id=eq.' + caixa.id,
+        { estado: 'sem-credencial', erro: 'Falta a senha desta caixa no segredo EMAIL_SENHAS.' });
+      relatorio.push({ caixa: caixa.endereco, erro: 'sem credencial' });
+      continue;
+    }
+
+    const linha: Record<string, unknown> = { caixa: caixa.endereco, recebidos: 0, enviados: 0 };
+
+    /* Receber e enviar são independentes de propósito: IMAP fora do ar não
+       pode impedir a resposta que o vendedor já escreveu de sair. */
+    try {
+      const { mensagens, maiorUid } = await lerCaixa(caixa, senha);
+      if (mensagens.length) {
+        linha.recebidos = await gravarEmails(mensagens.map((m) => ({
+          id: m.id, tenant_id: caixa.tenant_id, dono_id: caixa.dono_id, caixa: caixa.endereco,
+          direcao: enderecoIgual(m.de, caixa.endereco) ? 'saida' : 'entrada',
+          de: m.de, de_nome: m.deNome, para: m.para, copia: m.copia,
+          assunto: m.assunto, corpo: m.corpo, thread: m.thread, responde_a: m.respondeA,
+          enviada_em: m.quando || new Date().toISOString(), estado: 'recebida'
+        })));
+      }
+      if (maiorUid > (Number(caixa.ultimo_uid) || 0)) {
+        await alterar('caixas_email?id=eq.' + caixa.id,
+          { ultimo_uid: maiorUid, estado: 'ok', erro: '', ultima_leitura: new Date().toISOString() });
+      } else {
+        await alterar('caixas_email?id=eq.' + caixa.id,
+          { estado: 'ok', erro: '', ultima_leitura: new Date().toISOString() });
+      }
+    } catch (e) {
+      const motivo = String((e as Error).message || 'falhou').slice(0, 300);
+      linha.erroAoReceber = motivo;
+      await alterar('caixas_email?id=eq.' + caixa.id, { estado: 'erro', erro: motivo });
+    }
+
+    if (caixa.envia !== false) {
+      const fila = await consultar('emails?select=*&estado=eq.fila&caixa=eq.' +
+        encodeURIComponent(caixa.endereco) + '&order=enviada_em.asc&limit=20');
+      for (const msg of fila) {
+        try {
+          await mandar(caixa, senha, msg);
+          await alterar('emails?id=eq.' + encodeURIComponent(msg.id),
+            { estado: 'enviada', erro: '', enviada_em: new Date().toISOString() });
+          linha.enviados = (linha.enviados as number) + 1;
+        } catch (e) {
+          /* Marcada com o motivo, nunca sumindo: mensagem que o vendedor
+             escreveu e desapareceu sem explicação é a pior falha possível
+             aqui. Ela fica na tela, em vermelho, com o que o servidor disse. */
+          await alterar('emails?id=eq.' + encodeURIComponent(msg.id),
+            { estado: 'erro', erro: String((e as Error).message || 'falhou').slice(0, 300) });
+        }
+      }
+    }
+
+    relatorio.push(linha);
+  }
+
+  return { ok: true, caixas: relatorio };
+}
+
+function enderecoIgual(a: string, b: string): boolean {
+  return String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+}
+
+/* ---------------- quem pode chamar ----------------
+
+   Duas portas, e nenhuma aberta:
+
+     gente logada  → roda só as caixas dela.
+     o agendador   → com o segredo EMAIL_SEGREDO_CRON, roda todas.
+
+   Sem prova nenhuma não roda. Um endereço público que lê caixa de e-mail a
+   pedido de qualquer um seria o convite para alguém de fora mandar a função
+   trabalhar — e, no limite, para descobrir quais endereços existem. */
+async function quemChamou(req: Request): Promise<{ ok: boolean; donoId?: string; erro?: string }> {
+  if (SEGREDO_CRON && req.headers.get('x-cron') === SEGREDO_CRON) return { ok: true };
+
+  const auth = req.headers.get('authorization') || '';
+  const token = auth.replace(/^Bearer\s+/i, '');
+  if (!token || token === ANON) return { ok: false, erro: 'entre na sua conta antes' };
+
+  const r = await fetch(URL_SUPABASE + '/auth/v1/user', {
+    headers: { apikey: ANON, authorization: 'Bearer ' + token }
+  });
+  if (!r.ok) return { ok: false, erro: 'sessão inválida' };
+  const u = await r.json().catch(() => null);
+  if (!u || !u.id) return { ok: false, erro: 'sessão inválida' };
+  return { ok: true, donoId: u.id };
+}
+
+Deno.serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
+  if (req.method !== 'POST') return json({ erro: 'método não suportado' }, 405);
+  if (!URL_SUPABASE || !SERVICE) return json({ erro: 'a função está sem configuração de banco' }, 503);
+  if (!Deno.env.get('EMAIL_SENHAS')) {
+    return json({ erro: 'falta o segredo EMAIL_SENHAS' }, 503);
+  }
+
+  const quem = await quemChamou(req);
+  if (!quem.ok) return json({ erro: quem.erro }, 401);
+
+  try {
+    return json(await rodar(quem.donoId));
+  } catch (e) {
+    console.error('rodada falhou', e);
+    return json({ erro: String((e as Error).message || 'falhou') }, 500);
+  }
+});
