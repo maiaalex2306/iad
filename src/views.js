@@ -1911,6 +1911,13 @@
       '<div class="corpo-aba">' + corpoDaAba(op, r) + '</div>';
   }
 
+  function outrasAbertasDaConta(op) {
+    if (!op || !op.contaId) return [];
+    return Store.dados().oportunidades.filter(function (o) {
+      return o.contaId === op.contaId && o.id !== op.id && !o.desfecho;
+    });
+  }
+
   function barraDeAcoes(op) {
     return '<div class="row"><button class="btn ghost mini" onclick="App.ir(\'#/pipeline\')">← Pipeline</button>' +
       '<span class="espaco"></span>' +
@@ -1919,6 +1926,12 @@
          voltar — três telas de distância de onde a conversa acontece. */
       '<button class="btn ghost mini" onclick="App.contatosDaEmpresa(\'' + op.id + '\')" data-ajuda-titulo="Contatos" data-ajuda="Quem é da empresa, com LinkedIn, telefone e e-mail para falar em um toque. Mostra separado quem está no grupo comprador deste negócio e quem está de fora.">Contatos</button>' +
       '<button class="btn ghost mini" onclick="App.editarOportunidade(\'' + op.id + '\')" data-ajuda-titulo="Editar" data-ajuda="Muda título, valor, etapa, tipo, previsão, fonte e concorrentes. Não mexe nas decisões.">Editar</button>' +
+      /* Só aparece quando existe com quem juntar. Botão que abre uma lista
+         vazia é botão que ensina a não clicar. */
+      (op.desfecho || !outrasAbertasDaConta(op).length ? ''
+        : '<button class="btn ghost mini" onclick="App.juntarComOutra(\'' + op.id + '\')" ' +
+          'data-ajuda-titulo="Juntar" ' +
+          'data-ajuda="Traz outra negociação desta mesma empresa para dentro desta: evidências, contatos, tarefas e anexos passam para cá. É o conserto de duas negociações que são o mesmo negócio.">Juntar</button>') +
       (op.desfecho ? ''
         : (op.nutricao
             ? '<button class="btn ghost mini" onclick="App.retomarNutricao(\'' + op.id + '\')" data-ajuda-titulo="Retomar" data-ajuda="Tira da nutrição e devolve à carteira ativa. Uma evidência nova do cliente já faz isso sozinha.">Retomar da nutrição</button>'
@@ -3519,6 +3532,63 @@
       '</div>';
   }
 
+  /* ---------------- empresas com mais de uma negociação aberta ----------------
+
+     Entra na Revisão, e não numa tela nova, porque é exatamente o tipo de
+     coisa que a Revisão existe para pegar: não é urgente hoje, e apodrece se
+     ninguém olhar uma vez por semana.
+
+     Nem toda linha aqui é erro — empresa grande tem dois negócios de verdade.
+     Por isso a tela não manda juntar: ela mostra as duas lado a lado com o
+     IAD e a contagem de evidências, e marca como suspeita só a que nasceu
+     sozinha (sem nota, sem evidência, sem valor). Quem decide é quem conhece
+     a conta. */
+  function filaDeDuplicatas() {
+    if (!Store.contasComMaisDeUmNegocio) return '';
+    const casos = Store.contasComMaisDeUmNegocio();
+    if (!casos.length) return '';
+
+    const suspeitas = casos.filter(function (c) {
+      return c.negociacoes.some(function (n) { return n.suspeita; });
+    }).length;
+
+    const linha = function (caso) {
+      const principal = caso.negociacoes[0];
+      const cartoes = caso.negociacoes.map(function (n) {
+        return '<div class="row" style="margin-top:8px;align-items:flex-start">' +
+          '<div class="cresce"><strong>' + esc(n.op.titulo) + '</strong>' +
+          (n.suspeita ? ' <span class="pill risk mini">provável duplicata</span>' : '') +
+          '<div class="tiny muted">' + esc(n.op.etapa) + ' · IAD ' + n.iad + '/' + P.IAD_MAXIMO +
+          ' · ' + n.evidencias + ' evidência(s) · ' + U.compacto(n.op.valor) +
+          (n.op.campanha ? ' · campanha ' + esc(n.op.campanha) : '') + '</div></div>' +
+          (n.op.id === principal.op.id
+            ? '<span class="pill ok mini">fica</span>'
+            : '<button class="btn ghost mini" onclick="App.juntarOportunidades(\'' +
+              principal.op.id + '\',\'' + n.op.id + '\')">Juntar nesta</button>') +
+          '<button class="btn ghost mini" onclick="App.abrir(\'' + n.op.id + '\')">Abrir</button>' +
+          '</div>';
+      }).join('');
+
+      return '<div class="card" style="padding:12px">' +
+        '<strong>' + esc((caso.conta && caso.conta.nome) || 'Empresa sem nome') + '</strong>' +
+        '<span class="tiny muted"> · ' + caso.negociacoes.length + ' negociações abertas</span>' +
+        cartoes + '</div>';
+    };
+
+    return '<div class="card"><h2>Mesma empresa, mais de uma negociação ' +
+      '<span class="pill">' + casos.length + '</span></h2>' +
+      '<p class="small muted">Duas negociações abertas na mesma empresa partem o índice ao meio: ' +
+      'a evidência fica de um lado e a nota do outro, e nenhum dos dois números descreve o negócio. ' +
+      'Nem toda linha é erro — empresa grande tem dois projetos de verdade. ' +
+      (suspeitas
+        ? '<strong>' + suspeitas + '</strong> tem uma negociação sem nota, sem evidência e sem valor, ' +
+          'que é o retrato de um cartão que nasceu sozinho na importação.'
+        : 'Nenhuma delas parece cartão vazio.') + '</p>' +
+      '<p class="tiny muted">Juntar leva evidências, contatos, tarefas e anexos para a que fica — ' +
+      'e não conta como negócio perdido, que é o que aconteceria se você encerrasse a duplicata.</p>' +
+      casos.map(linha).join('') + '</div>';
+  }
+
   function revisao() {
     const est = Store.dados();
     const abertas = est.oportunidades.filter(function (o) { return !o.desfecho; });
@@ -3547,8 +3617,13 @@
         }).join('') + '</div>'
       : '';
 
-    if (!resumos.length && !vencidas.length) return '<h1>Revisão semanal</h1><div class="vazio">Sem oportunidades abertas.</div>';
-    if (!resumos.length) return '<h1>Revisão semanal</h1>' + filaNutricao;
+    const filaJuntar = filaDeDuplicatas();
+
+    if (!resumos.length && !vencidas.length) {
+      return '<h1>Revisão semanal</h1>' + filaJuntar +
+        (filaJuntar ? '' : '<div class="vazio">Sem oportunidades abertas.</div>');
+    }
+    if (!resumos.length) return '<h1>Revisão semanal</h1>' + filaNutricao + filaJuntar;
 
     const cards = resumos.map(function (r) {
       const d = r.delta;
@@ -3572,7 +3647,7 @@
         '<button class="btn ghost mini" onclick="App.abrir(\'' + r.op.id + '\')" data-ajuda-titulo="Abrir cockpit" data-ajuda="A tela completa do negócio: as oito decisões, lacunas, grupo comprador, gate e histórico.">Abrir cockpit</button></div></div>';
     }).join('');
 
-    return '<h1>Revisão semanal</h1>' + filaNutricao +
+    return '<h1>Revisão semanal</h1>' + filaNutricao + filaJuntar +
       '<p class="muted small">Uma pergunta só, por negócio. Respostas que começam com “nós” não valem.</p>' + cards;
   }
 
@@ -6261,6 +6336,32 @@
       '</span></label>';
   }
 
+  /* Este lead abriria uma SEGUNDA negociação numa empresa que já tem uma.
+
+     Vem MARCADO, e a diferença em relação à caixa da empresa acima é o motivo
+     do padrão: juntar duas empresas erradas mistura contatos e não se desfaz,
+     então lá o padrão protege contra o excesso. Aqui é o contrário — o erro
+     que já aconteceu na carteira foi o cartão a mais, com IAD 0 ao lado de um
+     IAD 16 da mesma conta, e o índice partido ao meio. E juntar negociação
+     agora tem conserto: existe o botão Juntar, tanto no cockpit quanto na
+     Revisão.
+
+     A negociação aparece com o IAD e a contagem de evidências porque é isso
+     que responde "é a mesma?" — cartão com evidência é o negócio de verdade. */
+  function juntarNaNegociacao(l, i) {
+    if (!l.negociacaoParalela) return '';
+    const op = Store.oportunidade(l.negociacaoParalela);
+    if (!op) return '';
+    const evid = (op.eventos || []).filter(function (e) { return e.tipo === 'decision'; }).length;
+    return '<label class="linha-achado" style="margin-top:6px">' +
+      '<input type="checkbox" data-negocio="' + i + '" checked>' +
+      '<span class="tiny">É a mesma negociação que já está aberta: <strong>' + esc(op.titulo) + '</strong>' +
+      ' <span class="muted">— ' + esc(op.etapa) + ', IAD ' + E.iad(op) + ', ' + evid + ' evidência(s)' +
+      (op.campanha ? ', campanha ' + esc(op.campanha) : '') + '</span>' +
+      '<br><span class="muted">Desmarque só se este lead for outro projeto dentro da mesma empresa. ' +
+      'Duas negociações abertas na mesma conta partem o índice ao meio.</span></span></label>';
+  }
+
   /* O que a ponte entregou, com os nomes originais dos campos.
 
      "Não veio empresa" e "veio com um nome de campo que o app não conhece"
@@ -6350,6 +6451,7 @@
             }).join('\n') + '</p>'
           : (l.resposta ? '<p class="origem">\u201c' + esc(l.resposta) + '\u201d</p>' : '')) +
         juntarNaConta(l, i) +
+        juntarNaNegociacao(l, i) +
         (l.insight
           ? '<p class="tiny muted" style="margin:6px 0 0"><b>Reenquadramento (rascunho):</b> ' + esc(l.insight) + '</p>'
           : '') +
@@ -6797,7 +6899,7 @@
     pipelineEstado, pipelineFiltrar, pipelineLimparTudo, gavetaDeFiltros, conferirSessao, zerarFiltros,
     definirSemanasDoAprendizado: function (n) { semanasDoAprendizado = n; },
     semanasDoAprendizado: function () { return semanasDoAprendizado; },
-    oportunidadesDoLHSemTarefa,
+    oportunidadesDoLHSemTarefa, outrasAbertasDaConta,
     definirFiltro: function (f) { filtroGrupo = f; },
     definirFiltroHistorico: function (f) { filtroHistorico = f; },
     definirFiltroHoje: function (f) { filtroHoje = f; },

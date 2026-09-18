@@ -1682,6 +1682,194 @@
     return op;
   }
 
+  /* ---------------- juntar duas negociações da mesma empresa ----------------
+
+     Por que isto existe: a importação do Linked Helper abre uma negociação por
+     empresa POR CAMPANHA, e duas campanhas tocando a mesma conta abriam dois
+     cartões do mesmo negócio. O comentário de `oportunidadeJaExistente` já
+     avisava do risco — "o índice partido ao meio" — e protegia só metade do
+     caso. O resultado apareceu na carteira: a mesma Suzano com IAD 0 num
+     cartão e IAD 16 no outro. Se é o mesmo negócio, um dos dois números é
+     mentira, e o IAD existe exatamente para não mentir.
+
+     Junta em vez de encerrar, e a diferença não é estética: encerrar a
+     duplicata como desistência a contaria como negócio perdido, e a tela de
+     Aprendizado — que existe para ensinar o que funciona — passaria a
+     aprender com um erro de cadastro.
+
+     O que se move e por quê:
+
+       eventos, snapshots   a história do cliente é dele, não do cartão
+       stakeholders         união, sem repetir
+       itens                o que está sendo vendido é o mesmo
+       dims                 o MAIOR dos dois, e só porque a evidência vem junto
+       campos em branco     o que a que fica não tem, a outra empresta
+       notas                emendadas, com separador, nunca sobrescritas
+       tarefas e sinais     apontam para a que fica
+
+     A nota fica no maior e não na soma nem na média: as duas notas descrevem a
+     MESMA decisão dentro do cliente, vista por dois cartões. Se num deles
+     Prioridade é 2 porque existe evidência que prova, essa evidência acabou de
+     entrar aqui — a nota maior é a que a prova sustenta. Média rebaixaria uma
+     decisão comprovada; soma inventaria decisão que não houve.
+
+     O que NÃO se move, e é decisão: valor, previsão de fechamento e etapa
+     ficam como estão na que sobrevive. São números que alguém escolheu, e
+     mexer neles em silêncio durante uma operação de limpeza é o jeito
+     conhecido de a previsão do mês mudar sem ninguém saber por quê. Se a
+     que morre tinha itens, o total se recalcula sozinho a partir deles — e a
+     tela avisa antes.
+
+     Anexos ficam por conta de quem chama: eles moram no IndexedDB e não neste
+     estado. Ver `App.juntarOportunidades`. */
+  function podeJuntarOportunidades(ficaId, vaiId) {
+    const fica = oportunidade(ficaId);
+    const vai = oportunidade(vaiId);
+    if (!fica || !vai) return 'Não achei uma das negociações.';
+    if (fica.id === vai.id) return 'São a mesma negociação.';
+    if (fica.contaId !== vai.contaId) {
+      return 'As duas precisam ser da mesma empresa. Se a empresa é que está duplicada, ' +
+        'junte as empresas primeiro em Configuração → Juntar empresas.';
+    }
+    if (fica.desfecho || vai.desfecho) {
+      return 'Só junto negociações abertas. Reabra a encerrada antes, para não reescrever um desfecho.';
+    }
+    return '';
+  }
+
+  function juntarOportunidades(ficaId, vaiId) {
+    const impedimento = podeJuntarOportunidades(ficaId, vaiId);
+    if (impedimento) return { ok: false, erro: impedimento };
+
+    const fica = oportunidade(ficaId);
+    const vai = oportunidade(vaiId);
+    const relatorio = { ok: true, eventos: 0, snapshots: 0, stakeholders: 0,
+                        itens: 0, tarefas: 0, sinais: 0, dims: [], titulo: vai.titulo };
+
+    /* Eventos: os dois históricos, em ordem de data, do mais novo para o mais
+       velho — que é a ordem que a tela espera. Sem reordenar, a evidência de
+       ontem apareceria no meio da de três meses atrás. */
+    const eventos = (fica.eventos || []).concat(vai.eventos || []);
+    relatorio.eventos = (vai.eventos || []).length;
+    fica.eventos = eventos.sort(function (a, b) {
+      return String(b.data || '').localeCompare(String(a.data || ''));
+    });
+
+    fica.snapshots = (fica.snapshots || []).concat(vai.snapshots || [])
+      .sort(function (a, b) { return String(a.data || '').localeCompare(String(b.data || '')); });
+    relatorio.snapshots = (vai.snapshots || []).length;
+
+    const antesStake = semRepetir(fica.stakeholders).length;
+    fica.stakeholders = semRepetir((fica.stakeholders || []).concat(vai.stakeholders || []));
+    relatorio.stakeholders = fica.stakeholders.length - antesStake;
+
+    if ((vai.itens || []).length) {
+      fica.itens = (fica.itens || []).concat(vai.itens);
+      relatorio.itens = vai.itens.length;
+    }
+
+    (global.IADPlaybook.DIMENSOES || []).forEach(function (d) {
+      const a = fica.dims[d.id] || 0;
+      const b = (vai.dims || {})[d.id] || 0;
+      if (b > a) {
+        fica.dims[d.id] = b;
+        relatorio.dims.push({ id: d.id, nome: d.nome, de: a, para: b });
+      }
+    });
+
+    completarEmBrancoNaOportunidade(fica, vai);
+
+    const notaDaOutra = String(vai.notas || '').trim();
+    if (notaDaOutra) {
+      fica.notas = String(fica.notas || '').trim() +
+        (String(fica.notas || '').trim() ? '\n\n' : '') +
+        '--- de "' + (vai.titulo || 'negociação juntada') + '" ---\n' + notaDaOutra;
+    }
+
+    /* Compromisso: o mais recente dos dois. O antigo não some do histórico —
+       ele está nos eventos —, mas o que a tela cobra é um só. */
+    const cFica = fica.proximoCompromisso, cVai = vai.proximoCompromisso;
+    if (cVai && cVai.data && (!cFica || !cFica.data || String(cVai.data) > String(cFica.data))) {
+      fica.proximoCompromisso = cVai;
+    }
+
+    (estado.tarefas || []).forEach(function (t) {
+      if (t.oportunidadeId === vai.id) { t.oportunidadeId = fica.id; relatorio.tarefas++; }
+    });
+    (estado.sinais || []).forEach(function (x) {
+      if (x.oportunidadeId === vai.id) { x.oportunidadeId = fica.id; relatorio.sinais++; }
+    });
+
+    /* O registro de que isto aconteceu. Uma carteira em que negociações somem
+       sem rastro é uma carteira em que ninguém confia, e daqui a seis meses a
+       pergunta "onde foi parar aquele negócio da Suzano" precisa de resposta. */
+    fica.eventos.unshift({
+      id: uid('evt'), tipo: 'activity', data: hoje(), canal: 'CRM',
+      titulo: 'Juntada com a negociação "' + (vai.titulo || vai.id) + '"',
+      descricao: 'Eventos, contatos e tarefas daquela negociação passaram para esta. ' +
+        (relatorio.dims.length
+          ? 'Notas que subiram: ' + relatorio.dims.map(function (d) {
+              return d.nome + ' ' + d.de + '→' + d.para;
+            }).join(', ') + '.'
+          : 'Nenhuma nota mudou.')
+    });
+
+    /* A que morre sai pelo caminho de sempre — mas as tarefas dela já foram
+       repontadas acima, então `excluirOportunidade` não tem mais o que levar
+       junto. A ordem importa: apagar antes de repontar levaria as tarefas. */
+    excluirOportunidade(vai.id);
+    salvar();
+    return relatorio;
+  }
+
+  /* Só o que está vazio na que fica. O vendedor que escolheu a campanha, o SDR
+     ou o produto não pode ver uma operação de limpeza desfazer isso. */
+  function completarEmBrancoNaOportunidade(fica, vai) {
+    ['campanha', 'sdr', 'sdrEmail', 'origem', 'fonteId', 'produto', 'concorrentes', 'dono']
+      .forEach(function (campo) {
+        if (!String(fica[campo] || '').trim() && String(vai[campo] || '').trim()) {
+          fica[campo] = vai[campo];
+        }
+      });
+    if (!fica.insight && vai.insight) fica.insight = vai.insight;
+  }
+
+  /* As empresas com mais de uma negociação aberta. Nem toda linha é erro —
+     empresa grande tem dois negócios de verdade —, mas é aqui que a duplicata
+     aparece, e a marca `suspeita` é a que separa as duas coisas: negociação
+     sem valor, sem nota e sem evidência não é um segundo negócio, é um cartão
+     que nasceu sozinho. */
+  function contasComMaisDeUmNegocio() {
+    const porConta = {};
+    (estado.oportunidades || []).forEach(function (o) {
+      if (o.desfecho || !o.contaId) return;
+      if (!visivel(o, true)) return;
+      (porConta[o.contaId] = porConta[o.contaId] || []).push(o);
+    });
+
+    return Object.keys(porConta).filter(function (id) { return porConta[id].length > 1; })
+      .map(function (id) {
+        const lista = porConta[id].slice().sort(function (a, b) {
+          const ia = Object.keys(a.dims || {}).reduce(function (s, k) { return s + (a.dims[k] || 0); }, 0);
+          const ib = Object.keys(b.dims || {}).reduce(function (s, k) { return s + (b.dims[k] || 0); }, 0);
+          return ib - ia;
+        });
+        return {
+          conta: conta(id),
+          negociacoes: lista.map(function (o) {
+            const iad = Object.keys(o.dims || {}).reduce(function (s, k) { return s + (o.dims[k] || 0); }, 0);
+            const evidencias = (o.eventos || []).filter(function (e) { return e.tipo === 'decision'; }).length;
+            return {
+              op: o, iad: iad, evidencias: evidencias,
+              suspeita: iad === 0 && !evidencias && !Number(o.valor) && !Number(o.valorMensal)
+            };
+          })
+        };
+      }).sort(function (a, b) {
+        return String((a.conta || {}).nome || '').localeCompare(String((b.conta || {}).nome || ''));
+      });
+  }
+
   function excluirOportunidade(id) {
     estado.oportunidades = estado.oportunidades.filter(function (o) { return o.id !== id; });
     /* As tarefas do negócio saem junto, e cada uma precisa da própria ordem de
@@ -1733,6 +1921,7 @@
     catalogo, catalogoAtivos, nomesDoCatalogo, criarNoCatalogo, atualizarNoCatalogo,
     removerDoCatalogo, produto,
     fecharOportunidade, reabrirOportunidade, excluirOportunidade,
+    juntarOportunidades, podeJuntarOportunidades, contasComMaisDeUmNegocio,
     colocarEmNutricao, retomarNutricao,
     exportar, importar, limpar
   };

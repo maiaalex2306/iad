@@ -5,8 +5,8 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v186**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v186, o aparelho
+Publicado agora: **v187**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v187, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -154,6 +154,69 @@ guardado no aparelho"* — verdade até a v180 e mentira desde então.
 E `.passo-manual .numero` ganhou a variante `.quando`: o círculo de 28px foi
 feito para um dígito, e com uma palavra dentro ("uma vez na semana") o texto
 transbordava.
+
+---
+
+## 0-E. Juntar negociações — v187, 18/09
+
+**O defeito:** a importação do LH abria uma negociação por empresa **por
+campanha**. Duas campanhas tocando a mesma conta abriam dois cartões do mesmo
+negócio. Apareceu na carteira do Alexandre: a mesma Suzano — uma conta só, 8
+contatos — com **IAD 0 num cartão e IAD 16 no outro**. Se é o mesmo negócio,
+um dos dois números é mentira.
+
+O comentário de `oportunidadeJaExistente` já avisava do risco ("o índice
+partido ao meio") e protegia só o caso em que NÃO havia nenhuma negociação de
+LH aberta. Campanha diferente passava batido.
+
+**Três coisas, e todas testadas no navegador:**
+
+1. **`Store.juntarOportunidades(ficaId, vaiId)`.** Move eventos (reordenados
+   por data), snapshots, stakeholders (união), itens, tarefas, sinais e
+   anexos. As notas das oito ficam no **maior dos dois** — e só porque a
+   evidência que as sustenta vem junto; média rebaixaria decisão comprovada e
+   soma inventaria decisão que não houve. Campos em branco na que fica são
+   emprestados pela outra; as notas de texto são emendadas, nunca
+   sobrescritas. **Valor, previsão e etapa não mudam** — são números que
+   alguém escolheu, e mexer neles durante uma limpeza é como a previsão do
+   mês muda sem ninguém saber por quê. Um evento de histórico registra a
+   junção, para "onde foi parar aquele negócio" ter resposta.
+
+   Recusa: negociações de empresas diferentes (manda juntar as empresas
+   primeiro) e qualquer uma encerrada.
+
+   **Junta em vez de encerrar**, e a diferença não é estética: encerrar a
+   duplicata como desistência a contaria como negócio perdido, e o Aprendizado
+   passaria a aprender com um erro de cadastro.
+
+2. **A fila na Revisão** — `Store.contasComMaisDeUmNegocio()` lista as
+   empresas com mais de uma negociação aberta, ordenadas por IAD, marcando
+   como `suspeita` a que não tem nota, nem evidência, nem valor. Nem toda
+   linha é erro; a tela mostra as duas lado a lado e quem decide é quem
+   conhece a conta.
+
+3. **A importação pergunta.** Quando um lead abriria uma segunda negociação
+   numa empresa que já tem uma, a tela de revisão mostra uma caixa **marcada**
+   — "é a mesma negociação que já está aberta" — com o IAD e a contagem de
+   evidências da existente. Desmarcar cria a separada. O padrão é marcado (ao
+   contrário da caixa da empresa, que protege contra o excesso) porque o erro
+   que já aconteceu foi o cartão a mais, e juntar negociação agora tem
+   conserto.
+
+**Anexos** moram no IndexedDB, fora do estado, então vão por fora:
+`IADArquivos.repontar(deOpId, paraOpId)`, chamado por `App.juntarOportunidades`
+depois que o store termina. Falhar ali não desfaz o resto e a mensagem diz o
+que ficou.
+
+**Conversas de WhatsApp** apontando para a que morreu se curam sozinhas: o
+`oportunidade_id` gravado deixa de resolver e o casamento cai para o contato,
+que leva à sobrevivente. A linha no servidor fica com um id velho e inofensivo.
+
+**Onde está:** `juntarOportunidades`, `podeJuntarOportunidades` e
+`contasComMaisDeUmNegocio` em `src/store.js`; `repontar` em
+`src/arquivos.js`; `juntarComOutra` e `juntarOportunidades` em `src/app.js`;
+`filaDeDuplicatas`, `juntarNaNegociacao` e o botão da barra em `src/views.js`;
+`marcarNegociacaoParalela` em `src/app.js`.
 
 ---
 

@@ -94,6 +94,31 @@
     });
   }
 
+  /* Os anexos de uma negociação passam para outra. Existe por causa do juntar
+     negociações: os arquivos moram aqui, no IndexedDB, e não no estado que o
+     store manipula — sem esta passagem eles ficariam apontando para um id que
+     não existe mais e sumiriam da tela sem nunca terem sido apagados, que é a
+     pior forma de perder um documento. */
+  function repontar(deOpId, paraOpId) {
+    if (!deOpId || !paraOpId || deOpId === paraOpId) return Promise.resolve(0);
+    return abrir().then(function (db) {
+      const loja = transacao(db, [META], 'readonly').objectStore(META);
+      return promessa(loja.getAll());
+    }).then(function (todos) {
+      const meus = (todos || []).filter(function (a) { return a.oportunidadeId === deOpId; });
+      if (!meus.length) return 0;
+      return abrir().then(function (db) {
+        const tx = transacao(db, [META], 'readwrite');
+        const loja = tx.objectStore(META);
+        meus.forEach(function (a) { a.oportunidadeId = paraOpId; loja.put(a); });
+        return new Promise(function (resolve, reject) {
+          tx.oncomplete = function () { resolve(meus.length); };
+          tx.onerror = function () { reject(tx.error); };
+        });
+      });
+    });
+  }
+
   function excluir(id) {
     return abrir().then(function (db) {
       const tx = transacao(db, [META, DADOS], 'readwrite');
@@ -117,5 +142,5 @@
 
   function disponivel() { return !!global.indexedDB; }
 
-  global.IADArquivos = { salvar, listar, abrir: abrirArquivo, excluir, uso, disponivel, LIMITE_BYTES };
+  global.IADArquivos = { salvar, listar, abrir: abrirArquivo, excluir, repontar, uso, disponivel, LIMITE_BYTES };
 })(window);

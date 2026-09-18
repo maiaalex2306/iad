@@ -1802,6 +1802,113 @@
       render();
     },
 
+    /* ---------------- juntar duas negociações ----------------
+
+       Isto apaga um registro da carteira, então ele é o tipo de botão que
+       precisa dizer exatamente o que vai acontecer ANTES — e não depois, numa
+       mensagem de sucesso que já não dá para desfazer. O diálogo lista o que
+       se move, quais notas sobem e se o valor vai ser recalculado. */
+    juntarComOutra: function (opId) {
+      const fica = Store.oportunidade(opId);
+      if (!fica || fica.desfecho) return;
+      const outras = V.outrasAbertasDaConta(fica);
+      if (!outras.length) {
+        alert('Esta empresa não tem outra negociação aberta para juntar.');
+        return;
+      }
+
+      const opcoes = outras.map(function (o) {
+        const iad = E.iad(o);
+        const evid = (o.eventos || []).filter(function (e) { return e.tipo === 'decision'; }).length;
+        return { valor: o.id,
+          rotulo: o.titulo + ' — ' + o.etapa + ' · IAD ' + iad + ' · ' + evid + ' evidência(s)' +
+            (o.campanha ? ' · ' + o.campanha : '') };
+      });
+
+      U.formulario('Juntar outra negociação nesta', [
+        { id: 'aviso', tipo: 'aviso',
+          rotulo: 'Esta negociação — "' + fica.titulo + '" — é a que fica. ' +
+            'A outra deixa de existir, e tudo o que está nela passa para cá.' },
+        { id: 'vai', rotulo: 'Qual negociação trazer para dentro desta', tipo: 'select', opcoes: opcoes }
+      ], { vai: opcoes[0].valor }, function (d) {
+        if (d.vai) App.juntarOportunidades(opId, d.vai);
+      });
+    },
+
+    juntarOportunidades: function (ficaId, vaiId) {
+      const fica = Store.oportunidade(ficaId);
+      const vai = Store.oportunidade(vaiId);
+      if (!fica || !vai) return;
+
+      const impedimento = Store.podeJuntarOportunidades(ficaId, vaiId);
+      if (impedimento) { alert(impedimento); return; }
+
+      /* O que vai mudar, calculado ANTES de mexer em nada. É este texto que
+         torna a confirmação uma decisão e não um reflexo. */
+      const evid = (vai.eventos || []).filter(function (e) { return e.tipo === 'decision'; }).length;
+      const tarefas = Store.dados().tarefas.filter(function (t) { return t.oportunidadeId === vai.id; }).length;
+      const sobem = (P.DIMENSOES || []).filter(function (dim) {
+        return ((vai.dims || {})[dim.id] || 0) > (fica.dims[dim.id] || 0);
+      }).map(function (dim) {
+        return dim.nome + ' ' + (fica.dims[dim.id] || 0) + '→' + (vai.dims || {})[dim.id];
+      });
+
+      const linhas = [
+        'Juntar "' + vai.titulo + '" dentro de "' + fica.titulo + '"?',
+        '',
+        'Passam para esta negociação:',
+        '• ' + (vai.eventos || []).length + ' registro(s) de histórico, sendo ' + evid + ' evidência(s) do cliente',
+        '• ' + (vai.stakeholders || []).length + ' pessoa(s) do grupo comprador',
+        '• ' + tarefas + ' tarefa(s)',
+        '• os anexos'
+      ];
+      if ((vai.itens || []).length) {
+        linhas.push('• ' + vai.itens.length + ' item(ns) de produto — e o valor total será recalculado');
+      }
+      linhas.push('');
+      linhas.push(sobem.length
+        ? 'Notas que sobem (a evidência que as sustenta vem junto): ' + sobem.join(', ')
+        : 'Nenhuma nota muda.');
+      linhas.push('');
+      linhas.push('Valor, previsão e etapa desta negociação NÃO mudam.');
+      linhas.push('"' + vai.titulo + '" deixa de existir. Isto não tem como desfazer.');
+
+      if (!U.confirmar(linhas.join('\n'))) return;
+
+      const r = Store.juntarOportunidades(ficaId, vaiId);
+      if (!r.ok) { alert(r.erro); return; }
+
+      /* Os anexos moram no IndexedDB e não no estado, então vão por fora — e
+         depois, porque o store já terminou. Falhar aqui não desfaz o resto: o
+         pior caso é um anexo que continua apontando para o id antigo, e isso
+         a mensagem diz. */
+      const Arq = global.IADArquivos;
+      const depois = function (quantosArquivos) {
+        render();
+        alert('Pronto.\n\n' +
+          r.eventos + ' registro(s) de histórico, ' + r.stakeholders + ' pessoa(s), ' +
+          r.tarefas + ' tarefa(s), ' + r.sinais + ' sinal(is) e ' +
+          quantosArquivos + ' anexo(s) agora estão em "' + fica.titulo + '".' +
+          (r.dims.length
+            ? '\n\nNotas que subiram: ' + r.dims.map(function (d) {
+                return d.nome + ' ' + d.de + '→' + d.para;
+              }).join(', ') + '.'
+            : '') +
+          '\n\nO histórico registra a junção, para a pergunta "onde foi parar aquele negócio" ter resposta.');
+      };
+
+      if (Arq && Arq.repontar) {
+        Arq.repontar(vaiId, ficaId).then(depois, function (e) {
+          console.warn('Não consegui mover os anexos:', e);
+          render();
+          alert('As negociações foram juntadas, mas não consegui mover os anexos: ' + e.message +
+            '\n\nEles não foram apagados — só continuam presos ao id antigo.');
+        });
+      } else {
+        depois(0);
+      }
+    },
+
     mudarPrevisao: function (opId) {
       const op = Store.oportunidade(opId);
       if (!op || op.desfecho) return;
@@ -3861,6 +3968,13 @@
     },
 
     revisarImportacao: function (lista, avisoSegmento) {
+      /* Antes de desenhar: descobrir quais leads abririam uma SEGUNDA
+         negociação numa empresa que já tem uma. A regra da importação é uma
+         negociação por empresa POR CAMPANHA, e duas campanhas tocando a mesma
+         conta abriam dois cartões do mesmo negócio — com a evidência de um
+         lado e a nota do outro. A tela passa a perguntar em vez de decidir. */
+      lista.forEach(marcarNegociacaoParalela);
+
       const dlg = document.createElement('dialog');
       dlg.className = 'revisao-ia';
       dlg.innerHTML = V.revisaoDaImportacao(lista, avisoSegmento, avisoDeDescartados);
@@ -3890,6 +4004,8 @@
             if (papel) l.papelSugerido = papel.value;
             const juntar = dlg.querySelector('[data-conta="' + i + '"]');
             if (juntar) l.usarContaSugerida = juntar.checked;
+            const mesma = dlg.querySelector('[data-negocio="' + i + '"]');
+            if (mesma) l.usarNegociacaoAberta = mesma.checked ? l.negociacaoParalela : '';
             return importarUmLead(l, escolha ? escolha.value : '');
           }).filter(Boolean);
           if (feitos.length) {
@@ -4917,7 +5033,38 @@
      ciclo: vira negócio novo. Negócio já fechado também não recebe interação
      nova — o desfecho congelou a foto da decisão, e mexer nele reescreveria
      um resultado já apurado. */
+  /* A negociação aberta que este lead ENCOSTARIA, se a regra da campanha não
+     estivesse no caminho.
+
+     Roda antes da tela de revisão e marca o lead. Só interessa quando a
+     empresa JÁ existe — se ela vai nascer agora, não há com o que colidir — e
+     só quando a regra da campanha devolveria "nenhuma", que é exatamente o
+     caso em que o cartão paralelo nasceria. */
+  function marcarNegociacaoParalela(lead) {
+    lead.negociacaoParalela = '';
+    const conta = contaJaExistente(lead);
+    if (!conta) return;
+    if (oportunidadeJaExistente(conta.id, lead)) return;   /* já encosta sozinho */
+
+    const abertas = Store.dados().oportunidades.filter(function (o) {
+      return o.contaId === conta.id && !o.desfecho;
+    });
+    if (!abertas.length) return;
+
+    /* A mais madura primeiro: entre duas, a que tem evidência é a de verdade,
+       e é nela que o lead novo deve encostar. */
+    abertas.sort(function (a, b) { return E.iad(b) - E.iad(a); });
+    lead.negociacaoParalela = abertas[0].id;
+  }
+
   function oportunidadeJaExistente(contaId, lead) {
+    /* A escolha da tela de revisão manda em qualquer regra automática: quem
+       marcou "é a mesma negociação" olhou para as duas e decidiu. */
+    if (lead && lead.usarNegociacaoAberta) {
+      const escolhida = Store.oportunidade(lead.usarNegociacaoAberta);
+      if (escolhida && !escolhida.desfecho && escolhida.contaId === contaId) return escolhida;
+    }
+
     const abertas = Store.dados().oportunidades.filter(function (o) {
       return o.contaId === contaId && !o.desfecho && o.origem === 'Linked Helper';
     });
