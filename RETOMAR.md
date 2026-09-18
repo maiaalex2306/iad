@@ -124,7 +124,7 @@ Decisões que valem lembrar:
 - 90 dias de validade, contra 30 dos leads: proposta fica mais tempo em cima
   da mesa, e link morto no meio da negociação é o app estragando a venda.
 
-**Falta publicar:** `ponte/worker.js` no Cloudflare (agora com 336 linhas —
+**Falta publicar:** `ponte/worker.js` no Cloudflare (agora com 364 linhas —
 confira com Ctrl+F por `chaveDoLink`). Enquanto não publicar, o botão "Link
 rastreado" responde que a ponte ainda não conhece links rastreados.
 
