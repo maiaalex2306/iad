@@ -2412,6 +2412,69 @@
       '</div>';
   }
 
+  /* "Nenhuma conversa" tem várias causas diferentes, e cada uma pede uma ação
+     diferente. Dizer só "nenhuma conversa" manda a pessoa adivinhar qual
+     delas é a sua — e a primeira suspeita costuma ser a errada ("o e-mail não
+     está funcionando"), quando quase sempre é cadastro faltando. */
+  function porQueVazio(op, M) {
+    const conta = Store.conta(op.contaId);
+    const contatos = op.contaId ? (Store.contatosDaConta(op.contaId) || []) : [];
+    const comEmail = contatos.filter(function (c) {
+      return String(c.email || c.emailPessoal || '').trim();
+    });
+    const total = (M.todas() || []).length;
+    const dominios = {};
+    comEmail.forEach(function (c) {
+      const d = String(c.email || c.emailPessoal).split('@')[1];
+      if (d) dominios[d.toLowerCase()] = true;
+    });
+    const listaDeDominios = Object.keys(dominios);
+
+    const cabeca = '<div class="vazio" style="margin-bottom:10px">Nenhuma conversa desta empresa ainda.</div>';
+
+    if (!total) {
+      return cabeca +
+        '<div class="aviso">O IAD ainda não trouxe e-mail nenhum de nenhuma caixa. ' +
+        'Clique em <strong>Buscar e-mails</strong> aqui em cima.</div>';
+    }
+
+    if (!comEmail.length) {
+      return cabeca +
+        '<div class="aviso">Há <strong>' + total + '</strong> e-mail(s) na sua caixa, mas ' +
+        (contatos.length
+          ? 'nenhum contato de ' + esc(conta ? conta.nome : 'desta empresa') + ' tem endereço cadastrado.'
+          : 'esta empresa não tem contatos cadastrados.') +
+        ' É por isso que nada casou: o IAD liga a mensagem ao negócio pelo endereço de quem escreveu. ' +
+        '<button class="btn ghost mini" onclick="App.contatosDaEmpresa(\'' + op.id + '\')">Cadastrar contato</button></div>';
+    }
+
+    /* Tem contato com e-mail e mesmo assim nada casou: ou não chegou mensagem
+       desse domínio, ou ela chegou e ficou na fila de casar. */
+    const naFilaDoDominio = (M.paraCasar() || []).filter(function (c) {
+      const d = String(c.deQuem || '').split('@')[1];
+      return d && listaDeDominios.indexOf(d.toLowerCase()) !== -1;
+    });
+
+    if (naFilaDoDominio.length) {
+      return cabeca +
+        '<div class="aviso"><strong>' + naFilaDoDominio.length + ' conversa(s) de ' +
+        esc(listaDeDominios.join(', ')) + '</strong> chegaram, mas o IAD não soube de quem são. ' +
+        'Aponte cada uma para o contato certo e ela passa a cair aqui — e as respostas seguintes ' +
+        'já vêm sozinhas. ' +
+        '<button class="btn ghost mini" onclick="App.ir(\'#/conversas\')">Ver a fila</button></div>';
+    }
+
+    return cabeca +
+      '<p class="small muted">O IAD já trouxe <strong>' + total + '</strong> e-mail(s), e nenhum é de ' +
+      esc(listaDeDominios.join(' ou ')) + '. Procurando por: ' +
+      comEmail.map(function (c) {
+        return '<code class="chip">' + esc(c.email || c.emailPessoal) + '</code>';
+      }).join(' ') +
+      ' — e qualquer endereço nesse(s) domínio(s).</p>' +
+      '<p class="small muted">Se você recebeu algo deles e não apareceu, clique em ' +
+      '<strong>Buscar e-mails</strong>: o servidor traz um lote por vez.</p>';
+  }
+
   function conversaDeEmail(c, op) {
     const ultima = c.ultima || {};
     return '<div class="card"><div class="row">' +
@@ -2461,18 +2524,30 @@
       '<span class="tiny muted">' + esc(texto) + '</span><span class="espaco"></span>' + botao + '</div>';
   }
 
+  function ocupadoBuscando() {
+    const A = global.App;
+    return !!(A && A.buscandoEmails && A.buscandoEmails());
+  }
+
   function abaEmail(op) {
     const M = global.IADEmail;
     const topo = function (miolo) {
       return '<div class="card"><div class="row"><h2 style="margin:0">E-mail</h2>' +
         '<span class="espaco"></span>' +
-        /* Sem "Minha caixa" aqui, de propósito: a caixa é de uma PESSOA e
-           vale para a carteira inteira. Configurá-la a partir de um negócio
-           fazia parecer que cada negócio tinha a sua — e foi a primeira coisa
-           que alguém perguntou ao olhar a tela. Ela mora em
-           Configuração → Minha caixa de e-mail. */
+        /* CONFIGURAR a caixa é de uma pessoa e mora em Configuração. BUSCAR
+           e ANALISAR são trabalho DESTE negócio, e é aqui que a pergunta
+           nasce: "chegou alguma coisa da Suzano?". Eu tinha movido as três
+           coisas juntas, e as duas últimas voltaram para cá. */
         (op.desfecho ? ''
-          : '<button class="btn mini" onclick="App.escreverEmail(\'' + op.id + '\')">Escrever</button>') +
+          : '<button class="btn ghost mini"' + (ocupadoBuscando() ? ' disabled' : '') +
+            ' onclick="App.buscarEmailsDaOportunidade(\'' + op.id + '\')" ' +
+            'data-ajuda-titulo="Buscar e-mails" ' +
+            'data-ajuda="Faz o servidor entrar nas suas caixas agora e traz o que chegou. Depois mostra aqui o que for dos contatos ou do domínio desta empresa.">' +
+            (ocupadoBuscando() ? 'Buscando…' : 'Buscar e-mails') + '</button>' +
+            '<button class="btn ghost mini" onclick="App.analisarEmailsDaOportunidade(\'' + op.id + '\')" ' +
+            'data-ajuda-titulo="Analisar com a IA" ' +
+            'data-ajuda="O assistente lê o que o cliente escreveu nesta negociação, registra a evidência por decisão e abre a tarefa do que ficou para você fazer.">Analisar com a IA</button>' +
+            '<button class="btn mini" onclick="App.escreverEmail(\'' + op.id + '\')">Escrever</button>') +
         '</div>' +
         '<p class="tiny muted" style="margin:8px 0 0">O que foi escrito de verdade, dos dois lados. ' +
         'O assistente lê o que chega e transforma em evidência; o que ficou para você fazer vira tarefa.</p>' +
@@ -2505,11 +2580,7 @@
             '<button class="btn ghost mini" onclick="App.irParaMinhaCaixa()">Resolver</button></div>'
           : '');
 
-    if (!minhas.length) {
-      return topo(aviso +
-        '<div class="vazio">Nenhuma conversa apontada para este negócio. Uma conversa cai aqui quando o ' +
-        'endereço de quem escreveu bate com o de um contato desta empresa — ou quando você escreve daqui.</div>');
-    }
+    if (!minhas.length) return topo(aviso + porQueVazio(op, M));
     return topo(aviso + minhas.map(function (c) { return conversaDeEmail(c, op); }).join(''));
   }
 
@@ -5171,8 +5242,14 @@
       passo(6, 'Confira',
         'Na mesma tela, cada endereço aparece com o estado dele. <em>Funcionando</em> está pronto; ' +
         '<strong>falta a senha</strong> quer dizer cadastrado e sem funcionar — clique em Editar e ' +
-        'cole as 16 letras. Logo abaixo, <strong>Buscar agora</strong> diz na hora quantos e-mails ' +
-        'vieram e quantos saíram.') +
+        'cole as 16 letras.') +
+      passo(7, 'O dia a dia é dentro da negociação',
+        'Configurar é uma vez; <strong>trabalhar é no negócio</strong>. Na aba <strong>E-mail</strong> ' +
+        'de cada oportunidade há três botões: <strong>Buscar e-mails</strong> traz o que chegou e ' +
+        'mostra o que é desta empresa; <strong>Analisar com a IA</strong> lê o que o cliente escreveu, ' +
+        'registra a evidência e abre a tarefa (<em>"Enviar a apresentação para Ana da Suzano"</em>, com ' +
+        'data); <strong>Escrever</strong> responde do seu endereço. Se a aba estiver vazia, ela diz ' +
+        '<em>por quê</em> — quase sempre é contato sem e-mail cadastrado, e não defeito.') +
       '</div>' +
 
       '<h3>Dois exemplos de verdade</h3>' +

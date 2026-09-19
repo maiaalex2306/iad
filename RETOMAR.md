@@ -5,8 +5,8 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v197**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v197, o aparelho
+Publicado agora: **v198**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v198, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -361,6 +361,54 @@ evidência e **criou a tarefa**; os três de ruído foram marcados sem chamada; 
 **Onde está:** `analisarEmailsNovos`, `analisarUm`, `tarefaDoCompromisso` e
 `ehRuido` em `src/app.js`; `marcarEmailAnalisado` e `contarTentativaDeAnalise`
 em `src/nuvem.js`; `linhaDaAnalise` em `src/views.js`.
+
+---
+
+## 0-R. O e-mail funcionou — e o trabalho voltou para a negociação — v198, 19/09
+
+**Primeiro: funcionou.** A tela do Alexandre mostrou
+*"Última conferência às 13:46 — **25 recebido(s)**"* e
+*"Código publicado no servidor: 2026-09-19-c"*. IMAP, senha cifrada, limites,
+carimbo — a corrente inteira.
+
+**Segundo: eu tinha movido demais.** Quando ele disse que a configuração estava
+no lugar errado, movi as três coisas juntas para a Configuração — e **buscar** e
+**analisar** não são configuração, são trabalho:
+
+> *"preciso buscar e-mails de dentro da oportunidade e verificar se para o
+> domínio e/ou contatos da empresa chegaram e-mails… e um botão da IA para
+> analisar."*
+
+A distinção certa, que agora está no código:
+
+| | Onde | Por quê |
+| --- | --- | --- |
+| **Configurar** a caixa | Configuração | é de uma pessoa, vale para a carteira toda |
+| **Buscar** e **Analisar** | dentro da negociação | a pergunta nasce olhando a Suzano |
+
+- `App.buscarEmailsDaOportunidade` chama o servidor e responde **desta
+  empresa**: quantos novos na caixa, quantas conversas apontadas para ela.
+- `App.analisarEmailsDaOportunidade` analisa **só a fila deste negócio**, e o
+  relatório fala daquele cliente. A versão global continua valendo para o app
+  inteiro; as duas passam pelo mesmo `analisarLote`, extraído para não existirem
+  duas cópias do laço (uma delas acabaria esquecendo de contar tentativa).
+
+**`porQueVazio()` é a parte que eu não tinha e fazia falta.** "Nenhuma conversa"
+tem causas diferentes e cada uma pede uma ação diferente — dizer só "nenhuma"
+manda a pessoa adivinhar, e a primeira suspeita costuma ser a errada ("o e-mail
+não funciona") quando quase sempre é cadastro:
+
+| Situação | O que a tela diz |
+| --- | --- |
+| nenhum e-mail no IAD | clique em Buscar e-mails |
+| empresa sem contato com endereço | é por isso que nada casou, e oferece cadastrar |
+| chegou do domínio mas sem dono | *N conversas de suzano.com.br chegaram*, com link para a fila |
+| nada daquele domínio | mostra **quais endereços está procurando** |
+
+**21 testes novos**, incluindo o caso exato da tela dele: 25 e-mails na caixa,
+nenhum da empresa, e a tela explicando por quê. Mais o fim a fim: chega um
+e-mail da Ana, aparece na negociação, Analisar cria *"Ana da Suzano: Enviar a
+apresentação para Ana da Suzano"* com data — e clicar de novo não repete.
 
 ---
 

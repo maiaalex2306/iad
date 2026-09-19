@@ -6608,6 +6608,31 @@
       return Promise.resolve(0);
     }
 
+    return analisarLote(fila).then(function (r) {
+      const feito = r.lidos;
+      if (comAviso) {
+        alert(feito + ' e-mail(s) analisado(s).\n\n' +
+          analise.evidencias + ' evidência(s) registrada(s) e ' + analise.tarefas + ' tarefa(s) criada(s).' +
+          (analise.fila > POR_RODADA
+            ? '\n\nAinda faltam ' + (analise.fila - feito) + '. Clique de novo para continuar — vou de ' +
+              POR_RODADA + ' em ' + POR_RODADA + ' para não estourar o limite do assistente.'
+            : ''));
+      }
+      return feito;
+    }, function (e) {
+      analise.erro = (e && e.message) || 'falhou';
+      console.warn('Análise dos e-mails falhou:', e);
+      if (comAviso) alert('A análise falhou: ' + analise.erro);
+      return 0;
+    });
+  }
+
+  /* O laço, um de cada vez, usado tanto pelo botão global quanto pelo da
+     negociação. Antes ele vivia dentro do global, e o da negociação teria de
+     copiá-lo — duas cópias do mesmo laço é como um dos dois para de contar
+     tentativa e vira consumo infinito sem ninguém notar. */
+  function analisarLote(fila) {
+    if (analisando) return Promise.resolve({ lidos: 0, evidencias: 0, restam: fila.length });
     analisando = true;
     /* Zerado a cada rodada, e não acumulado: com as tentativas de reenvio o
        número acumulado dizia "6 lidos" para três e-mails, que é pior do que
@@ -6627,25 +6652,75 @@
       Mail.esquecer();
       return pintarEmails(true);
     }).then(function () {
-      if (comAviso) {
-        alert(feito + ' e-mail(s) analisado(s).\n\n' +
-          analise.evidencias + ' evidência(s) registrada(s) e ' + analise.tarefas + ' tarefa(s) criada(s).' +
-          (analise.fila > POR_RODADA
-            ? '\n\nAinda faltam ' + (analise.fila - feito) + '. Clique de novo para continuar — vou de ' +
-              POR_RODADA + ' em ' + POR_RODADA + ' para não estourar o limite do assistente.'
-            : ''));
-      }
-      return feito;
+      return { lidos: feito, evidencias: analise.evidencias, restam: Math.max(0, fila.length - feito) };
     }, function (e) {
       analisando = false;
-      analise.erro = (e && e.message) || 'falhou';
-      console.warn('Análise dos e-mails falhou:', e);
-      if (comAviso) alert('A análise falhou: ' + analise.erro);
-      return 0;
+      throw e;
     });
   }
 
   App.analisarEmails = function () { analisarEmailsNovos(true); };
+
+  /* ---------------- as duas ações DENTRO da negociação ----------------
+
+     A caixa é da pessoa e se configura uma vez, em Configuração. Mas buscar e
+     analisar são trabalho DESTE negócio: a pergunta nasce olhando a Suzano
+     ("chegou alguma coisa deles?"), e a resposta tem de vir ali, sem passar
+     por outra tela. */
+
+  App.buscarEmailsDaOportunidade = function (opId) {
+    const op = Store.oportunidade(opId);
+    if (!op) return;
+    buscarNoServidorDeEmail(false).then(function (t) {
+      render();
+      if (!t) return;                       /* já avisou o erro na tela */
+      const quantas = Mail ? (Mail.conversasDaOportunidade(opId) || []).length : 0;
+      const conta = Store.conta(op.contaId);
+      alert(t.recebidos + ' e-mail(s) novo(s) na sua caixa.\n\n' +
+        (quantas
+          ? quantas + ' conversa(s) apontada(s) para ' + ((conta && conta.nome) || 'esta empresa') + '.'
+          : 'Nenhuma conversa desta empresa ainda — a tela explica por quê.') +
+        (t.faltam ? '\n\nAinda faltam ' + t.faltam + ' na caixa; clique de novo para trazer mais.' : ''));
+    });
+  };
+
+  /* Analisar SÓ o que é deste negócio.
+
+     A versão global existe e continua valendo para o app inteiro; esta aqui é
+     a que a pessoa clica olhando para um cliente, e o relatório fala daquele
+     cliente. Misturar as duas faria o botão da Suzano dizer "12 analisados" e
+     mostrar zero na tela. */
+  App.analisarEmailsDaOportunidade = function (opId) {
+    const op = Store.oportunidade(opId);
+    if (!op) return;
+    if (!IA || !IA.disponivel || !IA.disponivel()) {
+      alert('O assistente não está no ar. Veja Configuração → Assistente de IA.');
+      return;
+    }
+    const conta = Store.conta(op.contaId);
+    const nome = (conta && conta.nome) || 'esta empresa';
+
+    const fila = paraAnalisar().filter(function (x) { return x.op && x.op.id === opId; });
+    if (!fila.length) {
+      const quantas = Mail ? (Mail.conversasDaOportunidade(opId) || []).length : 0;
+      alert(quantas
+        ? 'Nada novo para analisar em ' + nome + '.\n\nAs mensagens desta negociação já passaram ' +
+          'pelo assistente — cada uma é lida uma vez só.'
+        : 'Não há e-mail de ' + nome + ' para analisar.\n\nClique em "Buscar e-mails" primeiro.');
+      return;
+    }
+
+    const antes = (Store.tarefasDaOportunidade(opId) || []).length;
+    analisarLote(fila).then(function (r) {
+      const novas = (Store.tarefasDaOportunidade(opId) || []).length - antes;
+      render();
+      alert(r.lidos + ' e-mail(s) de ' + nome + ' analisado(s).\n\n' +
+        r.evidencias + ' evidência(s) registrada(s) e ' + novas + ' tarefa(s) criada(s).' +
+        (r.restam ? '\n\nAinda faltam ' + r.restam + '. Clique de novo para continuar.' : ''));
+    }, function (e) {
+      alert('A análise falhou: ' + ((e && e.message) || 'erro'));
+    });
+  };
 
   App.abrirConversa = function (chave) {
     V.definirConversa(chave);
