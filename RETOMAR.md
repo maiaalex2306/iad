@@ -364,6 +364,49 @@ em `src/nuvem.js`; `linhaDaAnalise` em `src/views.js`.
 
 ---
 
+## 0-N. Testar a senha não é ler a caixa com um truque — 19/09
+
+Com o CORS resolvido, a função finalmente respondeu — e mostrou dois erros
+diferentes, um em cada caixa:
+
+| Caixa | O que voltou |
+| --- | --- |
+| `@biopartners.com.br` | `[AUTHENTICATIONFAILED] Invalid credentials` |
+| `@biosolvit.com` | **`Could not parse command`** |
+
+O segundo era meu. Para testar a senha sem baixar mensagem nenhuma, eu chamava
+a leitura da caixa com `ultimo_uid: Number.MAX_SAFE_INTEGER`, achando esperto:
+
+```
+UID FETCH 9007199254740992:* (UID INTERNALDATE BODY.PEEK[])
+```
+
+**UID de IMAP cabe em 32 bits.** Acima disso o servidor não recusa a busca —
+recusa a *linha*, e a mensagem que volta não fala de UID nenhum. Ou seja: a
+senha do biosolvit estava **certa**, e o app dizia que não.
+
+**A correção é estrutural, não um `Math.min`:** `naCaixa()` passou a ser o
+começo compartilhado (conectar, cumprimentar, entrar, escolher a pasta), e
+sobre ele existem dois usos — `testarCaixa()`, que só entra e sai, e
+`lerCaixa()`, que busca. Testar virou *um comando a menos*, e não uma leitura
+disfarçada. O teto de 32 bits também entrou na busca, por garantia.
+
+**O servidor de mentira era permissivo demais** — aceitava qualquer número num
+`UID FETCH`, e por isso os 51 testes passavam com o defeito dentro. Agora ele
+recusa fora da faixa, como o Gmail faz. Reintroduzi o defeito para conferir, e
+o teste reproduz o erro exato que o Alexandre viu: `{"erro":"Could not parse
+command"}`, com a linha de 16 dígitos no relatório.
+
+Dois testes novos, e o segundo é o que importa: **guardar a senha não pode
+pedir mensagem nenhuma** — nenhum `UID FETCH` na conversa —, mas tem de entrar
+e escolher a pasta. 53 ok.
+
+É a segunda vez hoje que um fake complacente esconde um defeito real (a
+primeira foi o banco que ignorava filtros). A regra que fica: **quando um teste
+passa e a realidade não, desconfie do fake antes do código.**
+
+---
+
 ## 0-M. Uma palavra que faltava numa lista — 19/09
 
 O Alexandre publicou a função `email`, com os dois arquivos, com o nome certo.

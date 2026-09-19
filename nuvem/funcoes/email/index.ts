@@ -319,14 +319,19 @@ function dataDoServidor(valor?: string): string {
    marcar como lido (BODY.PEEK), nada de apagar, nada de mover. Esta função lê
    a caixa do vendedor e não mexe nela — se ela mexesse, um defeito aqui
    estragaria a caixa de e-mail de alguém, e isso não se desfaz. */
-async function lerCaixa(caixa: Caixa, senha: string): Promise<{ mensagens: any[]; maiorUid: number }> {
+/* Entrar na caixa e escolher a pasta. Tudo o que se faz por IMAP começa
+   assim, então isto é o começo compartilhado — e a duplicata que existia aqui
+   foi o que deixou o teste de senha mandar um comando inválido sem ninguém
+   notar. `fazer` recebe a função de comando e faz o resto. */
+async function naCaixa<T>(
+  caixa: Caixa, senha: string, segundos: number,
+  fazer: (comando: (passo: string, linha: string) => Promise<string>) => Promise<T>
+): Promise<T> {
   const servidor = caixa.imap_servidor || SERVIDORES[caixa.provedor]?.imap || '';
   if (!servidor) throw new Error('não sei o servidor de entrada desta caixa');
 
   const conexao = await Deno.connectTls({ hostname: servidor, port: caixa.imap_porta || 993 });
-  const c = new Conversa(conexao, 40);
-  const mensagens: any[] = [];
-  let maiorUid = Number(caixa.ultimo_uid) || 0;
+  const c = new Conversa(conexao, segundos);
 
   try {
     await c.lerAte((t) => /^\* OK/m.test(t));
@@ -358,10 +363,38 @@ async function lerCaixa(caixa: Caixa, senha: string): Promise<{ mensagens: any[]
     const pasta = (caixa.pastas || 'INBOX').split(',')[0].trim() || 'INBOX';
     await comando('2', 'SELECT "' + pasta.replace(/"/g, '') + '"');
 
+    const saida = await fazer(comando);
+    await c.escrever(sorteio + '9 LOGOUT\r\n');
+    return saida;
+  } finally {
+    c.fechar();
+  }
+}
+
+/* Só provar que a senha abre a caixa. Entra, escolhe a pasta, sai.
+
+   Antes isto chamava a leitura com `ultimo_uid` no máximo que um número
+   seguro comporta, para não baixar nada — e aí o comando saía como
+   `UID FETCH 9007199254740992:*`. UID de IMAP cabe em 32 bits, e o Gmail
+   respondia "Could not parse command": a senha estava certa e o app dizia que
+   não. Testar não é ler com um truque; é um comando a menos. */
+async function testarCaixa(caixa: Caixa, senha: string): Promise<void> {
+  await naCaixa(caixa, senha, 30, async () => undefined);
+}
+
+async function lerCaixa(caixa: Caixa, senha: string): Promise<{ mensagens: any[]; maiorUid: number }> {
+  const mensagens: any[] = [];
+  let maiorUid = Number(caixa.ultimo_uid) || 0;
+
+  await naCaixa(caixa, senha, 40, async (comando) => {
     /* `n:*` devolve a última mensagem mesmo quando n é maior que todos os UIDs
        — é a pegadinha clássica do IMAP. Por isso o filtro por UID acontece
-       depois, na leitura, e não se confia no servidor para fazê-lo. */
-    const desde = maiorUid + 1;
+       depois, na leitura, e não se confia no servidor para fazê-lo.
+
+       O teto é o que cabe num UID: 32 bits. Acima disso o servidor não recusa
+       a busca, recusa a LINHA — e a mensagem que volta não fala de UID
+       nenhum. */
+    const desde = Math.min(maiorUid + 1, 4294967295);
     const bruto = await comando('3', 'UID FETCH ' + desde + ':* (UID INTERNALDATE BODY.PEEK[])');
 
     /* Cada item vem como `* N FETCH (UID u INTERNALDATE "..." BODY[] {tamanho}`
@@ -393,11 +426,7 @@ async function lerCaixa(caixa: Caixa, senha: string): Promise<{ mensagens: any[]
       if (!m.id) continue;   /* sem Message-ID não há chave e não há dedução */
       mensagens.push({ ...m, uid });
     }
-
-    await c.escrever(sorteio + '4 LOGOUT\r\n');
-  } finally {
-    c.fechar();
-  }
+  });
 
   return { mensagens, maiorUid };
 }
@@ -598,7 +627,7 @@ async function guardarSenha(donoId: string, endereco: string, senha: string): Pr
   if (!caixa) return { erro: 'não achei esta caixa entre as suas' };
 
   try {
-    await lerCaixa({ ...caixa, ultimo_uid: Number.MAX_SAFE_INTEGER }, senha);
+    await testarCaixa(caixa, senha);
   } catch (e) {
     const motivo = String((e as Error).message || 'falhou').slice(0, 300);
     await alterar('caixas_email?id=eq.' + caixa.id, { estado: 'erro', erro: motivo });

@@ -57,6 +57,15 @@ function servidorImap(): Falso {
       }
       if (cmd === 'SELECT') return '* 3 EXISTS\r\n' + marca + ' OK [READ-WRITE] SELECT completo\r\n';
       if (cmd === 'UID') {
+        /* UID de IMAP cabe em 32 bits. Acima disso o servidor de verdade não
+           recusa a busca — recusa a LINHA, e a resposta não fala de UID
+           nenhum. O servidor de mentira aceitava qualquer número, e por isso
+           deixou passar um `UID FETCH 9007199254740992:*` que o Gmail
+           respondia com "Could not parse command". */
+        const faixa = /UID FETCH (\d+):/.exec(linha);
+        if (faixa && Number(faixa[1]) > 4294967295) {
+          return marca + ' BAD Could not parse command\r\n';
+        }
         const item = (n: number, uid: number, corpo: string) =>
           '* ' + n + ' FETCH (UID ' + uid + ' INTERNALDATE "17-Sep-2026 12:12:00 +0000" BODY[] {' +
           corpo.length + '}\r\n' + corpo + ')\r\n';
@@ -71,6 +80,8 @@ function servidorImap(): Falso {
 }
 
 let corpoEnviado = '';
+let ultimoImap: Falso | null = null;
+const s_imap = () => ultimoImap || { visto: [], fala: () => null };
 function servidorSmtp(): Falso {
   let emDados = false;
   return {
@@ -115,7 +126,7 @@ let manipulador: any = null;
   env: { get: (k: string) => AMBIENTE[k] },
   serve: (h: any) => { manipulador = h; },
   connectTls: async (o: any) => {
-    if (o.port === 993) return conexaoFalsa(servidorImap());
+    if (o.port === 993) { ultimoImap = servidorImap(); return conexaoFalsa(ultimoImap); }
     return conexaoFalsa(servidorSmtp());
   }
 };
@@ -286,6 +297,13 @@ conferir('cada gravação sai diferente (vetor sorteado)', await (async () => {
 })());
 conferir('marcou a data na caixa',
   patches.some((p) => p.url.includes('caixas_email') && p.corpo.senha_em), '');
+
+conferir('guardar a senha não pediu mensagem nenhuma',
+  !s_imap().visto.some((l) => /UID FETCH/.test(l)),
+  s_imap().visto.join(' | ').slice(0, 200));
+conferir('mas entrou e escolheu a pasta',
+  s_imap().visto.some((l) => /LOGIN/.test(l)) && s_imap().visto.some((l) => /SELECT/.test(l)),
+  s_imap().visto.map((l) => l.split(' ')[1]).join(' '));
 
 console.log('\n9. A senha guardada é a que vale');
 /* o mapa do painel não tem a senha da caixa2; a guardada tem de bastar */
