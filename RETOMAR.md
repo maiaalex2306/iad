@@ -5,8 +5,8 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v194**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v194, o aparelho
+Publicado agora: **v195**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v195, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -361,6 +361,47 @@ evidência e **criou a tarefa**; os três de ruído foram marcados sem chamada; 
 **Onde está:** `analisarEmailsNovos`, `analisarUm`, `tarefaDoCompromisso` e
 `ehRuido` em `src/app.js`; `marcarEmailAnalisado` e `contarTentativaDeAnalise`
 em `src/nuvem.js`; `linhaDaAnalise` em `src/views.js`.
+
+---
+
+## 0-O. A função pedia a caixa inteira de uma vez — v195, 19/09
+
+Senha aceita, e o próximo erro:
+
+> *"Function failed due to not having enough compute resources (please check
+> logs)"*
+
+Que não diz nada sobre e-mail e manda procurar no lugar errado. A causa: na
+**primeira** leitura de uma caixa, `ultimo_uid` é zero, então o comando saía
+como `UID FETCH 1:*` — **"me dê tudo"**. Numa caixa de verdade isso é a
+correspondência de anos chegando de uma vez, e a função morre.
+
+**Dois limites, e eles precisam dos dois:**
+
+- **25 mensagens por rodada.** Com `UID FETCH n:*` não há como pedir "as 25
+  primeiras" — quem decide quantas vêm é o servidor. Então agora se **pergunta
+  antes**: `UID SEARCH` devolve só números (uma caixa de dez mil responde uns
+  70 KB), escolhem-se as 25 mais antigas, e só elas são buscadas pelo UID. Com
+  o agendador de 5 em 5 minutos, uma caixa antiga drena sozinha.
+- **64 KB por mensagem**, com `BODY.PEEK[]<0.65536>`. O IAD guarda só o texto —
+  anexo e imagem ficam onde estão. Sem isso, um anexo de 30 MB entra na memória
+  por acidente.
+
+A tela diz quantas faltam, senão a pessoa veria "25 recebidos" três vezes e
+concluiria que travou.
+
+**O fake era o problema de novo — a terceira vez hoje.** Ele devolvia as mesmas
+três mensagens para qualquer pedido, então nunca notou que a função pedia tudo.
+Agora ele tem uma caixa de 43 mensagens (40 delas com 200 KB), responde
+`SEARCH` de verdade, entrega só os UIDs pedidos e só o pedaço pedido, e
+**recusa um FETCH sem limite de tamanho**. Reintroduzi o defeito para conferir:
+o teste acusa `UID FETCH 11:* (UID INTERNALDATE BODY.PEEK[])` e a caixa fica
+com zero mensagens.
+
+Quatro asserções novas, e são sobre a forma do pedido, não sobre o resultado:
+que o `SEARCH` vem antes do `FETCH`, que o pedaço é de 64 KB, que vêm no
+máximo 25, e que **nunca se pede a caixa inteira**. 57 ok na função, mais 62
+no navegador.
 
 ---
 

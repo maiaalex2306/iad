@@ -6256,7 +6256,11 @@
         : '<p class="small muted" style="margin:8px 0 0">' +
           (t.quando
             ? 'Última conferência às ' + String(t.quando).slice(11, 16) + ' — ' +
-              (t.recebidos || 0) + ' recebido(s) e ' + (t.enviados || 0) + ' enviado(s).'
+              (t.recebidos || 0) + ' recebido(s) e ' + (t.enviados || 0) + ' enviado(s).' +
+              (t.faltam
+                ? ' Ainda faltam ' + t.faltam + ' na caixa — o servidor traz um lote por vez, ' +
+                  'e continua sozinho a cada rodada.'
+                : '')
             : 'O servidor busca sozinho de tempo em tempo, e sempre que você abre a aba E-mail ' +
               'de uma negociação.') + '</p>') +
       '<p class="tiny muted" style="margin:10px 0 0">A sua senha de aplicativo fica cifrada no ' +

@@ -39,6 +39,19 @@ const NORMAL = corpoDeUmEmail('normal@suzano.com.br', 'ana@suzano.com.br',
   '=?UTF-8?B?UHJlw6dv?=', 'Bom dia, pode mandar a proposta?\r\n\r\nEm 10/09 Alexandre escreveu:\r\n> coisa antiga\r\n');
 const ANTIGA = corpoDeUmEmail('antiga@suzano.com.br', 'ana@suzano.com.br', 'Velha', 'ja vista\r\n');
 
+/* O que existe na caixa do servidor de mentira. Além das três de sempre, 40
+   mensagens antigas — o caso que derrubou a função de verdade: primeira
+   leitura, `ultimo_uid` em zero, e o pedido saindo como "me dê tudo". */
+const CAIXA_DO_SERVIDOR: { uid: number; corpo: string }[] = [
+  { uid: 9, corpo: ANTIGA }, { uid: 11, corpo: NORMAL }, { uid: 12, corpo: ARMADILHA }
+].concat(
+  Array.from({ length: 40 }, (_v, i) => ({
+    uid: 100 + i,
+    corpo: corpoDeUmEmail('velha' + i + '@suzano.com.br', 'ana@suzano.com.br',
+      'Assunto ' + i, 'texto ' + i + '\r\n' + 'x'.repeat(200000))
+  }))
+);
+
 function servidorImap(): Falso {
   let s: Falso;
   let marca = '';
@@ -62,15 +75,36 @@ function servidorImap(): Falso {
            nenhum. O servidor de mentira aceitava qualquer número, e por isso
            deixou passar um `UID FETCH 9007199254740992:*` que o Gmail
            respondia com "Could not parse command". */
-        const faixa = /UID FETCH (\d+):/.exec(linha);
+        const faixa = /UID (?:FETCH|SEARCH)(?: UID)? (\d+)[:,]/.exec(linha);
         if (faixa && Number(faixa[1]) > 4294967295) {
           return marca + ' BAD Could not parse command\r\n';
         }
-        const item = (n: number, uid: number, corpo: string) =>
-          '* ' + n + ' FETCH (UID ' + uid + ' INTERNALDATE "17-Sep-2026 12:12:00 +0000" BODY[] {' +
-          corpo.length + '}\r\n' + corpo + ')\r\n';
-        return item(1, 9, ANTIGA) + item(2, 11, NORMAL) + item(3, 12, ARMADILHA) +
-          marca + ' OK FETCH completo\r\n';
+
+        if (/UID SEARCH/i.test(linha)) {
+          const de = Number((/UID SEARCH UID (\d+):/.exec(linha) || ['', '1'])[1]);
+          const achados = CAIXA_DO_SERVIDOR.map((m) => m.uid).filter((u) => u >= de);
+          return '* SEARCH ' + achados.join(' ') + '\r\n' + marca + ' OK SEARCH completo\r\n';
+        }
+
+        /* Só os UIDs pedidos, e só o pedaço pedido de cada um — como o
+           servidor de verdade faz. O fake antigo devolvia a caixa inteira
+           para qualquer pedido, e por isso não notava que a função pedia
+           tudo de uma vez. */
+        const pedidos = ((/UID FETCH ([\d,]+)/.exec(linha) || ['', ''])[1] || '')
+          .split(',').filter(Boolean).map(Number);
+        const pedaco = Number((/BODY\.PEEK\[\]<0\.(\d+)>/.exec(linha) || ['', '0'])[1]);
+        if (!pedaco) return marca + ' BAD pedido sem limite de tamanho\r\n';
+
+        let saida = '';
+        pedidos.forEach((uid, i) => {
+          const m = CAIXA_DO_SERVIDOR.filter((x) => x.uid === uid)[0];
+          if (!m) return;
+          const corpo = m.corpo.slice(0, pedaco);
+          saida += '* ' + (i + 1) + ' FETCH (UID ' + uid +
+            ' INTERNALDATE "17-Sep-2026 12:12:00 +0000" BODY[]<0> {' +
+            corpo.length + '}\r\n' + corpo + ')\r\n';
+        });
+        return saida + marca + ' OK FETCH completo\r\n';
       }
       if (cmd === 'LOGOUT') return '* BYE\r\n' + marca + ' OK\r\n';
       return marca + ' BAD nao entendi\r\n';
@@ -199,8 +233,19 @@ conferir('duas caixas na resposta', corpo.caixas?.length === 2, JSON.stringify(c
 conferir('a caixa sem senha ficou sem-credencial',
   patches.some((p) => p.corpo.estado === 'sem-credencial'),
   JSON.stringify(patches.map((p) => p.corpo)).slice(0, 300));
-conferir('gravou 2 mensagens (a de UID 9 ficou de fora)', gravados.length === 2,
-  gravados.map((g) => g.id).join(' | '));
+conferir('trouxe no máximo 25 numa rodada', gravados.length === 25, String(gravados.length));
+conferir('e disse quantas faltam', corpo.caixas?.some((l: any) => l.faltam === 17),
+  JSON.stringify(corpo.caixas));
+conferir('pediu só um pedaço de cada mensagem',
+  s_imap().visto.some((l) => /BODY\.PEEK\[\]<0\.65536>/.test(l)),
+  s_imap().visto.filter((l) => /FETCH/.test(l)).join(' | ').slice(0, 160));
+conferir('perguntou antes de pedir (SEARCH veio primeiro)',
+  s_imap().visto.findIndex((l) => /UID SEARCH/.test(l)) <
+  s_imap().visto.findIndex((l) => /UID FETCH/.test(l)),
+  s_imap().visto.map((l) => l.split(' ').slice(1, 3).join(' ')).join(' | '));
+conferir('nunca pediu a caixa inteira',
+  !s_imap().visto.some((l) => /UID FETCH \d+:\*/.test(l)),
+  s_imap().visto.filter((l) => /FETCH/.test(l)).join(' | ').slice(0, 160));
 conferir('a mensagem antiga nao entrou', !gravados.some((g) => g.id.includes('antiga')));
 conferir('a armadilha nao virou mensagem falsa',
   !gravados.some((g) => g.id.includes('999') || g.corpo === 'lixo lixo lix'),
@@ -224,7 +269,9 @@ conferir('thread amarrada', nova?.thread === '<normal@suzano.com.br>', nova?.thr
 
 console.log('\n3. A marca do ultimo UID');
 const marcaUid = patches.filter((p) => p.url.includes('caixas_email') && p.corpo.ultimo_uid);
-conferir('avancou para 12', marcaUid.some((p) => p.corpo.ultimo_uid === 12),
+/* 11, 12 e depois 100..122 — vinte e cinco, a mais alta é 122. A próxima
+   rodada começa em 123 e drena o resto. */
+conferir('avancou para 122', marcaUid.some((p) => p.corpo.ultimo_uid === 122),
   JSON.stringify(marcaUid.map((p) => p.corpo)));
 conferir('a caixa ficou ok', patches.some((p) => p.corpo.estado === 'ok'));
 

@@ -6334,6 +6334,10 @@
         quando: new Date().toISOString(),
         recebidos: linhas.reduce(function (t, l) { return t + (l.recebidos || 0); }, 0),
         enviados: linhas.reduce(function (t, l) { return t + (l.enviados || 0); }, 0),
+        /* Caixa antiga não vem de uma vez: o servidor traz um lote por rodada
+           e continua na seguinte. Sem este número, a pessoa veria "25
+           recebidos" três vezes seguidas e concluiria que travou. */
+        faltam: linhas.reduce(function (t, l) { return t + (l.faltam || 0); }, 0),
         /* O erro da caixa é o da caixa, e aparece com o endereço junto: com
            duas caixas ligadas, "falhou" sem dizer qual manda a pessoa mexer na
            configuração certa por sorte. */

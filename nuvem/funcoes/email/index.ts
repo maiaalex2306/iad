@@ -382,26 +382,62 @@ async function testarCaixa(caixa: Caixa, senha: string): Promise<void> {
   await naCaixa(caixa, senha, 30, async () => undefined);
 }
 
-async function lerCaixa(caixa: Caixa, senha: string): Promise<{ mensagens: any[]; maiorUid: number }> {
+/* Quantas mensagens uma rodada traz, e quanto de cada uma.
+
+   Os dois limites existem pelo mesmo motivo, e ele custou caro: a primeira
+   leitura de uma caixa tem `ultimo_uid` em zero, então o comando era "me dê
+   TUDO". Numa caixa de verdade isso é a correspondência de anos inteira
+   chegando de uma vez, e a função morria com
+   "Function failed due to not having enough compute resources" — que não diz
+   nada sobre e-mail e manda procurar no lugar errado.
+
+   25 por rodada, com o agendador de 5 em 5 minutos, drena uma caixa antiga
+   sozinho: cada rodada avança a marca, e a seguinte continua de onde parou.
+   E 64 KB por mensagem é de sobra para o que o IAD guarda — só o texto, sem
+   anexo e sem imagem. Anexo de 30 MB não entra na memória por acidente. */
+const POR_RODADA = 25;
+const BYTES_POR_MENSAGEM = 65536;
+
+async function lerCaixa(caixa: Caixa, senha: string):
+    Promise<{ mensagens: any[]; maiorUid: number; restantes: number }> {
   const mensagens: any[] = [];
   let maiorUid = Number(caixa.ultimo_uid) || 0;
+  let restantes = 0;
 
   await naCaixa(caixa, senha, 40, async (comando) => {
-    /* `n:*` devolve a última mensagem mesmo quando n é maior que todos os UIDs
-       — é a pegadinha clássica do IMAP. Por isso o filtro por UID acontece
-       depois, na leitura, e não se confia no servidor para fazê-lo.
+    /* Primeiro PERGUNTAR quais existem, e só depois buscar as escolhidas.
+
+       SEARCH devolve só números — uma caixa com dez mil mensagens responde uns
+       70 KB. É o que torna possível limitar: com `UID FETCH n:*` não há como
+       pedir "as 25 primeiras", porque quem decide quantas vêm é o servidor.
 
        O teto é o que cabe num UID: 32 bits. Acima disso o servidor não recusa
        a busca, recusa a LINHA — e a mensagem que volta não fala de UID
        nenhum. */
     const desde = Math.min(maiorUid + 1, 4294967295);
-    const bruto = await comando('3', 'UID FETCH ' + desde + ':* (UID INTERNALDATE BODY.PEEK[])');
+    const achados = await comando('3', 'UID SEARCH UID ' + desde + ':*');
 
-    /* Cada item vem como `* N FETCH (UID u INTERNALDATE "..." BODY[] {tamanho}`
-       seguido de exatamente `tamanho` bytes. É o tamanho que manda: procurar o
-       fim por texto quebraria em qualquer mensagem que contivesse `)` — ou
-       seja, em quase todas. */
-    const re = /\* \d+ FETCH \(([^)]*?)BODY\[\] \{(\d+)\}\r?\n/g;
+    const todos = ((/^\* SEARCH([ \d]*)/m.exec(achados) || [])[1] || '')
+      .trim().split(/\s+/).map(Number)
+      .filter((u) => u > (Number(caixa.ultimo_uid) || 0))
+      .sort((a, b) => a - b);
+
+    /* As mais antigas primeiro: assim a marca avança sempre, e uma caixa com
+       atraso é drenada em ordem em vez de ficar pulando. */
+    const desta = todos.slice(0, POR_RODADA);
+    restantes = todos.length - desta.length;
+    if (!desta.length) return;
+
+    /* `<0.65536>` é o pedaço que se quer de cada mensagem: do byte zero em
+       diante, no máximo isso. O servidor manda só esse pedaço. */
+    const bruto = await comando('4', 'UID FETCH ' + desta.join(',') +
+      ' (UID INTERNALDATE BODY.PEEK[]<0.' + BYTES_POR_MENSAGEM + '>)');
+
+    /* Cada item vem como `* N FETCH (UID u INTERNALDATE "..." BODY[]<0> {n}`
+       seguido de exatamente `n` bytes. É o tamanho que manda: procurar o fim
+       por texto quebraria em qualquer mensagem que contivesse `)` — ou seja,
+       em quase todas. O `<0>` só aparece quando se pede um pedaço. */
+    const re = /\* \d+ FETCH \(([^)]*?)BODY\[\](?:<\d+>)? \{(\d+)\}\r?\n/g;
     let achado: RegExpExecArray | null;
     while ((achado = re.exec(bruto)) !== null) {
       const meta = achado[1] || '';
@@ -428,7 +464,7 @@ async function lerCaixa(caixa: Caixa, senha: string): Promise<{ mensagens: any[]
     }
   });
 
-  return { mensagens, maiorUid };
+  return { mensagens, maiorUid, restantes };
 }
 
 /* ---------------- SMTP ----------------
@@ -549,7 +585,8 @@ async function rodar(donoId?: string): Promise<Record<string, unknown>> {
     /* Receber e enviar são independentes de propósito: IMAP fora do ar não
        pode impedir a resposta que o vendedor já escreveu de sair. */
     try {
-      const { mensagens, maiorUid } = await lerCaixa(caixa, senha);
+      const { mensagens, maiorUid, restantes } = await lerCaixa(caixa, senha);
+      if (restantes) linha.faltam = restantes;
       if (mensagens.length) {
         linha.recebidos = await gravarEmails(mensagens.map((m) => ({
           id: m.id, tenant_id: caixa.tenant_id, dono_id: caixa.dono_id, caixa: caixa.endereco,
