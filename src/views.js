@@ -6251,7 +6251,8 @@
       '<button class="btn ghost mini"' + (ocupado ? ' disabled' : '') +
       ' onclick="App.buscarEmails()">' + (ocupado ? 'Buscando…' : 'Buscar agora') + '</button></div>' +
       (t.erro
-        ? '<div class="aviso" style="margin-top:10px">A caixa não respondeu: ' + esc(t.erro) + '</div>'
+        ? '<div class="aviso" style="margin-top:10px">' +
+          esc(t.explicacao || ('A caixa não respondeu: ' + t.erro)).replace(/\n/g, '<br>') + '</div>'
         : '<p class="small muted" style="margin:8px 0 0">' +
           (t.quando
             ? 'Última conferência às ' + String(t.quando).slice(11, 16) + ' — ' +

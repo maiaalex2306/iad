@@ -1789,9 +1789,8 @@
       });
     },
 
-    /* A caixa da pessoa. Aqui NÃO se digita senha: o campo não existe, de
-       propósito. A senha de aplicativo mora num segredo da Edge Function, e
-       navegador que nunca a viu é navegador que não pode vazá-la. */
+    /* A caixa da pessoa. A senha vai daqui direto para a Edge Function, que a
+       testa e a guarda cifrada — o navegador não a guarda em lugar nenhum. */
     configurarEmail: function (enderecoAlvo) {
       if (!Mail || !Mail.disponivel()) { alert('Entre com a sua conta da nuvem antes.'); return; }
       const todas = Mail.minhasCaixas() || [];
@@ -1895,13 +1894,19 @@
             buscarNoServidorDeEmail(false);
           }, function (e) {
             /* A caixa ficou gravada; só a senha não entrou. Dizer isso evita
-               que a pessoa refaça o cadastro inteiro achando que perdeu tudo. */
+               que a pessoa refaça o cadastro inteiro achando que perdeu tudo.
+
+               E o motivo importa mais do que parece. Erro SEM status é a
+               resposta que nunca chegou — função não publicada, e o navegador
+               nem consegue ler o que voltou por causa do CORS. Erro COM status
+               é o servidor respondendo. Antes isto era uma mensagem só, que
+               dizia "o mais comum é ser a senha da conta" mesmo quando a
+               função não existia: mandava a pessoa trocar de senha a tarde
+               inteira por um problema que não era dela. */
             Mail.esquecer();
             pintarEmails(true);
-            alert('A caixa foi salva, mas a senha não foi aceita:\n\n' + e.message +
-              '\n\nO mais comum é ser a senha da CONTA em vez da senha de APLICATIVO, ' +
-              'ou a verificação em duas etapas estar desligada. Abra "Minha caixa" de novo ' +
-              'e tente outra vez — o resto do cadastro já está guardado.');
+            alert('A caixa foi salva, mas a senha não foi guardada.\n\n' +
+              porQueASenhaFalhou(e));
           });
         }, function (e) {
           alert('Não consegui salvar: ' + e.message +
@@ -6345,14 +6350,15 @@
       });
     }, function (e) {
       buscando = false;
+      /* A explicação vai para a TELA, e não só para o alerta: a busca também
+         roda sozinha ao abrir a aba, e aí não há alerta nenhum — antes disso,
+         a linha dizia "não foi possível falar com o servidor" e parava por
+         aí, sem dizer o que fazer. */
       transporte = { quando: new Date().toISOString(), recebidos: 0, enviados: 0,
-        erro: (e && e.message) || 'falhou' };
+        erro: (e && e.message) || 'falhou',
+        explicacao: porQueASenhaFalhou(e) };
       console.warn('Não consegui falar com o servidor de e-mail:', e);
-      if (comAviso) {
-        alert('Não consegui falar com o servidor de e-mail: ' + transporte.erro +
-          '\n\nSe a mensagem fala em EMAIL_SENHAS, falta guardar a senha de aplicativo ' +
-          'desta caixa no segredo da função — veja nuvem/EMAIL.md.');
-      }
+      if (comAviso) alert(porQueASenhaFalhou(e));
       render();
       return null;
     });
@@ -6360,6 +6366,49 @@
 
   App.buscarEmails = function () { buscarNoServidorDeEmail(true); };
   App.buscandoEmails = function () { return buscando; };
+
+  /* Por que a senha não entrou — e a diferença que mais importa aqui é se a
+     resposta CHEGOU.
+
+     Um erro sem `status` quer dizer que o navegador não conseguiu falar com a
+     função: ela não foi publicada, tem outro nome, ou a publicação falhou. Um
+     erro com `status` é o servidor respondendo, e aí o motivo é dele.
+
+     A mensagem antiga não separava os dois: dizia "o mais comum é ser a senha
+     da CONTA em vez da de APLICATIVO" mesmo quando a função não existia. Quem
+     leu aquilo foi trocar de senha, com e sem espaços, atrás de um problema
+     que não era dele — e o problema real, que era um passo de instalação que
+     faltou, ficou invisível. */
+  function porQueASenhaFalhou(e) {
+    const msg = (e && e.message) || 'falhou';
+
+    if (!e || !e.status) {
+      return 'O IAD não conseguiu falar com a função "email" no servidor — ' +
+        'a resposta não chegou.\n\n' +
+        'ISSO NÃO É A SUA SENHA. Quase sempre é a Edge Function que não foi ' +
+        'publicada, ou foi publicada com outro nome.\n\n' +
+        'Confira no Supabase, em Edge Functions: tem de existir uma função ' +
+        'chamada exatamente "email", com DOIS arquivos dentro — index.ts e ' +
+        'mime.ts. Se o Deploy falhou dizendo que não achou o módulo, foi o ' +
+        'mime.ts que faltou.';
+    }
+    if (e.status === 503) {
+      return 'O servidor respondeu, mas está sem configuração: ' + msg + '\n\n' +
+        'Falta criar o segredo EMAIL_CHAVE_MESTRA nas Edge Functions.';
+    }
+    if (e.status === 401 || e.status === 403) {
+      return 'O servidor não reconheceu a sua sessão: ' + msg + '\n\n' +
+        'Saia e entre de novo na sua conta da nuvem.';
+    }
+    if (/credential|authenticat|invalid|senha|password|login/i.test(msg)) {
+      return 'A sua caixa de e-mail recusou a senha:\n\n' + msg + '\n\n' +
+        'O mais comum é ser a senha da CONTA em vez da senha de APLICATIVO — ' +
+        'a de aplicativo tem 16 letras e você gera em ' +
+        'myaccount.google.com/apppasswords. O segundo mais comum é a ' +
+        'verificação em duas etapas estar desligada.';
+    }
+    return 'O servidor respondeu: ' + msg;
+  }
 
   function analisandoAgora() { return analisando; }
 

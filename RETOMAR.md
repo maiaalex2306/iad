@@ -5,8 +5,8 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v193**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v193, o aparelho
+Publicado agora: **v194**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v194, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -361,6 +361,48 @@ evidência e **criou a tarefa**; os três de ruído foram marcados sem chamada; 
 **Onde está:** `analisarEmailsNovos`, `analisarUm`, `tarefaDoCompromisso` e
 `ehRuido` em `src/app.js`; `marcarEmailAnalisado` e `contarTentativaDeAnalise`
 em `src/nuvem.js`; `linhaDaAnalise` em `src/views.js`.
+
+---
+
+## 0-L. A mensagem de erro culpava a pessoa — v194, 19/09
+
+O Alexandre cadastrou as duas caixas, colou a senha de aplicativo **com e sem
+espaços**, e o app respondeu:
+
+> *"A caixa foi salva, mas a senha não foi aceita: Não foi possível falar com o
+> servidor. (…) O mais comum é ser a senha da CONTA em vez da senha de
+> APLICATIVO."*
+
+As duas frases se contradizem, e a segunda é minha. A resposta **nem chegou ao
+navegador** — a Edge Function não está publicada — e ainda assim a mensagem
+mandou ele desconfiar da própria senha. Ele foi trocar de senha atrás de um
+problema que não era dele, enquanto o problema real (um passo de instalação que
+faltou) ficava invisível.
+
+**A regra que faltava usar** já estava escrita no `src/nuvem.js`, no comentário
+do `chamar`: *erro com status veio do servidor; erro SEM status significa que a
+resposta nem chegou*. `porQueASenhaFalhou(e)` passou a respeitá-la:
+
+| O que aconteceu | O que a tela diz agora |
+| --- | --- |
+| sem status — a resposta não chegou | **"ISSO NÃO É A SUA SENHA"**, e manda conferir se existe a função `email` com os **dois** arquivos |
+| 503 | falta o segredo `EMAIL_CHAVE_MESTRA` |
+| 401 / 403 | a sessão venceu, entre de novo |
+| a caixa recusou de verdade | aí sim: senha da conta ≠ senha de aplicativo, com o endereço de onde gerar |
+| qualquer outro | o que o servidor disse, sem inventar causa |
+
+A explicação também foi para a **tela**, e não só para o alerta: a busca roda
+sozinha ao abrir a aba, e ali não há alerta nenhum — antes, a linha dizia "não
+foi possível falar com o servidor" e parava aí.
+
+**13 testes**, um por causa, cada um provando também o que a mensagem **não**
+diz: no caso da função fora do ar, que ela *não* fala em senha da conta. O
+teste usa `route.abort()` de propósito, que é o que de fato acontece quando a
+função não existe — o portão recusa e o CORS impede o navegador de ler o que
+voltou.
+
+**Duas asserções antigas foram atualizadas, não apagadas:** elas cobravam o
+texto do alerta anterior.
 
 ---
 
