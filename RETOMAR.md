@@ -5,8 +5,8 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v196**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v196, o aparelho
+Publicado agora: **v197**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v197, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -361,6 +361,40 @@ evidência e **criou a tarefa**; os três de ruído foram marcados sem chamada; 
 **Onde está:** `analisarEmailsNovos`, `analisarUm`, `tarefaDoCompromisso` e
 `ehRuido` em `src/app.js`; `marcarEmailAnalisado` e `contarTentativaDeAnalise`
 em `src/nuvem.js`; `linhaDaAnalise` em `src/views.js`.
+
+---
+
+## 0-Q. Uma conversa de cinco respostas não são cinco tarefas — v197, 19/09
+
+O Alexandre descreveu o que espera do fluxo e terminou com um cuidado:
+*"tem que tomar cuidado com e-mails que possuem várias respostas e réplicas"*.
+
+Três dos quatro pontos dele já estavam construídos, e vale registrar onde:
+
+| O que ele descreveu | Onde já estava |
+| --- | --- |
+| entrar na oportunidade e ver os e-mails | a aba **E-mail** do negócio, casada por endereço e por thread |
+| apertar Analisar e virar movimentação | `analisarEmailsNovos` → evidência, nota e tarefa |
+| ler só o que chegou depois da última vez | `ultimo_uid` na caixa e `analisada_em` na mensagem |
+
+Sobre "a partir da **data** da última leitura": o IAD usa o **UID**, não a data.
+É mais forte — relógio de servidor de e-mail erra, e duas mensagens no mesmo
+segundo são indistinguíveis por data. O UID é um contador que só cresce.
+
+**O quarto ponto era um buraco de verdade.** Uma troca de cinco respostas sobre
+o mesmo pedido gerava **cinco tarefas iguais** — e lista de tarefas com
+repetição perde a credibilidade que ela existe para ter.
+
+`jaPediramIsso()` usa como chave o **assunto sem os "Re:"/"Enc:"**, que é o que
+atravessa a thread inteira. Se já existe tarefa **aberta** vinda de e-mail com
+aquele assunto, a nova não nasce. **Concluída não conta**: se a pessoa entregou
+e o cliente pediu de novo, é pedido novo de verdade.
+
+**Testado pelo caminho real**, e não chamando a função por dentro: quatro
+mensagens semeadas na tabela, o assistente substituído por um de mentira que
+devolve sempre o mesmo pedido, e `App.analisarEmails()` rodando de verdade.
+Três da mesma conversa + uma de outro assunto → **duas** tarefas. Reanalisar
+não repete. Concluir e cobrar de novo cria.
 
 ---
 

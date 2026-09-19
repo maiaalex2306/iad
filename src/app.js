@@ -6486,12 +6486,42 @@
      já é o próximo compromisso da negociação, e transformá-lo em tarefa nossa
      encheria a agenda de coisas que não dependem de nós — que é como uma lista
      de tarefas perde credibilidade. */
+  /* "Re: Re: Enc: Proposta" e "Proposta" são a MESMA conversa. Sem isto, uma
+     troca de cinco respostas sobre o mesmo pedido viraria cinco tarefas
+     iguais — e uma lista de tarefas com repetição perde a credibilidade que
+     ela existe para ter. */
+  function assuntoBase(texto) {
+    return String(texto || '')
+      .replace(/^\s*(re|res|res\.|fw|fwd|enc|encaminhada)\s*:\s*/i, '')
+      .replace(/^\s*(re|res|res\.|fw|fwd|enc|encaminhada)\s*:\s*/i, '')
+      .replace(/^\s*(re|res|res\.|fw|fwd|enc|encaminhada)\s*:\s*/i, '')
+      .trim().toLowerCase();
+  }
+
+  /* Já existe tarefa ABERTA vinda de e-mail para esta mesma conversa?
+
+     A chave é o assunto sem os "Re:", porque é o que atravessa a thread
+     inteira. Fechada não conta: se a pessoa concluiu e o cliente pediu de
+     novo, é pedido novo de verdade. */
+  function jaPediramIsso(op, assunto) {
+    const base = assuntoBase(assunto);
+    if (!base) return null;
+    return (Store.tarefasDaOportunidade(op.id) || []).filter(function (t) {
+      return t.status === 'aberta' && t.origem === 'email' &&
+        String(t.descricao || '').toLowerCase().indexOf('"' + base + '"') !== -1;
+    })[0] || null;
+  }
+
   function tarefaDoCompromisso(op, m, resultado) {
     const evidencias = (resultado && resultado.evidencias) || [];
     const dela = evidencias.filter(function (e) {
       return e.compromissoTexto && String(e.compromissoDono || '') === 'nos';
     })[0];
     if (!dela) return null;
+
+    /* O mesmo pedido, cobrado de novo, não é uma tarefa nova. */
+    const aberta = jaPediramIsso(op, m.assunto);
+    if (aberta) return null;
 
     const contato = m.contato_id ? Store.contato(m.contato_id)
       : (Mail.contatoDoEndereco(Mail.endereco(m.de)) || null);
@@ -6503,7 +6533,9 @@
       oportunidadeId: op.id,
       contatoId: contato ? contato.id : null,
       titulo: primeiro + (conta ? ' da ' + conta.nome : '') + ': ' + dela.compromissoTexto,
-      descricao: 'Pedido no e-mail "' + (m.assunto || 'sem assunto') + '", de ' +
+      /* O assunto entra SEM os "Re:" e entre aspas: é a chave que o
+         `jaPediramIsso` procura na próxima mensagem da mesma conversa. */
+      descricao: 'Pedido no e-mail "' + (assuntoBase(m.assunto) || 'sem assunto') + '", de ' +
         String(m.enviada_em || '').slice(0, 10) + '.',
       tipo: 'E-mail',
       decisaoAlvo: dela.dimensao || '',
