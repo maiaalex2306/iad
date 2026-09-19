@@ -427,6 +427,49 @@ mora dentro de um cadastro é trabalho que ninguém faz.
 `cabecalhoDaNutricao(est)` e `definirAbaNutricao` em `src/views.js`; a rota e
 `App.abaNutricao` em `src/app.js`. A linha nova na tabela `TELAS` do manual.
 
+### A rolagem que voltava ao topo — v202, 19/09
+
+*"Quando eu clico numa linha, volta para o início… então fico tendo que rolar a
+tela o tempo todo."* Com 98 linhas, isso torna a triagem em lote inviável — que
+era justamente o propósito da tela.
+
+A causa era uma linha no coração do app: **`window.scrollTo(0, 0)` no fim de
+todo `render()`**. Marcar uma caixinha chamava `render()`, que reconstruía a
+página inteira e devolvia o topo. O sintoma não era da Nutrição — era de
+qualquer tela; Tarefas e Pipeline já tinham cada uma o seu remendo local
+(`repintarTarefas`, `repintarPipeline`), copiado um do outro.
+
+Três mudanças, da mais específica para a mais geral:
+
+1. **`repintarConteudo(hash, desenhar)`** — um só lugar no lugar dos dois
+   remendos. Guarda rolagem, campo com foco e posição do cursor, repinta só o
+   `#conteudo` (agora com a faixa de aviso, que os remendos perdiam) e devolve
+   as três coisas. `repintarTarefas`, `repintarPipeline` e o novo
+   `repintarNutricao` são uma linha cada.
+2. **`render()` só mexe na rolagem quando a TELA MUDA.** Repintura da mesma
+   tela — marcar, filtrar, concluir, mover em lote — deixa a pessoa onde
+   estava. Isso conserta de graça a busca de Cadastros e tudo o mais que
+   chamava `render()` direto.
+3. **`ondeParei`** — a rolagem de cada tela de lista, guardada ao sair e
+   devolvida ao voltar. Entrar num negócio a partir da linha 90 e voltar agora
+   devolve a linha 90. Vale só para as telas do menu: um negócio a gente
+   *abre*, e quem abre espera começar do começo. Vive na memória e morre com a
+   aba. `history.scrollRestoration = 'manual'` desliga a memória do navegador,
+   que brigaria com esta.
+
+Troca de aba (Nutrição, Cadastros, Configuração) continua começando do topo,
+explicitamente: é troca de conteúdo, não continuação do trabalho.
+
+**20 testes novos** (`rolagem`), com 98 linhas de verdade: marcar, desmarcar,
+digitar tecla a tecla, entrar num negócio e voltar — na Nutrição e no Pipeline.
+
+Dois "defeitos" que o teste acusou eram do próprio teste, e valem como nota:
+o **diálogo diário da IaD** rouba o foco 400 ms depois do render (feche-o antes
+de medir foco), e **o Pipeline abre negócio por `onclick`, não por `<a href>`**.
+
+**Onde está:** `repintarConteudo`, `ondeParei`, `rolagemAnterior` e
+`ehTelaDeLista` em `src/app.js`.
+
 ### Um defeito que a tela dele denunciou no mesmo dia
 
 O e-mail *"Aceita: Conversa Inicial"* continuava mostrando o aviso jurídico

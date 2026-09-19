@@ -60,6 +60,18 @@
   const SEM_FUNCAO = 'não foi publicada, ou foi publicada com o "Verify JWT" ' +
     'ligado — e nesse caso o navegador nem chega a mandar o pedido.';
 
+  /* A rolagem de cada tela de lista, e qual tela estava aberta no render
+     anterior. O navegador tem uma memória própria para isto, e ela brigaria
+     com a nossa em cada troca de hash — por isso a desligamos aqui: manda
+     quem sabe se a tela foi trocada ou só repintada. */
+  const ondeParei = {};
+  let rolagemAnterior = null;
+  try { if (global.history && 'scrollRestoration' in global.history) global.history.scrollRestoration = 'manual'; } catch (e) {}
+
+  function ehTelaDeLista(hash) {
+    return ROTAS.some(function (r) { return r.hash === hash; });
+  }
+
   let promptInstalacao = null;
   let leads = null;
   /* Lote resgatado de outro balde: a baixa tem de ir para o balde de onde ele
@@ -125,6 +137,16 @@
     pintarTopo();
 
     const hash = location.hash || '#/hoje';
+    /* Onde a pessoa estava em cada tela.
+
+       Sem isto, entrar num negócio a partir da lista e voltar devolvia o topo
+       — e quem estava triando a linha noventa recomeçava a rolagem toda vez.
+       Vale só para as telas de lista: um negócio a gente ABRE, e quem abre
+       espera começar do começo. Vive na memória e morre com a aba, como toda
+       escolha de tela. */
+    if (rolagemAnterior !== null && ehTelaDeLista(rolagemAnterior)) {
+      ondeParei[rolagemAnterior] = window.scrollY;
+    }
     /* Saiu de Conversas, fechou a conversa: voltar depois e cair no meio de um
        fio antigo é desorientador. */
     if (hash !== '#/conversas' && V.conversaAberta()) V.definirConversa('');
@@ -157,7 +179,14 @@
     const barra = document.getElementById('barra-admin');
     if (barra) barra.innerHTML = V.barraAdmin();
 
-    window.scrollTo(0, 0);
+    /* Repintura da MESMA tela (marcar, filtrar, concluir, mover em lote) não
+       mexe na rolagem: quem está trabalhando continua onde estava. Troca de
+       tela devolve o lugar guardado daquela tela — ou o topo, se for a
+       primeira vez. */
+    if (hash !== rolagemAnterior) {
+      window.scrollTo(0, ehTelaDeLista(hash) ? (ondeParei[hash] || 0) : 0);
+    }
+    rolagemAnterior = hash;
 
     /* A IaD aparece uma vez por dia, na primeira tela depois do login — e
        depois do render, nunca antes: abrir um diálogo modal sobre uma tela
@@ -172,42 +201,47 @@
     }
   }
 
-  /* A tabela e a barra de lote se redesenham sozinhas; o resto da tela, não.
+  /* Repintar só o conteúdo, sem sair do lugar.
+
      Marcar uma linha não pode reconstruir a página inteira: a caixa de busca
-     perderia o foco e a rolagem voltaria ao topo a cada clique. */
-  function repintarTarefas() {
-    if ((location.hash || '') !== '#/tarefas') return;
+     perderia o foco e a rolagem voltaria ao topo a cada clique. Numa lista de
+     noventa e oito negócios isso é a diferença entre triar em dois minutos e
+     desistir na terceira marcação — foi exatamente o que o Alexandre relatou
+     na tela de Nutrição.
+
+     Guarda três coisas e devolve as três: a rolagem, o campo que estava com o
+     foco e a posição do cursor dentro dele. Devolve `false` quando a tela
+     pedida não é a que está aberta, para quem chamou decidir o que fazer. */
+  function repintarConteudo(hash, desenhar) {
+    if ((location.hash || '') !== hash) return false;
     const conteudo = document.getElementById('conteudo');
-    if (!conteudo) return;
+    if (!conteudo) return false;
+
     const rolagem = window.scrollY;
     const ativo = document.activeElement;
-    const nome = ativo && ativo.tagName === 'INPUT' && ativo.type === 'search' ? 'busca' : '';
-    const posicao = nome ? ativo.selectionStart : 0;
-    conteudo.innerHTML = V.tarefas();
-    if (nome) {
-      const campo = conteudo.querySelector('input[type="search"]');
+    const digitando = ativo && ativo.tagName === 'INPUT' &&
+      (ativo.type === 'search' || ativo.type === 'text');
+    /* Pelo id quando existe; senão, pelo primeiro campo de busca da tela —
+       que é como as telas antigas se identificavam. */
+    const marca = digitando ? (ativo.id || '@busca') : '';
+    let posicao = 0;
+    if (digitando) { try { posicao = ativo.selectionStart; } catch (e) {} }
+
+    conteudo.innerHTML = faixaDeAviso() + desenhar();
+
+    if (marca) {
+      const campo = marca === '@busca'
+        ? conteudo.querySelector('input[type="search"]')
+        : document.getElementById(marca);
       if (campo) { campo.focus(); try { campo.setSelectionRange(posicao, posicao); } catch (e) {} }
     }
     window.scrollTo(0, rolagem);
+    return true;
   }
 
-  /* Mesmo motivo do repintarTarefas: buscar não pode reconstruir a página
-     inteira a cada tecla. */
-  function repintarPipeline() {
-    if ((location.hash || '') !== '#/pipeline') return;
-    const conteudo = document.getElementById('conteudo');
-    if (!conteudo) return;
-    const rolagem = window.scrollY;
-    const ativo = document.activeElement;
-    const busca = ativo && ativo.tagName === 'INPUT' && ativo.type === 'search';
-    const posicao = busca ? ativo.selectionStart : 0;
-    conteudo.innerHTML = V.pipeline();
-    if (busca) {
-      const campo = conteudo.querySelector('input[type="search"]');
-      if (campo) { campo.focus(); try { campo.setSelectionRange(posicao, posicao); } catch (e) {} }
-    }
-    window.scrollTo(0, rolagem);
-  }
+  function repintarTarefas() { return repintarConteudo('#/tarefas', V.tarefas); }
+  function repintarPipeline() { return repintarConteudo('#/pipeline', V.pipeline); }
+  function repintarNutricao() { return repintarConteudo('#/nutricao', V.nutricao); }
 
   /* Concluir várias contando o que aconteceu em cada uma: abre o relato da
      primeira e, quando ela fecha, chama a próxima. Uma fila, não cinco
@@ -988,9 +1022,10 @@
     filtrarHistorico: function (tipo) { V.definirFiltroHistorico(tipo); render(); },
     filtrarHoje: function (chave) { V.definirFiltroHoje(chave); render(); },
     modoPipeline: function (modo) { V.definirModoPipeline(modo); render(); },
-    abaCadastro: function (aba) { V.definirAbaCadastro(aba); render(); },
-    abaNutricao: function (aba) { V.definirAbaNutricao(aba); render(); },
-    abaConfig: function (aba) { V.definirAbaConfig(aba); render(); },
+    abaCadastro: function (aba) { V.definirAbaCadastro(aba); render(); window.scrollTo(0, 0); },
+    /* Trocar de aba é trocar de lista: aí sim começa do topo. */
+    abaNutricao: function (aba) { V.definirAbaNutricao(aba); render(); window.scrollTo(0, 0); },
+    abaConfig: function (aba) { V.definirAbaConfig(aba); render(); window.scrollTo(0, 0); },
     /* Abrir a aba de Sinais busca as aberturas.
 
        Antes a colheita só rodava no boot, e isso produziu o sintoma que o
@@ -1016,6 +1051,7 @@
       V.definirAbaConfig('app');
       App.ir('#/dados');
       render();
+      window.scrollTo(0, 0);
     },
 
     /* Buscar re-renderiza a tela; devolvemos o foco e o cursor ao campo. */
@@ -3579,23 +3615,26 @@
        relatório e, pior, apagar a conta da agenda de todo mundo. */
     /* ---------- o trânsito em lote entre carteira e nutrição ---------- */
 
+    /* Filtrar e marcar repintam SÓ o conteúdo, guardando rolagem, foco e
+       cursor. Era daqui que vinha a queixa do Alexandre: cada clique numa
+       caixinha da lista de 98 devolvia o topo da tela, e ele passava o dia
+       rolando de volta. */
     filtroNutricao: function (campo, valor) {
       V.filtroNutricao(campo, valor);
-      render();
-      if (campo === 'busca') {
-        const c = document.getElementById('busca-nutri');
-        if (c) { c.focus(); c.setSelectionRange(c.value.length, c.value.length); }
-      }
+      if (!repintarNutricao()) render();
     },
 
-    marcarNutricao: function (lado, id, sim) { V.marcarNutricao(lado, id, sim); render(); },
+    marcarNutricao: function (lado, id, sim) {
+      V.marcarNutricao(lado, id, sim);
+      if (!repintarNutricao()) render();
+    },
 
     marcarTodosNutricao: function (lado) {
       const visiveis = V.visiveisDaNutricao(lado);
       const marcados = V.marcadosDaNutricao(lado);
       const desmarcar = marcados.length === visiveis.length;
       visiveis.forEach(function (op) { V.marcarNutricao(lado, op.id, !desmarcar); });
-      render();
+      if (!repintarNutricao()) render();
     },
 
     /* Vários de uma vez, com UM motivo e UMA data para o lote.
