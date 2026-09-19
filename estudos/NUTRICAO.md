@@ -1,7 +1,7 @@
 # Nutrição: o que funciona no mundo, e o que isso significa para o IAD
 
 Levantamento de setembro de 2026, a pedido do Alexandre, junto com a tela
-**Cadastros → Processo de Nutrição**.
+o menu **Nutrição** (*Processo de Nutrição*).
 
 ---
 

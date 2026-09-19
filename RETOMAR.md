@@ -371,7 +371,8 @@ o lote inteiro de uma campanha do Linked Helper. Decidir uma a uma quem ainda
 não está pronto é o motivo pelo qual, em quase todo CRM, ninguém faz — e o
 funil fica cheio de coisa que não é negócio.
 
-**Cadastros → Processo de Nutrição**, duas listas e um trânsito entre elas:
+Item próprio no menu, **logo abaixo de Cadastros** (`#/nutricao`), com duas abas
+e um trânsito entre elas:
 
 - **Filtros que valem para as duas ao mesmo tempo:** busca (negócio, empresa,
   campanha, SDR), responsável, segmento, e saúde da decisão — *IAD 0*,
@@ -392,10 +393,39 @@ explicitamente — a tela nova não substitui, acrescenta.
 A seleção vive na view e não no Store, de propósito: recarregar a página começa
 com nada marcado. Marcar 99 e a seleção sobreviver a um refresh seria armadilha.
 
-**21 testes**, com a carteira dele reproduzida: 99 leads de campanha mais as
+**31 testes**, com a carteira dele reproduzida: 99 leads de campanha mais as
 duas negociações de verdade. Filtrar por campanha, marcar os 51, mover com
 motivo e prazo, conferir que **ninguém foi encerrado**, devolver três, e que a
 passagem ficou no `historicoNutricao`.
+
+### O lugar, e as duas abas — v201, 19/09
+
+Nasceu como aba dentro de Cadastros, entre *Oportunidades* e *Segmentos*. O
+Alexandre viu a tela pronta e disse o que faltava: *"o processo de nutrição
+será muito importante… coloque-o numa opção debaixo de Cadastros, mas não
+dentro de Cadastros"*. Ele está certo, e a razão é de arquitetura, não de
+gosto: **aba de cadastro é lugar de lista que quase não muda**. Nutrição é
+trabalho de todo mês — decidir quem sai da previsão e quem volta. Trabalho que
+mora dentro de um cadastro é trabalho que ninguém faz.
+
+- **Rota própria `#/nutricao`**, ícone 🌱, imediatamente depois de
+  `#/cadastros` em `ROTAS` (`src/app.js`). Um teste confere a posição: estar
+  *debaixo de* Cadastros era metade do pedido.
+- **Duas abas: Carteira Ativa e Leads em Nutrição.** Empilhadas, a tela tinha
+  98 linhas em cima e 3 embaixo — para ver a nutrição era preciso rolar a
+  carteira inteira, e o filtro do topo parecia valer só para a lista de cima.
+- **O contador vive no botão da aba** (`Carteira Ativa · 98`), porque é o
+  número que decide qual das duas abrir. Saiu o cabeçalho duplicado.
+- **Trocar de aba limpa a marcação dos dois lados.** Marcar na carteira, ir
+  para a nutrição e mover sem ver o que foi marcado é o acidente que esta tela
+  não pode permitir.
+- Os filtros continuam valendo para as duas abas, de propósito: filtrar a
+  carteira, trocar de aba e ver outra régua faria comparar duas listas que não
+  são comparáveis.
+
+**Onde está:** `nutricao()`, `ABAS_NUTRICAO`, `AJUDA_NUTRICAO`,
+`cabecalhoDaNutricao(est)` e `definirAbaNutricao` em `src/views.js`; a rota e
+`App.abaNutricao` em `src/app.js`. A linha nova na tabela `TELAS` do manual.
 
 ### Um defeito que a tela dele denunciou no mesmo dia
 

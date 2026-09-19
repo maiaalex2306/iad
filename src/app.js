@@ -31,6 +31,13 @@
       ajuda: 'A reunião semanal numa tela: o que mudou na decisão de cada cliente nos últimos 7 dias.' },
     { hash: '#/cadastros', ico: '📇', nome: 'Cadastros', render: V.cadastros,
       ajuda: 'Empresas, contatos, oportunidades, segmentos, tipos de tarefa, produtos e usuários.' },
+    /* Logo abaixo de Cadastros, e fora dele. Era uma aba lá dentro, entre
+       Oportunidades e Segmentos, e aba de cadastro é lugar de lista que
+       quase não muda. Isto aqui é trabalho de todo mês: decidir quem sai da
+       previsão e quem volta. Trabalho que mora dentro de um cadastro é
+       trabalho que ninguém faz. */
+    { hash: '#/nutricao', ico: '🌱', nome: 'Nutrição', render: V.nutricao,
+      ajuda: 'A triagem em lote entre a carteira ativa e a nutrição: tirar da previsão quem ainda não está pronto, e devolver quem já está — sem encerrar ninguém.' },
     /* Saiu da engrenagem do topo e entrou no menu: era a única tela do app
        escondida atrás de um ícone, e ninguém procura nuvem, backup e
        importação num símbolo. */
@@ -982,6 +989,7 @@
     filtrarHoje: function (chave) { V.definirFiltroHoje(chave); render(); },
     modoPipeline: function (modo) { V.definirModoPipeline(modo); render(); },
     abaCadastro: function (aba) { V.definirAbaCadastro(aba); render(); },
+    abaNutricao: function (aba) { V.definirAbaNutricao(aba); render(); },
     abaConfig: function (aba) { V.definirAbaConfig(aba); render(); },
     /* Abrir a aba de Sinais busca as aberturas.
 

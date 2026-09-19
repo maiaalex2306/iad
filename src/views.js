@@ -3980,7 +3980,6 @@
     empresas: 'As empresas clientes que você atende. Não confundir com as empresas que usam o sistema, que ficam no painel do administrador.',
     contatos: 'As pessoas. O papel na compra e a posição são o que alimenta a cobertura e os alertas do grupo comprador.',
     oportunidades: 'Os negócios. A etapa organiza o funil; quem mede o avanço são as oito decisões dentro de cada um.',
-    nutricao: 'Mover negócios entre a carteira ativa e a nutrição, vários de uma vez. É a triagem de quem ainda não está pronto — sem encerrar ninguém.',
     segmentos: 'A lista que alimenta o campo Segmento das empresas e a análise por segmento no painel.',
     tiposTarefa: 'A lista de tipos que aparece ao criar uma tarefa.',
     produtos: 'O catálogo com preço de referência, para compor o valor das oportunidades.',
@@ -3993,7 +3992,6 @@
      e as empresas do sistema ficam no painel do administrador, onde só ele mexe. */
   const ABAS_CADASTRO = [
     ['empresas', 'Contas'], ['contatos', 'Contatos'], ['oportunidades', 'Oportunidades'],
-    ['nutricao', 'Processo de Nutrição'],
     ['segmentos', 'Segmentos'], ['tiposTarefa', 'Tipos de tarefa'], ['produtos', 'Produtos'],
     ['fontes', 'Fontes'], ['usuarios', 'Usuários']
   ];
@@ -4007,6 +4005,7 @@
      sobreviver a um refresh seria uma armadilha — a pessoa clicaria em mover
      achando que marcou três. */
   const nutri = {
+    aba: 'ativa',
     marcadosPipeline: {}, marcadosNutricao: {},
     busca: '', responsavel: 'todos', segmento: 'todos', saude: 'todas'
   };
@@ -4026,7 +4025,6 @@
 
     const corpo = {
       empresas: listaEmpresas, contatos: listaContatos, oportunidades: listaOportunidades,
-      nutricao: processoDeNutricao,
       segmentos: function (e) { return listaCatalogo(e, 'segmentos'); },
       tiposTarefa: function (e) { return listaCatalogo(e, 'tiposTarefa'); },
       produtos: listaProdutos, fontes: listaFontes, usuarios: listaUsuarios
@@ -4037,7 +4035,6 @@
        o item — não é trabalho do dia, é decisão comercial. Conta, contato e
        oportunidade continuam de todos, porque são o trabalho. */
     const podeCriar =
-      abaCadastro === 'nutricao' ? false :
       abaCadastro === 'usuarios' ? global.IADAuth.ehAdmin() :
       abaCadastro === 'produtos' ? global.IADAuth.ehGestor() : true;
 
@@ -4077,17 +4074,58 @@
      cemitério com outro nome; o valor dela está em devolver, no mês em que a
      conta ficou pronta.
      ------------------------------------------------------------------ */
-  function processoDeNutricao(est) {
+  /* Duas abas, e não as duas listas empilhadas.
+
+     Empilhadas, a tela tinha noventa e oito linhas em cima e três embaixo:
+     para ver a nutrição era preciso rolar a carteira inteira, e o filtro de
+     cima parecia valer só para a lista de cima. Separadas, cada aba é um
+     trabalho: "quem eu tiro da previsão hoje" e "quem já pode voltar".
+
+     O contador fica no próprio botão da aba porque é o número que decide qual
+     das duas abrir. */
+  const ABAS_NUTRICAO = [
+    ['ativa', 'Carteira Ativa'],
+    ['nutricao', 'Leads em Nutrição']
+  ];
+
+  const AJUDA_NUTRICAO = {
+    ativa: ajudaComLinhas('Carteira Ativa',
+      'Os negócios abertos que contam na previsão. É daqui que sai quem ainda não está pronto.',
+      [['O número', 'Quantos negócios abertos você tem fora da nutrição.'],
+       ['O que fazer aqui', 'Filtrar, marcar os que não estão prontos e mover em lote — com um motivo e uma data para o lote inteiro.'],
+       ['Não encerra', 'Mover para nutrição não fecha negócio nenhum: tira da previsão e mantém na agenda.']]),
+    nutricao: ajudaComLinhas('Leads em Nutrição',
+      'Os negócios que saíram da previsão mas continuam abertos, com data para voltar a olhar.',
+      [['O número', 'Quantos estão em nutrição agora.'],
+       ['O que fazer aqui', 'Ver quem tem revisão vencida e devolver à carteira quem já ficou pronto.'],
+       ['Volta sozinho', 'Qualquer evidência nova do cliente devolve o negócio à carteira sem ninguém apertar nada.']])
+  };
+
+  function nutricao() {
+    const est = Store.dados();
     const todas = (est.oportunidades || []).filter(function (op) { return !op.desfecho; });
     const ativas = todas.filter(function (op) { return !op.nutricao; });
     const nutridas = todas.filter(function (op) { return !!op.nutricao; });
+    const quantos = { ativa: ativas.length, nutricao: nutridas.length };
 
-    return cabecalhoDaNutricao(est, ativas, nutridas) +
-      listaDaNutricao(ativas, 'pipeline', est) +
-      listaDaNutricao(nutridas, 'nutricao', est);
+    const abas = ABAS_NUTRICAO.map(function (a) {
+      return '<button class="pill' + (nutri.aba === a[0] ? ' orange' : '') +
+        '" onclick="App.abaNutricao(\'' + a[0] + '\')"' + (AJUDA_NUTRICAO[a[0]] || '') + '>' +
+        esc(a[1]) + ' · ' + quantos[a[0]] + '</button>';
+    }).join(' ');
+
+    return '<div class="row"><h1>Processo de Nutrição</h1></div>' +
+      '<div class="row" style="margin:8px 0 10px">' + abas + '</div>' +
+      cabecalhoDaNutricao(est) +
+      (nutri.aba === 'nutricao'
+        ? listaDaNutricao(nutridas, 'nutricao', est)
+        : listaDaNutricao(ativas, 'pipeline', est));
   }
 
-  function cabecalhoDaNutricao(est, ativas, nutridas) {
+  /* O texto e os filtros valem para as duas abas — são os mesmos filtros de
+     propósito: filtrar a carteira, trocar de aba e ver outra régua faria a
+     pessoa comparar duas listas que não são comparáveis. */
+  function cabecalhoDaNutricao(est) {
     const pessoas = [{ valor: 'todos', rotulo: 'Todas as pessoas' }].concat(
       (est.usuarios || []).map(function (u) { return { valor: u.id, rotulo: u.nome }; }));
     const segs = [{ valor: 'todos', rotulo: 'Todos os segmentos' }].concat(
@@ -4101,11 +4139,7 @@
     };
 
     return '<div class="card">' +
-      '<div class="row"><h2 style="margin:0">Processo de Nutrição</h2>' +
-      '<span class="espaco"></span>' +
-      '<span class="pill">' + ativas.length + ' na carteira</span>' +
-      '<span class="pill warn">' + nutridas.length + ' em nutrição</span></div>' +
-      '<p class="small muted" style="margin:8px 0 0">Conta que ainda não está pronta não é negócio ' +
+      '<p class="small muted" style="margin:0">Conta que ainda não está pronta não é negócio ' +
       'perdido — é negócio cedo demais. Nutrição tira da previsão e <strong>mantém na agenda</strong>, ' +
       'com data para voltar a olhar. Nada aqui encerra ninguém.</p>' +
 
@@ -4686,7 +4720,9 @@
     ['🔄', 'Revisão', 'O que precisa da minha decisão, não do meu esforço.',
      'A fila do que está fora do lugar: negócio sem próximo passo, papel crítico ausente, evidência velha, etapa adiantada demais.'],
     ['📇', 'Cadastros', 'Onde ficam as empresas, as pessoas e as listas.',
-     'Empresas, contatos, oportunidades, e os catálogos: segmentos, tipos de tarefa e produtos. Produtos só o gestor cadastra.'],
+     'Contas, contatos, oportunidades, e os catálogos: segmentos, tipos de tarefa, produtos, fontes e usuários. Produtos só o gestor cadastra.'],
+    ['🌱', 'Nutrição', 'Quem eu tiro da previsão agora, e quem já pode voltar.',
+     'Duas abas — Carteira Ativa e Leads em Nutrição — com os mesmos filtros e o trânsito em lote entre elas. Nutrição não encerra ninguém: tira da previsão e mantém na agenda, com data para voltar a olhar.'],
     ['⚙️', 'Configuração', 'Instalação, dados, nuvem, IA e diagnóstico.',
      'Nove blocos, detalhados adiante neste manual.'],
     ['❓', 'Método', 'Por que o sistema funciona assim.',
@@ -7620,7 +7656,7 @@
 
   global.IADViews = {
     semServidor,
-    hoje, painel, pipeline, tarefas, cockpit, revisao, contas, cadastros, playbook, dados, itemArquivo, listaLeads,
+    hoje, painel, pipeline, tarefas, cockpit, revisao, contas, cadastros, nutricao, playbook, dados, itemArquivo, listaLeads,
     revisaoDaImportacao, recusaDoCliente, resumoDaLeitura, planoDaIA, definirPlano, planoGuardado,
     marcarLendo, estaLendo, revisaoDasNotas, respostaDaConversa,
     conversas, definirConversa, conversaAberta: function () { return conversaAberta; },
@@ -7643,6 +7679,14 @@
     /* A nutrição precisa do estado dela de fora: o App lê o que está marcado
        para mover, e limpa depois. */
     nutri: function () { return nutri; },
+    /* Trocar de aba limpa o que estava marcado do outro lado: marcar na
+       carteira, ir para a nutrição e mover sem ver o que foi marcado é o
+       acidente que esta tela não pode permitir. */
+    definirAbaNutricao: function (a) {
+      nutri.aba = a;
+      nutri.marcadosPipeline = {};
+      nutri.marcadosNutricao = {};
+    },
     filtroNutricao: function (campo, valor) { nutri[campo] = valor; },
     marcarNutricao: function (lado, id, sim) {
       const m = lado === 'nutricao' ? nutri.marcadosNutricao : nutri.marcadosPipeline;
