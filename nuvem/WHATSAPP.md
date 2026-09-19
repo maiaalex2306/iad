@@ -6,7 +6,7 @@ que é a única coisa que move as oito decisões — fica num aparelho.
 
 ---
 
-## Onde estamos — conferido em 15/09/2026
+## Onde estamos — conferido em 19/09/2026
 
 Esta seção existe porque o documento dizia "nada aqui foi executado ainda"
 muito depois de metade ter sido executada. Plano que não sabe o que já
@@ -23,7 +23,7 @@ rápido de perder a confiança no plano. **Atualize isto junto com o que fizer.*
 | Webhook: URL de callback e token preenchidos | ✅ feito |
 | Campos `messages`, `smb_message_echoes`, `history` assinados | ✅ feito |
 | Teste do painel disparado contra a função | ✅ feito |
-| Verificação do portfólio empresarial | ⏳ em processamento na Meta |
+| Verificação do portfólio empresarial | ❌ **reprovada em 19/09** — três pendências de documento, abaixo |
 | **Registro como Provedor de Tecnologia** | ⬜ o próximo passo |
 | Publicar o app (sair de "Em desenvolvimento") | ⬜ falta |
 | Conectar o número (Embedded Signup + Coexistence) | ⬜ falta — é o último |
@@ -32,6 +32,36 @@ rápido de perder a confiança no plano. **Atualize isto junto com o que fizer.*
 Em resumo: **o lado de cá está pronto e provado.** O que falta é tudo na Meta,
 e nesta ordem — Provedor de Tecnologia, verificação aprovada, app publicado, e
 só então o número.
+
+### A reprovação de 19/09, e o que ela pede
+
+A Meta recusou **três coisas**, e nenhuma é técnica. Razão social da empresa:
+**A C MAIA TECNOLOGIA**.
+
+| O que foi recusado | O que a Meta quer ver |
+| --- | --- |
+| documento do **endereço** | razão social **+** `AVENIDA CIDADE JARDIM, 2700 53A, SÃO JOSÉ DOS CAMPOS, SÃO PAULO 12233002` no mesmo papel |
+| documento do **telefone** | razão social **+** `+55 11 93240-4888` no mesmo papel |
+| o **site** | a razão social escrita no próprio site |
+
+**Os tipos que a Meta aceita** (a lista é curta e fechada): contrato ou estatuto
+social, licença ou alvará de funcionamento, extrato bancário, resumo de
+transações, carta do banco, ou conta de serviço público — água, gás, energia,
+telefone.
+
+**Cartão CNPJ não está nessa lista.** É o documento que todo mundo manda
+primeiro no Brasil, e é provavelmente o que foi recusado das duas vezes.
+
+**Um documento pode resolver os dois primeiros**: uma conta de telefone da
+linha, em nome da empresa, no endereço certo, traz razão social, endereço e
+número no mesmo papel. Extrato bancário PJ resolve o endereço, mas raramente
+traz telefone.
+
+**A armadilha que reprova de novo:** *"as informações devem ser inseridas
+exatamente como aparecem no documento"*. Se o documento diz
+`AV. CIDADE JARDIM, 2700, SALA 53A` e o formulário diz
+`AVENIDA CIDADE JARDIM, 2700 53A`, é outro endereço para quem confere. Copiar
+do documento, caractere a caractere, inclusive as abreviações.
 
 Enquanto o app estiver "Em desenvolvimento", a própria Meta avisa na tela de
 Webhooks que só chegam webhooks de teste: conversa real não entra, nem de
