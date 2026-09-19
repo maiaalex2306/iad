@@ -6457,9 +6457,14 @@
   function ehRuido(m) {
     if (DE_MAQUINA.test(String(m.de || ''))) return true;
     if (AUTOMATICA.test(String(m.assunto || ''))) return true;
-    /* Abaixo de 60 caracteres o próprio assistente recusa por texto curto.
+    /* Medido DEPOIS de tirar o rodapé, e essa ordem é o ponto: o "Aceita:
+       Conversa Inicial" do Carlos tinha mil caracteres de aviso jurídico e
+       zero de conversa. Pelo tamanho cru, passaria por mensagem de verdade e
+       gastaria uma chamada para o assistente dizer que não há nada ali.
+
+       Abaixo de 60 caracteres o próprio assistente recusa por texto curto.
        Gastar a chamada para ouvir isso é desperdício com passo extra. */
-    return String(m.corpo || '').trim().length < 60;
+    return Mail.limpo(m.corpo).length < 60;
   }
 
   function paraAnalisar() {
@@ -6563,8 +6568,11 @@
       quando: String(m.enviada_em || '').slice(0, 10)
     };
 
+    /* Sem o aviso jurídico, a assinatura e as marcas de imagem: é texto pago
+       para ler o mesmo rodapé cem vezes, e ele empurra a frase que importa
+       para o fim do que o assistente olha. */
     const texto = 'E-MAIL RECEBIDO\nDe: ' + (m.de_nome || '') + ' <' + (m.de || '') + '>\n' +
-      'Assunto: ' + (m.assunto || '') + '\n\n' + String(m.corpo || '');
+      'Assunto: ' + (m.assunto || '') + '\n\n' + Mail.limpo(m.corpo);
 
     return N.contarTentativaDeAnalise(m.id, (m.analise_tentativas || 0) + 1)
       .catch(function () {})

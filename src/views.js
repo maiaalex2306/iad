@@ -2407,7 +2407,7 @@
       '<span class="espaco"></span><span class="tiny muted">' + esc(quando) + '</span></div>' +
       (m.assunto ? '<div class="small" style="margin-top:4px">' + esc(m.assunto) + '</div>' : '') +
       '<p class="small muted" style="margin:6px 0 0;white-space:pre-wrap">' +
-      esc(corpoCurto(m.corpo, 600)) + '</p>' +
+      esc(corpoCurto((global.IADEmail && global.IADEmail.limpo(m.corpo)) || m.corpo, 600)) + '</p>' +
       (m.erro ? '<p class="tiny atrasado" style="margin:6px 0 0">' + esc(m.erro) + '</p>' : '') +
       '</div>';
   }
@@ -2488,10 +2488,18 @@
       (op && !op.desfecho
         ? '<div class="row" style="margin-top:10px">' +
           '<button class="btn mini" onclick="App.escreverEmail(\'' + op.id + '\',\'' +
-          esc(c.chave) + '\')">Responder</button>' +
-          '<button class="btn alt mini" onclick="App.novaTarefa(\'' + op.id + '\',\'\',{situacao:\'feita\',tipo:\'E-mail\'})" ' +
-          'data-ajuda-titulo="Virou evidência?" ' +
-          'data-ajuda="Abre a conclusão de tarefa com o canal já preenchido. Cole o que o cliente escreveu e o assistente separa o que move cada uma das oito decisões.">Registrar o que o cliente disse</button>' +
+          esc(c.chave) + '\')"' +
+          ajudaComLinhas('Responder nesta conversa',
+            'Abre a escrita já com o assunto e a conversa herdados, para a resposta continuar a mesma thread.',
+            [['Por que importa', 'Sem herdar a conversa, a sua resposta abre uma thread nova no cliente de e-mail DELE — e a conversa se parte em duas na caixa dele.'],
+             ['Para quem', 'Já vem preenchido com quem escreveu por último.']]) +
+          '>Responder</button>' +
+          '<button class="btn alt mini" onclick="App.novaTarefa(\'' + op.id + '\',\'\',{situacao:\'feita\',tipo:\'E-mail\'})"' +
+          ajudaComLinhas('Registrar à mão',
+            'Abre a conclusão de tarefa com o canal já preenchido, para você contar o que aconteceu com as suas palavras.',
+            [['Quando usar', 'Quando o assistente não está no ar, quando você discorda do que ele leu, ou quando o que moveu a decisão foi uma ligação e não o e-mail.'],
+             ['Diferença para o Analisar', 'O Analisar lê sozinho e propõe; aqui é você quem conta.']]) +
+          '>Registrar o que o cliente disse</button>' +
           '</div>'
         : '') + '</div>';
   }
@@ -2507,9 +2515,13 @@
     const A = global.App;
     if (!A || !A.estadoDaAnalise) return '';
     const a = A.estadoDaAnalise() || {};
-    const botao = '<button class="btn ghost mini" onclick="App.analisarEmails()" ' +
-      'data-ajuda-titulo="Analisar agora" ' +
-      'data-ajuda="Manda o assistente ler os e-mails recebidos que ainda não passaram por ele. Cada mensagem é lida uma vez só: depois fica marcada, e nem este aparelho nem outro a lê de novo.">Analisar agora</button>';
+    const botao = '<button class="btn ghost mini" onclick="App.analisarEmails()"' +
+      ajudaComLinhas('Analisar agora — o app inteiro',
+        'Manda o assistente ler TODOS os e-mails recebidos que ainda não passaram por ele, de todas as negociações.',
+        [['Diferença do botão de cima', 'O de cima lê só esta negociação e o relatório fala deste cliente. Este varre a carteira.'],
+         ['Quando usar', 'Depois de uns dias sem abrir o app, para pôr tudo em dia de uma vez.'],
+         ['De cinco em cinco', 'Vai em lotes para não estourar o limite do provedor. Se sobrar, o aviso diz quantos faltam.'],
+         ['Sozinho', 'Ele já roda ao abrir o app, no fundo, sem avisar.']]) + '>Analisar agora</button>';
 
     if (a.erro) {
       return '<div class="aviso" style="margin-top:10px">O assistente falhou: ' + esc(a.erro) +
@@ -2540,14 +2552,32 @@
            coisas juntas, e as duas últimas voltaram para cá. */
         (op.desfecho ? ''
           : '<button class="btn ghost mini"' + (ocupadoBuscando() ? ' disabled' : '') +
-            ' onclick="App.buscarEmailsDaOportunidade(\'' + op.id + '\')" ' +
-            'data-ajuda-titulo="Buscar e-mails" ' +
-            'data-ajuda="Faz o servidor entrar nas suas caixas agora e traz o que chegou. Depois mostra aqui o que for dos contatos ou do domínio desta empresa.">' +
+            ' onclick="App.buscarEmailsDaOportunidade(\'' + op.id + '\')"' +
+            ajudaComLinhas('Buscar e-mails',
+              'Manda o servidor entrar nas suas caixas AGORA e baixar o que chegou. Depois mostra aqui o que for desta empresa.',
+              [['Quando usar', 'Quando você sabe que o cliente respondeu e quer ver na hora, sem esperar.'],
+               ['Não precisa', 'O servidor busca sozinho de 5 em 5 minutos, e também ao abrir esta aba. Este botão só adianta.'],
+               ['O que é "desta empresa"', 'Mensagem de um contato cadastrado, ou de qualquer endereço no mesmo domínio (@heineken.com.br, por exemplo).'],
+               ['Traz tudo?', 'Um lote por vez. Se sobrar, o aviso diz quantas faltam e você clica de novo.']]) + '>' +
             (ocupadoBuscando() ? 'Buscando…' : 'Buscar e-mails') + '</button>' +
-            '<button class="btn ghost mini" onclick="App.analisarEmailsDaOportunidade(\'' + op.id + '\')" ' +
-            'data-ajuda-titulo="Analisar com a IA" ' +
-            'data-ajuda="O assistente lê o que o cliente escreveu nesta negociação, registra a evidência por decisão e abre a tarefa do que ficou para você fazer.">Analisar com a IA</button>' +
-            '<button class="btn mini" onclick="App.escreverEmail(\'' + op.id + '\')">Escrever</button>') +
+            '<button class="btn ghost mini" onclick="App.analisarEmailsDaOportunidade(\'' + op.id + '\')"' +
+            ajudaComLinhas('Analisar com a IA',
+              'O assistente lê o que o CLIENTE escreveu nesta negociação e transforma em movimento: evidência por decisão, releitura das oito notas, e tarefa do que ficou para você.',
+              [['Quando usar', 'Depois que chegou e-mail novo do cliente. O número ao lado da aba diz quantos ainda não foram lidos.'],
+               ['O que ele cria', 'Tarefa com data e nome — "Ana da Suzano: enviar a apresentação". Só quando o combinado é NOSSO; o que ficou para o cliente já é o próximo compromisso.'],
+               ['Lê duas vezes?', 'Não. Cada mensagem é lida uma vez só, e a marca fica no servidor — outro computador não relê.'],
+               ['Uma conversa longa', 'Cinco respostas sobre o mesmo pedido geram UMA tarefa, não cinco.'],
+               ['Só desta negociação', 'Ele não mexe nos e-mails dos outros clientes. Para o app inteiro, use Analisar agora, na linha de baixo.']],
+              'Ele nunca muda uma nota sem você confirmar: o que ele propõe aparece para você aceitar ou recusar.') +
+            '>Analisar com a IA</button>' +
+            '<button class="btn mini" onclick="App.escreverEmail(\'' + op.id + '\')"' +
+            ajudaComLinhas('Escrever para o cliente',
+              'Manda um e-mail do SEU endereço, de dentro da negociação — o cliente recebe como recebe qualquer e-mail seu.',
+              [['Para quem', 'Só contatos desta empresa que tenham e-mail cadastrado.'],
+               ['De qual endereço', 'Da caixa que você marcou como "envia", em Configuração → Minha caixa de e-mail.'],
+               ['Quando sai', 'Entra na fila e o servidor manda em segundos. Se der erro, ela fica marcada com o motivo em vez de sumir.'],
+               ['A resposta dele', 'Cai sozinha aqui nesta conversa, porque a mensagem leva uma marca que o cliente de e-mail dele devolve.']]) +
+            '>Escrever</button>') +
         '</div>' +
         '<p class="tiny muted" style="margin:8px 0 0">O que foi escrito de verdade, dos dois lados. ' +
         'O assistente lê o que chega e transforma em evidência; o que ficou para você fazer vira tarefa.</p>' +
@@ -6252,8 +6282,20 @@
     const topo = function (miolo) {
       return '<div class="card"><div class="row"><h2 style="margin:0">Minha caixa de e-mail</h2>' +
         '<span class="espaco"></span>' +
-        '<button class="btn ghost mini" onclick="App.comoLigarMinhaCaixa()">Como ligar</button>' +
-        '<button class="btn mini" onclick="App.configurarEmail()">+ Ligar um endereço</button></div>' +
+        '<button class="btn ghost mini" onclick="App.comoLigarMinhaCaixa()"' +
+        ajudaComLinhas('Como ligar',
+          'Abre o passo a passo no Manual: o que é senha de aplicativo, como gerar, e o que preencher aqui.',
+          [['Para a equipe', 'É esse texto que você manda para quem entrar: cada pessoa liga a própria caixa sozinha.']]) +
+        '>Como ligar</button>' +
+        '<button class="btn mini" onclick="App.configurarEmail()"' +
+        ajudaComLinhas('Ligar um endereço',
+          'Cadastra uma caixa para o IAD entrar. Você pode ligar quantos endereços quiser.',
+          [['O que precisa', 'O endereço, o provedor, e uma senha de APLICATIVO de 16 letras gerada na conta daquele e-mail.'],
+           ['Quem envia', 'Todas recebem; marque "Sim" em uma só para as respostas saírem por ela.'],
+           ['Servidor de entrada/saída', 'Deixe em branco no Gmail e no Outlook — o app já sabe.'],
+           ['A senha', 'Vai daqui direto para o servidor, cifrada. Não fica neste navegador, e ninguém mais a vê.']],
+          'Ninguém precisa mandar a senha para você: cada vendedor cola a dele na própria tela.') +
+        '>+ Ligar um endereço</button></div>' +
         '<p class="small muted" style="margin:8px 0 0">O IAD entra nestes endereços, traz o que os ' +
         'clientes escreveram para dentro da negociação certa e manda as suas respostas. ' +
         '<strong>Esta configuração é sua</strong> — vale para toda a carteira, e ninguém mais a vê.</p>' +
@@ -6289,8 +6331,12 @@
         '</td><td>' + estado + '</td><td>' + papel + '</td>' +
         '<td class="tiny muted">' + (c.senha_em ? 'senha guardada em ' + U.data(c.senha_em) : '—') +
         (c.erro ? '<br>' + esc(String(c.erro).slice(0, 120)) : '') + '</td>' +
-        '<td><button class="btn ghost mini" onclick="App.configurarEmail(\'' + esc(c.endereco) +
-        '\')">Editar</button></td></tr>';
+        '<td><button class="btn ghost mini" onclick="App.configurarEmail(\'' + esc(c.endereco) + '\')"' +
+        ajudaComLinhas('Editar ' + c.endereco,
+          'Muda o nome que o cliente vê, quem envia, ou troca a senha de aplicativo.',
+          [['Trocar a senha', 'Deixe o campo em branco para manter a que está guardada.'],
+           ['Desligar o acesso', 'Apague a senha de aplicativo na sua conta de e-mail — vale na hora, sem depender de ninguém.']]) +
+        '>Editar</button></td></tr>';
     }).join('');
 
     const semEnvio = !caixas.filter(function (c) { return c.envia !== false; }).length;
@@ -6326,7 +6372,14 @@
     return '<div class="card"><div class="row"><h2 style="margin:0">O servidor de e-mail</h2>' +
       '<span class="espaco"></span>' +
       '<button class="btn ghost mini"' + (ocupado ? ' disabled' : '') +
-      ' onclick="App.buscarEmails()">' + (ocupado ? 'Buscando…' : 'Buscar agora') + '</button></div>' +
+      ' onclick="App.buscarEmails()"' +
+      ajudaComLinhas('Buscar agora — todas as caixas',
+        'Faz o servidor entrar em TODAS as suas caixas e trazer o que chegou, além de mandar o que está na fila de envio.',
+        [['Quando usar', 'Para conferir se o e-mail está funcionando, ou depois de trocar uma senha.'],
+         ['No dia a dia', 'Não precisa: use o "Buscar e-mails" dentro da negociação, que também diz o que é daquele cliente.'],
+         ['Sozinho', 'O servidor busca de 5 em 5 minutos, se o agendamento estiver ligado.'],
+         ['Um lote por vez', 'Caixa antiga vem aos poucos; o aviso diz quantas faltam.']]) +
+      '>' + (ocupado ? 'Buscando…' : 'Buscar agora') + '</button></div>' +
       (t.erro
         ? '<div class="aviso" style="margin-top:10px">' +
           esc(t.explicacao || ('A caixa não respondeu: ' + t.erro)).replace(/\n/g, '<br>') + '</div>'

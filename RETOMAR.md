@@ -5,8 +5,8 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v198**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v198, o aparelho
+Publicado agora: **v199**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v199, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -361,6 +361,56 @@ evidência e **criou a tarefa**; os três de ruído foram marcados sem chamada; 
 **Onde está:** `analisarEmailsNovos`, `analisarUm`, `tarefaDoCompromisso` e
 `ehRuido` em `src/app.js`; `marcarEmailAnalisado` e `contarTentativaDeAnalise`
 em `src/nuvem.js`; `linhaDaAnalise` em `src/views.js`.
+
+---
+
+## 0-S. A HEINEKEN casou sozinha, e o rodapé saiu do caminho — v199, 19/09
+
+**A prova que faltava:** a negociação da HEINEKEN apareceu com **3 e-mails**,
+do `carlos.camargo@heineken.com.br` e do `davi.morgon@heineken.com.br`. Nenhum
+dos dois estava cadastrado como contato — casaram **pelo domínio**. A corrente
+inteira, do IMAP à aba da negociação.
+
+**E a tela mostrou o próximo problema.** O primeiro e-mail, *"Aceita: Conversa
+Inicial sobre ETDI"*, tinha como corpo **só o aviso jurídico**. Os outros dois
+traziam assinatura, `[cid:image001.jpg@01DD4757…]` e `<mailto:…>` repetindo o
+endereço que já estava ao lado.
+
+Isso atrapalha duas vezes: na tela esconde a única frase que interessa — no do
+Carlos, *"Agendado com o Alexandre para hoje às 14hs"* estava no meio de cinco
+linhas de rodapé — e no assistente é texto pago para ler o mesmo aviso cem
+vezes.
+
+`IADEmail.limpo()` corta, nesta ordem: as marcas de imagem e o `<mailto:>`
+(que aparecem no meio da frase), o aviso jurídico e o rodapé (que vão até o
+fim), a assinatura depois de `--`, a **despedida** (*At.te.*,
+*Atenciosamente*, *Regards*…) e, quando não há despedida, o telefone `+55`.
+
+| | antes | depois |
+| --- | --- | --- |
+| Carlos | 495 | **89** — exatamente a frase dele |
+| Davi | 556 | 270 |
+| "Aceita:" | ~1000 | **vazio** → vira ruído, sem gastar chamada |
+
+**A limpeza é no app, não na função do servidor**, e de propósito: assim vale
+também para os 25 que **já estão guardados**, e a regra existe num lugar só em
+vez de em duas linguagens.
+
+**O limite conhecido, escrito no teste:** o do Davi emenda *"…nesse momento!
+Davi Morgon Diretor Industrial…"* sem despedida nenhuma. Sem marca, não há como
+saber onde a mensagem acaba sem arriscar cortar conteúdo — e **cortar conteúdo
+é muito pior do que deixar rodapé**. O teste afirma o que é verdade: o telefone
+e o aviso saem, o bloco de nome e cargo sobra, e a frase dele vem primeiro.
+
+**E o `ehRuido` passou a medir DEPOIS da limpeza**, que é a ordem que importa:
+pelo tamanho cru, o "Aceita:" passaria por mensagem de verdade e gastaria uma
+chamada para o assistente dizer que não há nada ali.
+
+**Os balões de ajuda foram reescritos.** Antes diziam o que o botão faz; agora
+dizem **quando usar, o que ele não faz, e a diferença para o botão parecido do
+lado** — que era a dúvida real (*Buscar e-mails* da negociação × *Buscar agora*
+da Configuração; *Analisar com a IA* × *Analisar agora*). Nove botões, em
+linhas separadas em vez de um parágrafo.
 
 ---
 

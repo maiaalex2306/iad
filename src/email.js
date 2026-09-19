@@ -252,6 +252,79 @@
     return conversas().reduce(function (s, c) { return s + c.naoLidas; }, 0);
   }
 
+  /* ---------------- tirar o que não é conversa ----------------
+
+     O corpo de um e-mail corporativo vem com três camadas de entulho que não
+     são o que a pessoa escreveu:
+
+       o aviso jurídico   "The information transmitted is intended only for…",
+                          que é maior do que a mensagem e igual em todas.
+       a assinatura       nome, cargo, três telefones, o endereço da fábrica e
+                          "please consider the environment before printing".
+       as marcas de imagem [cid:image001.jpg@01DD…] e <mailto:…> repetindo o
+                          endereço que já está escrito ao lado.
+
+     Isso atrapalha duas vezes. Na tela, esconde a única frase que interessa —
+     no e-mail do Carlos, "Agendado com o Alexandre para hoje às 14hs" ficou
+     no meio de cinco linhas de rodapé. E no assistente, é texto pago para ler
+     o mesmo aviso jurídico cem vezes.
+
+     A limpeza é aqui, no app, e não na função do servidor de propósito: assim
+     ela vale também para o que JÁ está guardado, e a regra existe num lugar
+     só em vez de em duas linguagens. */
+  const AVISOS = [
+    /_{3,}\s*disclaimer\s*_{3,}/i,
+    /the information transmitted is intended only/i,
+    /this (e-?mail|message) (and any files? )?(transmitted )?(is|are) confidential/i,
+    /esta mensagem (e seus anexos )?(pode|podem) conter informa[çc][õo]es? confidenciais/i,
+    /aviso de confidencialidade/i,
+    /please consider the environment before printing/i,
+    /antes de imprimir pense/i
+  ];
+
+  function limpo(texto) {
+    let t = String(texto || '');
+
+    /* As marcas de imagem e o mailto duplicado saem antes: eles aparecem no
+       meio da frase, e cortar por eles perderia o que vem depois. */
+    t = t.replace(/\[cid:[^\]]*\]/gi, '')
+         .replace(/\[Description:[^\]]*\]/gi, '')
+         .replace(/<mailto:[^>]*>/gi, '')
+         .replace(/<https?:\/\/[^>]*>/gi, '');
+
+    /* O aviso jurídico e o rodapé vão até o fim da mensagem: corta-se do
+       primeiro que aparecer em diante. */
+    let corte = t.length;
+    AVISOS.forEach(function (re) {
+      const m = re.exec(t);
+      if (m && m.index < corte) corte = m.index;
+    });
+    t = t.slice(0, corte);
+
+    /* A assinatura separada por "--" sozinho numa linha é convenção antiga e
+       ainda muito usada. */
+    t = t.replace(/\n-{2,}\s*\n[\s\S]*$/, '\n');
+
+    /* A DESPEDIDA é o corte mais confiável que existe, porque quem escreve a
+       põe exatamente onde a mensagem acaba e a assinatura começa. No e-mail
+       do Carlos, "At.te." separa "estou à disposição" de cinco linhas de
+       cargo, telefone e endereço da fábrica.
+
+       Só vale se sobrar mensagem antes: "Atenciosamente" na primeira linha é
+       de quem cumprimenta, não de quem se despede. */
+    const DESPEDIDAS = /\b(at\.?te\.?|atenciosamente|atenciosa?mente|cordialmente|abra[çc]os?|abra[çc]o|grato|grata|obrigad[oa]\s*[,.]|best regards|kind regards|regards|sincerely)\b[\s,.:;-]*/i;
+    const dsp = DESPEDIDAS.exec(t);
+    if (dsp && dsp.index > 40) t = t.slice(0, dsp.index);
+
+    /* E, quando não há despedida, o bloco de contato se denuncia pelo
+       telefone: "T +55 11 4022-9596". Texto de negociação não costuma trazer
+       o número no meio da frase — e, se trouxer, o que vem antes fica. */
+    const tel = /\b[TMF]?\s*\+55[\s\d().-]{8,}/.exec(t);
+    if (tel && tel.index > 40) t = t.slice(0, tel.index);
+
+    return t.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+  }
+
   function naFila() {
     return todas().filter(function (m) { return m.estado === 'fila' || m.estado === 'erro'; });
   }
@@ -261,7 +334,7 @@
     disponivel: disponivel, todas: todas,
     carregarCaixas: carregarCaixas, minhasCaixas: minhasCaixas,
     conversas: conversas, conversasDaOportunidade: conversasDaOportunidade,
-    paraCasar: paraCasar, casar: casar, naFila: naFila,
+    paraCasar: paraCasar, casar: casar, naFila: naFila, limpo: limpo,
     naoLidasDaOp: naoLidasDaOp, totalNaoLidas: totalNaoLidas,
     endereco: endereco, dominio: dominio, ehGratuito: ehGratuito,
     contatoDoEndereco: contatoDoEndereco, contaDoDominio: contaDoDominio,
