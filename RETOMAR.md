@@ -364,6 +364,42 @@ em `src/nuvem.js`; `linhaDaAnalise` em `src/views.js`.
 
 ---
 
+## 0-M. Uma palavra que faltava numa lista — 19/09
+
+O Alexandre publicou a função `email`, com os dois arquivos, com o nome certo.
+E continuou vendo *"a resposta não chegou"*.
+
+**A causa era uma palavra minha:**
+
+```
+assistente:  'authorization, x-client-info, apikey, content-type'   ← funciona
+email:       'authorization, content-type, x-cron'                  ← falta apikey
+```
+
+O app manda `apikey` em toda chamada. Antes de enviar um pedido com cabeçalhos
+fora do comum, o navegador pergunta ao servidor se pode — e basta **um** não
+estar na resposta para ele negar a permissão e **o pedido de verdade nunca
+sair**.
+
+**E isso não deixa rastro.** A função não é chamada: não há log, não há erro,
+não há nada para investigar do lado do servidor. Do lado do app o sintoma é
+idêntico ao de uma função que não foi publicada — que foi exatamente onde eu
+fui procurar. Mandei o Alexandre publicar de novo, conferir nomes, conferir
+arquivos, e trocar a senha de aplicativo várias vezes, com e sem espaços,
+atrás de um problema que estava numa vírgula minha. Escrevi a função do zero
+em vez de copiar a linha do CORS das que já funcionavam.
+
+**O teste que faltava:** `nuvem/testes/cors.test.ts`. Ele lê o `cabecalhos()`
+do `src/nuvem.js` e o `Access-Control-Allow-Headers` de **cada** Edge Function,
+e compara as duas listas. Teste de navegador não pegaria isto — ele fala com um
+servidor de mentira, que não faz essa pergunta. Confirmei que ele pega,
+reintroduzindo o defeito de propósito antes de restaurar.
+
+Hoje: 4 ok nas três funções. Quando nascer a quarta, ela entra sozinha na
+conferência.
+
+---
+
 ## 0-L. A mensagem de erro culpava a pessoa — v194, 19/09
 
 O Alexandre cadastrou as duas caixas, colou a senha de aplicativo **com e sem

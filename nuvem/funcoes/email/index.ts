@@ -57,9 +57,17 @@ const SEGREDO_CRON = Deno.env.get('EMAIL_SEGREDO_CRON') || '';
    tudo o que já foi guardado — cada pessoa teria de digitar a senha de novo. */
 const CHAVE_MESTRA = Deno.env.get('EMAIL_CHAVE_MESTRA') || '';
 
+/* A lista tem de conter TODO cabeçalho que o app manda. O navegador pede
+   permissão para eles antes de enviar o pedido de verdade (o "preflight"), e
+   basta um faltando para a permissão ser negada e a requisição nunca sair.
+
+   Do lado de cá isso não aparece como erro nenhum: a função não é chamada, e
+   não há o que registrar. Do lado do app aparece "a resposta não chegou" — o
+   mesmo sintoma de função não publicada, que foi exatamente onde eu fui
+   procurar. `apikey` faltava aqui, e o app o manda em toda chamada. */
 const CORS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, content-type, x-cron',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-cron',
   'Access-Control-Allow-Methods': 'POST,OPTIONS'
 };
 const json = (dados: unknown, status = 200) =>
