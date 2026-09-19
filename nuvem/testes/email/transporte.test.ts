@@ -234,8 +234,14 @@ conferir('a caixa sem senha ficou sem-credencial',
   patches.some((p) => p.corpo.estado === 'sem-credencial'),
   JSON.stringify(patches.map((p) => p.corpo)).slice(0, 300));
 conferir('trouxe no máximo 25 numa rodada', gravados.length === 25, String(gravados.length));
+conferir('a resposta carimba a versão do código', /^\d{4}-\d{2}-\d{2}/.test(String(corpo.versao)),
+  String(corpo.versao));
+/* Caixa com ultimo_uid 10: não é a primeira leitura, então drena do mais
+   antigo e avisa quantas faltam. */
 conferir('e disse quantas faltam', corpo.caixas?.some((l: any) => l.faltam === 17),
   JSON.stringify(corpo.caixas));
+conferir('drenou do mais antigo (11 entrou)', gravados.some((g) => g.id.includes('normal')),
+  gravados.map((g) => g.id).slice(0, 4).join(' | '));
 conferir('pediu só um pedaço de cada mensagem',
   s_imap().visto.some((l) => /BODY\.PEEK\[\]<0\.65536>/.test(l)),
   s_imap().visto.filter((l) => /FETCH/.test(l)).join(' | ').slice(0, 160));
@@ -364,6 +370,23 @@ corpo = await r.json();
 conferir('nenhuma caixa ficou sem credencial',
   !patches.some((p) => p.corpo.estado === 'sem-credencial'),
   JSON.stringify(patches.map((p) => p.corpo)).slice(0, 300));
+
+console.log('\n9b. A primeira leitura pega as recentes');
+gravados = []; patches.length = 0;
+/* caixa nova: ultimo_uid zero */
+(CAIXA2 as any).ultimo_uid = 0;
+r = await manipulador(new Request('https://x/', { method: 'POST', headers: { 'x-cron': 'cron-de-teste' } }));
+corpo = await r.json();
+const daSegunda = gravados.filter((g) => g.caixa === CAIXA2.endereco);
+conferir('trouxe 25', daSegunda.length === 25, String(daSegunda.length));
+conferir('as MAIS RECENTES (a de uid 139 entrou)',
+  daSegunda.some((g) => g.id.includes('velha39')),
+  daSegunda.map((g) => g.id).slice(-3).join(' | '));
+conferir('e não as mais antigas (uid 9 ficou de fora)',
+  !daSegunda.some((g) => g.id.includes('antiga')), '');
+conferir('não promete drenar o arquivo inteiro',
+  !corpo.caixas?.some((l: any) => l.caixa === CAIXA2.endereco && l.faltam),
+  JSON.stringify(corpo.caixas));
 
 console.log('\n10. Senha errada não entra');
 const antesDoErro = segredos[CAIXA.id];

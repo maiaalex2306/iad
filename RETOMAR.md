@@ -5,8 +5,8 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v195**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v195, o aparelho
+Publicado agora: **v196**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v196, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -361,6 +361,38 @@ evidência e **criou a tarefa**; os três de ruído foram marcados sem chamada; 
 **Onde está:** `analisarEmailsNovos`, `analisarUm`, `tarefaDoCompromisso` e
 `ehRuido` em `src/app.js`; `marcarEmailAnalisado` e `contarTentativaDeAnalise`
 em `src/nuvem.js`; `linhaDaAnalise` em `src/views.js`.
+
+---
+
+## 0-P. Saber qual código está no servidor — v196, 19/09
+
+As duas caixas do Alexandre chegaram a **funcionando**, com senha guardada —
+o cofre inteiro provado ponta a ponta. E o "Buscar agora" continuou dando
+`not having enough compute resources`.
+
+Aí eu travei numa pergunta que não deveria existir: **ele republicou a função
+ou não?** A Edge Function é colada à mão no painel e não sobe com o app, então
+não havia como saber se o servidor tinha a correção ou a versão de antes. Passei
+a tarde inteira nesse escuro, e isso é pior do que o defeito — porque cada
+tentativa de diagnóstico vale para uma versão que eu não sei qual é.
+
+**`VERSAO_DA_FUNCAO`** resolve: um carimbo que volta em toda resposta e aparece
+na tela, em *O servidor de e-mail → Código publicado no servidor*. A pergunta
+passa a ter resposta em vez de palpite.
+
+**E a primeira leitura mudou de regra**, que é uma decisão de produto e não um
+detalhe:
+
+| | O que traz |
+| --- | --- |
+| primeira vez | as **mais recentes**, e o arquivo antigo fica para trás de propósito |
+| daí em diante | as mais antigas primeiro, para a marca avançar sempre |
+
+Drenar dez anos de caixa de 25 em 25 levaria meses, e ninguém precisa disso: o
+que move uma negociação é o que foi escrito nas últimas semanas. O histórico
+continua no Gmail, onde sempre esteve.
+
+63 ok na função (eram 57), 63 no navegador.
 
 ---
 

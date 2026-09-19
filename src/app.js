@@ -6338,6 +6338,10 @@
            e continua na seguinte. Sem este número, a pessoa veria "25
            recebidos" três vezes seguidas e concluiria que travou. */
         faltam: linhas.reduce(function (t, l) { return t + (l.faltam || 0); }, 0),
+        /* Qual código está publicado no servidor. A Edge Function é colada à
+           mão no painel e não sobe com o app: sem este carimbo, "você
+           republicou?" só tem palpite por resposta. */
+        versao: (r && r.versao) || '',
         /* O erro da caixa é o da caixa, e aparece com o endereço junto: com
            duas caixas ligadas, "falhou" sem dizer qual manda a pessoa mexer na
            configuração certa por sorte. */

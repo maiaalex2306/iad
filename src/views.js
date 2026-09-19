@@ -6263,6 +6263,10 @@
                 : '')
             : 'O servidor busca sozinho de tempo em tempo, e sempre que você abre a aba E-mail ' +
               'de uma negociação.') + '</p>') +
+      (t.versao
+        ? '<p class="tiny muted" style="margin:8px 0 0">Código publicado no servidor: <code>' +
+          esc(t.versao) + '</code></p>'
+        : '') +
       '<p class="tiny muted" style="margin:10px 0 0">A sua senha de aplicativo fica cifrada no ' +
       'servidor e nunca passa por este navegador. Para cortar o acesso a qualquer momento, apague ' +
       'a senha de aplicativo na sua conta de e-mail — vale na hora.</p></div>';

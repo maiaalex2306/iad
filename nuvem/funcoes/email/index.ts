@@ -57,6 +57,15 @@ const SEGREDO_CRON = Deno.env.get('EMAIL_SEGREDO_CRON') || '';
    tudo o que já foi guardado — cada pessoa teria de digitar a senha de novo. */
 const CHAVE_MESTRA = Deno.env.get('EMAIL_CHAVE_MESTRA') || '';
 
+/* Qual código está publicado.
+
+   Esta função é colada à mão no painel do Supabase, e não sobe junto com o
+   app. Resultado: quando alguma coisa falha, ninguém sabe se o servidor tem a
+   correção ou a versão de antes — e eu passei a tarde inteira sem saber, o
+   que é pior do que o defeito. O carimbo volta em toda resposta e aparece na
+   tela, e aí a pergunta "você republicou?" tem resposta em vez de palpite. */
+const VERSAO_DA_FUNCAO = '2026-09-19-c';
+
 /* A lista tem de conter TODO cabeçalho que o app manda. O navegador pede
    permissão para eles antes de enviar o pedido de verdade (o "preflight"), e
    basta um faltando para a permissão ser negada e a requisição nunca sair.
@@ -422,10 +431,20 @@ async function lerCaixa(caixa: Caixa, senha: string):
       .filter((u) => u > (Number(caixa.ultimo_uid) || 0))
       .sort((a, b) => a - b);
 
-    /* As mais antigas primeiro: assim a marca avança sempre, e uma caixa com
-       atraso é drenada em ordem em vez de ficar pulando. */
-    const desta = todos.slice(0, POR_RODADA);
-    restantes = todos.length - desta.length;
+    /* A PRIMEIRA leitura é diferente das outras, e essa diferença é uma
+       decisão de produto, não um detalhe:
+
+         primeira vez  → as mais RECENTES, e o resto do arquivo fica para trás
+                         de propósito.
+         daí em diante → as mais antigas primeiro, para a marca avançar sempre
+                         e um atraso ser drenado em ordem.
+
+       Trazer dez anos de caixa de 25 em 25 levaria meses, e ninguém precisa
+       disso: o que move uma negociação é o que foi escrito nas últimas
+       semanas. O histórico continua no Gmail, onde sempre esteve. */
+    const primeiraVez = !(Number(caixa.ultimo_uid) || 0);
+    const desta = primeiraVez ? todos.slice(-POR_RODADA) : todos.slice(0, POR_RODADA);
+    restantes = primeiraVez ? 0 : todos.length - desta.length;
     if (!desta.length) return;
 
     /* `<0.65536>` é o pedaço que se quer de cada mensagem: do byte zero em
@@ -631,7 +650,7 @@ async function rodar(donoId?: string): Promise<Record<string, unknown>> {
     relatorio.push(linha);
   }
 
-  return { ok: true, caixas: relatorio };
+  return { ok: true, versao: VERSAO_DA_FUNCAO, caixas: relatorio };
 }
 
 /* ---------------- guardar a senha de uma caixa ----------------
