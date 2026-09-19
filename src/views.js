@@ -2527,14 +2527,26 @@
        endereços: "de qual sai a resposta?". */
     const aviso = !caixas.length
       ? '<div class="aviso" style="margin-bottom:10px">Você ainda não ligou uma caixa de e-mail. ' +
-        'Sem isso o IAD não recebe nem manda nada — use <strong>Minha caixa</strong> acima.</div>'
+        'Sem isso o IAD não recebe nem manda nada. ' +
+        '<button class="btn ghost mini" onclick="App.comoLigarMinhaCaixa()">Como ligar a minha</button></div>'
       : '<p class="tiny muted" style="margin:0 0 10px">Caixas ligadas: ' +
         caixas.map(function (c) {
-          return '<button class="pill' + (c.envia !== false ? ' ok' : '') + ' mini" ' +
+          /* Três estados, e o pior deles precisa gritar: caixa sem senha está
+             cadastrada e não funciona, que é o jeito mais fácil de alguém
+             achar que terminou sem ter terminado. */
+          const semSenha = !c.senha_em;
+          return '<button class="pill ' + (semSenha ? 'risk' : (c.envia !== false ? 'ok' : '')) + ' mini" ' +
             'onclick="App.configurarEmail(\'' + esc(c.endereco) + '\')">' + esc(c.endereco) +
-            (c.envia !== false ? ' · envia' : ' · só recebe') + '</button>';
+            (semSenha ? ' · FALTA A SENHA' : (c.envia !== false ? ' · envia' : ' · só recebe')) +
+            '</button>';
         }).join(' ') +
         ' <button class="btn ghost mini" onclick="App.configurarEmail()">+ Ligar outra</button></p>' +
+        (caixas.filter(function (c) { return !c.senha_em; }).length
+          ? '<div class="aviso" style="margin-bottom:10px">Uma caixa sem senha de aplicativo está ' +
+            'cadastrada mas não funciona: o IAD não tem como entrar nela. Clique na caixa em ' +
+            'vermelho acima e cole as 16 letras. ' +
+            '<button class="btn ghost mini" onclick="App.comoLigarMinhaCaixa()">Como gerar</button></div>'
+          : '') +
         (caixas.filter(function (c) { return c.envia !== false; }).length
           ? ''
           : '<div class="aviso" style="margin-bottom:10px">Nenhuma caixa está marcada para enviar. ' +
@@ -4374,6 +4386,7 @@
     ['m-dia', 'O dia do vendedor: o que alimentar, o que você recebe'],
     ['m-lh', 'A integração com o Linked Helper'],
     ['m-sinais', 'Sinais: o que o comprador faz sozinho'],
+    ['m-email', 'Ligar a sua caixa de e-mail'],
     ['m-avanco', 'Como o IAD anda'],
     ['m-faixas', 'O que o número diz'],
     ['m-etapas', 'O que cada etapa pede'],
@@ -5135,6 +5148,119 @@
       '</div>';
   }
 
+
+  /* ------------------------------------------------------------------
+     Ligar a caixa de e-mail
+
+     Escrito para QUALQUER pessoa da equipe, não para quem administra o
+     Supabase. A diferença importa: até a correção 21, a senha de aplicativo
+     de cada um tinha de ser digitada no painel por quem o administra — ou
+     seja, a Rosa teria de MANDAR a senha dela para alguém, e senha que viaja
+     por mensagem já está queimada. Agora cada um guarda a sua, sozinho, e
+     este é o texto que ensina como.
+     ------------------------------------------------------------------ */
+  function manualDoEmail() {
+    const passo = function (n, titulo, texto) {
+      return '<div class="passo-manual"><div class="numero">' + n + '</div>' +
+        '<div><strong>' + esc(titulo) + '</strong>' +
+        '<p class="small" style="margin:4px 0 0">' + texto + '</p></div></div>';
+    };
+
+    return '<div class="card" id="m-email"><h2>Ligar a sua caixa de e-mail</h2>' +
+
+      '<p>Ligada a caixa, o que os clientes escrevem para você passa a cair dentro da ' +
+      'negociação certa, o assistente lê e transforma em evidência e tarefa, e você responde de ' +
+      'dentro do IAD — do seu endereço, com o seu nome.</p>' +
+
+      '<p class="small"><strong>Cada pessoa liga a sua.</strong> Você pode ligar quantos ' +
+      'endereços quiser para <em>receber</em>, e escolher <strong>um</strong> para <em>enviar</em>. ' +
+      'Ninguém vê a caixa de ninguém: a regra do banco é por dono, e nem o gestor enxerga a ' +
+      'configuração de e-mail da equipe.</p>' +
+
+      '<h3>Antes de começar: o que é uma senha de aplicativo</h3>' +
+      '<p class="small">Não é a senha da sua conta, e não abre a sua conta. É uma senha ' +
+      'separada, de 16 letras, que serve <strong>só para programa de e-mail</strong> e que você ' +
+      'apaga quando quiser, sem mexer em mais nada. É por isso que o IAD pede essa e não a sua: ' +
+      'se um dia você quiser cortar o acesso, é um clique na sua conta, e não um pedido para ' +
+      'ninguém.</p>' +
+
+      '<div class="aviso" style="margin:14px 0"><strong>Não mande essas 16 letras para ninguém</strong> ' +
+      '— nem para o seu gestor, nem para quem cuida do sistema, nem por WhatsApp. Você mesmo as ' +
+      'cola na tela do IAD, elas vão cifradas para o servidor e não ficam guardadas neste ' +
+      'computador. Quem pede a sua senha por mensagem está errado, sempre.</div>' +
+
+      '<h3>O passo a passo</h3>' +
+      '<div class="passos-manual">' +
+      passo(1, 'Descubra quem hospeda o seu e-mail',
+        'Quase sempre é Google (Gmail/Workspace) ou Microsoft (Outlook/365) — mesmo que o ' +
+        'endereço seja da empresa, como <em>@acp.tec.br</em> ou <em>@biosolvit.com</em>. Se você ' +
+        'entra no seu e-mail por <em>mail.google.com</em>, é Google. Por ' +
+        '<em>outlook.office.com</em>, é Microsoft. Se for outro, peça ao TI da sua empresa ' +
+        '"o servidor de IMAP e o de SMTP" — são dois nomes, e é tudo o que ele precisa dizer.') +
+      passo(2, 'Ligue a verificação em duas etapas',
+        'No Google: <em>myaccount.google.com/security</em>. Sem ela o Google nem mostra a opção ' +
+        'de senha de aplicativo. É chato uma vez e protege a sua conta para sempre.') +
+      passo(3, 'Gere a senha de aplicativo',
+        'No Google: <em>myaccount.google.com/apppasswords</em>. Dê o nome <strong>IAD CRM</strong> ' +
+        'e ele mostra 16 letras em quatro grupos. <strong>Copie agora</strong> — ele não mostra ' +
+        'de novo. Se sumir, não tem problema: você apaga aquela e gera outra.') +
+      passo(4, 'Abra Minha caixa, no IAD',
+        'Em qualquer negociação, aba <strong>E-mail</strong> → botão <strong>Minha caixa</strong>. ' +
+        'Preencha o seu endereço, o nome que o cliente vê, e o provedor. No último campo, cole as ' +
+        '16 letras — com ou sem os espaços, tanto faz.') +
+      passo(5, 'Escolha qual caixa ENVIA',
+        'Se você tem só uma, ela envia. Se tem duas, marque <strong>Sim</strong> na que deve ' +
+        'assinar as respostas e <strong>Não</strong> na outra — o IAD desmarca a anterior ' +
+        'sozinho, porque duas marcadas fariam o remetente virar sorteio.') +
+      passo(6, 'Confira',
+        'A caixa aparece no topo da aba E-mail. Verde com <em>· envia</em> ou <em>· só recebe</em> ' +
+        'está pronta. <strong>Vermelha com FALTA A SENHA</strong> está cadastrada e não funciona: ' +
+        'clique nela e cole as 16 letras.') +
+      '</div>' +
+
+      '<h3>Dois exemplos de verdade</h3>' +
+      '<div class="tabela-rolagem"><table><tbody>' +
+      '<tr><td style="vertical-align:top"><strong>Alexandre</strong><br>' +
+      '<span class="small muted">Bio Water Care</span></td>' +
+      '<td class="small">Recebe cliente em <strong>@biosolvit.com</strong> e em ' +
+      '<strong>@biopartners.com.br</strong>, e responde sempre pelo segundo. Ele liga ' +
+      '<strong>as duas</strong> caixas — uma senha de aplicativo para cada, gerada em cada conta ' +
+      '— e marca <em>Envia: Sim</em> só na do biopartners. As duas trazem e-mail; só uma ' +
+      'assina.</td></tr>' +
+      '<tr><td style="vertical-align:top"><strong>Rosa</strong><br>' +
+      '<span class="small muted">AcP</span></td>' +
+      '<td class="small">Recebe tudo em <strong>rosa.oliveira@acp.tec.br</strong>. Ela liga ' +
+      '<strong>uma</strong> caixa, com uma senha de aplicativo gerada na conta dela, e pronto — ' +
+      'essa mesma envia. Ela não precisa falar com ninguém nem esperar ninguém: quem digita a ' +
+      'senha dela é ela, na tela dela.</td></tr>' +
+      '</tbody></table></div>' +
+
+      '<h3>Quando dá errado</h3>' +
+      '<div class="tabela-rolagem"><table><tbody>' +
+      '<tr><td><strong>A caixa recusou a senha</strong></td>' +
+      '<td class="small">O mais comum é ter colado a senha da <em>conta</em> em vez da de ' +
+      '<em>aplicativo</em>. O segundo mais comum é a verificação em duas etapas estar ' +
+      'desligada.</td></tr>' +
+      '<tr><td><strong>Não acho "senha de aplicativo" no Google</strong></td>' +
+      '<td class="small">Falta ligar a verificação em duas etapas (passo 2). Em algumas empresas o ' +
+      'administrador do Workspace desliga essa opção para todo mundo — aí é com ele.</td></tr>' +
+      '<tr><td><strong>Não sei o servidor</strong></td>' +
+      '<td class="small">Só acontece em "Outro (servidor próprio)". Peça ao TI o endereço de ' +
+      '<em>IMAP</em> (entrada) e o de <em>SMTP</em> (saída).</td></tr>' +
+      '<tr><td><strong>Liguei e não chega nada</strong></td>' +
+      '<td class="small">Clique em <strong>Buscar agora</strong>, na aba E-mail. Ele diz na hora ' +
+      'quantos vieram — ou o que a caixa respondeu.</td></tr>' +
+      '<tr><td><strong>Quero desligar</strong></td>' +
+      '<td class="small">Apague a senha de aplicativo na sua conta de e-mail. O acesso morre na ' +
+      'hora, sem depender de ninguém aqui.</td></tr>' +
+      '</tbody></table></div>' +
+
+      '<p class="small muted" style="margin-top:14px">O IAD lê a sua caixa sem mexer nela: ' +
+      'não marca como lido, não apaga e não move nada. E guarda só o texto das mensagens — ' +
+      'anexo e imagem ficam onde estão.</p>' +
+      '</div>';
+  }
+
   function manualDoCaminho() {
     const passo = function (n, titulo, texto, onde) {
       return '<div class="passo-manual"><div class="numero">' + n + '</div>' +
@@ -5810,6 +5936,7 @@
       manualDoDia() +
       manualDoLinkedHelper() +
       manualDosSinais() +
+      manualDoEmail() +
       manualDaRegua() +
       manualDoAvanco() +
       manualDasFaixas() +

@@ -354,6 +354,23 @@
     return chamar('/rest/v1/caixas_email?select=*&order=criado_em.asc');
   }
 
+  /* A senha de aplicativo faz UMA viagem: daqui para a Edge Function, por TLS.
+     Ela não é guardada em lugar nenhum do navegador — nem em variável que
+     sobreviva a esta chamada, nem em localStorage, nem no estado do app. O
+     servidor a cifra e guarda; o que volta é só "deu certo" ou o motivo.
+
+     Antes disto, a senha de cada pessoa tinha de ser digitada no painel do
+     Supabase por quem o administra — ou seja, a Rosa teria de MANDAR a senha
+     dela para alguém. Senha que viaja por mensagem já está queimada, por
+     melhor que seja o cofre do outro lado. */
+  function guardarSenhaDaCaixa(endereco, senha) {
+    return chamarFuncao('email', { acao: 'guardar-senha', endereco: endereco, senha: senha });
+  }
+
+  function esquecerSenhaDaCaixa(endereco) {
+    return chamarFuncao('email', { acao: 'esquecer-senha', endereco: endereco });
+  }
+
   function salvarCaixaDeEmail(caixa) {
     return chamar('/rest/v1/caixas_email?on_conflict=dono_id,endereco', {
       metodo: 'POST',
@@ -1007,7 +1024,7 @@
     mensagensWhatsapp, marcarLidasWhatsapp, vincularWhatsapp,
     emailsDaNuvem, vincularEmail, enfileirarEmail, marcarLidosEmail,
     marcarEmailAnalisado, contarTentativaDeAnalise,
-    caixasDeEmail, salvarCaixaDeEmail,
+    caixasDeEmail, salvarCaixaDeEmail, guardarSenhaDaCaixa, esquecerSenhaDaCaixa,
     empresaParecida, achatarNome, porFormato, explicarFalhas,
     adotarTokens,
     trocarMinhaSenha,

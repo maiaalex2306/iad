@@ -20,13 +20,20 @@
      enviar   → pega o que está em `emails` com estado 'fila', manda por SMTP
                 e marca 'enviada' — ou 'erro' com o motivo, nunca sumindo.
 
-   O segredo EMAIL_SENHAS é um mapa, no mesmo formato do CHAVES_POR_EMPRESA da
-   ponte:
+   A senha de cada caixa vem de um de dois lugares, nesta ordem:
 
-     {"alexandre.maia@biopartners.com.br":"as16letrasjuntas"}
+     1. `segredos_email` — guardada pela própria pessoa, pela tela do app,
+        cifrada aqui dentro com a EMAIL_CHAVE_MESTRA. É o caminho normal, e é
+        o único que funciona para uma equipe: ninguém precisa mandar a própria
+        senha para o administrador do painel.
+     2. `EMAIL_SENHAS` — o mapa de endereço para senha, editado à mão no painel
+        do Supabase. Nasceu antes do caminho 1 e continua valendo para quem já
+        o usava:
 
-   Endereço que não estiver no mapa é ignorado com a caixa marcada
-   'sem-credencial' — em vez de tentar, falhar e parecer defeito. */
+          {"alexandre.maia@biopartners.com.br":"as16letrasjuntas"}
+
+   Caixa sem senha em nenhum dos dois é ignorada e marcada 'sem-credencial' —
+   em vez de tentar, falhar e parecer defeito. */
 
 import { lerMensagem, dataISO } from './mime.ts';
 
@@ -45,6 +52,10 @@ const ANON = Deno.env.get('IAD_CHAVE_PUBLICA') ||
    endereço público que lê caixa de e-mail sem prova nenhuma seria o convite
    para alguém de fora mandar a função trabalhar de graça. */
 const SEGREDO_CRON = Deno.env.get('EMAIL_SEGREDO_CRON') || '';
+/* Com o que as senhas das caixas são cifradas antes de irem para o banco.
+   Uma só, para o sistema inteiro, definida uma vez. Trocá-la torna ilegível
+   tudo o que já foi guardado — cada pessoa teria de digitar a senha de novo. */
+const CHAVE_MESTRA = Deno.env.get('EMAIL_CHAVE_MESTRA') || '';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -58,6 +69,56 @@ const json = (dados: unknown, status = 200) =>
 
 function senhas(): Record<string, string> {
   try { return JSON.parse(Deno.env.get('EMAIL_SENHAS') || '{}'); } catch (_e) { return {}; }
+}
+
+/* ---------------- a cifra ----------------
+
+   AES-256-GCM, com a chave derivada da EMAIL_CHAVE_MESTRA por SHA-256. GCM e
+   não CBC porque ele ACUSA adulteração: bytes trocados no banco viram erro de
+   decifragem, e não uma senha diferente sendo mandada para um servidor.
+
+   O vetor de inicialização é sorteado a cada gravação e viaja junto, no
+   começo. Reaproveitar um vetor em GCM é a falha clássica do modo — e ela não
+   é sutil: dois textos cifrados com o mesmo vetor se revelam um ao outro. */
+async function chaveDaCifra(): Promise<CryptoKey> {
+  /* O `as BufferSource` existe só para o verificador de tipos: TextEncoder
+     devolve bytes que qualquer motor aceita aqui, mas as definições mais
+     novas do TypeScript não provam isso sozinhas. Nada muda em execução. */
+  const material = await crypto.subtle.digest(
+    'SHA-256', new TextEncoder().encode(CHAVE_MESTRA) as BufferSource);
+  return await crypto.subtle.importKey('raw', material, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+}
+
+function paraBase64(bytes: Uint8Array): string {
+  let s = '';
+  for (let i = 0; i < bytes.length; i += 8192) s += String.fromCharCode(...bytes.subarray(i, i + 8192));
+  return btoa(s);
+}
+
+function deBase64(texto: string): Uint8Array {
+  const cru = atob(texto);
+  const bytes = new Uint8Array(cru.length);
+  for (let i = 0; i < cru.length; i++) bytes[i] = cru.charCodeAt(i);
+  return bytes;
+}
+
+async function cifrar(texto: string): Promise<string> {
+  const vetor = crypto.getRandomValues(new Uint8Array(12));
+  const fechado = new Uint8Array(await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv: vetor }, await chaveDaCifra(),
+    new TextEncoder().encode(texto) as BufferSource));
+  const junto = new Uint8Array(vetor.length + fechado.length);
+  junto.set(vetor, 0);
+  junto.set(fechado, vetor.length);
+  return paraBase64(junto);
+}
+
+async function decifrar(guardado: string): Promise<string> {
+  const bytes = deBase64(guardado);
+  const aberto = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: bytes.subarray(0, 12) as BufferSource },
+    await chaveDaCifra(), bytes.subarray(12) as BufferSource);
+  return new TextDecoder().decode(aberto);
 }
 
 /* Gmail e Outlook têm endereço conhecido, e obrigar cada vendedor a saber o
@@ -117,6 +178,46 @@ async function gravarEmails(linhas: Record<string, unknown>[]): Promise<number> 
     return 0;
   }
   return linhas.length;
+}
+
+/* O segredo de uma caixa, de onde estiver. A tabela primeiro: é onde a
+   própria pessoa guardou. O mapa do painel depois, para não quebrar quem já
+   estava funcionando por ele. */
+async function senhaDaCaixa(caixa: Caixa, mapa: Record<string, string>): Promise<string> {
+  const linhas = await consultar('segredos_email?select=senha_cifrada&caixa_id=eq.' + caixa.id);
+  const guardada = (linhas[0] || {}).senha_cifrada || '';
+  if (guardada && CHAVE_MESTRA) {
+    try {
+      return await decifrar(guardada);
+    } catch (_e) {
+      /* Chave-mestra trocada, ou linha adulterada. Cair no mapa seria pior do
+         que falhar: a pessoa continuaria vendo "ok" sem entender que a senha
+         que ela guardou parou de valer. */
+      throw new Error('a senha guardada não pôde ser lida; guarde-a de novo na tela "Minha caixa"');
+    }
+  }
+  return mapa[String(caixa.endereco || '').toLowerCase()] || mapa[caixa.endereco] || '';
+}
+
+async function gravarSegredo(caixaId: string, cifrada: string): Promise<boolean> {
+  const r = await fetch(URL_SUPABASE + '/rest/v1/segredos_email?on_conflict=caixa_id', {
+    method: 'POST',
+    headers: {
+      apikey: SERVICE, authorization: 'Bearer ' + SERVICE,
+      'content-type': 'application/json',
+      prefer: 'resolution=merge-duplicates,return=minimal'
+    },
+    body: JSON.stringify([{ caixa_id: caixaId, senha_cifrada: cifrada, atualizado_em: new Date().toISOString() }])
+  });
+  if (!r.ok) console.error('gravar segredo falhou', r.status, await r.text().catch(() => ''));
+  return r.ok;
+}
+
+async function apagarSegredo(caixaId: string): Promise<void> {
+  await fetch(URL_SUPABASE + '/rest/v1/segredos_email?caixa_id=eq.' + caixaId, {
+    method: 'DELETE',
+    headers: { apikey: SERVICE, authorization: 'Bearer ' + SERVICE, prefer: 'return=minimal' }
+  });
 }
 
 /* ---------------- conversa de linha sobre TLS ----------------
@@ -389,10 +490,19 @@ async function rodar(donoId?: string): Promise<Record<string, unknown>> {
   const relatorio: Record<string, unknown>[] = [];
 
   for (const caixa of caixas) {
-    const senha = mapa[String(caixa.endereco || '').toLowerCase()] || mapa[caixa.endereco] || '';
+    let senha = '';
+    try {
+      senha = await senhaDaCaixa(caixa, mapa);
+    } catch (e) {
+      const motivo = String((e as Error).message || 'falhou').slice(0, 300);
+      await alterar('caixas_email?id=eq.' + caixa.id, { estado: 'erro', erro: motivo });
+      relatorio.push({ caixa: caixa.endereco, erro: motivo });
+      continue;
+    }
     if (!senha) {
       await alterar('caixas_email?id=eq.' + caixa.id,
-        { estado: 'sem-credencial', erro: 'Falta a senha desta caixa no segredo EMAIL_SENHAS.' });
+        { estado: 'sem-credencial',
+          erro: 'Falta a senha de aplicativo desta caixa. Abra "Minha caixa" e guarde-a.' });
       relatorio.push({ caixa: caixa.endereco, erro: 'sem credencial' });
       continue;
     }
@@ -450,6 +560,62 @@ async function rodar(donoId?: string): Promise<Record<string, unknown>> {
   return { ok: true, caixas: relatorio };
 }
 
+/* ---------------- guardar a senha de uma caixa ----------------
+
+   Esta é a razão de a função aceitar mais de uma ação. Sem ela, a senha de
+   cada vendedor teria de ser digitada no painel do Supabase por quem o
+   administra — ou seja, a Rosa teria de MANDAR a senha dela para alguém. Uma
+   senha que viaja por mensagem já está queimada, por melhor que seja o cofre
+   do outro lado.
+
+   Aqui ela faz uma viagem só: do computador dela para este servidor, por TLS,
+   e sai cifrada para o banco. Ninguém no meio, e nada guardado no navegador.
+
+   A senha é TESTADA antes de ser guardada. Guardar sem testar empurraria a
+   descoberta do erro de digitação para a próxima rodada automática, que
+   acontece sem ninguém olhando — e aí a pessoa só descobriria pela ausência
+   de e-mails, que é o sintoma mais difícil de notar que existe. */
+async function guardarSenha(donoId: string, endereco: string, senha: string): Promise<Record<string, unknown>> {
+  if (!CHAVE_MESTRA) {
+    return { erro: 'o servidor está sem a EMAIL_CHAVE_MESTRA; quem administra precisa criá-la uma vez' };
+  }
+  if (!senha) return { erro: 'a senha veio vazia' };
+
+  const caixas = await consultar('caixas_email?select=*&dono_id=eq.' + encodeURIComponent(donoId) +
+    '&endereco=eq.' + encodeURIComponent(endereco.toLowerCase())) as Caixa[];
+  const caixa = caixas[0];
+  /* Só as caixas de quem chamou: o filtro por dono_id é o que impede alguém
+     de gravar uma senha na caixa de outra pessoa — ou de descobrir, pela
+     resposta, que aquela caixa existe. */
+  if (!caixa) return { erro: 'não achei esta caixa entre as suas' };
+
+  try {
+    await lerCaixa({ ...caixa, ultimo_uid: Number.MAX_SAFE_INTEGER }, senha);
+  } catch (e) {
+    const motivo = String((e as Error).message || 'falhou').slice(0, 300);
+    await alterar('caixas_email?id=eq.' + caixa.id, { estado: 'erro', erro: motivo });
+    return { erro: motivo };
+  }
+
+  if (!(await gravarSegredo(caixa.id, await cifrar(senha)))) {
+    return { erro: 'a senha foi aceita pela caixa, mas não consegui guardá-la' };
+  }
+  await alterar('caixas_email?id=eq.' + caixa.id,
+    { estado: 'ok', erro: '', senha_em: new Date().toISOString() });
+  return { ok: true, caixa: caixa.endereco };
+}
+
+async function esquecerSenha(donoId: string, endereco: string): Promise<Record<string, unknown>> {
+  const caixas = await consultar('caixas_email?select=id,endereco&dono_id=eq.' + encodeURIComponent(donoId) +
+    '&endereco=eq.' + encodeURIComponent(endereco.toLowerCase())) as Caixa[];
+  const caixa = caixas[0];
+  if (!caixa) return { erro: 'não achei esta caixa entre as suas' };
+  await apagarSegredo(caixa.id);
+  await alterar('caixas_email?id=eq.' + caixa.id,
+    { estado: 'sem-credencial', erro: '', senha_em: null });
+  return { ok: true, caixa: caixa.endereco };
+}
+
 function enderecoIgual(a: string, b: string): boolean {
   return String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
 }
@@ -484,17 +650,36 @@ Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
   if (req.method !== 'POST') return json({ erro: 'método não suportado' }, 405);
   if (!URL_SUPABASE || !SERVICE) return json({ erro: 'a função está sem configuração de banco' }, 503);
-  if (!Deno.env.get('EMAIL_SENHAS')) {
-    return json({ erro: 'falta o segredo EMAIL_SENHAS' }, 503);
+  /* Nenhum dos dois caminhos de senha configurado: a função não teria como
+     abrir caixa nenhuma, e dizer isso agora é melhor do que marcar todas as
+     caixas como 'sem-credencial' e deixar a pessoa procurar. */
+  if (!CHAVE_MESTRA && !Deno.env.get('EMAIL_SENHAS')) {
+    return json({ erro: 'falta o segredo EMAIL_CHAVE_MESTRA' }, 503);
   }
 
   const quem = await quemChamou(req);
   if (!quem.ok) return json({ erro: quem.erro }, 401);
 
+  const pedido = await req.json().catch(() => ({})) as Record<string, string>;
+  const acao = String(pedido.acao || 'rodar');
+
   try {
+    if (acao === 'guardar-senha' || acao === 'esquecer-senha') {
+      /* Só gente logada mexe em senha. O agendador roda a caixa; ele não tem
+         dono, e uma ação sem dono aqui seria uma ação sobre a caixa de
+         qualquer um. */
+      if (!quem.donoId) return json({ erro: 'esta ação é de quem está logado' }, 403);
+      const endereco = String(pedido.endereco || '').trim().toLowerCase();
+      if (!endereco) return json({ erro: 'falta o endereço da caixa' }, 400);
+
+      const r = acao === 'guardar-senha'
+        ? await guardarSenha(quem.donoId, endereco, String(pedido.senha || ''))
+        : await esquecerSenha(quem.donoId, endereco);
+      return json(r, r.erro ? 400 : 200);
+    }
     return json(await rodar(quem.donoId));
   } catch (e) {
-    console.error('rodada falhou', e);
+    console.error('a ação ' + acao + ' falhou', e);
     return json({ erro: String((e as Error).message || 'falhou') }, 500);
   }
 });

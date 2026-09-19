@@ -8,6 +8,20 @@ manda o assistente ler, e envia a sua resposta pelo seu endereço.
 Quem faz isso é uma Edge Function chamada `email`. Ela é a **única** parte do
 sistema que toca a senha da caixa.
 
+## Quem faz o quê
+
+São dois papéis, e confundi-los é o que trava a equipe inteira:
+
+| | Quem | Quantas vezes |
+| --- | --- | --- |
+| **Instalar** (seções 1 a 5) | quem administra o Supabase | **uma vez**, para a empresa toda |
+| **Ligar a própria caixa** (seção 6) | **cada vendedor, sozinho** | uma vez por endereço |
+
+A Rosa não precisa do painel do Supabase, não precisa falar com ninguém e não
+manda a senha dela para lugar nenhum: ela abre o IAD, vai em **Minha caixa**,
+cola as 16 letras e acabou. O passo a passo dela está no **Manual do app**, em
+*Ligar a sua caixa de e-mail* — escrito para vendedor, não para quem instala.
+
 ---
 
 ## O que ela faz, em ordem
@@ -54,19 +68,23 @@ uma em cada conta.
 
 ---
 
-## 1. Crie a senha de aplicativo
+## 1. A senha de aplicativo — quem gera é cada um
 
-Para **cada** endereço que o IAD vai ler:
+Isto **não** é passo de instalação, e está aqui só para você saber o que a
+equipe vai fazer. Para cada endereço, a própria pessoa:
 
-1. Entre na conta daquele endereço.
-2. Ligue a verificação em duas etapas, se ainda não estiver:
+1. Entra na conta daquele endereço.
+2. Liga a verificação em duas etapas, se ainda não estiver:
    <https://myaccount.google.com/security>
-3. Vá em <https://myaccount.google.com/apppasswords>, crie uma com o nome
+3. Vai em <https://myaccount.google.com/apppasswords> e cria uma com o nome
    `IAD CRM`.
-4. Copie as 16 letras. O Google não mostra de novo.
+4. Copia as 16 letras. O Google não mostra de novo.
+5. Cola no IAD, em **Minha caixa**. Fim.
 
-> Não mande essas 16 letras por mensagem para ninguém — nem para mim. Elas vão
-> direto do Google para o segredo da função, e mais nada.
+> Essas 16 letras não se mandam por mensagem para ninguém — nem para quem
+> administra o sistema, nem para mim. Quem as cola é o dono da conta, na tela
+> dele. É por isso que a `EMAIL_CHAVE_MESTRA` existe: para que ninguém mais
+> precise vê-las.
 
 ---
 
@@ -106,26 +124,49 @@ Em **Edge Functions → Secrets**:
 
 | Nome | Valor |
 | --- | --- |
-| `EMAIL_SENHAS` | o mapa de endereços e senhas, abaixo |
-| `EMAIL_SEGREDO_CRON` | qualquer frase longa que só você saiba |
+| `EMAIL_CHAVE_MESTRA` | uma frase longa e sorteada, criada uma vez e nunca trocada |
+| `EMAIL_SEGREDO_CRON` | outra frase longa que só você saiba |
 | `IAD_CHAVE_SECRETA` | a chave `service_role` do projeto, se ainda não estiver lá |
 | `IAD_CHAVE_PUBLICA` | a chave publicável (`anon`), se ainda não estiver lá |
 
-O `EMAIL_SENHAS` é um JSON numa linha, no mesmo formato do `CHAVES_POR_EMPRESA`
-da ponte — **um par por caixa**:
+### `EMAIL_CHAVE_MESTRA` — a que faz a equipe funcionar
 
-```json
-{"alexandre.maia@biopartners.com.br":"as16letrasdeuma","alexandre.maia@biosolvit.com":"as16letrasdaoutra"}
+É com ela que a função cifra a senha de aplicativo de **cada pessoa** antes de
+guardá-la. Gere-a assim e cole o resultado:
+
+```
+openssl rand -base64 48
 ```
 
-Endereço que não estiver no mapa não é tentado: a caixa fica marcada
-`sem-credencial` na tela, em vez de tentar, falhar e parecer defeito.
+Crie-a **uma vez** e não a troque: trocá-la torna ilegível toda senha já
+guardada, e cada pessoa teria de digitar a dela de novo. Ela não é a senha de
+ninguém — é a chave do cofre onde as senhas ficam.
 
-O `EMAIL_SEGREDO_CRON` é o que prova que quem chamou é o agendador. **Sem ele
-definido, a rodada automática não roda** — só a chamada de gente logada, que lê
-apenas as caixas dela. É o padrão seguro: um endereço público que lê caixa de
-e-mail sem prova nenhuma seria o convite para alguém de fora mandar a função
-trabalhar de graça — e, no limite, descobrir quais endereços existem.
+Sem ela, ninguém consegue guardar a própria senha pela tela, e você volta ao
+mundo em que a Rosa teria de **mandar a senha dela por mensagem** para alguém
+digitar no painel. Que é exatamente o que não pode acontecer.
+
+### `EMAIL_SEGREDO_CRON`
+
+Prova que quem chamou é o agendador. **Sem ele definido, a rodada automática
+não roda** — só a chamada de gente logada, que lê apenas as caixas dela. É o
+padrão seguro: um endereço público que lê caixa de e-mail sem prova nenhuma
+seria o convite para alguém de fora mandar a função trabalhar de graça — e, no
+limite, descobrir quais endereços existem.
+
+### `EMAIL_SENHAS` — o caminho antigo, ainda aceito
+
+Antes da correção 21, a senha de cada caixa morava neste mapa, editado à mão:
+
+```json
+{"alexandre.maia@biopartners.com.br":"as16letrasdeuma"}
+```
+
+Ele continua funcionando, e a função o consulta quando a pessoa ainda não
+guardou a senha pela tela. Mas **não crie caixa nova por aqui**: isso não
+escala (uma ida ao painel por vendedor) e obriga a senha a passar por uma
+terceira pessoa. Quem já está nele pode migrar guardando a senha pela tela —
+a guardada tem precedência — e depois apagar a entrada do mapa.
 
 ---
 
@@ -137,7 +178,12 @@ No **SQL Editor**, nesta ordem, se ainda não rodou:
 nuvem/correcao-18-emails.sql            → 21 | 1 | 16 | 1
 nuvem/correcao-19-analise-do-email.sql  → 25 | 18 | 1
 nuvem/correcao-20-caixa-que-envia.sql   → 19
+nuvem/correcao-21-senha-da-caixa.sql    → 20 | 1 | 0 | nao
 ```
+
+A última linha da correção 21 tem de dizer **`nao`** em *navegador_le_a_senha*.
+Se disser outra coisa, pare: a tabela dos segredos ficou legível pelo navegador
+e o resto não vale a pena antes de consertar isso.
 
 Os números à direita são o que a última linha de cada arquivo deve devolver.
 Todos podem ser repetidos sem estragar nada.
@@ -189,24 +235,38 @@ o envio sem esperar o ciclo.
 
 ---
 
-## 6. Ligue a caixa na tela
+## 6. Cada pessoa liga a caixa dela
 
-Em qualquer negociação, aba **E-mail** → **Minha caixa**:
+**Daqui em diante não é mais com quem administra.** Cada vendedor faz isto
+sozinho, no próprio computador, e o texto completo está no **Manual do app**,
+seção *Ligar a sua caixa de e-mail* — com os dois exemplos, o do Alexandre
+(duas caixas, uma que envia) e o da Rosa (uma caixa só).
+
+Em resumo, para cada endereço:
 
 | Campo | O que é |
 | --- | --- |
-| Endereço | o e-mail, igualzinho ao que está no `EMAIL_SENHAS` |
+| Endereço | o e-mail dela |
 | Nome | o que o cliente vê como remetente |
 | Provedor | Gmail ou Outlook preenchem servidor e porta sozinhos |
 | Envia | **marque numa só**; as outras só recebem |
+| Senha de aplicativo | as 16 letras, coladas por ela mesma |
 
-Não há campo de senha, e não é esquecimento: navegador que nunca viu a senha é
-navegador que não pode vazá-la.
+A senha faz uma viagem só: do computador dela para a Edge Function, por TLS. A
+função **testa** antes de guardar (senha errada é recusada na hora, com o que o
+servidor de e-mail disse) e guarda **cifrada**. Ela não fica no navegador, não
+entra no banco em texto claro e não passa por pessoa nenhuma.
 
-Duas caixas é o caso do Alexandre: `@biosolvit.com` e `@biopartners.com.br`
-recebem cliente, e a resposta sai sempre pelo `@biopartners.com.br`. Ligue as
-duas, marque **Envia** só na segunda. A linha "Caixas ligadas" no topo da aba
-mostra qual é qual, e cada uma abre com um clique.
+Para desligar, ela apaga a senha de aplicativo na conta dela — o acesso morre
+na hora, sem depender de ninguém.
+
+A linha "Caixas ligadas" no topo da aba mostra o estado de cada uma:
+
+| Como aparece | O que quer dizer |
+| --- | --- |
+| verde · envia | pronta, e é por ela que as respostas saem |
+| verde · só recebe | pronta, e só traz e-mail |
+| **vermelha · FALTA A SENHA** | cadastrada e **não funciona** — falta colar as 16 letras |
 
 ---
 
@@ -225,8 +285,10 @@ ligadas, "falhou" sem dizer qual faz você mexer na configuração certa por sor
 
 | O que aparece | O que é |
 | --- | --- |
-| `falta o segredo EMAIL_SENHAS` | o segredo não foi criado, ou tem erro de JSON |
-| a caixa marcada `sem-credencial` | este endereço não está no mapa |
+| `falta o segredo EMAIL_CHAVE_MESTRA` | o segredo não foi criado (seção 3) |
+| `o servidor está sem a EMAIL_CHAVE_MESTRA` | idem, ao tentar guardar uma senha |
+| a caixa marcada `sem-credencial` | ninguém guardou a senha desta caixa ainda |
+| `a senha guardada não pôde ser lida` | a `EMAIL_CHAVE_MESTRA` foi trocada; cada pessoa precisa guardar a senha de novo |
 | `Invalid credentials` ou parecido | a senha de aplicativo está errada, ou a verificação em duas etapas foi desligada |
 | `não sei o servidor de entrada` | provedor "outro" sem o servidor de IMAP preenchido |
 | `o servidor demorou demais` | a caixa não respondeu em 40 segundos; tente de novo |

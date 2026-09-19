@@ -5,8 +5,8 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v191**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v191, o aparelho
+Publicado agora: **v192**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v192, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -361,6 +361,73 @@ evidência e **criou a tarefa**; os três de ruído foram marcados sem chamada; 
 **Onde está:** `analisarEmailsNovos`, `analisarUm`, `tarefaDoCompromisso` e
 `ehRuido` em `src/app.js`; `marcarEmailAnalisado` e `contarTentativaDeAnalise`
 em `src/nuvem.js`; `linhaDaAnalise` em `src/views.js`.
+
+---
+
+## 0-J. Cada pessoa liga a própria caixa — v192, 19/09
+
+**O Alexandre não entendeu o que tinha de fazer, e ele estava certo:** o
+desenho da v191 não respondia à pergunta dele. A senha de aplicativo de cada
+vendedor morava num segredo do painel (`EMAIL_SENHAS`), editado à mão. Isso
+funciona para uma pessoa e falha para todas as outras, por um motivo que não é
+técnico:
+
+> a Rosa teria de **mandar a senha dela** para quem administra o painel.
+
+Senha que viaja por WhatsApp já está queimada, por melhor que seja o cofre do
+outro lado. E o app dizia, com todas as letras, *"me avise quando tiver gerado"*
+— ou seja, ele não terminava sozinho.
+
+**Agora cada um guarda a sua, sozinho.** A senha faz uma viagem só: do
+computador da pessoa para a Edge Function, por TLS. A função **testa** contra a
+caixa antes de guardar e só então cifra (AES-256-GCM) e grava.
+
+- **`nuvem/correcao-21-senha-da-caixa.sql`** — a tabela `segredos_email`, com
+  RLS ligada e **nenhuma política**: quem passa pela RLS não lê nem escreve
+  nada. Só a `service_role` da função chega lá. Mais `senha_em` em
+  `caixas_email`, que é uma data e não uma credencial — é ela que a tela lê
+  para dizer "falta a senha".
+- **Duas coisas que o Postgres de verdade pegou.** A primeira versão punha a
+  senha cifrada numa coluna de `caixas_email` e revogava o SELECT dela; a
+  conferência voltou **`SIM — ALGO ERRADO`**, porque revogar permissão de
+  coluna não tem efeito nenhum enquanto existe permissão de tabela. Fatiar por
+  coluna ainda deixaria uma armadilha: coluna nova em migração futura nasceria
+  invisível, e a leitura inteira quebraria sem dizer por quê. Tabela separada
+  resolve as duas.
+- **Testado:** 51 testes na função (eram 33). Os novos provam que o guardado
+  **não é** a senha nem a senha em base64, que cada gravação sai diferente (o
+  vetor do GCM é sorteado — reaproveitá-lo é a falha clássica do modo), que
+  senha errada é recusada **sem** apagar a boa que já estava lá, que ninguém
+  guarda senha na caixa de outro e que o agendador não guarda senha nenhuma.
+- **Dois testes falharam por culpa do banco de mentira, não do código:** ele
+  ignorava os filtros da consulta e devolvia sempre a mesma caixa — o que
+  transformava em "ok" justamente os testes de isolamento. Consertado o falso,
+  os dois passaram de verdade.
+- **16 testes no navegador**, com a Rosa: o campo é `password`, os espaços que
+  o Google mostra são tirados, senha errada deixa o cadastro de pé e explica o
+  motivo do servidor, em branco mantém a que está guardada — e **a senha não
+  aparece em localStorage, sessionStorage, no estado do app nem na tela**.
+
+**Na tela:** campo de senha em "Minha caixa"; a caixa sem senha vira uma pílula
+**vermelha com FALTA A SENHA** (cadastrada e não funciona é o jeito mais fácil
+de alguém achar que terminou sem ter terminado); e um botão **Como gerar** que
+leva ao manual.
+
+**No manual, seção nova `m-email`** — escrita para vendedor, não para quem
+instala: o que é senha de aplicativo e por que não é a da conta, como descobrir
+quem hospeda o e-mail da empresa, os seis passos, os dois exemplos de verdade
+(Alexandre com duas caixas e uma que envia; Rosa com uma só) e a tabela de
+"quando dá errado". Com o aviso que importa: **não mande as 16 letras para
+ninguém**.
+
+**`EMAIL_SENHAS` continua aceito** para quem já o usava — a senha guardada pela
+tela tem precedência. Mas o `nuvem/CAIXA-DE-EMAIL.md` agora separa em duas
+colunas quem faz o quê: instalar é uma vez, de quem administra; ligar a própria
+caixa é de cada vendedor, sozinho.
+
+**Falta o Alexandre fazer:** rodar a `correcao-21` e criar o segredo
+`EMAIL_CHAVE_MESTRA` (`openssl rand -base64 48`, uma vez, nunca trocar).
+Depois disso a Rosa se vira sozinha.
 
 ---
 

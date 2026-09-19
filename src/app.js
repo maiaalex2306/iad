@@ -1800,10 +1800,16 @@
         : null;
       const eu = A.atual() || {};
 
-      U.formulario('Minha caixa de e-mail', [
+      const temSenha = !!(minha && minha.senha_em);
+
+      U.formulario(minha ? 'Minha caixa · ' + minha.endereco : 'Ligar uma caixa de e-mail', [
         { id: 'aviso', tipo: 'aviso',
-          rotulo: 'A senha de aplicativo não se digita aqui, e este campo não existe de propósito: ' +
-            'ela mora num segredo do servidor e o navegador nunca a vê. Aqui fica só o endereço.' },
+          rotulo: temSenha
+            ? 'Esta caixa já tem senha guardada. Só preencha o campo da senha se quiser TROCÁ-LA — ' +
+              'em branco, a que está lá continua valendo.'
+            : 'A senha de aplicativo NÃO é a senha da sua conta: é uma senha separada, de 16 letras, ' +
+              'que você gera na sua conta e revoga quando quiser. Ela vai daqui direto para o ' +
+              'servidor, cifrada, e não fica guardada neste navegador.' },
         { id: 'endereco', rotulo: 'Seu endereço de e-mail', tipo: 'text' },
         { id: 'nome_exibicao', rotulo: 'Nome que aparece para quem recebe', tipo: 'text' },
         { id: 'provedor', rotulo: 'Provedor', tipo: 'select',
@@ -1818,14 +1824,24 @@
         { id: 'envia', rotulo: 'Esta caixa também ENVIA?', tipo: 'select',
           opcoes: [{ valor: 'sim', rotulo: 'Sim — a saída sai por ela' },
                    { valor: 'nao', rotulo: 'Não — só recebe' }],
-          dica: 'Marque "Sim" em uma só. As outras continuam recebendo normalmente.' }
+          dica: 'Marque "Sim" em uma só. As outras continuam recebendo normalmente.' },
+        /* O campo da senha fica por ÚLTIMO de propósito: é o passo que exige
+           sair do app, ir à conta de e-mail e voltar. Vindo antes, ele pararia
+           o preenchimento do resto no meio. */
+        { id: 'senha', rotulo: temSenha ? 'Trocar a senha de aplicativo' : 'Senha de aplicativo (16 letras)',
+          tipo: 'password',
+          dica: temSenha
+            ? 'Deixe em branco para manter a que já está guardada.'
+            : 'No Gmail: myaccount.google.com/apppasswords (exige verificação em 2 etapas). ' +
+              'Cole as 16 letras — com ou sem espaços, tanto faz.' }
       ], {
         endereco: (minha && minha.endereco) || eu.email || '',
         nome_exibicao: (minha && minha.nome_exibicao) || eu.nome || '',
         provedor: (minha && minha.provedor) || 'gmail',
         imap_servidor: (minha && minha.imap_servidor) || '',
         smtp_servidor: (minha && minha.smtp_servidor) || '',
-        envia: (minha && minha.envia === false) ? 'nao' : 'sim'
+        envia: (minha && minha.envia === false) ? 'nao' : 'sim',
+        senha: ''
       }, function (d) {
         const endereco = String(d.endereco || '').trim().toLowerCase();
         if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(endereco)) {
@@ -1855,10 +1871,38 @@
               }
             });
           }
-          pintarEmails(true);
-          alert('Caixa registrada.\n\nFalta a senha de aplicativo, que você gera na sua conta ' +
-            'e eu guardo no segredo do servidor. Me avise quando tiver gerado — ela não se manda ' +
-            'por mensagem, nem para mim.');
+          /* Espaços colados junto: o Google mostra as 16 letras em quatro
+             grupos, e quem copia leva os espaços. Recusar por causa disso
+             seria culpar a pessoa pelo formato da tela do Google. */
+          const senha = String(d.senha || '').replace(/\s+/g, '');
+          if (!senha) {
+            Mail.esquecer();
+            pintarEmails(true);
+            alert(temSenha
+              ? 'Caixa atualizada. A senha guardada continua valendo.'
+              : 'Caixa registrada — mas ela ainda NÃO funciona.\n\n' +
+                'Falta a senha de aplicativo. Gere uma na sua conta de e-mail e volte aqui ' +
+                'para colá-la: sem ela o IAD não tem como entrar na caixa.');
+            return;
+          }
+
+          return global.IADNuvem.guardarSenhaDaCaixa(endereco, senha).then(function () {
+            Mail.esquecer();
+            return pintarEmails(true);
+          }).then(function () {
+            alert('Pronto. A senha foi aceita pela sua caixa e guardada cifrada no servidor.\n\n' +
+              'Os e-mails começam a chegar na próxima busca.');
+            buscarNoServidorDeEmail(false);
+          }, function (e) {
+            /* A caixa ficou gravada; só a senha não entrou. Dizer isso evita
+               que a pessoa refaça o cadastro inteiro achando que perdeu tudo. */
+            Mail.esquecer();
+            pintarEmails(true);
+            alert('A caixa foi salva, mas a senha não foi aceita:\n\n' + e.message +
+              '\n\nO mais comum é ser a senha da CONTA em vez da senha de APLICATIVO, ' +
+              'ou a verificação em duas etapas estar desligada. Abra "Minha caixa" de novo ' +
+              'e tente outra vez — o resto do cadastro já está guardado.');
+          });
         }, function (e) {
           alert('Não consegui salvar: ' + e.message +
             (/relation|schema cache/i.test(e.message)
@@ -3002,6 +3046,11 @@
     /* O índice do manual. Rola até a seção em vez de trocar de rota: o manual
        é uma tela só, e mandar para outra rota faria o botão Voltar do navegador
        sair do manual em vez de subir nele. */
+    /* O manual, na seção do e-mail. Existe como botão porque a pergunta
+       "como eu ligo a minha caixa?" nasce na aba E-mail, e mandar a pessoa
+       procurar no manual é mandar a pessoa desistir. */
+    comoLigarMinhaCaixa: function () { App.irNoManual('m-email'); },
+
     irNoManual: function (id) {
       if (location.hash !== '#/playbook') { location.hash = '#/playbook'; }
       setTimeout(function () {

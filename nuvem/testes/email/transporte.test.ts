@@ -11,6 +11,7 @@ const CAIXA = {
 const CAIXA2 = { ...CAIXA, id: 'c2', endereco: 'alexandre.maia@biosolvit.com', ultimo_uid: 0, envia: false };
 
 const patches: any[] = [];
+const segredos: Record<string, string> = {};
 let filaDeEnvio: any[] = [];
 let gravados: any[] = [];
 
@@ -49,7 +50,11 @@ function servidorImap(): Falso {
       if (!m) return null;
       marca = m[1]!;
       const cmd = m[2]!.toUpperCase();
-      if (cmd === 'LOGIN') return marca + ' OK logado\r\n';
+      if (cmd === 'LOGIN') {
+        return /"aaaabbbbccccdddd"|"ssssrrrroooossssaaaa"/.test(linha)
+          ? marca + ' OK logado\r\n'
+          : marca + ' NO [AUTHENTICATIONFAILED] Invalid credentials (Failure)\r\n';
+      }
       if (cmd === 'SELECT') return '* 3 EXISTS\r\n' + marca + ' OK [READ-WRITE] SELECT completo\r\n';
       if (cmd === 'UID') {
         const item = (n: number, uid: number, corpo: string) =>
@@ -101,7 +106,8 @@ const AMBIENTE: Record<string, string> = {
   IAD_CHAVE_SECRETA: 'segredo-de-teste',
   IAD_CHAVE_PUBLICA: 'publica-de-teste',
   EMAIL_SENHAS: JSON.stringify({ 'alexandre.maia@biopartners.com.br': 'aaaabbbbccccdddd' }),
-  EMAIL_SEGREDO_CRON: 'cron-de-teste'
+  EMAIL_SEGREDO_CRON: 'cron-de-teste',
+  EMAIL_CHAVE_MESTRA: 'uma-frase-longa-e-sorteada-de-verdade-1234567890'
 };
 
 let manipulador: any = null;
@@ -119,10 +125,37 @@ const fetchDeVerdade = globalThis.fetch;
   const u = String(url);
   const ok = (dados: any) => new Response(JSON.stringify(dados), { status: 200, headers: { 'content-type': 'application/json' } });
   if (u.includes('/rest/v1/caixas_email') && (!op.method || op.method === 'GET')) {
-    return ok(u.includes('dono_id=eq.') ? [CAIXA] : [CAIXA, CAIXA2]);
+    /* Os filtros valem de verdade. Um banco de mentira que devolve a mesma
+       coisa para qualquer consulta transforma em "ok" justamente os testes
+       que existem para provar isolamento — e foi o que ele fez na primeira
+       versão: a senha da segunda caixa foi parar na primeira, e "mexer na
+       caixa de outro" passou. */
+    const filtro = (campo: string) => {
+      const m = new RegExp(campo + '=eq\\.([^&]+)').exec(u);
+      return m ? decodeURIComponent(m[1]!) : null;
+    };
+    const dono = filtro('dono_id');
+    const endereco = filtro('endereco');
+    return ok([CAIXA, CAIXA2].filter((c) =>
+      (!dono || c.dono_id === dono) && (!endereco || c.endereco === endereco)));
   }
   if (u.includes('/rest/v1/caixas_email') && op.method === 'PATCH') {
     patches.push({ url: u, corpo: JSON.parse(op.body) }); return new Response('', { status: 204 });
+  }
+  if (u.includes('/rest/v1/segredos_email') && op.method === 'POST') {
+    const linha = JSON.parse(op.body)[0];
+    segredos[linha.caixa_id] = linha.senha_cifrada;
+    return new Response('', { status: 201 });
+  }
+  if (u.includes('/rest/v1/segredos_email') && op.method === 'DELETE') {
+    const m = /caixa_id=eq\.([^&]+)/.exec(u);
+    if (m) delete segredos[m[1]!];
+    return new Response('', { status: 204 });
+  }
+  if (u.includes('/rest/v1/segredos_email')) {
+    const m = /caixa_id=eq\.([^&]+)/.exec(u);
+    const guardada = m ? segredos[m[1]!] : '';
+    return ok(guardada ? [{ senha_cifrada: guardada }] : []);
   }
   if (u.includes('/rest/v1/emails') && op.method === 'POST') {
     gravados = gravados.concat(JSON.parse(op.body)); return new Response('', { status: 201 });
@@ -229,6 +262,75 @@ conferir('GET: 405', get.status === 405, String(get.status));
 console.log('\n7. A senha nunca aparece');
 const tudo = JSON.stringify({ corpo, patches, gravados }) + corpoEnviado;
 conferir('a senha nao esta em nada do que sai', !tudo.includes('aaaabbbbccccdddd'));
+
+/* ===== a senha guardada pela própria pessoa ===== */
+console.log('\n8. Cada um guarda a própria senha');
+patches.length = 0;
+const logada = (corpo: unknown) => new Request('https://x/', {
+  method: 'POST', headers: { authorization: 'Bearer token-de-gente', 'content-type': 'application/json' },
+  body: JSON.stringify(corpo)
+});
+
+r = await manipulador(logada({ acao: 'guardar-senha', endereco: CAIXA.endereco, senha: 'aaaabbbbccccdddd' }));
+corpo = await r.json();
+conferir('guardou', r.status === 200 && corpo.ok === true, JSON.stringify(corpo));
+const cifrada = segredos[CAIXA.id] || '';
+conferir('guardou ALGUMA coisa', !!cifrada);
+conferir('o que foi guardado NÃO é a senha', !cifrada.includes('aaaabbbbccccdddd'), cifrada.slice(0, 40));
+conferir('o que foi guardado não é a senha em base64',
+  !cifrada.includes(btoa('aaaabbbbccccdddd')), cifrada.slice(0, 40));
+conferir('cada gravação sai diferente (vetor sorteado)', await (async () => {
+  const antes = segredos[CAIXA.id];
+  await manipulador(logada({ acao: 'guardar-senha', endereco: CAIXA.endereco, senha: 'aaaabbbbccccdddd' }));
+  return segredos[CAIXA.id] !== antes;
+})());
+conferir('marcou a data na caixa',
+  patches.some((p) => p.url.includes('caixas_email') && p.corpo.senha_em), '');
+
+console.log('\n9. A senha guardada é a que vale');
+/* o mapa do painel não tem a senha da caixa2; a guardada tem de bastar */
+delete (AMBIENTE as any).EMAIL_SENHAS_DESLIGADO;
+r = await manipulador(logada({ acao: 'guardar-senha', endereco: CAIXA2.endereco, senha: 'ssssrrrroooossssaaaa' }));
+corpo = await r.json();
+conferir('a segunda caixa aceitou a senha dela', corpo.ok === true, JSON.stringify(corpo));
+gravados = []; patches.length = 0;
+r = await manipulador(new Request('https://x/', { method: 'POST', headers: { 'x-cron': 'cron-de-teste' } }));
+corpo = await r.json();
+conferir('nenhuma caixa ficou sem credencial',
+  !patches.some((p) => p.corpo.estado === 'sem-credencial'),
+  JSON.stringify(patches.map((p) => p.corpo)).slice(0, 300));
+
+console.log('\n10. Senha errada não entra');
+const antesDoErro = segredos[CAIXA.id];
+r = await manipulador(logada({ acao: 'guardar-senha', endereco: CAIXA.endereco, senha: 'chute-errado' }));
+corpo = await r.json();
+conferir('recusou', r.status === 400 && !!corpo.erro, JSON.stringify(corpo));
+conferir('o motivo é o do servidor', /credential/i.test(String(corpo.erro)), String(corpo.erro));
+conferir('não trocou a senha boa que já estava lá', segredos[CAIXA.id] === antesDoErro);
+
+console.log('\n11. Ninguém mexe na caixa de outro');
+r = await manipulador(logada({ acao: 'guardar-senha', endereco: 'rosa.oliveira@acp.tec.br', senha: 'aaaabbbbccccdddd' }));
+corpo = await r.json();
+conferir('caixa que não é minha: recusa', r.status === 400 && /não achei/.test(String(corpo.erro)), JSON.stringify(corpo));
+r = await manipulador(new Request('https://x/', {
+  method: 'POST', headers: { 'x-cron': 'cron-de-teste', 'content-type': 'application/json' },
+  body: JSON.stringify({ acao: 'guardar-senha', endereco: CAIXA.endereco, senha: 'xxxx' })
+}));
+conferir('o agendador não guarda senha de ninguém', r.status === 403, String(r.status));
+
+console.log('\n12. Esquecer a senha');
+r = await manipulador(logada({ acao: 'esquecer-senha', endereco: CAIXA.endereco }));
+corpo = await r.json();
+conferir('esqueceu', corpo.ok === true, JSON.stringify(corpo));
+conferir('o segredo sumiu', !segredos[CAIXA.id]);
+conferir('a caixa voltou a sem-credencial',
+  patches.some((p) => p.corpo.estado === 'sem-credencial'),
+  JSON.stringify(patches.map((p) => p.corpo)).slice(0, 200));
+
+console.log('\n13. A senha continua sem aparecer');
+const tudo2 = JSON.stringify({ patches, gravados, segredos });
+conferir('nem a do Alexandre', !tudo2.includes('aaaabbbbccccdddd'));
+conferir('nem a da segunda caixa', !tudo2.includes('ssssrrrroooossssaaaa'));
 
 console.log('\n' + ok + ' ok, ' + falhas + ' falhas');
 if (falhas) process.exit(1);
