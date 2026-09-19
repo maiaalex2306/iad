@@ -5,8 +5,8 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v192**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v192, o aparelho
+Publicado agora: **v193**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v193, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -361,6 +361,51 @@ evidência e **criou a tarefa**; os três de ruído foram marcados sem chamada; 
 **Onde está:** `analisarEmailsNovos`, `analisarUm`, `tarefaDoCompromisso` e
 `ehRuido` em `src/app.js`; `marcarEmailAnalisado` e `contarTentativaDeAnalise`
 em `src/nuvem.js`; `linhaDaAnalise` em `src/views.js`.
+
+---
+
+## 0-K. A caixa é da pessoa, não da negociação — v193, 19/09
+
+**O Alexandre olhou a tela e viu na hora o que eu não tinha visto:**
+
+> *"Esta configuração não deveria ficar dentro de Configurações? Está dentro de
+> Pipeline… parece que cada oportunidade terá uma configuração da minha caixa."*
+
+Ele tem razão, e o erro é de desenho. O botão **Minha caixa** estava dentro da
+aba E-mail de *uma negociação*. A caixa é de uma **pessoa** e vale para a
+carteira inteira — configurá-la a partir de um negócio faz parecer que cada
+negócio tem a sua. Foi a primeira pergunta de quem olhou a tela, e isso é o
+teste que importa.
+
+**O que mudou de lugar:**
+
+- **Configuração ganhou a aba "Minha caixa de e-mail"** (`configEmail`): uma
+  linha por endereço, com o estado em primeiro lugar — *funcionando*,
+  **falta a senha** ou *com erro* —, quem envia e quem só recebe, desde quando
+  a senha está guardada, e Editar. Mais o bloco **O servidor de e-mail**, com
+  o Buscar agora e o resultado da última rodada.
+- **A aba E-mail da negociação ficou só com a conversa daquele cliente**:
+  Escrever, a linha da análise e as mensagens. Sem configurar nada.
+- **Quando falta caixa**, a aba não some o problema: diz o que falta e leva
+  para o lugar certo (`App.irParaMinhaCaixa`), porque a falta é percebida de
+  dentro da negociação e mandar a pessoa procurar no menu é mandá-la desistir.
+- `linhaDoTransporte` foi removida — virou `blocoTransporte`, na Configuração.
+- O manual passou a ensinar o caminho novo, incluindo que os campos de
+  servidor ficam **vazios** para Gmail e Outlook (outra dúvida real dele).
+
+**Por que a lista tem estado e não só o endereço:** cadastrado-e-sem-senha é o
+pior caso possível, porque parece pronto e não funciona. Ele agora aparece em
+vermelho e com um aviso que diz o que fazer.
+
+**19 testes novos no navegador**, mais os 13 do transporte reescritos para a
+tela nova — os antigos cobravam o lugar antigo e passaram a falhar de
+propósito. Não apaguei a cobertura: movi as asserções para onde a coisa está.
+
+**Um erro meu no caminho, que vale registrar:** uma substituição por fatia
+(`s[i:j]`) com os índices invertidos devolveu string vazia, e
+`s.replace('', novo)` inseriu o texto entre cada caractere do arquivo —
+`views.js` foi de 448 KB para **411 MB**. `git checkout` desfez; a lição é que
+substituição por fatia precisa afirmar `i < j` antes, e não depois.
 
 ---
 

@@ -3051,6 +3051,24 @@
        procurar no manual é mandar a pessoa desistir. */
     comoLigarMinhaCaixa: function () { App.irNoManual('m-email'); },
 
+    /* A caixa mora na Configuração. Este atalho existe porque a falta dela é
+       percebida de dentro da negociação — e mandar a pessoa procurar no menu
+       é mandá-la desistir. */
+    irParaMinhaCaixa: function () {
+      V.definirAbaConfig('email');
+      App.ir('#/dados');
+      render();
+    },
+
+    /* A caixa mora na Configuração. Este atalho existe porque a falta dela é
+       percebida de dentro da negociação — e mandar a pessoa procurar o menu
+       é mandá-la desistir. */
+    irParaMinhaCaixa: function () {
+      V.definirAbaConfig('email');
+      App.ir('#/dados');
+      render();
+    },
+
     irNoManual: function (id) {
       if (location.hash !== '#/playbook') { location.hash = '#/playbook'; }
       setTimeout(function () {

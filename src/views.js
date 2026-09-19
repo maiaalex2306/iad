@@ -2461,56 +2461,22 @@
       '<span class="tiny muted">' + esc(texto) + '</span><span class="espaco"></span>' + botao + '</div>';
   }
 
-  /* Duas linhas, duas coisas diferentes, e confundi-las é o que faz a pessoa
-     clicar no botão errado quando some um e-mail:
-
-       o transporte → o servidor de e-mail. Traz o que chegou, manda o que
-                      está na fila. É a Edge Function, com a senha.
-       a análise    → o assistente. Lê o que já chegou e vira evidência,
-                      nota e tarefa.
-
-     Se o transporte não rodou, não há o que analisar; se ele rodou e a
-     análise não, as mensagens estão na tela sem virar nada. A linha de cima
-     responde "chegou?" e a de baixo, "foi lido?". */
-  function linhaDoTransporte() {
-    const A = global.App;
-    if (!A || !A.estadoDoTransporte) return '';
-    const t = A.estadoDoTransporte() || {};
-    const ocupado = A.buscandoEmails && A.buscandoEmails();
-    const botao = '<button class="btn ghost mini"' + (ocupado ? ' disabled' : '') +
-      ' onclick="App.buscarEmails()" ' +
-      'data-ajuda-titulo="Buscar agora" ' +
-      'data-ajuda="Faz o servidor entrar na sua caixa, baixar o que chegou e mandar o que está na fila. Ele já faz isso sozinho de tempo em tempo; este botão só adianta.">' +
-      (ocupado ? 'Buscando…' : 'Buscar agora') + '</button>';
-
-    if (t.erro) {
-      return '<div class="aviso" style="margin-top:10px">A caixa não respondeu: ' + esc(t.erro) +
-        '<div class="row" style="margin-top:8px">' + botao + '</div></div>';
-    }
-    const texto = t.quando
-      ? 'Caixa conferida às ' + String(t.quando).slice(11, 16) +
-        (t.recebidos || t.enviados
-          ? ' — ' + (t.recebidos || 0) + ' recebido(s) e ' + (t.enviados || 0) + ' enviado(s).'
-          : ' — nada novo.')
-      : 'O servidor busca a sua caixa de tempo em tempo e ao abrir esta aba.';
-    return '<div class="row" style="margin-top:10px;gap:8px">' +
-      '<span class="tiny muted">' + esc(texto) + '</span><span class="espaco"></span>' + botao + '</div>';
-  }
-
   function abaEmail(op) {
     const M = global.IADEmail;
     const topo = function (miolo) {
       return '<div class="card"><div class="row"><h2 style="margin:0">E-mail</h2>' +
         '<span class="espaco"></span>' +
+        /* Sem "Minha caixa" aqui, de propósito: a caixa é de uma PESSOA e
+           vale para a carteira inteira. Configurá-la a partir de um negócio
+           fazia parecer que cada negócio tinha a sua — e foi a primeira coisa
+           que alguém perguntou ao olhar a tela. Ela mora em
+           Configuração → Minha caixa de e-mail. */
         (op.desfecho ? ''
-          : '<button class="btn ghost mini" onclick="App.configurarEmail()" ' +
-            'data-ajuda-titulo="Minha caixa" ' +
-            'data-ajuda="Liga a sua caixa ao IAD com uma senha de aplicativo. Ela fica no servidor, criptografada, e nunca passa pelo navegador — você revoga no Google quando quiser.">Minha caixa</button>' +
-            '<button class="btn mini" onclick="App.escreverEmail(\'' + op.id + '\')">Escrever</button>') +
+          : '<button class="btn mini" onclick="App.escreverEmail(\'' + op.id + '\')">Escrever</button>') +
         '</div>' +
         '<p class="tiny muted" style="margin:8px 0 0">O que foi escrito de verdade, dos dois lados. ' +
         'O assistente lê o que chega e transforma em evidência; o que ficou para você fazer vira tarefa.</p>' +
-        linhaDoTransporte() + linhaDaAnalise() + '</div>' + miolo;
+        linhaDaAnalise() + '</div>' + miolo;
     };
 
     if (!M || !M.disponivel()) {
@@ -2525,32 +2491,19 @@
     /* As caixas ligadas, com a que envia marcada. Uma linha, e ela responde a
        pergunta que aparece na primeira vez que alguém recebe em dois
        endereços: "de qual sai a resposta?". */
+    /* Aqui não se configura nada: só se diz o que falta e para onde ir. Quem
+       abriu esta aba veio ver a conversa DESTE cliente, não mexer na própria
+       caixa — e a caixa não é deste negócio, é da pessoa. */
     const aviso = !caixas.length
       ? '<div class="aviso" style="margin-bottom:10px">Você ainda não ligou uma caixa de e-mail. ' +
         'Sem isso o IAD não recebe nem manda nada. ' +
-        '<button class="btn ghost mini" onclick="App.comoLigarMinhaCaixa()">Como ligar a minha</button></div>'
-      : '<p class="tiny muted" style="margin:0 0 10px">Caixas ligadas: ' +
-        caixas.map(function (c) {
-          /* Três estados, e o pior deles precisa gritar: caixa sem senha está
-             cadastrada e não funciona, que é o jeito mais fácil de alguém
-             achar que terminou sem ter terminado. */
-          const semSenha = !c.senha_em;
-          return '<button class="pill ' + (semSenha ? 'risk' : (c.envia !== false ? 'ok' : '')) + ' mini" ' +
-            'onclick="App.configurarEmail(\'' + esc(c.endereco) + '\')">' + esc(c.endereco) +
-            (semSenha ? ' · FALTA A SENHA' : (c.envia !== false ? ' · envia' : ' · só recebe')) +
-            '</button>';
-        }).join(' ') +
-        ' <button class="btn ghost mini" onclick="App.configurarEmail()">+ Ligar outra</button></p>' +
-        (caixas.filter(function (c) { return !c.senha_em; }).length
-          ? '<div class="aviso" style="margin-bottom:10px">Uma caixa sem senha de aplicativo está ' +
-            'cadastrada mas não funciona: o IAD não tem como entrar nela. Clique na caixa em ' +
-            'vermelho acima e cole as 16 letras. ' +
-            '<button class="btn ghost mini" onclick="App.comoLigarMinhaCaixa()">Como gerar</button></div>'
-          : '') +
-        (caixas.filter(function (c) { return c.envia !== false; }).length
-          ? ''
-          : '<div class="aviso" style="margin-bottom:10px">Nenhuma caixa está marcada para enviar. ' +
-            'Clique numa delas acima e marque qual manda os e-mails.</div>');
+        '<button class="btn ghost mini" onclick="App.irParaMinhaCaixa()">Configurar minha caixa</button> ' +
+        '<button class="btn ghost mini" onclick="App.comoLigarMinhaCaixa()">Como ligar</button></div>'
+      : (caixas.filter(function (c) { return !c.senha_em; }).length
+          ? '<div class="aviso" style="margin-bottom:10px">Um dos seus endereços está sem a senha de ' +
+            'aplicativo e não funciona. ' +
+            '<button class="btn ghost mini" onclick="App.irParaMinhaCaixa()">Resolver</button></div>'
+          : '');
 
     if (!minhas.length) {
       return topo(aviso +
@@ -5204,18 +5157,22 @@
         'No Google: <em>myaccount.google.com/apppasswords</em>. Dê o nome <strong>IAD CRM</strong> ' +
         'e ele mostra 16 letras em quatro grupos. <strong>Copie agora</strong> — ele não mostra ' +
         'de novo. Se sumir, não tem problema: você apaga aquela e gera outra.') +
-      passo(4, 'Abra Minha caixa, no IAD',
-        'Em qualquer negociação, aba <strong>E-mail</strong> → botão <strong>Minha caixa</strong>. ' +
-        'Preencha o seu endereço, o nome que o cliente vê, e o provedor. No último campo, cole as ' +
-        '16 letras — com ou sem os espaços, tanto faz.') +
+      passo(4, 'Abra Minha caixa, na Configuração',
+        'Menu <strong>Configuração</strong> → aba <strong>Minha caixa de e-mail</strong> → ' +
+        '<strong>+ Ligar um endereço</strong>. Ela fica ali, e não dentro de uma negociação, porque a ' +
+        'caixa é <em>sua</em> e vale para a carteira inteira. Preencha o seu endereço, o nome que o ' +
+        'cliente vê, e o provedor. No último campo, cole as 16 letras — com ou sem os espaços, ' +
+        'tanto faz. Os campos de servidor ficam <strong>vazios</strong>: eles só valem para ' +
+        '"Outro (servidor próprio)".') +
       passo(5, 'Escolha qual caixa ENVIA',
         'Se você tem só uma, ela envia. Se tem duas, marque <strong>Sim</strong> na que deve ' +
         'assinar as respostas e <strong>Não</strong> na outra — o IAD desmarca a anterior ' +
         'sozinho, porque duas marcadas fariam o remetente virar sorteio.') +
       passo(6, 'Confira',
-        'A caixa aparece no topo da aba E-mail. Verde com <em>· envia</em> ou <em>· só recebe</em> ' +
-        'está pronta. <strong>Vermelha com FALTA A SENHA</strong> está cadastrada e não funciona: ' +
-        'clique nela e cole as 16 letras.') +
+        'Na mesma tela, cada endereço aparece com o estado dele. <em>Funcionando</em> está pronto; ' +
+        '<strong>falta a senha</strong> quer dizer cadastrado e sem funcionar — clique em Editar e ' +
+        'cole as 16 letras. Logo abaixo, <strong>Buscar agora</strong> diz na hora quantos e-mails ' +
+        'vieram e quantos saíram.') +
       '</div>' +
 
       '<h3>Dois exemplos de verdade</h3>' +
@@ -5248,8 +5205,8 @@
       '<td class="small">Só acontece em "Outro (servidor próprio)". Peça ao TI o endereço de ' +
       '<em>IMAP</em> (entrada) e o de <em>SMTP</em> (saída).</td></tr>' +
       '<tr><td><strong>Liguei e não chega nada</strong></td>' +
-      '<td class="small">Clique em <strong>Buscar agora</strong>, na aba E-mail. Ele diz na hora ' +
-      'quantos vieram — ou o que a caixa respondeu.</td></tr>' +
+      '<td class="small">Clique em <strong>Buscar agora</strong>, em Configuração → Minha caixa ' +
+      'de e-mail. Ele diz na hora quantos vieram — ou o que a caixa respondeu.</td></tr>' +
       '<tr><td><strong>Quero desligar</strong></td>' +
       '<td class="small">Apague a senha de aplicativo na sua conta de e-mail. O acesso morre na ' +
       'hora, sem depender de ninguém aqui.</td></tr>' +
@@ -6161,6 +6118,11 @@
      com pressa, então tem nome de lugar e não de assunto. */
   const ABAS_CONFIG = [
     ['nuvem', 'Conta e nuvem'],
+    /* A caixa de e-mail mora aqui, e não dentro da negociação, porque ela é
+       de UMA PESSOA e vale para a carteira inteira. Configurá-la a partir de
+       um negócio fazia parecer que cada negócio tinha a sua — e a pergunta
+       apareceu na primeira vez que alguém olhou a tela. */
+    ['email', 'Minha caixa de e-mail'],
     ['lh', 'Linked Helper'],
     ['dados', 'Dados'],
     ['app', 'O aplicativo']
@@ -6168,6 +6130,7 @@
 
   const AJUDA_CONFIG = {
     nuvem: 'Sua conta, o servidor, para qual empresa você sincroniza e se o assistente de IA está respondendo.',
+    email: 'De quais endereços o IAD recebe os seus e-mails e por qual deles ele responde. Vale para todas as negociações.',
     lh: 'A ponte com o Linked Helper: endereço, busca de respostas, quem foi descartado e o que as campanhas produziram de recusa.',
     dados: 'Importar planilha, exportar e importar backup, e a carteira de demonstração.',
     app: 'A versão instalada, como instalar no celular, e o diagnóstico de quando a tela aparece vazia.'
@@ -6186,7 +6149,8 @@
     }).join(' ');
 
     const corpo = {
-      nuvem: configNuvem, lh: configLinkedHelper, dados: configDados, app: configApp
+      nuvem: configNuvem, email: configEmail, lh: configLinkedHelper,
+      dados: configDados, app: configApp
     }[abaConfig] || configNuvem;
 
     return '<h1>Configuração</h1>' +
@@ -6196,6 +6160,107 @@
 
   function configNuvem() {
     return blocoNuvem() + blocoMinhaConta() + blocoAssistente();
+  }
+
+  /* ------------------------------------------------------------------
+     A caixa de e-mail da pessoa
+
+     Uma tela por USUÁRIO, e não por negociação. O que ela responde, nesta
+     ordem: de onde eu recebo, por onde eu mando, e está funcionando?
+     ------------------------------------------------------------------ */
+  function configEmail() {
+    const M = global.IADEmail;
+    const A = global.App;
+
+    const topo = function (miolo) {
+      return '<div class="card"><div class="row"><h2 style="margin:0">Minha caixa de e-mail</h2>' +
+        '<span class="espaco"></span>' +
+        '<button class="btn ghost mini" onclick="App.comoLigarMinhaCaixa()">Como ligar</button>' +
+        '<button class="btn mini" onclick="App.configurarEmail()">+ Ligar um endereço</button></div>' +
+        '<p class="small muted" style="margin:8px 0 0">O IAD entra nestes endereços, traz o que os ' +
+        'clientes escreveram para dentro da negociação certa e manda as suas respostas. ' +
+        '<strong>Esta configuração é sua</strong> — vale para toda a carteira, e ninguém mais a vê.</p>' +
+        miolo + '</div>';
+    };
+
+    if (!M || !M.disponivel()) {
+      return topo('<div class="vazio" style="margin-top:12px">Entre com a sua conta da nuvem para ' +
+        'configurar o e-mail.</div>');
+    }
+
+    const caixas = M.minhasCaixas() || [];
+    if (!caixas.length) {
+      return topo('<div class="vazio" style="margin-top:12px">Nenhum endereço ligado ainda. ' +
+        'Sem isso o IAD não recebe nem manda e-mail nenhum.</div>') + blocoTransporte();
+    }
+
+    /* Uma linha por caixa, com o estado em primeiro lugar: é o que a pessoa
+       veio conferir. Cadastrada e sem senha é o pior caso, porque parece
+       pronta e não funciona. */
+    const linhas = caixas.map(function (c) {
+      const semSenha = !c.senha_em;
+      const estado = semSenha
+        ? '<span class="pill risk">falta a senha</span>'
+        : (c.estado === 'erro'
+            ? '<span class="pill dead">com erro</span>'
+            : '<span class="pill ok">funcionando</span>');
+      const papel = c.envia !== false
+        ? '<span class="pill">envia e recebe</span>'
+        : '<span class="pill">só recebe</span>';
+      return '<tr><td><strong>' + esc(c.endereco) + '</strong>' +
+        (c.nome_exibicao ? '<br><span class="tiny muted">' + esc(c.nome_exibicao) + '</span>' : '') +
+        '</td><td>' + estado + '</td><td>' + papel + '</td>' +
+        '<td class="tiny muted">' + (c.senha_em ? 'senha guardada em ' + U.data(c.senha_em) : '—') +
+        (c.erro ? '<br>' + esc(String(c.erro).slice(0, 120)) : '') + '</td>' +
+        '<td><button class="btn ghost mini" onclick="App.configurarEmail(\'' + esc(c.endereco) +
+        '\')">Editar</button></td></tr>';
+    }).join('');
+
+    const semEnvio = !caixas.filter(function (c) { return c.envia !== false; }).length;
+    const semSenhaAlguma = caixas.filter(function (c) { return !c.senha_em; }).length;
+
+    return topo(
+      '<div class="tabela-rolagem" style="margin-top:14px"><table><thead><tr>' +
+      '<th>Endereço</th><th>Estado</th><th>Papel</th><th>Desde</th><th></th>' +
+      '</tr></thead><tbody>' + linhas + '</tbody></table></div>' +
+      (semSenhaAlguma
+        ? '<div class="aviso" style="margin-top:12px">Um endereço sem senha de aplicativo está ' +
+          'cadastrado e <strong>não funciona</strong>: o IAD não tem como entrar nele. ' +
+          'Clique em Editar e cole as 16 letras.</div>'
+        : '') +
+      (semEnvio
+        ? '<div class="aviso" style="margin-top:12px">Nenhum endereço está marcado para <strong>enviar</strong>. ' +
+          'Você recebe, mas não consegue responder de dentro do IAD.</div>'
+        : '') +
+      '<p class="tiny muted" style="margin:12px 0 0">Recebe de todos; manda por um só. ' +
+      'Para trocar qual envia, edite o endereço e marque "Sim" — o IAD desmarca o anterior sozinho.</p>'
+    ) + blocoTransporte();
+  }
+
+  /* O estado do servidor de e-mail. Fica aqui embaixo, e não junto da lista,
+     porque responde outra pergunta: a lista diz COMO ESTÁ CONFIGURADO, esta
+     diz SE ESTÁ FUNCIONANDO AGORA. */
+  function blocoTransporte() {
+    const A = global.App;
+    if (!A || !A.estadoDoTransporte) return '';
+    const t = A.estadoDoTransporte() || {};
+    const ocupado = A.buscandoEmails && A.buscandoEmails();
+
+    return '<div class="card"><div class="row"><h2 style="margin:0">O servidor de e-mail</h2>' +
+      '<span class="espaco"></span>' +
+      '<button class="btn ghost mini"' + (ocupado ? ' disabled' : '') +
+      ' onclick="App.buscarEmails()">' + (ocupado ? 'Buscando…' : 'Buscar agora') + '</button></div>' +
+      (t.erro
+        ? '<div class="aviso" style="margin-top:10px">A caixa não respondeu: ' + esc(t.erro) + '</div>'
+        : '<p class="small muted" style="margin:8px 0 0">' +
+          (t.quando
+            ? 'Última conferência às ' + String(t.quando).slice(11, 16) + ' — ' +
+              (t.recebidos || 0) + ' recebido(s) e ' + (t.enviados || 0) + ' enviado(s).'
+            : 'O servidor busca sozinho de tempo em tempo, e sempre que você abre a aba E-mail ' +
+              'de uma negociação.') + '</p>') +
+      '<p class="tiny muted" style="margin:10px 0 0">A sua senha de aplicativo fica cifrada no ' +
+      'servidor e nunca passa por este navegador. Para cortar o acesso a qualquer momento, apague ' +
+      'a senha de aplicativo na sua conta de e-mail — vale na hora.</p></div>';
   }
 
   function configLinkedHelper() {
