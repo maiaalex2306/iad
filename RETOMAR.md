@@ -5,8 +5,8 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v199**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v199, o aparelho
+Publicado agora: **v200**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v200, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -361,6 +361,72 @@ evidência e **criou a tarefa**; os três de ruído foram marcados sem chamada; 
 **Onde está:** `analisarEmailsNovos`, `analisarUm`, `tarefaDoCompromisso` e
 `ehRuido` em `src/app.js`; `marcarEmailAnalisado` e `contarTentativaDeAnalise`
 em `src/nuvem.js`; `linhaDaAnalise` em `src/views.js`.
+
+---
+
+## 0-T. Processo de Nutrição: triagem em lote, nos dois sentidos — v200, 19/09
+
+O pipeline do Alexandre tem **101 negociações, 99 delas em Conexão com IAD 0** —
+o lote inteiro de uma campanha do Linked Helper. Decidir uma a uma quem ainda
+não está pronto é o motivo pelo qual, em quase todo CRM, ninguém faz — e o
+funil fica cheio de coisa que não é negócio.
+
+**Cadastros → Processo de Nutrição**, duas listas e um trânsito entre elas:
+
+- **Filtros que valem para as duas ao mesmo tempo:** busca (negócio, empresa,
+  campanha, SDR), responsável, segmento, e saúde da decisão — *IAD 0*,
+  *IAD 1 a 4*, *parado há 30 dias*, *parado há 90*.
+- **Marcar todos** significa **todos os que passam no filtro**, nunca os 101.
+  Marcar o que não está na tela é a forma mais fácil de mover um negócio sem
+  querer.
+- **Um motivo e uma data para o lote inteiro.** Perguntar negócio a negócio
+  derrotaria o propósito: quem tria noventa leads responde a mesma coisa
+  noventa vezes. O detalhe por negócio continua existindo, para quem quiser.
+- **O caminho de volta é igual**, e é o que importa: nutrição que só recebe é
+  cemitério com outro nome. O valor está em devolver, no mês em que a conta
+  ficou pronta.
+
+**O botão de uma só continua na oportunidade**, como o Alexandre pediu
+explicitamente — a tela nova não substitui, acrescenta.
+
+A seleção vive na view e não no Store, de propósito: recarregar a página começa
+com nada marcado. Marcar 99 e a seleção sobreviver a um refresh seria armadilha.
+
+**21 testes**, com a carteira dele reproduzida: 99 leads de campanha mais as
+duas negociações de verdade. Filtrar por campanha, marcar os 51, mover com
+motivo e prazo, conferir que **ninguém foi encerrado**, devolver três, e que a
+passagem ficou no `historicoNutricao`.
+
+### Um defeito que a tela dele denunciou no mesmo dia
+
+O e-mail *"Aceita: Conversa Inicial"* continuava mostrando o aviso jurídico
+inteiro, mesmo com a limpeza da v199 funcionando nos outros. A causa era o
+`|| m.corpo` que eu tinha deixado: mensagem que era **só** aviso jurídico virava
+string vazia, e o `||` caía de volta no texto cru — a limpeza era derrotada
+justamente quando funcionava melhor. Agora a tela diz *"Sem texto — só
+assinatura e aviso jurídico. O assistente não gasta leitura com isto."*
+
+### E o estudo: `estudos/NUTRICAO.md`
+
+Levantamento mundial, com uma ressalva que abre o documento: **quase toda
+estatística de nutrição que circula vem de blog de fornecedor e recicla
+estudos de 2007 a 2014** com "2026" no título. Estão lá, rastreadas até a fonte
+original, mas marcadas — servem de indício, não de promessa para um cliente.
+
+O que tem data e método recentes é mais interessante: 70–80% da jornada
+acontece antes do vendedor; 67% preferem comprar sem vendedor; grupo comprador
+de 11,2 pessoas; **27% dos leads chegam prontos** — o que explica os 99 com
+IAD 0 melhor do que qualquer teoria sobre a campanha. Eles não recusaram;
+ainda não chegaram.
+
+Os dois números acionáveis: responder a um sinal **em até 5 minutos** dá **8×**
+mais conversão, e **70% dos leads nunca veem a mensagem** se o único canal for
+o e-mail.
+
+O estudo termina em decisões de produto, não em ideias — e inclui **o que eu
+não recomendaria**: sequência automática de e-mail disparada pelo IAD (forma
+rápida de queimar o domínio do cliente) e pontuação de lead clássica, que é
+exatamente o contador de cliques que este app existe para não ser.
 
 ---
 

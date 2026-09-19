@@ -2395,6 +2395,27 @@
     return texto.length > max ? texto.slice(0, max) + '…' : texto;
   }
 
+  /* O `|| m.corpo` que estava aqui derrotava a limpeza justamente quando ela
+     funcionava melhor: mensagem que era SÓ aviso jurídico virava string vazia,
+     o `||` caía de volta no texto cru, e o aviso aparecia inteiro na tela.
+     Apareceu na tela do Alexandre no mesmo dia em que a limpeza entrou.
+
+     Vazio depois de limpar não é falha — é a resposta certa, e merece ser dita
+     com todas as letras em vez de escondida atrás do entulho. */
+  function corpoLimpoNaTela(m) {
+    const M = global.IADEmail;
+    const limpo = M ? M.limpo(m.corpo) : String(m.corpo || '');
+    if (limpo) {
+      return '<p class="small muted" style="margin:6px 0 0;white-space:pre-wrap">' +
+        esc(corpoCurto(limpo, 600)) + '</p>';
+    }
+    if (String(m.corpo || '').trim()) {
+      return '<p class="tiny muted" style="margin:6px 0 0"><em>Sem texto — só assinatura e aviso ' +
+        'jurídico. O assistente não gasta leitura com isto.</em></p>';
+    }
+    return '<p class="tiny muted" style="margin:6px 0 0"><em>Mensagem sem corpo.</em></p>';
+  }
+
   function mensagemDeEmail(m) {
     const meu = m.direcao === 'saida';
     const quando = String(m.enviada_em || '').replace('T', ' ').slice(0, 16);
@@ -2407,7 +2428,7 @@
       '<span class="espaco"></span><span class="tiny muted">' + esc(quando) + '</span></div>' +
       (m.assunto ? '<div class="small" style="margin-top:4px">' + esc(m.assunto) + '</div>' : '') +
       '<p class="small muted" style="margin:6px 0 0;white-space:pre-wrap">' +
-      esc(corpoCurto((global.IADEmail && global.IADEmail.limpo(m.corpo)) || m.corpo, 600)) + '</p>' +
+      corpoLimpoNaTela(m) +
       (m.erro ? '<p class="tiny atrasado" style="margin:6px 0 0">' + esc(m.erro) + '</p>' : '') +
       '</div>';
   }
@@ -3959,6 +3980,7 @@
     empresas: 'As empresas clientes que você atende. Não confundir com as empresas que usam o sistema, que ficam no painel do administrador.',
     contatos: 'As pessoas. O papel na compra e a posição são o que alimenta a cobertura e os alertas do grupo comprador.',
     oportunidades: 'Os negócios. A etapa organiza o funil; quem mede o avanço são as oito decisões dentro de cada um.',
+    nutricao: 'Mover negócios entre a carteira ativa e a nutrição, vários de uma vez. É a triagem de quem ainda não está pronto — sem encerrar ninguém.',
     segmentos: 'A lista que alimenta o campo Segmento das empresas e a análise por segmento no painel.',
     tiposTarefa: 'A lista de tipos que aparece ao criar uma tarefa.',
     produtos: 'O catálogo com preço de referência, para compor o valor das oportunidades.',
@@ -3971,11 +3993,23 @@
      e as empresas do sistema ficam no painel do administrador, onde só ele mexe. */
   const ABAS_CADASTRO = [
     ['empresas', 'Contas'], ['contatos', 'Contatos'], ['oportunidades', 'Oportunidades'],
+    ['nutricao', 'Processo de Nutrição'],
     ['segmentos', 'Segmentos'], ['tiposTarefa', 'Tipos de tarefa'], ['produtos', 'Produtos'],
     ['fontes', 'Fontes'], ['usuarios', 'Usuários']
   ];
   let abaCadastro = 'empresas';
   let buscaCadastro = '';
+
+  /* O que está marcado nas duas listas da nutrição, e os filtros de cada uma.
+
+     Fica aqui e não no Store porque é escolha de tela, não dado: recarregar a
+     página tem de começar com nada marcado. Marcar 99 negócios e a seleção
+     sobreviver a um refresh seria uma armadilha — a pessoa clicaria em mover
+     achando que marcou três. */
+  const nutri = {
+    marcadosPipeline: {}, marcadosNutricao: {},
+    busca: '', responsavel: 'todos', segmento: 'todos', saude: 'todas'
+  };
 
   function cadastros() {
     const est = Store.dados();
@@ -3992,6 +4026,7 @@
 
     const corpo = {
       empresas: listaEmpresas, contatos: listaContatos, oportunidades: listaOportunidades,
+      nutricao: processoDeNutricao,
       segmentos: function (e) { return listaCatalogo(e, 'segmentos'); },
       tiposTarefa: function (e) { return listaCatalogo(e, 'tiposTarefa'); },
       produtos: listaProdutos, fontes: listaFontes, usuarios: listaUsuarios
@@ -4002,6 +4037,7 @@
        o item — não é trabalho do dia, é decisão comercial. Conta, contato e
        oportunidade continuam de todos, porque são o trabalho. */
     const podeCriar =
+      abaCadastro === 'nutricao' ? false :
       abaCadastro === 'usuarios' ? global.IADAuth.ehAdmin() :
       abaCadastro === 'produtos' ? global.IADAuth.ehGestor() : true;
 
@@ -4024,6 +4060,174 @@
     if (!linhas) return '<div class="vazio">' + esc(vazio) + '</div>';
     return '<div class="card" style="padding:0"><div class="tabela-rolagem"><table><thead><tr>' +
       colunas.map(function (c) { return '<th>' + esc(c) + '</th>'; }).join('') +
+      '</tr></thead><tbody>' + linhas + '</tbody></table></div></div>';
+  }
+
+
+  /* ------------------------------------------------------------------
+     Processo de Nutrição
+
+     Duas listas e um trânsito entre elas. Existe porque a triagem é um
+     trabalho de LOTE: quem importou noventa e nove leads de uma campanha não
+     vai abrir um por um para decidir quais ainda não estão prontos. Fazer
+     isso negócio a negócio é o motivo pelo qual, em quase todo CRM, ninguém
+     faz — e o funil fica cheio de coisa que não é negócio.
+
+     E o trânsito é nos DOIS sentidos de propósito. Nutrição que só recebe é
+     cemitério com outro nome; o valor dela está em devolver, no mês em que a
+     conta ficou pronta.
+     ------------------------------------------------------------------ */
+  function processoDeNutricao(est) {
+    const todas = (est.oportunidades || []).filter(function (op) { return !op.desfecho; });
+    const ativas = todas.filter(function (op) { return !op.nutricao; });
+    const nutridas = todas.filter(function (op) { return !!op.nutricao; });
+
+    return cabecalhoDaNutricao(est, ativas, nutridas) +
+      listaDaNutricao(ativas, 'pipeline', est) +
+      listaDaNutricao(nutridas, 'nutricao', est);
+  }
+
+  function cabecalhoDaNutricao(est, ativas, nutridas) {
+    const pessoas = [{ valor: 'todos', rotulo: 'Todas as pessoas' }].concat(
+      (est.usuarios || []).map(function (u) { return { valor: u.id, rotulo: u.nome }; }));
+    const segs = [{ valor: 'todos', rotulo: 'Todos os segmentos' }].concat(
+      (est.segmentos || []).map(function (x) { return { valor: x.nome, rotulo: x.nome }; }));
+
+    const opcoes = function (lista, atual) {
+      return lista.map(function (o) {
+        return '<option value="' + esc(o.valor) + '"' +
+          (String(atual) === String(o.valor) ? ' selected' : '') + '>' + esc(o.rotulo) + '</option>';
+      }).join('');
+    };
+
+    return '<div class="card">' +
+      '<div class="row"><h2 style="margin:0">Processo de Nutrição</h2>' +
+      '<span class="espaco"></span>' +
+      '<span class="pill">' + ativas.length + ' na carteira</span>' +
+      '<span class="pill warn">' + nutridas.length + ' em nutrição</span></div>' +
+      '<p class="small muted" style="margin:8px 0 0">Conta que ainda não está pronta não é negócio ' +
+      'perdido — é negócio cedo demais. Nutrição tira da previsão e <strong>mantém na agenda</strong>, ' +
+      'com data para voltar a olhar. Nada aqui encerra ninguém.</p>' +
+
+      '<div class="filtros" style="margin-top:12px">' +
+      '<label><span>Buscar</span><input type="text" id="busca-nutri" value="' + esc(nutri.busca) + '" ' +
+      'placeholder="negócio, empresa, campanha, SDR" ' +
+      'oninput="App.filtroNutricao(\'busca\', this.value)"></label>' +
+      '<label><span>Responsável</span><select onchange="App.filtroNutricao(\'responsavel\', this.value)">' +
+      opcoes(pessoas, nutri.responsavel) + '</select></label>' +
+      '<label><span>Segmento</span><select onchange="App.filtroNutricao(\'segmento\', this.value)">' +
+      opcoes(segs, nutri.segmento) + '</select></label>' +
+      '<label><span>Saúde da decisão</span><select onchange="App.filtroNutricao(\'saude\', this.value)">' +
+      opcoes([{ valor: 'todas', rotulo: 'Todas' },
+              { valor: 'zerado', rotulo: 'IAD 0 — nada registrado' },
+              { valor: 'ate4', rotulo: 'IAD 1 a 4' },
+              { valor: 'parado30', rotulo: 'Sem evidência há 30 dias ou mais' },
+              { valor: 'parado90', rotulo: 'Sem evidência há 90 dias ou mais' }], nutri.saude) +
+      '</select></label>' +
+      '</div></div>';
+  }
+
+  /* Um negócio passa pelo filtro? A mesma regra vale para as duas listas: o
+     que a pessoa digitou vale nos dois lados, senão ela filtraria a carteira,
+     olharia a nutrição e veria outra coisa. */
+  function passaNoFiltroDaNutricao(op) {
+    const conta = Store.conta(op.contaId);
+    const texto = (nutri.busca || '').trim().toLowerCase();
+    if (texto) {
+      const palha = [op.titulo, conta && conta.nome, op.campanha, op.sdr, op.origem]
+        .filter(Boolean).join(' ').toLowerCase();
+      if (palha.indexOf(texto) === -1) return false;
+    }
+    if (nutri.responsavel !== 'todos' && String(op.dono || '') !== String(nutri.responsavel)) return false;
+    if (nutri.segmento !== 'todos' && String((conta && conta.segmento) || '') !== nutri.segmento) return false;
+
+    if (nutri.saude !== 'todas') {
+      const r = E.resumo(op);
+      if (nutri.saude === 'zerado' && r.iad !== 0) return false;
+      if (nutri.saude === 'ate4' && !(r.iad >= 1 && r.iad <= 4)) return false;
+      if (nutri.saude === 'parado30' && !(r.evidenceAge >= 30)) return false;
+      if (nutri.saude === 'parado90' && !(r.evidenceAge >= 90)) return false;
+    }
+    return true;
+  }
+
+  function listaDaNutricao(lista, lado, est) {
+    const naNutricao = lado === 'nutricao';
+    const marcados = naNutricao ? nutri.marcadosNutricao : nutri.marcadosPipeline;
+    const filtradas = lista.filter(passaNoFiltroDaNutricao);
+    const quantosMarcados = filtradas.filter(function (op) { return marcados[op.id]; }).length;
+
+    const titulo = naNutricao ? 'Em nutrição' : 'Na carteira ativa';
+    const acao = naNutricao
+      ? '<button class="btn mini"' + (quantosMarcados ? '' : ' disabled') +
+        ' onclick="App.devolverAoPipeline()"' +
+        ajudaComLinhas('Voltar para a carteira',
+          'Tira da nutrição e devolve à carteira ativa, com a saúde que a decisão do cliente indicar.',
+          [['Quando usar', 'Quando o motivo que segurava a conta deixou de valer: o orçamento saiu, o contrato do concorrente venceu, a obra acabou.'],
+           ['O que acontece', 'Volta a contar na previsão e a cobrar próximo passo. A passagem pela nutrição fica no histórico da conta.'],
+           ['Sozinho', 'Qualquer evidência nova do cliente já devolve o negócio sem você fazer nada — é esse o sinal que a nutrição espera.']]) +
+        '>← Voltar ' + (quantosMarcados || '') + ' para a carteira</button>'
+      : '<button class="btn mini"' + (quantosMarcados ? '' : ' disabled') +
+        ' onclick="App.moverParaNutricao()"' +
+        ajudaComLinhas('Mover para nutrição',
+          'Tira da previsão e mantém na agenda, com motivo e data para voltar a olhar. O negócio continua aberto.',
+          [['Quando usar', 'Quando a conta não está pronta: sem orçamento no ciclo, contrato vigente com outro, obra em curso, ninguém nomeado para decidir.'],
+           ['Não é encerrar', 'Encerrar é a forma mais cara de esquecer de uma conta — sai da previsão E da cabeça de todo mundo.'],
+           ['Motivo e data', 'Pedidos uma vez, valem para todos os marcados. Nutrição sem data é esquecimento com nome bonito.'],
+           ['Volta sozinho', 'Evidência nova do cliente acorda o negócio automaticamente.']]) +
+        '>Mover ' + (quantosMarcados || '') + ' para nutrição →</button>';
+
+    const cabeca = '<div class="row"><h2 style="margin:0">' + titulo + '</h2>' +
+      '<span class="pill">' + filtradas.length +
+      (filtradas.length === lista.length ? '' : ' de ' + lista.length) + '</span>' +
+      '<span class="espaco"></span>' +
+      (filtradas.length
+        ? '<button class="btn ghost mini" onclick="App.marcarTodosNutricao(\'' + lado + '\')">' +
+          (quantosMarcados === filtradas.length ? 'Desmarcar todos' : 'Marcar os ' + filtradas.length) +
+          '</button>'
+        : '') +
+      acao + '</div>';
+
+    if (!filtradas.length) {
+      return '<div class="card" style="margin-top:12px">' + cabeca +
+        '<div class="vazio">' +
+        (lista.length
+          ? 'Nenhum negócio desta lista passa nos filtros acima.'
+          : (naNutricao
+              ? 'Nada em nutrição. Marque negócios na lista de cima para começar.'
+              : 'Nenhum negócio ativo.')) +
+        '</div></div>';
+    }
+
+    const linhas = filtradas.map(function (op) {
+      const conta = Store.conta(op.contaId);
+      const r = E.resumo(op);
+      const dono = (est.usuarios || []).filter(function (u) { return u.id === op.dono; })[0];
+      return '<tr' + (marcados[op.id] ? ' class="marcada"' : '') + '>' +
+        '<td><input type="checkbox" id="n-' + lado + '-' + esc(op.id) + '"' +
+        (marcados[op.id] ? ' checked' : '') +
+        ' onchange="App.marcarNutricao(\'' + lado + '\',\'' + esc(op.id) + '\',this.checked)"></td>' +
+        '<td><a href="#/op/' + esc(op.id) + '"><strong>' + esc(op.titulo) + '</strong></a>' +
+        '<div class="tiny muted">' + esc((conta && conta.nome) || 'sem empresa') +
+        (op.campanha ? ' · ' + esc(op.campanha) : '') +
+        (dono ? ' · ' + esc(dono.nome) : '') + '</div></td>' +
+        '<td style="white-space:nowrap"><span class="pill ' + r.faixa.classe + ' mini">IAD ' + r.iad + '</span></td>' +
+        '<td class="tiny muted" style="white-space:nowrap">' + r.evidenceAge + 'd sem evidência</td>' +
+        '<td class="tiny muted">' +
+        (naNutricao
+          ? esc(op.nutricao.motivo || 'sem motivo') +
+            (op.nutricao.revisarEm
+              ? '<br>revisar em ' + U.data(op.nutricao.revisarEm) +
+                (E.nutricaoVencida(op) ? ' <span class="pill risk mini">vencida</span>' : '')
+              : '')
+          : esc(op.etapa || '')) +
+        '</td></tr>';
+    }).join('');
+
+    return '<div class="card" style="margin-top:12px">' + cabeca +
+      '<div class="tabela-rolagem" style="margin-top:10px"><table><thead><tr>' +
+      '<th style="width:34px"></th><th>Negócio</th><th>IAD</th><th>Parado</th>' +
+      '<th>' + (naNutricao ? 'Motivo e revisão' : 'Etapa') + '</th>' +
       '</tr></thead><tbody>' + linhas + '</tbody></table></div></div>';
   }
 
@@ -7435,6 +7639,39 @@
     definirPeriodoTarefas: function (f) { periodoTarefas = f; },
     definirModoPipeline: function (m) { modoPipeline = m; },
     definirAbaCadastro: function (a) { abaCadastro = a; buscaCadastro = ''; },
+
+    /* A nutrição precisa do estado dela de fora: o App lê o que está marcado
+       para mover, e limpa depois. */
+    nutri: function () { return nutri; },
+    filtroNutricao: function (campo, valor) { nutri[campo] = valor; },
+    marcarNutricao: function (lado, id, sim) {
+      const m = lado === 'nutricao' ? nutri.marcadosNutricao : nutri.marcadosPipeline;
+      if (sim) m[id] = true; else delete m[id];
+    },
+    limparMarcasDaNutricao: function () {
+      nutri.marcadosPipeline = {};
+      nutri.marcadosNutricao = {};
+    },
+    /* Marcar "todos" significa todos os que PASSAM NO FILTRO — nunca os cento
+       e um. Marcar o que não está na tela é a forma mais fácil de mover um
+       negócio sem querer. */
+    marcadosDaNutricao: function (lado) {
+      const est = Store.dados();
+      const m = lado === 'nutricao' ? nutri.marcadosNutricao : nutri.marcadosPipeline;
+      return (est.oportunidades || []).filter(function (op) {
+        if (op.desfecho) return false;
+        if (lado === 'nutricao' ? !op.nutricao : !!op.nutricao) return false;
+        return !!m[op.id] && passaNoFiltroDaNutricao(op);
+      });
+    },
+    visiveisDaNutricao: function (lado) {
+      const est = Store.dados();
+      return (est.oportunidades || []).filter(function (op) {
+        if (op.desfecho) return false;
+        if (lado === 'nutricao' ? !op.nutricao : !!op.nutricao) return false;
+        return passaNoFiltroDaNutricao(op);
+      });
+    },
     definirAbaConfig: definirAbaConfig,
     definirAbaCockpit: definirAbaCockpit,
     definirBuscaCadastro: function (b) { buscaCadastro = b; },
