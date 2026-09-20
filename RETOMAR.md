@@ -398,6 +398,48 @@ duas negociações de verdade. Filtrar por campanha, marcar os 51, mover com
 motivo e prazo, conferir que **ninguém foi encerrado**, devolver três, e que a
 passagem ficou no `historicoNutricao`.
 
+## 0-W. O índice do manual com resumo no balão — v204, 20/09
+
+*"Quando passar com o mouse em cima de cada item apresente um pop up dentro do
+nosso padrão resumindo em poucas linhas o que a pessoa aprenderá e encontrará
+no item."*
+
+Vinte e cinco títulos numa lista são vinte e cinco apostas: a pessoa lê "Como o
+IAD anda" e tem de adivinhar se aquilo é a teoria do índice ou o passo a passo
+de dar nota. Com o resumo no balão ela decide antes de clicar — que é a única
+coisa que um índice precisa fazer.
+
+`SECOES_DO_MANUAL` ganhou um terceiro campo: o resumo. `indiceDoManual()` o
+emite como `data-ajuda` com `data-ajuda-titulo`, então usa o balão que já
+existe (`src/ajuda.js`) — mesmo desenho de todo o resto do app, e de graça
+ganha o teclado, porque o balão já escuta `focusin`.
+
+**A regra que os 25 resumos seguem:** dizem o que a pessoa vai ENCONTRAR ali,
+não o que a seção é. *"Os quatro modos de registrar, do mais completo ao mais
+rápido"* serve; *"fala sobre registro"* não serve para nada. Cada um foi
+escrito depois de ler a seção — resumo inventado num tooltip é pior do que
+tooltip nenhum.
+
+**15 testes** (`indice`): os 25 existem, nenhum sem resumo, nenhum curto demais
+(< 80 caracteres), nenhum longo demais para um balão (> 400), nenhum só
+repetindo o título, os 25 diferentes entre si, o balão abre no mouse e no foco
+do teclado, cabe na tela, some ao sair, e o link continua navegando.
+
+### Uma função declarada duas vezes
+
+`App.irParaMinhaCaixa` aparecia **duas vezes** no mesmo objeto literal, com
+corpos idênticos e comentários quase iguais ("procurar no menu" × "procurar o
+menu"). A segunda sobrescrevia a primeira em silêncio — inofensivo hoje,
+armadilha no dia em que alguém corrigisse só uma das duas. Removida.
+
+E uma nota de teste: `irNoManual` rola com `behavior: 'smooth'`. Meio segundo
+de espera não cobre 1800px de animação, e o teste acusou defeito onde só havia
+animação — o oposto do fake complacente, mas igualmente enganoso.
+
+**Onde está:** `SECOES_DO_MANUAL` e `indiceDoManual()` em `src/views.js`.
+
+---
+
 ## 0-V. A Fila — v203, 20/09
 
 Primeiro item da Onda 1 do estudo (`estudos/AUTOMACAO-IA.md`, item 6.1),

@@ -4729,38 +4729,75 @@
      entra. As duas coisas agora dividem a mesma tela, com um índice no alto —
      porque manual sem índice é manual que ninguém volta a abrir. */
 
+  /* O índice do manual com resumo ao passar o mouse.
+
+     Vinte e cinco títulos numa lista são vinte e cinco apostas: a pessoa lê
+     "Como o IAD anda" e tem de adivinhar se aquilo é a teoria do índice ou o
+     passo a passo de dar nota. Com o resumo no balão ela decide antes de
+     clicar — que é a única coisa que um índice precisa fazer.
+
+     O terceiro campo é o resumo, e ele tem uma regra: diz o que a pessoa vai
+     ENCONTRAR ali, não o que a seção é. "Os quatro modos de registrar" serve;
+     "fala sobre registro" não serve para nada. */
   const SECOES_DO_MANUAL = [
-    ['m-regra', 'A regra'],
-    ['m-oito', 'As oito decisões'],
-    ['m-regua', 'A régua: cinco degraus'],
-    ['m-caminho', 'O caminho do vendedor, passo a passo'],
-    ['m-dia', 'O dia do vendedor: o que alimentar, o que você recebe'],
-    ['m-fila', 'A Fila: o que fazer primeiro'],
-    ['m-lh', 'A integração com o Linked Helper'],
-    ['m-sinais', 'Sinais: o que o comprador faz sozinho'],
-    ['m-email', 'Ligar a sua caixa de e-mail'],
-    ['m-avanco', 'Como o IAD anda'],
-    ['m-faixas', 'O que o número diz'],
-    ['m-etapas', 'O que cada etapa pede'],
-    ['m-tarefa', 'Tudo entra por tarefa'],
-    ['m-contar', 'Como contar o que aconteceu'],
-    ['m-telas', 'As telas, uma a uma'],
-    ['m-pipeline', 'Os grupos do pipeline'],
-    ['m-tarefas', 'A tela de Tarefas'],
-    ['m-conversas', 'As conversas do WhatsApp'],
-    ['m-aprendizado', 'Aprendizado e plano'],
-    ['m-config', 'Configuração'],
-    ['m-ia-vendedor', 'A IA no seu dia'],
-    ['m-ia', 'As tarefas da IA'],
-    ['m-limites', 'O que a IA não faz'],
-    ['m-perfis', 'Quem move por dentro'],
-    ['m-cadencia', 'As 8 decisões, canal a canal']
+    ['m-regra', 'A regra',
+     'A diferença entre etapa e decisão, e a frase que sustenta o método inteiro: só o cliente move o índice. Traz a lista do que NÃO conta como avanço — mandar proposta, marcar reunião, dar follow-up.'],
+    ['m-oito', 'As oito decisões',
+     'As oito decisões que acontecem dentro do cliente, com a pergunta que cada uma responde. Cada uma vale de 0 a 4; a soma é o IAD, de 0 a 32. Com 24 ou mais, a decisão está madura.'],
+    ['m-regua', 'A régua: cinco degraus',
+     'Como se dá nota de 0 a 4 numa decisão, degrau por degrau. O que separa um do outro é quem disse, se houve número próprio do cliente e se aquilo está por escrito num documento dele.'],
+    ['m-caminho', 'O caminho do vendedor, passo a passo',
+     'O ciclo de UM negócio, do primeiro contato ao desfecho: de onde a conta entra, como o índice anda enquanto você trabalha, e como se encerra — inclusive quando não fecha.'],
+    ['m-dia', 'O dia do vendedor: o que alimentar, o que você recebe',
+     'O outro corte: o DIA, com trinta negócios ao mesmo tempo. A rotina hora a hora — o que abrir de manhã, o que ler antes de cada conversa, o que registrar logo depois — e o que o sistema devolve em troca.'],
+    ['m-fila', 'A Fila: o que fazer primeiro',
+     'A ordem em que a tela Hoje coloca a carteira e o porquê de cada posição; com quem falar para provar a decisão que falta, decisão por decisão; e por que os leads que nunca produziram evidência ficam fora da fila.'],
+    ['m-lh', 'A integração com o Linked Helper',
+     'Como a prospecção do LinkedIn chega ao IAD. Por que existe uma ponte no meio, os dois endereços que quase todo mundo troca, as duas chaves e o balde separado por empresa. É a página para abrir quando os leads não aparecem.'],
+    ['m-sinais', 'Sinais: o que o comprador faz sozinho',
+     'O que o cliente faz sem você — abrir o documento, responder, voltar ao site — e de onde cada sinal vem. Por que isso é um relógio separado que nunca mexe na nota: sinal que pontuasse viraria contador de cliques.'],
+    ['m-email', 'Ligar a sua caixa de e-mail',
+     'O passo a passo para o IAD ler a sua caixa: o que é uma senha de aplicativo, onde gerar a sua, e o que o sistema faz com os e-mails depois de encontrá-los.'],
+    ['m-avanco', 'Como o IAD anda',
+     'A mecânica do índice: o caminho de um ponto do começo ao fim, os três níveis decisão por decisão, a força da evidência (relato, confirmado, documentado), a ordem em que as oito devem ser trabalhadas e o que não sobe o índice de jeito nenhum.'],
+    ['m-faixas', 'O que o número diz',
+     'Como ler um IAD: o que significa cada faixa. E a segunda régua, que não é a nota — há quanto tempo o cliente não se move, que é o que separa negócio vivo de negócio bonito e parado.'],
+    ['m-etapas', 'O que cada etapa pede',
+     'As seis condições do portão da proposta — o que precisa estar provado antes de ela sair — e as três coisas que fazem o app gritar depois que ela já saiu.'],
+    ['m-tarefa', 'Tudo entra por tarefa',
+     'Por que existe um botão só, e a diferença entre "a fazer" e "já foi feita": a primeira mostra planejamento, a segunda mostra corrida atrás do histórico. Mais a lista de canais que você pode editar.'],
+    ['m-contar', 'Como contar o que aconteceu',
+     'Os quatro modos de registrar uma tarefa que já aconteceu, do mais completo ao mais rápido: colar a ata, responder quatro perguntas fechadas, registrar uma evidência direta, ou marcar que nada aconteceu — que também é informação.'],
+    ['m-telas', 'As telas, uma a uma',
+     'Uma linha por tela do menu, com a pergunta que cada uma responde antes do que ela mostra. É a tabela para consultar quando você não sabe em qual entrar.'],
+    ['m-pipeline', 'Os grupos do pipeline',
+     'Os grupos que classificam a carteira pela decisão do comprador, não pela etapa: o que entra, o que sai e o que fazer em cada um. A classificação é regra fixa, não é a IA — mesmo dado, mesmo grupo, sempre.'],
+    ['m-tarefas', 'A tela de Tarefas',
+     'Como a tela organiza o que foi executado e o que aquilo rendeu: por que toda tarefa está presa a uma empresa E a uma negociação, como a lista abre, e a coluna que diz quantos pontos de decisão cada tarefa fez andar.'],
+    ['m-conversas', 'As conversas do WhatsApp',
+     'Como as conversas chegam ao app, por que ele não lê a sua caixa sozinho, que formato de telefone cadastrar para a conversa casar com o contato certo, e de quem é cada conversa.'],
+    ['m-aprendizado', 'Aprendizado e plano',
+     'Oito indicadores em série semanal, sempre contra a semana anterior — porque número sozinho não ensina nada. Por que só estes indicadores entram, e o plano de desenvolvimento que sai da leitura.'],
+    ['m-config', 'Configuração',
+     'A tela de Configuração bloco a bloco: nuvem, caixa de e-mail, Linked Helper, backup, importação de planilha, instalação no celular e diagnóstico.'],
+    ['m-ia-vendedor', 'A IA no seu dia',
+     'O que a IA tira das suas costas na prática, a caixa que abre quando você entra — e, no fim, o que continua sendo fundamental que VOCÊ faça, porque não dá para terceirizar.'],
+    ['m-ia', 'As tarefas da IA',
+     'A lista inteira: cada pedido que o app faz ao assistente, onde ele aparece na tela, o que faz e o que é proibido de fazer. Com o nome técnico de cada um — que é o que aparece no diagnóstico quando dá errado.'],
+    ['m-limites', 'O que a IA não faz',
+     'Os limites deliberados, e por que eles existem: é o que garante que duas pessoas vejam o mesmo número. A frase para levar: a IA lê e propõe, o motor calcula, você decide.'],
+    ['m-perfis', 'Quem move por dentro',
+     'Os perfis do Challenger Customer: três mobilizam, três só conversam, um bloqueia. Como reconhecer cada um e como trabalhar com ele — com a ressalva honesta sobre a força da pesquisa por trás.'],
+    ['m-cadencia', 'As 8 decisões, canal a canal',
+     'O que dizer em cada canal para mover cada uma das oito decisões: LinkedIn, Linked Helper, e-mail e WhatsApp, decisão por decisão. É a cola para montar a cadência de uma conta.']
   ];
 
   function indiceDoManual() {
     return '<div class="card indice-manual"><h2 style="margin-top:0">Neste manual</h2>' +
+      '<p class="tiny muted" style="margin:-6px 0 10px">Passe o mouse sobre um item para ver o que você encontra nele.</p>' +
       '<ol>' + SECOES_DO_MANUAL.map(function (s) {
-        return '<li><a href="#/playbook" onclick="App.irNoManual(\'' + s[0] + '\');return false;">' +
+        return '<li><a href="#/playbook" onclick="App.irNoManual(\'' + s[0] + '\');return false;"' +
+          ' data-ajuda-titulo="' + esc(s[1]) + '" data-ajuda="' + esc(s[2] || '') + '">' +
           esc(s[1]) + '</a></li>';
       }).join('') + '</ol></div>';
   }
