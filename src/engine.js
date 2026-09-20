@@ -799,52 +799,202 @@
     return lista;
   }
 
-  /* Foco do dia: o app procura o vendedor, em vez de esperar ser procurado.
-     Uma linha por negócio, a mais urgente primeiro. */
-  function focoDoDia(oportunidades, tarefas) {
-    const itens = [];
+  /* ---------------- A Fila ----------------
+
+     O que fazer primeiro, com quem, por qual canal — e por quê.
+
+     Isto substitui o `focoDoDia`, que acertava a ideia (o app procura o
+     vendedor, em vez de esperar ser procurado) e errava três coisas que só
+     apareceram quando a carteira do Alexandre chegou a 101 negócios:
+
+     1. TUDO VIRAVA URGENTE. A régua era `evidenceAge > 30 → urgência 3`, e
+        `evidenceAge` de quem nunca teve evidência conta a partir da criação.
+        Noventa e oito leads importados de campanha nasceram com zero
+        evidência, envelheceram, e a tela abriu com noventa e oito linhas
+        vermelhas. Lista em que tudo é urgente não diz nada — e a primeira
+        coisa que a pessoa faz é parar de olhar.
+
+        A distinção que conserta: NUNCA COMEÇOU não é o mesmo que PAROU. Lead
+        que nunca produziu evidência do cliente não é resgate atrasado; é
+        triagem pendente. Vai para um balde próprio, fora da fila do dia.
+
+     2. NINGUÉM TINHA NOME. A ação saía como "pergunte se isso acontece aí" —
+        correta e inútil, porque não dizia a quem. Agora `quemProva()` cruza a
+        decisão que falta com o papel que a prova e devolve a pessoa.
+
+     3. O SINAL NÃO CHEGAVA AQUI. `momento()` — o comprador andou enquanto o
+        registro ficou parado — é o melhor instante que este motor sabe
+        calcular, e a tela do dia não o consultava. Agora ele é a segunda
+        posição da escada, atrás só de compromisso vencido.
+
+     A pontuação é aritmética pura: não chama IA, não custa nada, e cada
+     posição sai com o motivo escrito. Número sem motivo é ranking de CRM, que
+     é justamente o que ninguém obedece. */
+
+  /* O sinal gravado tem `titulo` (copiado do catálogo quando nasce) e `tipo`.
+     `rotulo` é campo do CATÁLOGO, não do registro — ler direto dele devolvia
+     undefined e derrubava a fila inteira. */
+  function rotuloDoSinal(s) {
+    if (!s) return 'sinal';
+    if (s.titulo) return s.titulo;
+    const t = (P.TIPOS_SINAL || []).find(function (x) { return x.id === s.tipo; });
+    return (t && t.rotulo) || 'sinal';
+  }
+
+  function nuncaComecou(op) {
+    return eventosDeDecisao(op).length === 0;
+  }
+
+  /* Quem, nesta conta, prova a decisão que falta. */
+  function quemProva(op, dimId) {
+    const papeis = P.PAPEL_QUE_PROVA[dimId] || [];
+    const pessoas = stakeholdersDaOp(op);
+    const serve = function (p) { return p && p.sentimento !== 'resistente'; };
+    const maisInfluente = function (lista) {
+      return lista.reduce(function (m, p) {
+        return (p.influencia || 0) > (m.influencia || 0) ? p : m;
+      }, lista[0]);
+    };
+
+    for (let i = 0; i < papeis.length; i++) {
+      const candidatos = pessoas.filter(function (p) { return p.papel === papeis[i] && serve(p); });
+      if (candidatos.length) {
+        return { pessoa: maisInfluente(candidatos), papel: papeis[i], presente: true, porta: null };
+      }
+    }
+
+    /* Ninguém com o papel. Isso não encerra a recomendação — vira ela: chegar
+       nesse papel é a próxima ação, e quem abre a porta é o champion, ou a
+       pessoa de maior influência que já temos. */
+    const disponiveis = pessoas.filter(serve);
+    const porta = disponiveis.filter(function (p) { return p.papel === 'Champion / Mobilizer'; })[0] ||
+      (disponiveis.length ? maisInfluente(disponiveis) : null);
+    return { pessoa: null, papel: papeis[0] || '', presente: false, porta: porta };
+  }
+
+  /* Por onde falar. A preferência declarada da pessoa ganha da do método:
+     canal que ela não responde é canal onde a decisão não anda. Depois vem a
+     regra do playbook (decisão ainda não admitida se abre por conversa, o
+     resto por material), e por último o que temos como alcançá-la. */
+  function canalDaFila(dim, pessoa, nivel) {
+    if (!dim) return null;
+    const alcanca = function (id) {
+      if (!pessoa) return id === 'linkedin' || id === 'linkedhelper';
+      if (id === 'whatsapp') return !!pessoa.telefone;
+      if (id === 'email') return !!(pessoa.email || pessoa.emailPessoal);
+      if (id === 'linkedin' || id === 'linkedhelper') return !!pessoa.linkedin;
+      return false;
+    };
+    const ordem = [];
+    if (pessoa && pessoa.canalPreferido) ordem.push(pessoa.canalPreferido);
+    ordem.push(nivel === 0 ? 'whatsapp' : 'email', 'email', 'whatsapp', 'linkedin', 'linkedhelper');
+
+    const existe = function (id) { return !!(dim.canais && dim.canais[id]); };
+    const escolhido = ordem.find(function (id) { return existe(id) && alcanca(id); }) ||
+      ordem.find(existe);
+    if (!escolhido) return null;
+    const canal = P.CANAIS.find(function (c) { return c.id === escolhido; });
+    return {
+      id: escolhido,
+      rotulo: canal ? canal.nome : escolhido,
+      texto: dim.canais[escolhido],
+      alcancavel: alcanca(escolhido)
+    };
+  }
+
+  function fila(oportunidades, tarefas) {
+    const hoje = Store.hoje();
     const porOp = {};
     (tarefas || []).filter(function (t) { return t.status === 'aberta'; }).forEach(function (t) {
-      if (!t.oportunidadeId) return;
-      (porOp[t.oportunidadeId] = porOp[t.oportunidadeId] || []).push(t);
+      if (t.oportunidadeId) (porOp[t.oportunidadeId] = porOp[t.oportunidadeId] || []).push(t);
     });
 
-    oportunidades.filter(function (o) { return !o.desfecho; }).forEach(function (op) {
+    const todos = (oportunidades || []).filter(function (o) {
+      if (o.desfecho) return false;
+      /* Nutrição saiu da previsão E do dia — é para isso que ela serve. Só
+         volta quando a data de revisão que o vendedor marcou chegar. */
+      if (o.nutricao && !nutricaoVencida(o)) return false;
+      return true;
+    }).map(function (op) {
       const r = resumo(op);
-      const push = function (urgencia, motivo, acao) {
-        itens.push({ resumo: r, urgencia: urgencia, motivo: motivo, acao: acao, tarefas: porOp[op.id] || [] });
-      };
-      const comp = r.compromisso;
-      const vencidas = (porOp[op.id] || []).filter(function (t) { return t.vencimento < Store.hoje(); });
+      const mom = momento(op);
+      const vencidas = (porOp[op.id] || []).filter(function (t) { return t.vencimento && t.vencimento < hoje; });
+      const dim = r.nbd.dimensao;
+      const quem = dim ? quemProva(op, dim.id) : { pessoa: null, papel: '', presente: false, porta: null };
+      const canal = dim ? canalDaFila(dim, quem.pessoa || quem.porta, op.dims[dim.id] || 0) : null;
 
-      if (comp && comp.vencido) {
-        push(3, 'Compromisso vencido há ' + comp.diasAtraso + ' dia(s): ' + comp.texto,
+      const item = {
+        resumo: r, tarefas: porOp[op.id] || [],
+        decisao: dim, comQuem: quem, canal: canal, porQueAgora: mom
+      };
+      const marcar = function (pontos, tipo, motivo, acao) {
+        item.pontos = pontos;
+        item.tipo = tipo;
+        item.motivo = motivo;
+        item.acao = acao;
+        /* Mantido para quem já lia a fila antiga: três baldes, não onze. */
+        item.urgencia = pontos >= 70 ? 3 : (pontos >= 34 ? 2 : (pontos >= 14 ? 1 : 0));
+      };
+
+      const comp = r.compromisso;
+      const passo = r.nbd.acao;
+
+      if (op.nutricao && nutricaoVencida(op)) {
+        marcar(72, 'revisao', 'A revisão da nutrição venceu' +
+          (op.nutricao.revisarEm ? ' em ' + op.nutricao.revisarEm.split('-').reverse().join('/') : '') + '.',
+          'Olhe se o motivo que segurava a conta ainda vale. Se não vale mais, devolva à carteira.');
+      } else if (comp && comp.vencido) {
+        marcar(100 + Math.min(comp.diasAtraso, 20), 'combinado',
+          'Compromisso vencido há ' + comp.diasAtraso + ' dia(s): ' + comp.texto,
           comp.dono === 'cliente'
             ? 'Cobre o retorno combinado e reagende com data nova.'
             : 'A bola está com você: entregue o que foi combinado hoje.');
+      } else if (mom) {
+        marcar(92 + Math.min(mom.atraso, 8), 'agora',
+          'O cliente se mexeu há ' + mom.idadeSinal + ' dia(s) — ' + rotuloDoSinal(mom.principal).toLowerCase() +
+          ' — e o registro está parado há ' + mom.idadeEvidencia + '.',
+          passo);
       } else if (vencidas.length) {
-        push(3, vencidas.length + ' tarefa(s) vencida(s)', vencidas[0].titulo);
-      } else if (r.evidenceAge > 30) {
-        push(3, r.evidenceAge + ' dias sem evidência do cliente', 'Requalifique ou encerre: registre o desfecho real.');
+        marcar(80, 'combinado', vencidas.length + ' tarefa(s) vencida(s)', vencidas[0].titulo);
       } else if (depoisDaProposta(op) && !r.coverage.temEconomicBuyer) {
-        push(3, 'Em ' + op.etapa.toLowerCase() + ' sem acesso ao decisor econômico', r.nbd.acao);
+        marcar(76, 'trava', 'Em ' + String(op.etapa).toLowerCase() + ' sem acesso ao decisor econômico',
+          r.nbd.acao);
       } else if (depoisDaProposta(op) && !r.gates.liberado) {
-        push(3, 'Proposta emitida com prontidão de ' + r.gates.prontidao + '%', 'Feche as lacunas: ' + r.gates.pendentes.map(function (p) { return p.nome; }).join(', ') + '.');
+        marcar(70, 'trava', 'Proposta emitida com prontidão de ' + r.gates.prontidao + '%',
+          'Feche as lacunas: ' + r.gates.pendentes.map(function (p) { return p.nome; }).join(', ') + '.');
+      } else if (nuncaComecou(op)) {
+        /* O balde que faltava. Não é resgate: é lead que nunca virou negócio. */
+        marcar(4, 'triagem',
+          'Nunca houve evidência do cliente — em ' + r.evidenceAge + ' dias.',
+          'Isto é um lead, não um negócio. Decida: vale uma primeira conversa, ou vai para a nutrição?');
+      } else if (r.evidenceAge > 30) {
+        marcar(60, 'resgate', r.evidenceAge + ' dias sem evidência do cliente, e já houve',
+          'Requalifique ou encerre: registre o desfecho real.');
       } else if (r.evidenceAge > 14) {
-        push(2, r.evidenceAge + ' dias sem evidência do cliente', r.nbd.acao);
+        marcar(46, 'resgate', r.evidenceAge + ' dias sem evidência do cliente', passo);
       } else if (r.velocity === 0) {
-        push(2, 'Nenhuma microdecisão nos últimos 30 dias', r.nbd.acao);
+        marcar(34, 'avanco', 'Nenhuma microdecisão nos últimos 30 dias', passo);
       } else if (r.coverage.mapeados <= 1) {
-        push(1, 'Depende de uma única pessoa', r.nbd.acao);
+        marcar(24, 'avanco', 'Depende de uma única pessoa', passo);
       } else {
-        push(0, 'Próxima decisão: ' + (r.nbd.dimensao ? r.nbd.dimensao.nome : 'formalização'), r.nbd.acao);
+        marcar(14, 'avanco', 'Próxima decisão: ' + (dim ? dim.nome : 'formalização'), passo);
       }
+      return item;
     });
-    itens.sort(function (a, b) {
-      return b.urgencia - a.urgencia || (b.resumo.op.valor || 0) - (a.resumo.op.valor || 0);
-    });
+
+    /* Empate se resolve por decisão madura e depois por valor: entre dois
+       negócios igualmente atrasados, o que já tem decisão construída é o que
+       se perde mais caro. */
+    const ordenar = function (a, b) {
+      return b.pontos - a.pontos || b.resumo.iad - a.resumo.iad ||
+        (b.resumo.op.valor || 0) - (a.resumo.op.valor || 0);
+    };
+    const triagem = todos.filter(function (i) { return i.tipo === 'triagem'; }).sort(ordenar);
+    const itens = todos.filter(function (i) { return i.tipo !== 'triagem'; }).sort(ordenar);
+
     return {
       itens: itens,
+      triagem: triagem,
       urgentes: itens.filter(function (i) { return i.urgencia >= 2; }),
       valorUrgente: itens.filter(function (i) { return i.urgencia >= 2; })
         .reduce(function (s, i) { return s + (i.resumo.op.valor || 0); }, 0)
@@ -1138,7 +1288,7 @@
   global.IADEngine = {
     iad, evidenceAge, faixaEvidencia, decisionVelocity, coverage, gates,
     saude, classificar, nextBestDecision, alertas, resumo, carteira,
-    focoDoDia, aprendizado, sugerirDimensao, podeComprovar, degrauPermitido, evidenciasDaDimensao,
+    fila, nuncaComecou, quemProva, canalDaFila, rotuloDoSinal, aprendizado, sugerirDimensao, podeComprovar, degrauPermitido, evidenciasDaDimensao,
     tarefasAtrasadas,
     filtrar, mesesDisponiveis, segmentosDisponiveis, rotuloMes, segmentoDe, faixaSaude,
     porMes, porSegmento, porEtapa, matrizDecisoes, distribuicaoEvidencia,

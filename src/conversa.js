@@ -190,16 +190,31 @@
       exemplos: ['o que eu faço agora', 'por onde começo', 'qual a prioridade',
         'o que é mais urgente', 'me diz o que fazer'],
       palavras: ['agora', 'prioridade', 'urgente', 'começo', 'foco'],
+      /* `fila()` devolve um OBJETO — {itens, triagem, urgentes, valorUrgente}.
+         Este trecho lia `.length` direto no retorno, que em objeto é
+         `undefined`: a pergunta mais importante que o assistente sabe
+         responder vinha respondendo "nada urgente na carteira" desde sempre,
+         com a carteira cheia. Passou despercebido porque a resposta era
+         plausível — o pior tipo de defeito. */
       responder: function () {
-        const itens = E.focoDoDia(abertas(), Store.dados().tarefas || []);
-        if (!itens.length) return vazio('Nada urgente na carteira. Bom momento para prospectar.');
+        const f = E.fila(abertas(), Store.dados().tarefas || []);
+        if (!f.itens.length) {
+          return vazio(f.triagem.length
+            ? 'Nenhum negócio em andamento — mas há ' + f.triagem.length +
+              ' lead(s) sem evidência nenhuma esperando triagem, em Nutrição.'
+            : 'Nada na fila. Bom momento para prospectar.');
+        }
         return {
-          resumo: 'Comece por estas ' + Math.min(itens.length, 5),
-          linhas: itens.slice(0, 5).map(function (i) {
-            return linha(i.resumo.op.titulo + ' · ' + i.motivo + ' → ' + i.acao,
+          resumo: 'Comece por est' + (f.itens.length === 1 ? 'e' : 'as ' + Math.min(f.itens.length, 5)),
+          linhas: f.itens.slice(0, 5).map(function (i) {
+            const q = i.comQuem || {};
+            const com = q.presente && q.pessoa
+              ? ' — com ' + q.pessoa.nome + (i.canal ? ' por ' + i.canal.rotulo : '')
+              : '';
+            return linha(i.resumo.op.titulo + ' · ' + i.motivo + ' → ' + i.acao + com,
               '#/op/' + i.resumo.op.id);
           }),
-          alvo: itens[0].resumo.op.id,
+          alvo: f.itens[0].resumo.op.id,
           maisEm: '#/hoje'
         };
       }

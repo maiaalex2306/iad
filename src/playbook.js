@@ -280,6 +280,31 @@
   /* Cobertura mínima do buying group para um negócio ser considerado real. */
   const PAPEIS_CRITICOS = ['Champion / Mobilizer', 'Financeiro', 'Decisor econômico', 'Compras'];
 
+  /* Quem prova cada decisão.
+
+     O motor já sabia QUAL decisão falta e por QUAL canal se fala dela. Não
+     sabia COM QUEM — e "prove o Impacto" sem nome é conselho, não tarefa. O
+     vendedor lê, concorda e não faz, porque falta a única informação que
+     transforma a frase em ação.
+
+     A ordem dentro de cada lista é de preferência, não de hierarquia: quem
+     prova melhor vem primeiro. Impacto se prova com o Financeiro porque
+     número que o Financeiro aceita é número que sobrevive à reunião de
+     orçamento; número que o Usuário aceita, não necessariamente.
+
+     Quando ninguém da conta tem o papel, isso não é um beco: é a própria
+     próxima ação — chegar nele, e quem abre essa porta é o champion. */
+  const PAPEL_QUE_PROVA = {
+    problema:     ['Operações', 'Usuário', 'Técnico', 'Champion / Mobilizer'],
+    prioridade:   ['Decisor econômico', 'Champion / Mobilizer', 'Operações'],
+    impacto:      ['Financeiro', 'Decisor econômico', 'Operações'],
+    stakeholders: ['Champion / Mobilizer', 'Decisor econômico'],
+    criterios:    ['Técnico', 'Usuário', 'Operações'],
+    processo:     ['Compras', 'Decisor econômico', 'Champion / Mobilizer'],
+    consenso:     ['Champion / Mobilizer', 'Decisor econômico'],
+    risco:        ['Jurídico / Compliance', 'Compras', 'Técnico']
+  };
+
   const CANAIS = [
     { id: 'linkedin', nome: 'LinkedIn', papel: 'Educa o mercado e ativa problema, prioridade e risco.' },
     { id: 'linkedhelper', nome: 'LinkedHelper', papel: 'Expande relacionamento com múltiplos stakeholders da conta.' },
@@ -685,7 +710,7 @@
   ];
 
   global.IADPlaybook = {
-    DIMENSOES, ETAPAS, GATES_PROPOSTA, PAPEIS, PAPEIS_CRITICOS, DESFECHOS,
+    DIMENSOES, ETAPAS, GATES_PROPOSTA, PAPEIS, PAPEIS_CRITICOS, PAPEL_QUE_PROVA, DESFECHOS,
     DESFECHOS_RENOMEADOS, MOTIVOS_PERDA, MOTIVOS_DESISTENCIA, MOTIVOS_NUTRICAO, PRAZOS_NUTRICAO,
     NIVEIS_DA_ESCADA, NOTA_MAXIMA, IAD_MAXIMO, IAD_MADURO,
     FORCAS, FORCA_MINIMA_DO_DEGRAU, TIPOS_TAREFA, TIPOS_TAREFA_RENOMEADOS, CATEGORIAS_ARQUIVO,

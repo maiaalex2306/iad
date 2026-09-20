@@ -398,6 +398,69 @@ duas negociações de verdade. Filtrar por campanha, marcar os 51, mover com
 motivo e prazo, conferir que **ninguém foi encerrado**, devolver três, e que a
 passagem ficou no `historicoNutricao`.
 
+## 0-V. A Fila — v203, 20/09
+
+Primeiro item da Onda 1 do estudo (`estudos/AUTOMACAO-IA.md`, item 6.1),
+construído. `E.fila()` substitui o `focoDoDia()`.
+
+**O defeito que ela conserta, e que só apareceu com a carteira real.** A régua
+antiga era `evidenceAge > 30 → urgência 3`, e `evidenceAge` de quem nunca teve
+evidência conta desde a criação. Noventa e oito leads importados de campanha
+nasceram com zero evidência, envelheceram, e a tela do dia abria com noventa e
+oito linhas vermelhas. **Lista em que tudo é urgente não diz nada.**
+
+A distinção que conserta: **nunca começou ≠ parou**. `nuncaComecou(op)` —
+zero eventos de decisão — manda o lead para um balde `triagem`, fora da fila,
+resumido numa linha com botão para a Nutrição. No teste: 101 oportunidades →
+**3 na fila, 98 na triagem, no máximo 3 urgentes**.
+
+**O que a fila passou a responder, e o foco não respondia:**
+
+- **Com quem.** `quemProva(op, dim)` cruza a decisão que falta com
+  `P.PAPEL_QUE_PROVA` (mapa novo no playbook) e devolve a pessoa — a mais
+  influente do papel, nunca uma resistente. Sem papel na conta, a recomendação
+  vira *chegar* nele pelo champion.
+- **Por qual canal.** `canalDaFila()` — preferência declarada da pessoa,
+  depois a regra do playbook (`dim.canais`), depois o que temos para alcançá-la.
+  Se faltar o contato, a linha avisa em vez de mandar tentar.
+- **Por que agora.** `momento()` — o melhor instante que o motor sabe calcular
+  — **não era consultado pela tela do dia**. Agora é a 2ª posição da escada,
+  atrás só de compromisso vencido.
+
+Nutrição saiu da fila (é para isso que serve), e volta quando `nutricaoVencida`.
+
+A pontuação é aritmética: **não chama IA, não custa token**. Cada posição sai
+com o motivo escrito — número sem motivo é ranking de CRM, que é o que ninguém
+obedece.
+
+### Dois defeitos que a construção desenterrou
+
+1. **O assistente respondia errado desde sempre.** `conversa.js` fazia
+   `const itens = E.focoDoDia(...)` e lia `itens.length` — mas `focoDoDia`
+   devolve `{itens, urgentes, valorUrgente}`. `.length` em objeto é
+   `undefined`, então *"o que eu faço agora"* respondia **"Nada urgente na
+   carteira"** com a carteira cheia. Passou despercebido porque a resposta era
+   plausível — o pior tipo de defeito.
+2. **`mom.principal.rotulo`** — `rotulo` é campo do CATÁLOGO (`TIPOS_SINAL`),
+   não do sinal gravado, que tem `titulo`. Derrubava a fila inteira com
+   `undefined.toLowerCase()`. Pegou no primeiro teste. `rotuloDoSinal()` resolve.
+
+**28 testes** (`fila`): a carteira dele reproduzida — 98 leads que nunca
+começaram, um compromisso vencido, um negócio com sinal de 3 dias e evidência
+de 40, e um em dia. Confere ordem, motivo, pessoa, canal, a linha de triagem, a
+não-poluição da lista e o manual.
+
+Manual: seção **`m-fila`** nova no Método, com a escada de prioridade, a tabela
+de quem prova cada decisão (gerada do playbook) e o porquê da triagem ficar
+fora. O bloco "de manhã" do `m-dia` foi reescrito, e a linha de Hoje na tabela
+`TELAS` também.
+
+**Onde está:** `fila`, `nuncaComecou`, `quemProva`, `canalDaFila`,
+`rotuloDoSinal` em `src/engine.js`; `PAPEL_QUE_PROVA` em `src/playbook.js`;
+`linhaDaTriagem`, `comQuemECanal`, `manualDaFila` em `src/views.js`.
+
+---
+
 ## 0-U. Estudo: o que trazer do mercado de AI SDR — 20/09
 
 O Alexandre mandou dois documentos (Dossiê Global de AI SDR com 12 plataformas,

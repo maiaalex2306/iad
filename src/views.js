@@ -338,7 +338,7 @@
     if (!est.oportunidades.length) return boasVindas();
 
     const G = global.IADGraficos;
-    const foco = E.focoDoDia(est.oportunidades, est.tarefas);
+    const foco = E.fila(est.oportunidades, est.tarefas);
     if (!foco.itens.length) {
       return '<h1>Hoje</h1><div class="card"><div class="vazio">Nenhum negócio aberto. Toda a carteira está encerrada.</div></div>';
     }
@@ -371,9 +371,11 @@
       '<button class="btn alt mini" onclick="App.capturaRapida()" data-ajuda-titulo="Nova tarefa" data-ajuda="Acabei de falar com um cliente. A tarefa é a evidência: escolha o negócio, o canal, e conte o que aconteceu — o assistente separa o que o CLIENTE fez e relê as oito decisões.">+ Tarefa</button>' +
       '<button class="btn ghost mini" onclick="location.hash=\'#/playbook\'" aria-label="O método"' +
       ' data-ajuda-titulo="O método" data-ajuda="Como uma tarefa vira avanço, o que conta como evidência em cada uma das oito decisões, e o que fazer em cada canal.">?</button></div>' +
-      '<p class="muted small">' + (grupos[0].qtd
-        ? grupos[0].qtd + ' negócio(s) precisam de você agora · ' + U.compacto(grupos[0].valor) + ' envolvidos'
-        : 'Nada urgente hoje.') + '</p>' +
+      '<p class="muted small">' + (foco.itens.length
+        ? 'Primeiro da fila: <strong>' + esc(foco.itens[0].resumo.op.titulo) + '</strong> — ' +
+          esc(foco.itens[0].motivo)
+        : 'Nada na fila hoje.') + '</p>' +
+      linhaDaTriagem(foco.triagem) +
       responderamNoWhatsapp() +
       '<div class="tiles">' + cartoesResumo +
         '<button class="tile todos' + (filtroHoje === 'todos' ? ' ativo' : '') + '" onclick="App.filtrarHoje(\'todos\')">' +
@@ -621,6 +623,62 @@
       '</div>';
   }
 
+  /* Os leads que nunca começaram não entram na fila — mas também não podem
+     sumir. Uma linha, quieta, com a porta para a tela onde se resolve isso em
+     lote. É a diferença entre "noventa e oito urgências" e "noventa e oito
+     leads esperando triagem", que é a mesma carteira dita com honestidade. */
+  function linhaDaTriagem(triagem) {
+    if (!triagem || !triagem.length) return '';
+    return '<div class="card" style="padding:10px 14px;margin-bottom:10px">' +
+      '<div class="row"><span class="pill">' + triagem.length + '</span>' +
+      '<span class="small">lead(s) sem evidência nenhuma do cliente. ' +
+      'Não são urgências — são triagem.</span><span class="espaco"></span>' +
+      '<button class="btn ghost mini" onclick="location.hash=\'#/nutricao\'"' +
+      ajudaComLinhas('Triagem em lote',
+        'Lead que nunca produziu evidência do cliente não é negócio atrasado: é negócio que nunca começou.',
+        [['Por que fora da fila', 'Se eles entrassem como urgência, a fila do dia teria noventa e oito linhas vermelhas e nenhuma prioridade real.'],
+         ['O que fazer', 'Abra o Processo de Nutrição, filtre por segmento ou responsável, marque os que não valem uma primeira conversa e mova em lote.'],
+         ['Volta sozinho', 'Qualquer evidência nova do cliente tira o negócio da triagem e o coloca na fila.']]) +
+      '>Triar →</button></div></div>';
+  }
+
+  /* Com quem falar, e por onde. Sem isto a recomendação é conselho: "prove o
+     Impacto" é verdadeiro e não move ninguém. Com nome e canal, vira tarefa. */
+  function comQuemECanal(i) {
+    if (!i.decisao) return '';
+    const q = i.comQuem || {};
+    const c = i.canal;
+    let linha;
+
+    if (q.presente && q.pessoa) {
+      linha = 'Com <strong>' + esc(q.pessoa.nome) + '</strong> <span class="muted">(' +
+        esc(q.papel) + ')</span>' + (c ? ' por <strong>' + esc(c.rotulo) + '</strong>' : '');
+    } else if (q.porta) {
+      linha = '<span class="muted">Falta o</span> <strong>' + esc(q.papel) +
+        '</strong> <span class="muted">nesta conta — peça a</span> <strong>' +
+        esc(q.porta.nome) + '</strong> <span class="muted">(' + esc(q.porta.papel) + ') a apresentação.</span>';
+    } else {
+      linha = '<span class="muted">Ninguém mapeado aqui. Descubra quem é o</span> <strong>' +
+        esc(q.papel || 'decisor') + '</strong>.';
+    }
+
+    const aviso = c && !c.alcancavel && q.presente
+      ? '<br><span class="tiny atrasado">Não temos como falar com ' + esc(q.pessoa.nome) +
+        ' por ' + esc(c.rotulo) + ' — falta o contato no cadastro.</span>'
+      : '';
+
+    /* A frase do canal só entra quando ACRESCENTA. Ela vem do mesmo lugar que
+       `i.acao` quando a recomendação é a próxima decisão, e sair duas vezes no
+       mesmo cartão faz a tela parecer quebrada. E em compromisso vencido ela
+       não cabe: ali a ação é o que foi combinado, não a próxima decisão — a
+       pessoa ainda ajuda (é para ela que se liga), a frase não. */
+    const repetida = !c || c.texto === i.acao ||
+      i.tipo === 'combinado' || i.tipo === 'revisao' || i.tipo === 'triagem';
+
+    return '<div class="tiny" style="margin-top:6px">' + linha + aviso +
+      (repetida ? '' : '<br><span class="muted">' + esc(c.texto) + '</span>') + '</div>';
+  }
+
   function cartaoFoco(i) {
     const r = i.resumo;
     const rotulos = ['', 'Atenção', 'Prioridade', 'Urgente'];
@@ -650,7 +708,8 @@
         '<span class="pill">grupo ' + r.coverage.percentual + '%</span>' +
       '</div>' +
 
-      '<div class="motivo"><strong>' + esc(i.motivo) + '</strong><br><span class="muted">' + esc(i.acao) + '</span></div>' +
+      '<div class="motivo"><strong>' + esc(i.motivo) + '</strong><br><span class="muted">' + esc(i.acao) + '</span>' +
+      comQuemECanal(i) + '</div>' +
       '<div class="tiny muted" style="margin-top:6px">Falta: ' + falta + '</div>' +
       (tarefas ? '<div class="tarefas">' + tarefas + '</div>' : '') +
       '<div class="row" style="margin-top:10px">' +
@@ -4676,6 +4735,7 @@
     ['m-regua', 'A régua: cinco degraus'],
     ['m-caminho', 'O caminho do vendedor, passo a passo'],
     ['m-dia', 'O dia do vendedor: o que alimentar, o que você recebe'],
+    ['m-fila', 'A Fila: o que fazer primeiro'],
     ['m-lh', 'A integração com o Linked Helper'],
     ['m-sinais', 'Sinais: o que o comprador faz sozinho'],
     ['m-email', 'Ligar a sua caixa de e-mail'],
@@ -4709,8 +4769,8 @@
      ela mostra: quem abre o manual está com uma pergunta, não com vontade de
      ler a lista de campos. */
   const TELAS = [
-    ['⚡', 'Hoje', 'O que fazer agora.',
-     'As tarefas do dia e o que está atrasado, com o negócio de cada uma ao lado. É a tela de abrir de manhã.'],
+    ['⚡', 'Hoje', 'O que fazer agora, com quem e por onde.',
+     'A Fila: a carteira inteira ordenada, com o motivo de cada posição, a pessoa que prova a decisão que falta e o canal para falar com ela. Os leads que nunca produziram evidência ficam fora, contados numa linha de triagem. É a tela de abrir de manhã.'],
     ['📊', 'Painel', 'Como está a carteira, e o que ela está me ensinando.',
      'Pipeline por saúde da decisão, o que está travando a receita, tempo sem evidência, riscos críticos — e, no fim, o Aprendizado da carteira com a evolução semana a semana e o plano de desenvolvimento.'],
     ['🗂️', 'Pipeline', 'Quais negócios são reais.',
@@ -5166,6 +5226,81 @@
      faz sobre qualquer CRM é "o que eu ganho por alimentar isto?", e um
      sistema que não responde isso em uma tela é um sistema que vai ser
      preenchido pela metade. */
+  /* A Fila, explicada. Precisa estar no manual por um motivo específico: ela
+     ORDENA, e toda ordenação que a pessoa não entende ela desobedece. */
+  function manualDaFila() {
+    const degrau = function (posicao, quando, porque) {
+      return '<tr><td style="white-space:nowrap"><strong>' + esc(posicao) + '</strong></td>' +
+        '<td class="small">' + quando + '</td><td class="small muted">' + porque + '</td></tr>';
+    };
+
+    return '<div class="card" id="m-fila"><h2>A Fila: o que fazer primeiro, e com quem</h2>' +
+
+      '<p class="small">A tela <strong>Hoje</strong> não lista a carteira — ela ordena. Cada linha ' +
+      'responde três perguntas que, separadas, não viram ação: <strong>o que fazer</strong>, ' +
+      '<strong>com quem</strong> e <strong>por qual canal</strong>. Mais o motivo de estar naquela ' +
+      'posição, porque ordem sem motivo é ordem que ninguém obedece.</p>' +
+
+      '<h3>A ordem, e por quê</h3>' +
+      '<div class="tabela-rolagem"><table><tbody>' +
+      degrau('1º', 'Compromisso vencido',
+        'Você combinou uma data com o cliente e ela passou. Nada custa mais caro à confiança.') +
+      degrau('2º', 'O cliente se mexeu e o registro não',
+        'Ele abriu o documento, respondeu, voltou ao site — e a última evidência é bem mais velha ' +
+        'que isso. É o melhor instante que este sistema sabe calcular.') +
+      degrau('3º', 'Tarefa sua vencida', 'Você marcou e não fez.') +
+      degrau('4º', 'Proposta emitida sem o decisor econômico, ou com lacuna de decisão',
+        'Proposta que anda sem quem assina é proposta que volta.') +
+      degrau('5º', 'Parado: já houve evidência, e sumiu',
+        'Aqui é resgate de verdade — o negócio existiu e esfriou.') +
+      degrau('6º', 'Sem microdecisão no mês, ou dependendo de uma pessoa só',
+        'Não está atrasado; está frágil.') +
+      degrau('7º', 'Em dia', 'Segue a próxima decisão da escada.') +
+      '</tbody></table></div>' +
+
+      '<h3>Os leads que nunca começaram ficam fora — de propósito</h3>' +
+      '<p class="small">Um lead importado de campanha que nunca produziu evidência do cliente ' +
+      '<strong>não é um negócio atrasado: é um negócio que nunca começou.</strong> Antes eles ' +
+      'entravam como urgência, porque o contador de “dias sem evidência” conta desde a criação — e ' +
+      'uma carteira com noventa e oito leads assim abria com noventa e oito linhas vermelhas.</p>' +
+      '<p class="small">Lista em que tudo é urgente não diz nada, e a primeira coisa que a pessoa ' +
+      'faz é parar de olhar. Por isso eles saem da fila e viram <strong>uma linha só</strong>, no ' +
+      'alto: quantos são, e o botão que leva à triagem em lote no ' +
+      '<a href="#/nutricao">Processo de Nutrição</a>. Qualquer evidência nova do cliente tira o ' +
+      'negócio da triagem e o coloca na fila, sozinho.</p>' +
+
+      '<h3>Com quem falar — e por que é sempre essa pessoa</h3>' +
+      '<p class="small">Saber que falta provar o <em>Impacto</em> não faz ninguém agir. Saber que ' +
+      'quem prova o Impacto é o <strong>Financeiro</strong>, e que o Financeiro desta conta é a ' +
+      'Ana, faz. Cada decisão tem o papel do grupo comprador que melhor a prova:</p>' +
+      '<div class="tabela-rolagem"><table><thead><tr><th>Decisão</th><th>Quem prova</th></tr></thead><tbody>' +
+      P.DIMENSOES.map(function (d) {
+        const papeis = P.PAPEL_QUE_PROVA[d.id] || [];
+        return '<tr><td style="white-space:nowrap"><strong>' + esc(d.nome) + '</strong></td>' +
+          '<td class="small">' + esc(papeis.join(' · ')) + '</td></tr>';
+      }).join('') +
+      '</tbody></table></div>' +
+      '<p class="small muted" style="margin-top:8px">Número que o Financeiro aceita sobrevive à ' +
+      'reunião de orçamento; número que só o usuário aceita, não necessariamente. É por isso que a ' +
+      'ordem dentro de cada linha importa.</p>' +
+      '<p class="small"><strong>E quando ninguém da conta tem o papel?</strong> Isso não é um beco — ' +
+      'é a própria recomendação. A Fila passa a dizer “falta o Financeiro aqui: peça ao Davi ' +
+      '(Champion) a apresentação”, porque quem abre porta dentro do cliente é o champion.</p>' +
+
+      '<h3>Por qual canal</h3>' +
+      '<p class="small">A ordem é esta, e cada degrau tem razão: <strong>o canal que a pessoa ' +
+      'prefere</strong> (canal que ela não responde é canal onde a decisão não anda), depois ' +
+      '<strong>o que o método pede</strong> para aquela decisão — decisão ainda não admitida se ' +
+      'abre por conversa, decisão de número se sustenta por material — e por último ' +
+      '<strong>o que temos para alcançá-la</strong>. Se faltar o contato no cadastro, a linha avisa ' +
+      'em vez de mandar você tentar.</p>' +
+
+      '<p class="small muted" style="margin-top:10px">A Fila não usa IA e não custa nada: é ' +
+      'aritmética sobre o que já está registrado. Ela não inventa prioridade — ela mostra a que ' +
+      'os seus próprios dados já indicavam, e que ninguém tinha tempo de calcular todo dia.</p>' +
+      '</div>';
+  }
+
   function manualDoDia() {
     const bloco = function (hora, titulo, corpo) {
       return '<div class="passo-manual"><div class="numero quando">' +
@@ -5185,12 +5320,14 @@
 
       '<h3>A rotina</h3>' +
 
-      bloco('de manhã', 'Abra em Hoje e trabalhe a lista de cima para baixo',
-        '<p class="small" style="margin:4px 0 0">Hoje traz o que vence hoje, o que está atrasado e ' +
-        'o que o cliente mandou e você ainda não leu. É a única tela que você precisa abrir para ' +
-        'saber o que fazer. O que está atrasado vem primeiro, e negócio com mensagem nova de ' +
-        'cliente sobe para o topo.</p>' +
-        '<p class="tiny muted" style="margin:4px 0 0">Onde: <strong>⚡ Hoje</strong></p>') +
+      bloco('de manhã', 'Abra em Hoje e trabalhe A Fila de cima para baixo',
+        '<p class="small" style="margin:4px 0 0">A Fila ordena a carteira inteira e diz, em cada ' +
+        'linha, <strong>o que fazer, com quem e por qual canal</strong> — e o motivo de aquilo ' +
+        'estar naquela posição. Compromisso vencido vem primeiro; logo atrás vem o negócio em que ' +
+        'o cliente se mexeu e o registro ficou para trás. Os leads que nunca produziram evidência ' +
+        'nenhuma não entram: ficam contados numa linha à parte, como triagem.</p>' +
+        '<p class="tiny muted" style="margin:4px 0 0">Onde: <strong>⚡ Hoje</strong> · detalhada em ' +
+        '<a href="#/playbook" onclick="App.irNoManual(\'m-fila\');return false;">A Fila</a></p>') +
 
       bloco('antes da conversa', 'Antes de falar com alguém, abra a negociação e leia duas coisas',
         '<p class="small" style="margin:4px 0 0"><strong>Próximos passos</strong>, no alto da aba ' +
@@ -6238,6 +6375,7 @@
       manualDasOito() +
       manualDoCaminho() +
       manualDoDia() +
+      manualDaFila() +
       manualDoLinkedHelper() +
       manualDosSinais() +
       manualDoEmail() +
