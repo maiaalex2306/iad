@@ -398,6 +398,50 @@ duas negociações de verdade. Filtrar por campanha, marcar os 51, mover com
 motivo e prazo, conferir que **ninguém foi encerrado**, devolver três, e que a
 passagem ficou no `historicoNutricao`.
 
+## 0-U. Estudo: o que trazer do mercado de AI SDR — 20/09
+
+O Alexandre mandou dois documentos (Dossiê Global de AI SDR com 12 plataformas,
+e a Análise Completa do Chattie) e pediu um estudo profundo do que dá para
+implantar de automação no IAD.
+
+Está em **`estudos/AUTOMACAO-IA.md`** — 23 itens, agrupados pelos 10 módulos
+que o dossiê define como "plataforma superior", cada um com esforço, custo de
+IA e risco de plataforma.
+
+**A tese, porque muda a leitura de tudo:** as doze plataformas medem
+ATIVIDADE; o IAD mede DECISÃO. O dossiê conclui que o maior espaço de inovação
+do mercado é memória coordenada de buying committee — e o IAD já tem o grafo
+(`PAPEIS`, `coverage()`, `PERFIS` Challenger, `FORCAS`). Falta coordenar, não
+modelar. Placar honesto contra os 10 módulos: 4 fortes, 3 parciais, 3 ausentes
+— e os 3 ausentes são os mais baratos.
+
+**Onda 1 (nenhum precisa de LinkedIn, fornecedor novo ou tabela complexa):**
+
+1. **Cérebro da empresa** — o que vendemos, provas, objeções, tom. Melhora
+   todas as funções de IA que já existem, de uma vez.
+2. **A Fila** — próxima melhor ação da carteira inteira, ordenada com o motivo
+   por escrito. Aritmética sobre o que já está no banco: **não gasta token**.
+3. **Mudança de cargo pela ponte** — `mudou_de_cargo` existe em `TIPOS_SINAL`
+   e nunca é emitido; o LH já traz cargo e empresa a cada colheita. ~30 linhas.
+4. **ICP aprendido dos ganhos** — derivar o ICP de quem a gente FECHOU, em vez
+   de declarar. Resolve a triagem dos 98 leads sem critério.
+5. **Taxonomia de intenção** no analisador de e-mail — e `FUTURE_FOLLOW_UP`
+   ("me chama em novembro") cai direto na Nutrição com a data que ele disse.
+
+**As cinco recusas, com motivo:** não construir envio no LinkedIn (o IAD é
+cérebro, o Linked Helper é execução — é a lição do HeyReach e mantém o risco
+onde já estava); não construir Autopilot (IA que responde sozinha produz
+atividade nossa, não evidência dele); não perseguir "AI copy" (o Expandi mediu
+em 13,2M de convites: não supera copy humana); não construir base de leads; e
+**nunca deixar sinal entrar no índice IAD** — o comentário do `engine.js` já
+explica, e a tentação vai aparecer quando o Signal Engine ficar bom.
+
+**A análise que nenhum concorrente consegue fazer:** cruzar tipo de tarefa com
+dimensão movida. "Visita presencial move Consenso 3× mais que qualquer canal;
+apresentação sem o Financeiro nunca moveu Critérios." O insumo já está gravado.
+
+---
+
 ### O lugar, e as duas abas — v201, 19/09
 
 Nasceu como aba dentro de Cadastros, entre *Oportunidades* e *Segmentos*. O
