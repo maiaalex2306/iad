@@ -47,7 +47,12 @@
     /* Deixou de ser tela escondida: é a teoria que o vendedor precisa antes de
        marcar a próxima reunião, e teoria fora do menu é teoria que ninguém lê. */
     { hash: '#/playbook', ico: '❓', nome: 'Método', render: V.playbook,
-      ajuda: 'A teoria inteira: como uma tarefa vira avanço, o que conta como evidência em cada uma das oito decisões e o que fazer em cada canal.' }
+      ajuda: 'A teoria inteira: como uma tarefa vira avanço, o que conta como evidência em cada uma das oito decisões e o que fazer em cada canal.' },
+    /* Logo abaixo do Método, que é o fim do menu: o caderninho não é uma
+       etapa do trabalho, é o que sobra dele. Fica onde a mão alcança sem
+       disputar lugar com as telas que movem a carteira. */
+    { hash: '#/notas', ico: '📝', nome: 'Notas rápidas', render: V.notasRapidas,
+      ajuda: 'O que você não pode esquecer, escrito ou ditado em uma linha. Só você vê, e cada anotação vira tarefa com um clique.' }
   ];
 
   /* Uma função do servidor pode faltar por dois motivos, e o navegador não
@@ -169,6 +174,11 @@
          servidor. Nenhuma das duas pode segurar o render. */
       if (rota.hash === '#/dados') { pintarUso(); pintarLeads(); pintarVersao(); }
       else pintarUsuariosNuvem();
+      /* O ditado vivia dentro de formulário, onde alguem sempre chamava
+         ligarVoz ao abrir o diálogo. Nas Notas o botão está na página, e
+         página nenhuma tinha esse gancho — sem esta linha o microfone é um
+         botão que não faz nada. */
+      if (rota.hash === '#/notas') U.ligarVoz(conteudo);
     }
 
     document.querySelectorAll('nav.tabs a').forEach(function (a) {
@@ -1012,7 +1022,11 @@
     /* O caminho que transforma um lead em conta, contato e negociação. Exposto
        porque é onde o nome da empresa é decidido, e foi lá que o nome da
        pessoa acabou virando razão social. */
-    __importarUmLead: function (lead, segmento) { return importarUmLead(lead, segmento); }
+    __importarUmLead: function (lead, segmento) { return importarUmLead(lead, segmento); },
+    /* O que a nota rápida consegue ler do próprio texto. Exposto porque é
+       a única parte da tela com regra de verdade, e regra que decide em qual
+       negócio uma tarefa vai cair precisa de teste. */
+    __palpiteDaNota: function (texto) { return palpiteDaNota(texto); }
   };
 
   const App = {
@@ -2863,6 +2877,10 @@
           origem: feita ? 'registrada' : 'planejada'
         });
         if (d.donoId) Store.atualizarTarefa(tarefa.id, { donoId: d.donoId });
+        /* Quem abriu esta tela a partir de outra coisa — hoje, uma nota rápida
+           — precisa saber que a tarefa existiu de verdade. Cancelar não chega
+           aqui, e é por isso que a nota só sai da lista depois. */
+        if (typeof o.aoCriar === 'function') o.aoCriar(tarefa, alvo);
         /* Tarefa a fazer também guarda o material: a proposta que vou enviar
            fica anexada ao negócio desde já. */
         if (!feita) {
@@ -2939,6 +2957,67 @@
       if (!t) return;
       if (!t.oportunidadeId) { Store.concluirTarefa(id, null, false, true); render(); return; }
       App.concluirComRelato(t.oportunidadeId, id);
+    },
+
+    /* ---------- Notas rápidas ---------- */
+
+    /* Enter anota, Shift+Enter pula linha. É a convenção de todo campo de
+       mensagem que existe, e aqui vale mais do que em qualquer lugar: o valor
+       da tela é anotar sem tirar a mão do teclado. */
+    teclaDaNota: function (ev) {
+      if (ev.key !== 'Enter' || ev.shiftKey) return;
+      ev.preventDefault();
+      App.novaNota();
+    },
+
+    novaNota: function () {
+      const campo = document.getElementById('nota-texto');
+      if (!campo) return;
+      const texto = campo.value.trim();
+      if (!texto) { campo.focus(); return; }
+      Store.criarNota(texto);
+      render();
+      /* De volta à caixa: quem anotou uma coisa quase sempre tem a segunda na
+         ponta da língua, e ter que clicar de novo perde a segunda. */
+      const novo = document.getElementById('nota-texto');
+      if (novo) novo.focus();
+    },
+
+    concluirNota: function (id, feita) {
+      Store.concluirNota(id, feita);
+      render();
+    },
+
+    excluirNota: function (id) {
+      Store.excluirNota(id);
+      render();
+    },
+
+    limparNotasFeitas: function () {
+      const feitas = Store.minhasNotas().filter(function (n) { return n.feita; });
+      if (!feitas.length) return;
+      if (!U.confirmar('Apagar ' + feitas.length + ' anotação(ões) já feita(s)?')) return;
+      feitas.forEach(function (n) { Store.excluirNota(n.id); });
+      render();
+    },
+
+    /* A ponte entre o caderninho e o método. A nota sozinha não move decisão
+       nenhuma — só tarefa concluída move. Aqui ela atravessa, levando junto o
+       que o app conseguiu reconhecer no próprio texto. */
+    notaVirarTarefa: function (id) {
+      const n = Store.nota(id);
+      if (!n) return;
+      const palpite = palpiteDaNota(n.texto);
+      App.novaTarefa(palpite.oportunidadeId || '', '', {
+        titulo: n.texto,
+        tipo: palpite.tipo,
+        contaId: palpite.contaId,
+        contatoId: palpite.contatoId,
+        situacao: 'afazer',
+        /* Só depois de a tarefa existir. Cancelar o formulário não pode
+           apagar a anotação — seria perder o único lugar onde ela estava. */
+        aoCriar: function () { Store.concluirNota(id, true); }
+      });
     },
 
     excluirTarefa: function (id) {
@@ -6081,6 +6160,106 @@
      Fica logo abaixo do destino porque a pergunta é a mesma: onde isto
      acontece, e com quem. E traz a porta de cadastrar, porque a pessoa nova
      costuma aparecer justamente na tarefa em que ela apareceu. */
+  /* ---------- o que a nota rápida sabe sobre a carteira ----------
+
+     "Ligar para o Carlos da Heineken" tem três coisas dentro: um canal, uma
+     pessoa e uma empresa. O app já conhece as três — estão no cadastro — e
+     encontrá-las é comparação de texto, não inteligência. Nenhuma chamada,
+     nenhum token, nada para dar errado quando o servidor da IA cai.
+
+     A regra que vale mais do que o acerto: na dúvida, não escolher. Preencher
+     o negocio errado é pior do que deixar em branco, porque o errado passa
+     despercebido e o branco não. Por isso tudo aqui exige UM único candidato;
+     dois viram nada. */
+  function semAcentoNota(t) {
+    return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  }
+
+  /* Palavras que aparecem no nome de metade das empresas do Brasil. Deixar
+     "industria" valer como pista faria "visitar a indústria" casar com a
+     primeira razão social da lista. */
+  const RUIDO_DE_RAZAO_SOCIAL = {
+    ltda: 1, 'sa': 1, 'eireli': 1, 'me': 1, 'epp': 1, 'industria': 1, 'industrias': 1,
+    comercio: 1, 'com': 1, 'ind': 1, 'servicos': 1, 'servico': 1, 'grupo': 1, 'group': 1,
+    'brasil': 1, 'brazil': 1, 'do': 1, 'da': 1, 'de': 1, 'dos': 1, 'das': 1, 'e': 1,
+    'agro': 1, 'agropecuaria': 1, 'alimentos': 1, 'holding': 1, 'participacoes': 1,
+    'distribuidora': 1, 'tecnologia': 1, 'sistemas': 1, 'solucoes': 1
+  };
+
+  function pistasDoNome(nome) {
+    return semAcentoNota(nome).replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/)
+      .filter(function (t) { return t.length >= 4 && !RUIDO_DE_RAZAO_SOCIAL[t]; });
+  }
+
+  function citaNoTexto(limpo, nome) {
+    const inteiro = semAcentoNota(nome).replace(/[^a-z0-9 ]+/g, ' ').trim();
+    if (inteiro.length >= 4 && limpo.indexOf(inteiro) !== -1) return true;
+    return pistasDoNome(nome).some(function (t) {
+      return new RegExp('(^|[^a-z0-9])' + t + '([^a-z0-9]|$)').test(limpo);
+    });
+  }
+
+  /* Verbo → canal. A ordem é a regra: "mandar e-mail marcando a reunião" é
+     um e-mail, e quem testa "reuniao" primeiro erra isso. */
+  const CANAIS_DA_NOTA = [
+    /* "e mail" com espaco, e nao "e-mail": o texto chega aqui com toda
+       pontuacao virada em espaco, e foi assim que "mandar e-mail" deixou o
+       canal em branco no primeiro teste. */
+    [/(^|[^a-z])(e ?-? ?mails?|emails?)([^a-z]|$)/, 'E-mail'],
+    [/(^|[^a-z])(whats|whatsapp|zap)([^a-z]|$)/, 'WhatsApp'],
+    [/(^|[^a-z])(linkedin|inmail)([^a-z]|$)/, 'LinkedIn'],
+    [/(^|[^a-z])(ligar|ligue|ligacao|telefonar|telefone|liga)([^a-z]|$)/, 'Telefonema'],
+    [/(^|[^a-z])(visitar|visita)([^a-z]|$)/, 'Visita'],
+    [/(^|[^a-z])(reuniao|call|agendar|marcar)([^a-z]|$)/, 'Reunião'],
+    [/(^|[^a-z])(proposta|orcamento)([^a-z]|$)/, 'Proposta'],
+    [/(^|[^a-z])(cobrar|retorno)([^a-z]|$)/, 'Cobrar retorno']
+  ];
+
+  function canalDaNota(limpo) {
+    const existentes = Store.nomesDoCatalogo('tiposTarefa');
+    for (let i = 0; i < CANAIS_DA_NOTA.length; i++) {
+      if (!CANAIS_DA_NOTA[i][0].test(limpo)) continue;
+      const alvo = CANAIS_DA_NOTA[i][1];
+      /* Só vale o que existe no catálogo desta empresa: devolver "Telefonema"
+         onde o select não tem essa opção deixa o campo em branco e a pessoa
+         achando que o app esqueceu. */
+      const achado = existentes.filter(function (n) {
+        return semAcentoNota(n) === semAcentoNota(alvo);
+      })[0];
+      if (achado) return achado;
+    }
+    return '';
+  }
+
+  function palpiteDaNota(texto) {
+    const limpo = ' ' + semAcentoNota(texto).replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+    const est = Store.dados();
+    const abertas = (est.oportunidades || []).filter(function (o) { return !o.desfecho; });
+
+    const contas = (est.contas || []).filter(function (c) { return citaNoTexto(limpo, c.nome); });
+    const contatos = (est.contatos || []).filter(function (c) { return citaNoTexto(limpo, c.nome); });
+
+    /* A pessoa manda mais do que a empresa: quem escreve "Carlos da Heineken"
+       quer falar com o Carlos. Quando os dois batem e discordam, o contato
+       ganha — e só se a empresa dele for uma das citadas, ou nenhuma for. */
+    let contato = contatos.length === 1 ? contatos[0] : null;
+    if (contato && contas.length && !contas.some(function (c) { return c.id === contato.contaId; })) {
+      contato = null;
+    }
+
+    let contaId = contato ? contato.contaId : (contas.length === 1 ? contas[0].id : '');
+    const daConta = contaId ? abertas.filter(function (o) { return o.contaId === contaId; }) : [];
+
+    return {
+      oportunidadeId: daConta.length === 1 ? daConta[0].id : '',
+      contaId: contaId || '',
+      contatoId: contato ? contato.id : '',
+      tipo: canalDaNota(limpo),
+      /* Para a tela dizer por que não preencheu, em vez de só não preencher. */
+      ambiguo: (daConta.length > 1) || (contas.length > 1 && !contato)
+    };
+  }
+
   function camposDoContatoDaTarefa(contaId, o) {
     return [
       { id: 'contatoId', rotulo: 'Com quem (contato)', tipo: 'select',

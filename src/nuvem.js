@@ -655,7 +655,10 @@
     { local: 'segmentos', remota: 'segmentos' },
     { local: 'tiposTarefa', remota: 'tipos_tarefa' },
     { local: 'fontes', remota: 'fontes' },
-    { local: 'sinais', remota: 'sinais' }
+    { local: 'sinais', remota: 'sinais' },
+    /* Notas rápidas viajam como tudo o mais. A diferença está na política do
+       banco, que só devolve as do próprio dono — o app não precisa saber. */
+    { local: 'notas', remota: 'notas' }
   ];
 
   /* camelCase no app, snake_case no Postgres: a conversão é mecânica. */

@@ -324,10 +324,22 @@
     return '<button type="button" class="btn ghost mini voz" data-voz="' + campoId + '">🎤 Ditar</button>';
   }
 
-  function ligarVoz(dlg) {
-    dlg.querySelectorAll('[data-voz]').forEach(function (botao) {
+  /* `raiz` era sempre um <dialog>, porque ditado só existia dentro de
+     formulário. As Notas Rápidas ditam numa tela inteira, sem caixa nenhuma —
+     daí o parâmetro virar "qualquer pedaço da página". E o campo passa a ser
+     procurado também por id: fora de formulário ninguém tem `name`.
+
+     A marca `data-voz-ligado` existe porque a tela das notas se repinta a
+     cada nota criada. Sem ela, o mesmo botão acumularia um ouvinte por
+     repintura e um clique abriria três microfones. */
+  function ligarVoz(raiz) {
+    raiz.querySelectorAll('[data-voz]').forEach(function (botao) {
+      if (botao.dataset.vozLigado) return;
+      botao.dataset.vozLigado = '1';
       botao.addEventListener('click', function () {
-        const campo = dlg.querySelector('[name="' + botao.dataset.voz + '"]');
+        const alvo = botao.dataset.voz;
+        const campo = raiz.querySelector('[name="' + alvo + '"]') || document.getElementById(alvo);
+        if (!campo) return;
         const Reconhecimento = global.SpeechRecognition || global.webkitSpeechRecognition;
         const rec = new Reconhecimento();
         rec.lang = 'pt-BR';
@@ -763,7 +775,7 @@
     },
     esc: esc, moeda: moeda, compacto: compacto, data: data, numero: numero,
     numeroDigitado: numeroDigitado, paraCampoMoeda: paraCampoMoeda,
-    formulario: formulario, ficha: ficha, confirmar: confirmar, barra: barra, vozDisponivel: vozDisponivel,
+    formulario: formulario, ficha: ficha, confirmar: confirmar, barra: barra, vozDisponivel: vozDisponivel, botaoVoz: botaoVoz, ligarVoz: ligarVoz,
     assistenteAtivo: assistenteAtivo, marcarSugerido: marcarSugerido, limparSugestao: limparSugestao
   };
 })(window);

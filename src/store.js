@@ -124,7 +124,11 @@
          grudado na PESSOA e muitas vezes antes de existir negócio nenhum —
          guardá-lo dentro da oportunidade seria perder justamente o sinal que
          chega cedo, que é o mais valioso. */
-      sinais: []
+      sinais: [],
+      /* O caderninho. Não é tarefa e não vira uma: tarefa tem dono, prazo,
+         tipo e oportunidade, e exigir tudo isso de "ligar para o Carlos" é o
+         que faz a pessoa anotar no papel e o app nunca ficar sabendo. */
+      notas: []
     };
   }
 
@@ -531,11 +535,11 @@
     const ctx = contexto();
     const A = global.IADAuth;
     const u = ctx.usuario;
-    const colecoes = ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos', 'fontes', 'sinais'];
+    const colecoes = ['contas', 'contatos', 'oportunidades', 'tarefas', 'segmentos', 'tiposTarefa', 'produtos', 'fontes', 'sinais', 'notas'];
 
     const linhas = colecoes.map(function (nome) {
       const todos = estado[nome] || [];
-      const comDono = ['contas', 'contatos', 'oportunidades', 'tarefas'].indexOf(nome) !== -1;
+      const comDono = ['contas', 'contatos', 'oportunidades', 'tarefas', 'notas'].indexOf(nome) !== -1;
       return {
         colecao: nome,
         guardados: todos.length,
@@ -672,8 +676,101 @@
          segue a mesma regra do contato a que ele pertence. Um vendedor não
          enxerga o comportamento das contas do colega. */
       sinais: porDono(estado.sinais),
+      /* Nem por empresa nem por dono: só minhas. `porDono` deixaria o gestor
+         ler o caderninho da equipe, que é exatamente o que esta tela promete
+         não fazer. */
+      notas: ordenarNotas((estado.notas || []).filter(minhaNota)),
       config: estado.config
     };
+  }
+
+  /* ---------- notas rápidas ----------
+
+     Tudo aqui é de propósito mais pobre do que uma tarefa. Uma nota tem texto
+     e um estado: feita ou não. Não tem prazo, não tem tipo, não tem dono que
+     não seja quem escreveu. Essa pobreza é a funcionalidade: o que compete
+     com o Post-it não é um formulário melhor, é não ter formulário.
+
+     A nota é privada, e privada de verdade: nem gestor nem administrador
+     enxergam. A regra vale no banco (correcao-23) e vale aqui. Um rascunho
+     que o chefe lê é um rascunho onde ninguém escreve o que realmente
+     precisa lembrar — e aí a tela vira mais um lugar vazio. */
+  function minhaNota(n) {
+    const ctx = contexto();
+    if (!ctx.usuario) return false;
+    return String(n.donoId || '') === String(ctx.usuario.id);
+  }
+
+  /* Abertas primeiro, e dentro de cada grupo a mais nova em cima: o que eu
+     acabei de anotar é o que eu ainda não fiz. */
+  function ordenarNotas(lista) {
+    return lista.slice().sort(function (a, b) {
+      if (!!a.feita !== !!b.feita) return a.feita ? 1 : -1;
+      return String(b.criadoEm || '').localeCompare(String(a.criadoEm || '')) ||
+             String(b.id || '').localeCompare(String(a.id || ''));
+    });
+  }
+
+  function minhasNotas() {
+    return ordenarNotas((estado.notas || []).filter(minhaNota));
+  }
+
+  function notasAbertas() {
+    return minhasNotas().filter(function (n) { return !n.feita; });
+  }
+
+  function nota(id) {
+    return (estado.notas || []).filter(function (n) { return n.id === id && minhaNota(n); })[0] || null;
+  }
+
+  /* `oportunidadeId` nasce vazio quase sempre, e é assim que tem que ser: a
+     nota vem antes de saber a que negócio ela pertence. Quando o app
+     reconhece um nome no texto, ele preenche — mas depois, e sem perguntar. */
+  function criarNota(texto, oportunidadeId) {
+    const limpo = String(texto || '').trim();
+    if (!limpo) return null;
+    const base = Object.assign({
+      id: uid('not'),
+      texto: limpo,
+      feita: false,
+      oportunidadeId: oportunidadeId || null,
+      /* Instante inteiro, e não `hoje()`: cinco anotações do mesmo dia com a
+         mesma data empatam, e empate aqui é lista fora de ordem. */
+      criadoEm: new Date().toISOString()
+    }, carimbo(true));
+    estado.notas = estado.notas || [];
+    estado.notas.push(base);
+    salvar();
+    return base;
+  }
+
+  function atualizarNota(id, dados) {
+    const n = nota(id);
+    if (!n) return null;
+    if (dados.texto != null) {
+      const limpo = String(dados.texto).trim();
+      if (!limpo) return n;      /* apagar o texto todo é excluir, e isso tem botão */
+      n.texto = limpo;
+    }
+    if (dados.feita != null) n.feita = !!dados.feita;
+    if (dados.oportunidadeId !== undefined) n.oportunidadeId = dados.oportunidadeId || null;
+    salvar();
+    return n;
+  }
+
+  /* Com argumento, para o mesmo botão servir de desfazer. Marcar por engano e
+     não ter volta é o jeito mais rápido de a pessoa parar de marcar. */
+  function concluirNota(id, feita) {
+    return atualizarNota(id, { feita: feita === undefined ? true : !!feita });
+  }
+
+  function excluirNota(id) {
+    const n = nota(id);
+    if (!n) return false;
+    estado.notas = (estado.notas || []).filter(function (x) { return x.id !== id; });
+    registrarExclusao('notas', id);
+    salvar();
+    return true;
   }
 
   function carimbo(comDono) {
@@ -1914,6 +2011,7 @@
     pontuar, registrarEvento, removerEvento, definirCompromisso, definirInsight,
     sinal, sinais, criarSinal, registrarSinalUnico, sinalExterno,
     sinaisDoContato, sinaisDaConta, sinaisDaOportunidade, excluirSinal, promoverSinal,
+    minhasNotas, notasAbertas, nota, criarNota, atualizarNota, concluirNota, excluirNota,
     registrarRecusa, recusas, recusasPorCampanha, limparRecusas, excluirRecusa,
     descartarLead, foiDescartado, descartes, desfazerDescarte, chaveDoLead,
     criarTarefa, atualizarTarefa, adiarTarefa, concluirTarefa, excluirTarefa,

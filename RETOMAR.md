@@ -1,12 +1,12 @@
-# Onde paramos — 15/09/2026, fim da noite
+# Onde paramos — 21/09/2026
 
 Este arquivo existe para a próxima sessão começar sabendo o que já aconteceu.
 Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v200**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v200, o aparelho
+Publicado agora: **v205**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v205, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -397,6 +397,77 @@ com nada marcado. Marcar 99 e a seleção sobreviver a um refresh seria armadilh
 duas negociações de verdade. Filtrar por campanha, marcar os 51, mover com
 motivo e prazo, conferir que **ninguém foi encerrado**, devolver três, e que a
 passagem ficou no `historicoNutricao`.
+
+## 0-X. Notas rápidas: o caderninho — v205, 21/09
+
+*"Debaixo da opção método, coloque uma opção chamada Notas Rápidas, onde o
+vendedor poderá digitar ou falar algo rápido que ele não pode esquecer... Por
+exemplo: Ligar para o Carlos da Heinenker."*
+
+O app tinha um lugar para tudo, menos para a frase que sobra da ligação. Para
+guardar *"ligar para o Carlos da Heineken"* era preciso empresa, negociação,
+canal, decisão alvo e vencimento — cinco campos para uma frase, que é o motivo
+de a frase acabar no papel. E papel é onde as coisas somem.
+
+`#/notas`, logo abaixo do Método. Uma caixa, um botão **🎤 Ditar**, uma lista.
+Enter anota, Shift+Enter pula linha, o cursor volta para a caixa. Nada mais,
+de propósito: o que compete com o Post-it não é um formulário melhor, é não
+ter formulário.
+
+**Privada de verdade.** `correcao-23-notas-rapidas.sql` é a única tabela do
+banco sem `or sou_admin()`: só `dono_id = auth.uid()`, no `using` e no `with
+check`. Um rascunho que o chefe lê é um rascunho onde ninguém escreve o que
+precisa mesmo lembrar. Provado num Postgres 16 de verdade, com papel não
+superusuário e dois donos: o `select` devolve só a minha, o `update` na do
+colega afeta 0 linhas, e o `insert` em nome dele levanta *"new row violates
+row-level security policy"*. `minhasNotas()` e `dados().notas` repetem a regra
+no app — nem `visivel(r, true)`, que deixaria o gestor entrar.
+
+**A única parte esperta: "Virar tarefa".** Anotação não move decisão nenhuma;
+quem move as oito é tarefa concluída. O botão atravessa a nota para o método
+levando o que `palpiteDaNota()` leu do próprio texto: a conta ("Heineken"), a
+pessoa ("Carlos") e o canal (o verbo — "ligar" → Telefonema, "mandar e-mail"
+→ E-mail). **Sem IA, sem chamada, sem custo:** é comparação de texto, e
+continua funcionando com o assistente fora do ar.
+
+A regra que vale mais que o acerto: **na dúvida, não escolher.** Dois nomes
+que batem, ou duas negociações na mesma conta, e o formulário abre em branco.
+Preencher o negócio errado é pior que deixar vazio — o errado passa
+despercebido. Palavras que aparecem em metade das razões sociais (indústria,
+comércio, Ltda, Brasil, agro) não valem como pista, senão *"visitar a
+indústria"* casa com a primeira conta da lista.
+
+A nota só sai da lista **depois** que a tarefa existe (`aoCriar`, novo gancho
+de `App.novaTarefa`). Cancelar não pode apagar o único lugar onde ela estava.
+
+**Dois consertos que caíram junto:**
+
+- `ligarVoz` só funcionava dentro de `<dialog>` e só achava campo por
+  `[name=]`. Agora aceita qualquer pedaço da página e também acha por `id`, e
+  marca o botão com `data-voz-ligado` — a tela se repinta a cada nota, e sem
+  a marca um clique abriria três microfones.
+- **O Hoje mentia.** Desde a Fila (v203) os leads sem evidência saem da fila
+  para a triagem; quem tinha cem deles e nenhum negócio começado via *"Nenhum
+  negócio aberto. Toda a carteira está encerrada"* — frase falsa na única
+  tela que se abre de manhã. Agora a fila vazia com triagem cheia mostra a
+  triagem, que é exatamente o trabalho que existe.
+
+**42 testes** (`notas`): a rota logo depois do Método, anotar/Enter/Shift+Enter,
+vazio não cria, feita e desfazer, o palpite nos quatro casos (acerta, acerta
+apesar de "Alimentos", não escolhe no ambíguo, não inventa sem pista), o
+formulário pré-preenchido, cancelar preserva a nota, confirmar a consome, a
+linha no Hoje aparece e some, e as três provas de privacidade. Mais o manual
+(`m-notas`), a linha em `TELAS` e o resumo no índice — que agora tem 26 itens.
+
+**Falta o Alexandre fazer:** rodar `nuvem/correcao-23-notas-rapidas.sql` no SQL
+Editor do Supabase. Sem ela as notas vivem só na memória da aba e morrem com
+ela.
+
+**Onde está:** `notasRapidas()` e `linhaDasNotas()` em `src/views.js`;
+`palpiteDaNota()` e os handlers em `src/app.js`; `minhasNotas`/`criarNota`/
+`concluirNota`/`excluirNota` em `src/store.js`; `ligarVoz` em `src/ui.js`.
+
+---
 
 ## 0-W. O índice do manual com resumo no balão — v204, 20/09
 

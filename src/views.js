@@ -339,8 +339,21 @@
 
     const G = global.IADGraficos;
     const foco = E.fila(est.oportunidades, est.tarefas);
+    /* Fila vazia não significa carteira encerrada. Desde que os leads que
+       nunca produziram evidência saíram da fila, quem tem cem deles e nenhum
+       negócio começado via “Toda a carteira está encerrada” — uma frase falsa
+       na única tela que a pessoa abre de manhã. Aí a resposta certa é a
+       triagem, que é exatamente o trabalho que existe. */
     if (!foco.itens.length) {
-      return '<h1>Hoje</h1><div class="card"><div class="vazio">Nenhum negócio aberto. Toda a carteira está encerrada.</div></div>';
+      return '<h1>Hoje</h1>' +
+        linhaDasNotas() +
+        linhaDaTriagem(foco.triagem) +
+        '<div class="card"><div class="vazio">' +
+        (foco.triagem.length
+          ? 'Nada na fila: nenhum negócio da carteira produziu evidência do cliente ainda. ' +
+            'O trabalho de hoje é a triagem lá em cima.'
+          : 'Nenhum negócio aberto. Toda a carteira está encerrada.') +
+        '</div></div>';
     }
 
     const balde = function (i) { return i.urgencia >= 3 ? 3 : (i.urgencia === 2 ? 2 : 'resto'); };
@@ -375,6 +388,7 @@
         ? 'Primeiro da fila: <strong>' + esc(foco.itens[0].resumo.op.titulo) + '</strong> — ' +
           esc(foco.itens[0].motivo)
         : 'Nada na fila hoje.') + '</p>' +
+      linhaDasNotas() +
       linhaDaTriagem(foco.triagem) +
       responderamNoWhatsapp() +
       '<div class="tiles">' + cartoesResumo +
@@ -4752,6 +4766,8 @@
      'O outro corte: o DIA, com trinta negócios ao mesmo tempo. A rotina hora a hora — o que abrir de manhã, o que ler antes de cada conversa, o que registrar logo depois — e o que o sistema devolve em troca.'],
     ['m-fila', 'A Fila: o que fazer primeiro',
      'A ordem em que a tela Hoje coloca a carteira e o porquê de cada posição; com quem falar para provar a decisão que falta, decisão por decisão; e por que os leads que nunca produziram evidência ficam fora da fila.'],
+    ['m-notas', 'Notas rápidas: o caderninho',
+     'Onde guardar a frase que você não pode esquecer, escrita ou ditada, sem preencher formulário nenhum. O que o app reconhece sozinho no texto, por que a anotação não conta como tarefa, e por que ninguém além de você lê esta tela.'],
     ['m-lh', 'A integração com o Linked Helper',
      'Como a prospecção do LinkedIn chega ao IAD. Por que existe uma ponte no meio, os dois endereços que quase todo mundo troca, as duas chaves e o balde separado por empresa. É a página para abrir quando os leads não aparecem.'],
     ['m-sinais', 'Sinais: o que o comprador faz sozinho',
@@ -4820,6 +4836,8 @@
      'Contas, contatos, oportunidades, e os catálogos: segmentos, tipos de tarefa, produtos, fontes e usuários. Produtos só o gestor cadastra.'],
     ['🌱', 'Nutrição', 'Quem eu tiro da previsão agora, e quem já pode voltar.',
      'Duas abas — Carteira Ativa e Leads em Nutrição — com os mesmos filtros e o trânsito em lote entre elas. Nutrição não encerra ninguém: tira da previsão e mantém na agenda, com data para voltar a olhar.'],
+    ['📝', 'Notas rápidas', 'O que eu não posso esquecer.',
+     'Uma caixa, um botão de ditar e uma lista. É o caderninho, não a agenda: anotação não tem prazo, não tem dono e não entra em relatório nenhum. Quando uma delas virar compromisso, o botão "Virar tarefa" a atravessa para o método, já com o negócio e a pessoa que o texto citava.'],
     ['⚙️', 'Configuração', 'Instalação, dados, nuvem, IA e diagnóstico.',
      'Nove blocos, detalhados adiante neste manual.'],
     ['❓', 'Método', 'Por que o sistema funciona assim.',
@@ -5335,6 +5353,67 @@
       '<p class="small muted" style="margin-top:10px">A Fila não usa IA e não custa nada: é ' +
       'aritmética sobre o que já está registrado. Ela não inventa prioridade — ela mostra a que ' +
       'os seus próprios dados já indicavam, e que ninguém tinha tempo de calcular todo dia.</p>' +
+      '</div>';
+  }
+
+  /* ---------- o caderninho, no manual ----------
+     A seção existe menos para ensinar a usar (não há o que ensinar: é uma
+     caixa de texto) e mais para dizer o que ela NÃO é. Sem isso, em um mês a
+     tela vira uma segunda lista de tarefas paralela à de verdade — e aí
+     existem dois lugares para procurar a mesma coisa, que é o mesmo que não
+     ter lugar nenhum. */
+  function manualDasNotas() {
+    return '<div class="card" id="m-notas"><h2>Notas rápidas: o caderninho</h2>' +
+
+      '<p class="small">Você desliga o telefone com uma frase na cabeça: <em>“ligar para o ' +
+      'Carlos da Heineken”</em>. Ela não é uma tarefa ainda — não tem prazo, não tem canal e ' +
+      'talvez nem seja daquele negócio. Se o único lugar para guardá-la fosse um formulário com ' +
+      'empresa, negociação, canal, decisão alvo e vencimento, ela acabaria num papel. E papel é ' +
+      'onde as coisas somem.</p>' +
+
+      '<p class="small">Por isso esta tela não pergunta nada. Tem uma caixa, um botão ' +
+      '<strong>🎤 Ditar</strong> e uma lista. <strong>Enter</strong> anota, ' +
+      '<strong>Shift+Enter</strong> pula linha, e o cursor volta para a caixa — quem anotou uma ' +
+      'coisa quase sempre tem a segunda na ponta da língua.</p>' +
+
+      '<h3>Só você lê</h3>' +
+      '<p class="small">Nem gestor nem administrador enxergam as suas notas. Não é detalhe de ' +
+      'tela: está escrito na permissão do banco, que devolve apenas as do próprio dono. Um ' +
+      'rascunho que o chefe lê é um rascunho onde ninguém escreve o que precisa mesmo lembrar — ' +
+      'e aí a tela vira mais um lugar vazio.</p>' +
+
+      '<h3>Virar tarefa: o que o app reconhece sozinho</h3>' +
+      '<p class="small">Anotação não move decisão nenhuma. Quem move as oito é tarefa concluída, ' +
+      'e é para isso que serve o botão <strong>Virar tarefa</strong>: a nota atravessa para o ' +
+      'método e sai da lista. O que ela leva junto sai do próprio texto:</p>' +
+      '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' +
+      '<tr><td class="rotulo-manual"><strong>A empresa</strong></td><td><strong>Nome que bate com ' +
+      'uma conta do cadastro</strong><span class="tiny muted">“Heineken” acha a conta. Palavras ' +
+      'que aparecem em metade das razões sociais — indústria, comércio, Ltda, Brasil — não ' +
+      'valem como pista.</span></td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>A pessoa</strong></td><td><strong>Nome que bate com um ' +
+      'contato</strong><span class="tiny muted">“Carlos” acha o contato, e o contato manda mais do ' +
+      'que a empresa: quem escreve o nome da pessoa quer falar com ela.</span></td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>O canal</strong></td><td><strong>O verbo</strong>' +
+      '<span class="tiny muted">“ligar” vira Telefonema, “mandar e-mail” vira E-mail, “visitar” ' +
+      'vira Visita. Só usa canais que existem no seu catálogo de tipos de tarefa.</span></td></tr>' +
+      '</tbody></table></div>' +
+
+      '<p class="small"><strong>Na dúvida, ele não escolhe.</strong> Se o nome bate com duas ' +
+      'contas, ou se a empresa tem duas negociações abertas, a tarefa abre em branco e você ' +
+      'escolhe. Preencher o negócio errado é pior do que deixar vazio: o errado passa ' +
+      'despercebido, o vazio não. E isto aqui não é IA — é comparação de texto, sem chamada ' +
+      'nenhuma, sem custo e sem depender de o assistente estar no ar.</p>' +
+
+      '<p class="small muted">A anotação só sai da lista depois que a tarefa existe de verdade. ' +
+      'Cancelar o formulário não apaga nada — seria perder o único lugar onde ela estava.</p>' +
+
+      '<h3>O que ela não é</h3>' +
+      '<p class="small">Não é uma segunda lista de tarefas. Nota não tem prazo, não aparece na ' +
+      'Fila do Hoje como urgência, não entra em relatório, não conta para o IAD e não avisa ' +
+      'ninguém. O único lugar onde ela aparece fora daqui é uma linha discreta no alto do ' +
+      '<strong>Hoje</strong>, dizendo quantas estão em aberto — porque caderninho que ninguém ' +
+      'vê no começo do dia é caderninho perdido.</p>' +
       '</div>';
   }
 
@@ -6359,6 +6438,96 @@
       '</div>';
   }
 
+  /* ---------------- Notas rápidas ----------------
+
+     O caderninho que todo vendedor tem, e que o CRM nunca teve. Ele sai da
+     ligação com uma frase na cabeça — "ligar para o Carlos da Heineken" — e o
+     app só sabia oferecer um formulário de tarefa com negócio, tipo, decisão
+     alvo e vencimento. Cinco campos para guardar uma frase é o motivo de a
+     frase acabar num papel, e o papel é onde ela morre.
+
+     Aqui tem uma caixa, um botão de ditar e uma lista. Nada mais, de
+     propósito. O que existe de inteligente é o "Virar tarefa": quando a frase
+     cita alguém que está no cadastro, o formulário já abre com o negócio, a
+     pessoa e o canal certos. Sem IA e sem chamada nenhuma — é comparação de
+     texto. A ambiguidade resolve-se do lado seguro: quando duas contas batem,
+     o app não escolhe por você, só abre a tarefa em branco. */
+  function notasRapidas() {
+    const minhas = Store.minhasNotas();
+    const abertas = minhas.filter(function (n) { return !n.feita; });
+    const feitas = minhas.filter(function (n) { return n.feita; });
+
+    const caixa =
+      '<div class="card" style="padding:14px 16px;margin-bottom:12px">' +
+        '<div class="row" style="align-items:flex-start;gap:8px">' +
+          '<textarea id="nota-texto" name="nota-texto" rows="2" style="flex:1;min-height:52px"' +
+          ' placeholder="Ligar para o Carlos da Heineken"' +
+          ' onkeydown="App.teclaDaNota(event)"></textarea>' +
+        '</div>' +
+        '<div class="row" style="margin-top:8px">' +
+          '<button class="btn alt" onclick="App.novaNota()">Anotar</button>' +
+          U.botaoVoz('nota-texto') +
+          '<span class="espaco"></span>' +
+          '<span class="tiny muted">Enter anota. Shift+Enter pula linha.</span>' +
+        '</div>' +
+      '</div>';
+
+    const linha = function (n) {
+      const op = n.oportunidadeId ? Store.oportunidade(n.oportunidadeId) : null;
+      const conta = op ? Store.conta(op.contaId) : null;
+      return '<div class="card" style="padding:10px 14px;margin-bottom:6px' +
+        (n.feita ? ';opacity:.55' : '') + '">' +
+        '<div class="row" style="align-items:flex-start">' +
+          '<button class="btn ghost mini" onclick="App.concluirNota(\'' + n.id + '\',' + (n.feita ? 'false' : 'true') + ')"' +
+          ' aria-label="' + (n.feita ? 'Reabrir' : 'Marcar como feita') + '">' + (n.feita ? '↩' : '✓') + '</button>' +
+          '<span style="flex:1' + (n.feita ? ';text-decoration:line-through' : '') + '">' + esc(n.texto) +
+            (op ? '<span class="tiny muted"> · ' + esc((conta && conta.nome) || op.titulo) + '</span>' : '') +
+          '</span>' +
+          '<span class="espaco"></span>' +
+          (n.feita ? '' :
+            '<button class="btn ghost mini" onclick="App.notaVirarTarefa(\'' + n.id + '\')"' +
+            ajudaComLinhas('Virar tarefa',
+              'A nota vira uma tarefa de verdade — com negócio, prazo e canal — e sai daqui.',
+              [['O que ele preenche sozinho', 'Se o texto cita uma empresa ou uma pessoa do cadastro, o negócio e o contato já vêm escolhidos.'],
+               ['O canal', 'Verbos como "ligar", "mandar e-mail" e "visitar" viram o tipo da tarefa.'],
+               ['Quando não dá', 'Nome que bate com duas contas abre a tarefa em branco: escolher por você seria errar em silêncio.']]) +
+            '>Virar tarefa</button>') +
+          '<button class="btn ghost mini" onclick="App.excluirNota(\'' + n.id + '\')" aria-label="Excluir">✕</button>' +
+        '</div>' +
+      '</div>';
+    };
+
+    const listaAbertas = abertas.length
+      ? abertas.map(linha).join('')
+      : '<div class="card"><div class="vazio">Nada anotado. Escreva ou dite acima.</div></div>';
+
+    const listaFeitas = feitas.length
+      ? '<h3 style="margin-top:18px">Feitas <span class="pill">' + feitas.length + '</span>' +
+        ' <button class="btn ghost mini" onclick="App.limparNotasFeitas()">Limpar</button></h3>' +
+        feitas.map(linha).join('')
+      : '';
+
+    return '<div class="row"><h1>Notas rápidas</h1>' +
+      (abertas.length ? '<span class="pill">' + abertas.length + '</span>' : '') + '</div>' +
+      '<p class="muted small">O que você não pode esquecer, do jeito que sai da sua cabeça. ' +
+      'Só você vê — nem gestor nem administrador leem esta tela.</p>' +
+      caixa + listaAbertas + listaFeitas;
+  }
+
+  /* A mesma forma da linha de triagem: uma frase discreta no alto do Hoje. Se
+     o que está anotado não aparece onde o dia começa, o caderninho vira mais
+     uma tela que ninguém abre. */
+  function linhaDasNotas() {
+    const abertas = Store.notasAbertas();
+    if (!abertas.length) return '';
+    return '<div class="card" style="padding:10px 14px;margin-bottom:10px">' +
+      '<div class="row"><span class="pill">' + abertas.length + '</span>' +
+      '<span class="small">anotação(ões) sua(s) em aberto: <strong>' + esc(abertas[0].texto) + '</strong>' +
+      (abertas.length > 1 ? ' e mais ' + (abertas.length - 1) : '') + '</span>' +
+      '<span class="espaco"></span>' +
+      '<button class="btn ghost mini" onclick="location.hash=\'#/notas\'">Ver →</button></div></div>';
+  }
+
   function playbook() {
     const dims = P.DIMENSOES.map(function (d) {
       const canais = P.CANAIS.map(function (c) {
@@ -6413,6 +6582,7 @@
       manualDoCaminho() +
       manualDoDia() +
       manualDaFila() +
+      manualDasNotas() +
       manualDoLinkedHelper() +
       manualDosSinais() +
       manualDoEmail() +
@@ -7831,7 +8001,7 @@
 
   global.IADViews = {
     semServidor,
-    hoje, painel, pipeline, tarefas, cockpit, revisao, contas, cadastros, nutricao, playbook, dados, itemArquivo, listaLeads,
+    hoje, painel, pipeline, tarefas, cockpit, revisao, contas, cadastros, nutricao, notasRapidas, playbook, dados, itemArquivo, listaLeads,
     revisaoDaImportacao, recusaDoCliente, resumoDaLeitura, planoDaIA, definirPlano, planoGuardado,
     marcarLendo, estaLendo, revisaoDasNotas, respostaDaConversa,
     conversas, definirConversa, conversaAberta: function () { return conversaAberta; },
