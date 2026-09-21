@@ -1143,6 +1143,20 @@
 
   let modoPipeline = 'lista';
 
+  /* ---------------- Seleção em lote no Pipeline ----------------
+
+     A triagem em lote já existia, mas só na tela de Nutrição — e quem está
+     olhando o Pipeline e vê cinco negócios que não vão a lugar nenhum
+     precisava sair da tela, achar cada um de novo numa lista diferente e só
+     então mover. Duas telas para uma decisão é uma decisão que não acontece.
+
+     `null` é modo normal; um objeto é modo seleção com os ids marcados. Mora
+     na memória e morre com a aba, como toda escolha de tela — seleção que
+     sobrevive ao recarregamento é seleção que a pessoa esqueceu que fez. */
+  let selecaoPipeline = null;
+
+  function podeIrParaNutricao(op) { return !op.desfecho && !op.nutricao; }
+
   /* ---------------- Pipeline: a barra de filtros ----------------
 
      Quem vê o quê é regra de negócio, não de tela, e já está no Store: o
@@ -1558,7 +1572,12 @@
           ? ' <button class="link" onclick="App.pipelineLimpar(\'tudo\')">Limpar os filtros</button>'
           : '') + '</div>';
 
-    return cabecalhoPipeline(filtros) + barraDoPipeline(resumos, total) + corpo;
+    /* Só na lista. No kanban o cartão já carrega o arrasto, e um clique que
+       às vezes abre, às vezes marca e às vezes arrasta é um clique que
+       ninguém confia. */
+    const selecao = modoPipeline === 'lista' ? barraDeSelecao(resumos) : '';
+
+    return cabecalhoPipeline(filtros) + barraDoPipeline(resumos, total) + corpo + selecao;
   }
 
   /* O recorte do administrador não é um filtro da barra: mora no menu do
@@ -1872,11 +1891,74 @@
       partes.join(' ') + ' Abra o negócio na aba Decisão para ver o que fazer em cada uma.');
   }
 
+  /* O botão do canto inferior direito. Fora da barra de filtros de propósito:
+     a barra responde “que negócios eu vejo?” e isto responde “o que eu faço com
+     eles?” — e flutuando ele continua ao alcance do polegar depois de rolar
+     sessenta cartões, que é exatamente quando a vontade de triar aparece. */
+  function barraDeSelecao(resumos) {
+    const elegiveis = resumos.filter(function (r) { return podeIrParaNutricao(r.op); });
+
+    if (!selecaoPipeline) {
+      if (!elegiveis.length) return '';
+      /* O espaçador existe porque a barra é `fixed` e não ocupa lugar no
+         fluxo: sem ele o último cartão da lista fica embaixo dela, e o
+         último cartão é justamente um dos que a pessoa veio marcar. */
+      return '<div class="espaco-flutua"></div><div class="flutua-acoes">' +
+        '<button class="btn alt" onclick="App.selecionarNoPipeline()"' +
+        ajudaComLinhas('Selecionar várias',
+          'Marque os negócios que ainda não estão prontos e mande todos para nutrição de uma vez.',
+          [['O que é nutrição', 'Sai da previsão e continua na agenda, com motivo e data para voltar a olhar. Não encerra ninguém.'],
+           ['Motivo e data', 'Pedidos uma vez só, e valem para o lote inteiro.'],
+           ['Volta sozinho', 'Qualquer evidência nova do cliente devolve o negócio à carteira sem você fazer nada.']]) +
+        '>☑ Selecionar várias</button></div>';
+    }
+
+    const marcadas = elegiveis.filter(function (r) { return selecaoPipeline[r.op.id]; });
+    const todasMarcadas = elegiveis.length && marcadas.length === elegiveis.length;
+    const valor = marcadas.reduce(function (t, r) { return t + (r.op.valor || 0); }, 0);
+
+    return '<div class="espaco-flutua"></div><div class="flutua-acoes selecionando">' +
+      '<span class="conta">' + marcadas.length + ' de ' + elegiveis.length +
+      (valor ? ' · ' + U.compacto(valor) : '') + '</span>' +
+      '<button class="btn ghost mini" onclick="App.marcarTodosNoPipeline()">' +
+      (todasMarcadas ? 'Desmarcar' : 'Marcar as ' + elegiveis.length) + '</button>' +
+      '<button class="btn mini"' + (marcadas.length ? '' : ' disabled') +
+      ' onclick="App.nutrirSelecionadas()">Mover ' + (marcadas.length || '') + ' para nutrição →</button>' +
+      '<button class="btn ghost mini" onclick="App.selecionarNoPipeline(false)">Cancelar</button>' +
+      '</div>';
+  }
+
   function cardOportunidade(r) {
     const comp = r.compromisso;
-    return '<button class="item g-' + r.classe.id + (r.tarefasAtrasadas ? ' com-atraso' : '') +
-      '" onclick="App.abrir(\'' + r.op.id + '\')">' +
-      '<div class="row"><span class="tit"' +
+
+    /* Em modo seleção o cartão inteiro vira o alvo do clique, e não uma
+       caixinha de 14 pixels no canto. Duas razões: o cartão já é um
+       <button>, e enfiar outro controle clicável dentro dele seria HTML
+       inválido; e no celular acertar a caixinha é justamente o que faz
+       ninguém triar. */
+    const selecionando = !!selecaoPipeline;
+    const elegivel = podeIrParaNutricao(r.op);
+    const marcada = selecionando && !!selecaoPipeline[r.op.id];
+
+    const classes = 'item g-' + r.classe.id + (r.tarefasAtrasadas ? ' com-atraso' : '') +
+      (selecionando ? ' selecionavel' : '') + (marcada ? ' selecionada' : '') +
+      (selecionando && !elegivel ? ' inelegivel' : '');
+
+    const acao = !selecionando
+      ? 'App.abrir(\'' + r.op.id + '\')'
+      : (elegivel ? 'App.marcarNoPipeline(\'' + r.op.id + '\')' : '');
+
+    const marca = selecionando
+      ? '<span class="marca-selecao' + (marcada ? ' on' : '') + '"' +
+        (elegivel ? '' : ajuda('Não dá para mover',
+          r.op.nutricao ? 'Já está em nutrição. Para devolver à carteira, use o Processo de Nutrição.'
+                        : 'Negócio encerrado. Reabra antes, se for o caso.')) +
+        '>' + (elegivel ? (marcada ? '✓' : '') : '—') + '</span>'
+      : '';
+
+    return '<button class="' + classes + '" onclick="' + acao + '"' +
+      (selecionando && !elegivel ? ' disabled' : '') + '>' +
+      '<div class="row">' + marca + '<span class="tit"' +
         ajuda(r.classe.rotulo, r.classe.desc) + '>' + esc(r.op.titulo) + '</span>' +
       '<span class="espaco"></span>' +
       '<span class="pill navy"' + ajudaDoValor(r.op) + '>' + U.compacto(r.op.valor) + '</span></div>' +
@@ -4117,6 +4199,11 @@
      página tem de começar com nada marcado. Marcar 99 negócios e a seleção
      sobreviver a um refresh seria uma armadilha — a pessoa clicaria em mover
      achando que marcou três. */
+  /* Sair do Pipeline desliga a seleção. Voltar horas depois e achar quarenta
+     cartões marcados por alguém que era você de manhã é a receita para mover em
+     lote sem querer. */
+  function esquecerSelecaoDoPipeline() { selecaoPipeline = null; }
+
   const nutri = {
     aba: 'ativa',
     marcadosPipeline: {}, marcadosNutricao: {},
@@ -4851,7 +4938,7 @@
     ['m-potencial', 'Potencial: vale a primeira hora?',
      'A pergunta que vem antes do IAD, para quando você tem cem leads e IAD 0 em todos. As quatro faixas, as duas contas que as formam (perfil e interesse), de onde sai cada ponto e por que nada disso mexe no índice.'],
     ['m-nutricao', 'O Processo de Nutrição: triar cem de uma vez',
-     'A tela onde se decide em lote quem sai da previsão e quem volta: as duas abas, os filtros que valem para as duas, a ordem por Potencial, o motivo e a data pedidos uma vez para o lote todo — e por que nada disso encerra ninguém.'],
+     'A tela onde se decide em lote quem sai da previsão e quem volta: as duas abas, os filtros que valem para as duas, a ordem por Potencial, o motivo e a data pedidos uma vez para o lote todo, a seleção em lote direto do Pipeline — e por que nada disso encerra ninguém.'],
     ['m-notas', 'Notas rápidas: o caderninho',
      'Onde guardar a frase que você não pode esquecer, escrita ou ditada, sem preencher formulário nenhum. O que o app reconhece sozinho no texto, por que a anotação não conta como tarefa, e por que ninguém além de você lê esta tela.'],
     ['m-lh', 'A integração com o Linked Helper',
@@ -4913,7 +5000,7 @@
     ['📊', 'Painel', 'Como está a carteira, e o que ela está me ensinando.',
      'Pipeline por saúde da decisão, o que está travando a receita, tempo sem evidência, riscos críticos — e, no fim, o Aprendizado da carteira com a evolução semana a semana e o plano de desenvolvimento.'],
     ['🗂️', 'Pipeline', 'Quais negócios são reais.',
-     'A carteira lida pela decisão do comprador, não pela etapa. Sete grupos, filtros no topo e a gaveta de filtros finos. Em lista ou em kanban.'],
+     'A carteira lida pela decisão do comprador, não pela etapa. Sete grupos, filtros no topo e a gaveta de filtros finos. Em lista ou em kanban — e, na lista, o botão do canto inferior direito marca vários negócios e manda todos para nutrição de uma vez.'],
     ['✅', 'Tarefas', 'O que foi executado, e o que aquilo rendeu.',
      'Toda tarefa presa a uma empresa e a uma negociação. Filtros como os do pipeline, resumo da semana, e a coluna que diz qual decisão cada tarefa destrava.'],
     /* Faltava. A tela existe no menu desde que o WhatsApp entrou, tem seção
@@ -5619,6 +5706,26 @@
       'existe para quando o motivo deixou de valer: o orçamento saiu, o contrato do concorrente venceu, ' +
       'a obra acabou.</span></div></div>' +
       '</div>' +
+
+      '<h3>A outra porta: selecionar direto no Pipeline</h3>' +
+      '<p class="small">Você nem sempre descobre que um negócio não vai a lugar nenhum aqui — ' +
+      'descobre olhando o Pipeline. Por isso o mesmo trabalho tem uma segunda porta: no ' +
+      '<strong>Pipeline em lista</strong>, o botão <strong>☑ Selecionar várias</strong> no canto ' +
+      'inferior direito liga o modo seleção. Aí o clique no cartão <em>marca</em> em vez de abrir, ' +
+      'e a mesma barra aparece com “Mover N para nutrição”.</p>' +
+      '<ul class="small">' +
+      '<li>O <strong>cartão inteiro</strong> é o alvo do clique, e não uma caixinha no canto — no ' +
+      'celular acertar a caixinha é o que faz ninguém triar.</li>' +
+      '<li>“Marcar as N” marca <strong>as que estão na tela</strong>, respeitando os filtros e a busca.</li>' +
+      '<li>Quem já está em nutrição ou já foi encerrado aparece apagado, com um traço no lugar da ' +
+      'marca, e diz por que não dá.</li>' +
+      '<li>Abrir um negócio para conferir <strong>não perde</strong> o que você já marcou. Sair para ' +
+      'outra tela, sim: seleção é de uma sessão de triagem, não um estado da carteira.</li>' +
+      '<li>Só na lista. No kanban o cartão já carrega o arrasto, e um clique que às vezes abre, às ' +
+      'vezes marca e às vezes arrasta é um clique em que ninguém confia.</li>' +
+      '</ul>' +
+      '<p class="tiny muted">O formulário de motivo e data é o mesmo das duas portas, de propósito: ' +
+      'duas cópias divergiriam, e aí o mesmo botão pediria coisas diferentes em lugares diferentes.</p>' +
 
       '<h3>Por que a triagem não entra na Fila do dia</h3>' +
       '<p class="small">Lead que nunca produziu evidência do cliente não é negócio atrasado: é negócio ' +
@@ -8372,6 +8479,30 @@
         if (lado === 'nutricao' ? !op.nutricao : !!op.nutricao) return false;
         return passaNoFiltroDaNutricao(op);
       });
+    },
+    esquecerSelecaoDoPipeline: esquecerSelecaoDoPipeline,
+    selecaoDoPipelineLigada: function () { return !!selecaoPipeline; },
+    ligarSelecaoDoPipeline: function (sim) { selecaoPipeline = sim ? {} : null; },
+    marcarNoPipeline: function (id) {
+      if (!selecaoPipeline) return;
+      if (selecaoPipeline[id]) delete selecaoPipeline[id];
+      else selecaoPipeline[id] = true;
+    },
+    /* “Todas” é sempre “todas as que estão na tela”. Marcar o que um filtro
+       escondeu é a forma mais fácil de mover um negócio sem ver. */
+    marcarTodosNoPipeline: function () {
+      if (!selecaoPipeline) return;
+      const elegiveis = resumosDoPipeline(Store.dados())
+        .filter(function (r) { return podeIrParaNutricao(r.op); });
+      const todas = elegiveis.length && elegiveis.every(function (r) { return selecaoPipeline[r.op.id]; });
+      selecaoPipeline = {};
+      if (!todas) elegiveis.forEach(function (r) { selecaoPipeline[r.op.id] = true; });
+    },
+    marcadasNoPipeline: function () {
+      if (!selecaoPipeline) return [];
+      return resumosDoPipeline(Store.dados())
+        .filter(function (r) { return podeIrParaNutricao(r.op) && selecaoPipeline[r.op.id]; })
+        .map(function (r) { return r.op; });
     },
     definirAbaConfig: definirAbaConfig,
     definirAbaCockpit: definirAbaCockpit,

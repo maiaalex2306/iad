@@ -155,6 +155,12 @@
     /* Saiu de Conversas, fechou a conversa: voltar depois e cair no meio de um
        fio antigo é desorientador. */
     if (hash !== '#/conversas' && V.conversaAberta()) V.definirConversa('');
+    /* Seleção em lote é de uma sessão de triagem, não um estado da carteira.
+       Voltar ao Pipeline horas depois e achar quarenta cartões marcados é a
+       receita para mover em lote sem querer. Abrir um negócio não conta como
+       sair: quem confere uma conta antes de marcar precisa voltar para o que
+       já tinha marcado. */
+    if (hash !== '#/pipeline' && hash.indexOf('#/op/') !== 0) V.esquecerSelecaoDoPipeline();
 
     /* A faixa entra DENTRO do conteúdo, e não entre a barra e ele: no desktop
        o topo é fixo, quem fica antes do <main> nasce embaixo dele, e a faixa
@@ -3713,33 +3719,31 @@
        triagem noventa leads de uma campanha está respondendo a mesma coisa
        noventa vezes. O detalhe continua por negócio, para quem quiser. */
     moverParaNutricao: function () {
-      const escolhidas = V.marcadosDaNutricao('pipeline');
-      if (!escolhidas.length) return;
+      pedirNutricaoEmLote(V.marcadosDaNutricao('pipeline'), V.limparMarcasDaNutricao);
+    },
 
-      U.formulario('Mover ' + escolhidas.length + ' para nutrição', [
-        { tipo: 'aviso', rotulo: 'Os negócios continuam ABERTOS e saem da previsão. Voltam sozinhos ' +
-          'quando o cliente produzir qualquer evidência nova — é esse o sinal que a nutrição espera. ' +
-          'Nada aqui encerra ninguém.' },
-        { id: 'motivo', rotulo: 'O que precisa acontecer para estas contas ficarem prontas', tipo: 'select',
-          opcoes: P.MOTIVOS_NUTRICAO.map(function (m) { return { valor: m.id, rotulo: m.rotulo }; }) },
-        { id: 'prazo', rotulo: 'Quando voltar a olhar', tipo: 'select',
-          opcoes: P.PRAZOS_NUTRICAO.map(function (x) { return { valor: String(x.dias), rotulo: x.rotulo }; }) },
-        { id: 'motivoTexto', rotulo: 'Detalhe (opcional, vale para todos)', tipo: 'textarea', voz: true,
-          placeholder: 'Ex.: leads da campanha do Vale do Paraíba que ainda não responderam nada.' }
-      ], { prazo: '90' }, function (d) {
-        const m = P.MOTIVOS_NUTRICAO.filter(function (x) { return x.id === d.motivo; })[0];
-        const revisarEm = Store.daquiADias(Number(d.prazo) || 90);
-        escolhidas.forEach(function (op) {
-          Store.colocarEmNutricao(op.id, {
-            motivo: m ? m.rotulo : '',
-            motivoTexto: d.motivoTexto || '',
-            revisarEm: revisarEm
-          });
-        });
-        V.limparMarcasDaNutricao();
-        render();
-        alert(escolhidas.length + ' negócio(s) em nutrição.\n\nVoltam a aparecer para revisão em ' +
-          U.data(revisarEm) + ' — ou antes, se o cliente se mexer.');
+    /* ---------- Seleção em lote no Pipeline ----------
+       O mesmo trabalho que a tela de Nutrição faz, feito de onde a pessoa já
+       está. Sair da tela para reencontrar os mesmos cinco negócios numa lista
+       diferente é o atrito que faz a triagem nunca acontecer. */
+    selecionarNoPipeline: function (ligar) {
+      V.ligarSelecaoDoPipeline(ligar === undefined ? true : !!ligar);
+      if (!repintarPipeline()) render();
+    },
+
+    marcarNoPipeline: function (id) {
+      V.marcarNoPipeline(id);
+      if (!repintarPipeline()) render();
+    },
+
+    marcarTodosNoPipeline: function () {
+      V.marcarTodosNoPipeline();
+      if (!repintarPipeline()) render();
+    },
+
+    nutrirSelecionadas: function () {
+      pedirNutricaoEmLote(V.marcadasNoPipeline(), function () {
+        V.ligarSelecaoDoPipeline(false);
       });
     },
 
@@ -6258,6 +6262,40 @@
       /* Para a tela dizer por que não preencheu, em vez de só não preencher. */
       ambiguo: (daConta.length > 1) || (contas.length > 1 && !contato)
     };
+  }
+
+  /* Mover para nutrição em lote, com um formulário só para as duas portas: a
+     tela de Nutrição e a seleção do Pipeline. Duas cópias dos mesmos campos
+     divergiriam no dia em que alguém mexesse numa delas, e aí o mesmo botão
+     pediria coisas diferentes em lugares diferentes. */
+  function pedirNutricaoEmLote(escolhidas, aoTerminar) {
+    if (!escolhidas || !escolhidas.length) return;
+
+    U.formulario('Mover ' + escolhidas.length + ' para nutrição', [
+      { tipo: 'aviso', rotulo: 'Os negócios continuam ABERTOS e saem da previsão. Voltam sozinhos ' +
+        'quando o cliente produzir qualquer evidência nova — é esse o sinal que a nutrição espera. ' +
+        'Nada aqui encerra ninguém.' },
+      { id: 'motivo', rotulo: 'O que precisa acontecer para estas contas ficarem prontas', tipo: 'select',
+        opcoes: P.MOTIVOS_NUTRICAO.map(function (m) { return { valor: m.id, rotulo: m.rotulo }; }) },
+      { id: 'prazo', rotulo: 'Quando voltar a olhar', tipo: 'select',
+        opcoes: P.PRAZOS_NUTRICAO.map(function (x) { return { valor: String(x.dias), rotulo: x.rotulo }; }) },
+      { id: 'motivoTexto', rotulo: 'Detalhe (opcional, vale para todos)', tipo: 'textarea', voz: true,
+        placeholder: 'Ex.: leads da campanha do Vale do Paraíba que ainda não responderam nada.' }
+    ], { prazo: '90' }, function (d) {
+      const m = P.MOTIVOS_NUTRICAO.filter(function (x) { return x.id === d.motivo; })[0];
+      const revisarEm = Store.daquiADias(Number(d.prazo) || 90);
+      escolhidas.forEach(function (op) {
+        Store.colocarEmNutricao(op.id, {
+          motivo: m ? m.rotulo : '',
+          motivoTexto: d.motivoTexto || '',
+          revisarEm: revisarEm
+        });
+      });
+      if (aoTerminar) aoTerminar();
+      render();
+      alert(escolhidas.length + ' negócio(s) em nutrição.\n\nVoltam a aparecer para revisão em ' +
+        U.data(revisarEm) + ' — ou antes, se o cliente se mexer.');
+    });
   }
 
   function camposDoContatoDaTarefa(contaId, o) {

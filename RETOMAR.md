@@ -5,8 +5,8 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v207**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v207, o aparelho
+Publicado agora: **v208**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v208, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -397,6 +397,69 @@ com nada marcado. Marcar 99 e a seleção sobreviver a um refresh seria armadilh
 duas negociações de verdade. Filtrar por campanha, marcar os 51, mover com
 motivo e prazo, conferir que **ninguém foi encerrado**, devolver três, e que a
 passagem ficou no `historicoNutricao`.
+
+## 0-AA. Seleção em lote no Pipeline — v208, 21/09
+
+*“No pipeline em formato de lista, eu quero colocar um botão no canto inferior
+direito que permita selecionar diversas oportunidades e colocá-las em
+nutrição.”*
+
+A triagem em lote já existia — só que na tela de Nutrição. Quem estava olhando
+o Pipeline e via cinco negócios que não vão a lugar nenhum precisava sair da
+tela, reencontrar cada um numa lista diferente e só então mover. **Duas telas
+para uma decisão é uma decisão que não acontece.**
+
+**☑ Selecionar várias**, flutuando no canto inferior direito. Fora da barra de
+filtros de propósito: a barra responde *“que negócios eu vejo?”*, e isto
+responde *“o que faço com eles?”* — e flutuando continua ao alcance depois de
+rolar sessenta cartões, que é quando a vontade de triar aparece.
+
+**O cartão inteiro é o alvo do clique**, e não uma caixinha de 14px no canto.
+Duas razões: o cartão já é um `<button>` e aninhar outro controle clicável
+seria HTML inválido; e no celular acertar a caixinha é justamente o que faz
+ninguém triar.
+
+**As regras que valem:**
+
+- “Marcar as N” marca **as que estão na tela**, respeitando filtros e busca.
+  Marcar o que um filtro escondeu é a forma mais fácil de mover sem ver.
+- Quem já está em nutrição ou encerrado aparece apagado, com um traço no lugar
+  da marca e um balão dizendo por quê. Esconder seria pior: a lista mudaria de
+  tamanho ao entrar no modo.
+- **Abrir um negócio não perde a seleção** (`#/op/` conta como “ainda estou
+  triando”); sair para outra tela, sim. Seleção é de uma sessão de triagem, não
+  um estado da carteira — voltar horas depois e achar quarenta cartões marcados
+  é a receita para mover em lote sem querer.
+- **Só na lista.** No kanban o cartão já carrega o arrasto, e um clique que às
+  vezes abre, às vezes marca e às vezes arrasta é um clique em que ninguém
+  confia.
+- Sem nada elegível na tela, o botão não aparece.
+
+**Um formulário só para as duas portas.** `moverParaNutricao` virou
+`pedirNutricaoEmLote(escolhidas, aoTerminar)`, no nível do módulo. Duas cópias
+dos mesmos campos divergiriam no dia em que alguém mexesse numa delas, e aí o
+mesmo botão pediria coisas diferentes em lugares diferentes.
+
+**Dois tropeços que valem registro:**
+
+1. A primeira tentativa pôs `pedirNutricaoEmLote` **dentro** do objeto literal
+   `App`, partindo-o ao meio com um `Object.assign` — `SyntaxError`. Declaração
+   de função iça; propriedade de objeto não. Revertido e refeito com a função
+   fora do objeto.
+2. A barra é `fixed` e não ocupa lugar no fluxo: **o último cartão ficava
+   embaixo dela** — e o último cartão é um dos que a pessoa desceu até ali para
+   marcar. Um `.espaco-flutua` de 64px resolve sem depender de `:has()`.
+
+**32 testes** (`selecao`), incluindo o caminho do cartão inelegível, que numa
+primeira rodada tinha passado sem ser exercitado — o filtro “Todos” não traz
+nutrição nem encerrados, então não havia nenhum na lista. Cobri com o status
+“Todas”.
+
+**Onde está:** `selecaoPipeline`, `barraDeSelecao()` e `cardOportunidade()` em
+`src/views.js`; `pedirNutricaoEmLote()` e os handlers em `src/app.js`;
+`.flutua-acoes` / `.marca-selecao` em `assets/styles.css`.
+
+---
 
 ## 0-Z. O manual, auditado por teste — v207, 21/09
 

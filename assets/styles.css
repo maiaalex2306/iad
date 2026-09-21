@@ -179,6 +179,56 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--navy-2); ou
 .item.g-construcao { border-left-color: var(--warn); }
 .item .tit { font-weight: 700; }
 
+/* ---------- seleção em lote no Pipeline ----------
+
+   O botão flutua no canto inferior direito e não entra na barra de filtros:
+   a barra responde “que negócios eu vejo?”, e isto responde “o que faço com
+   eles?”. Flutuando, continua ao alcance depois de rolar sessenta cartões —
+   que é exatamente quando a vontade de triar aparece.
+
+   No celular ele sobe acima da barra de abas (84px + área segura); no desktop
+   a barra é lateral e ele desce. */
+.flutua-acoes {
+  position: fixed; right: 16px; z-index: 45;
+  bottom: calc(96px + var(--safe-b));
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  justify-content: flex-end; max-width: calc(100vw - 32px);
+}
+.flutua-acoes > .btn { box-shadow: 0 6px 20px rgba(13,43,78,.28); }
+.flutua-acoes.selecionando {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 999px; padding: 8px 10px 8px 16px;
+  box-shadow: 0 6px 24px rgba(13,43,78,.22);
+}
+.flutua-acoes .conta { font-size: .78rem; font-weight: 700; color: var(--navy); white-space: nowrap; }
+
+/* A barra é `fixed` e não ocupa lugar no fluxo. Sem este espaçador o último
+   cartão da lista fica embaixo dela — e o último cartão é justamente um dos
+   que a pessoa desceu até ali para marcar. */
+.espaco-flutua { height: 64px; }
+
+@media (min-width: 900px) {
+  .flutua-acoes { bottom: 24px; right: 28px; }
+}
+
+/* A marca nasce do tamanho do texto para acompanhar o zoom do sistema. O
+   cartão inteiro é que recebe o clique — ela só mostra o estado. */
+.marca-selecao {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.25rem; height: 1.25rem; flex: 0 0 auto; margin-right: 8px;
+  border: 2px solid var(--line); border-radius: 6px;
+  font-size: .8rem; font-weight: 700; line-height: 1; color: var(--muted);
+}
+.marca-selecao.on { background: var(--orange); border-color: var(--orange); color: #fff; }
+.item.selecionavel { cursor: pointer; }
+.item.selecionada { background: var(--orange-soft); border-color: var(--orange); }
+
+/* Não dá para mover: já está em nutrição, ou está encerrado. Fica visível e
+   sem ação, e a marca diz por quê ao passar o mouse. Esconder seria pior: a
+   lista mudaria de tamanho ao entrar no modo seleção. */
+.item.inelegivel { opacity: .5; cursor: default; }
+.item.inelegivel:hover { border-color: var(--line); }
+
 /* Tarefa vencida. O laranja claro é para achar o cartão de longe; a tarja
    embaixo diz o que é, porque cor sozinha não informa nem serve a quem não
    distingue tons. */
