@@ -702,6 +702,75 @@
      é o mesmo horizonte que a Idade da Evidência usa para virar Risco. */
   const JANELA_SINAL = 21;
 
+  /* ---------------- Potencial: vale a primeira hora? ----------------
+
+     O IAD responde “a decisão está madura?”. A pergunta pressupõe que existe
+     decisão para medir — e noventa e oito leads recém-importados do LinkedIn
+     não têm nenhuma: todos marcam IAD 0. IAD 0 não distingue o diretor de
+     operações de uma indústria do segmento onde já ganhamos do estagiário de
+     uma empresa sem site.
+
+     Potencial responde a pergunta ANTERIOR: vale a primeira hora? É a única
+     coisa que o vendedor precisa saber diante de uma lista de cem nomes, e
+     nenhum CRM responde — o campo de qualificação do RD Station mistura
+     estágio (“estamos no jogo”) com torcida (“expectativa de sucesso”), e
+     nenhum dos dois é verificável.
+
+     As quatro faixas têm nome de ação, não de temperatura. “Morno” não diz o
+     que fazer na segunda-feira de manhã; “A conferir” diz.
+
+     REGRA QUE NÃO SE NEGOCIA: nada de Potencial entra em `iad()`, `saude()`
+     nem `classificar()`. Potencial é sobre o LEAD; IAD é sobre a DECISÃO. No
+     dia em que um lead “promissor” subir o índice sozinho, o índice deixa de
+     medir o comprador e passa a medir a nossa esperança. */
+  const FAIXAS_POTENCIAL = [
+    { id: 'prioritario', minimo: 60, rotulo: 'Prioritário', classe: 'ok',
+      acao: 'Fale hoje. O perfil bate e ele já se mexeu.' },
+    { id: 'promissor', minimo: 38, rotulo: 'Promissor', classe: 'warn',
+      acao: 'Vale a primeira hora: parece com quem compra da gente. Falta ele se mexer.' },
+    { id: 'conferir', minimo: 18, rotulo: 'A conferir', classe: 'risk',
+      acao: 'Falta informação para saber. Complete o cadastro ou mande para nutrição.' },
+    { id: 'fora', minimo: -Infinity, rotulo: 'Fora do alvo', classe: 'dead',
+      acao: 'Não gaste hora aqui. Nutrição, ou descarte com motivo.' }
+  ];
+
+  /* O peso de cada papel do grupo comprador na hora de decidir se a PESSOA que
+     respondeu vale a primeira hora. Não é a mesma tabela de `PAPEL_QUE_PROVA`:
+     lá a pergunta é “quem comprova esta decisão”, aqui é “falar com esta
+     pessoa abre ou não abre a porta”. Compras abre tarde; o usuário quase
+     nunca abre. */
+  const PESO_DO_PAPEL = {
+    'Decisor econômico': 18,
+    'Champion / Mobilizer': 14,
+    'Financeiro': 12,
+    'Operações': 12,
+    'Técnico': 10,
+    'Compras': 8,
+    'Jurídico / Compliance': 6,
+    'Usuário': 4
+  };
+
+  /* Senioridade lida do cargo escrito. Quatro degraus e não dez: o cargo vem
+     do LinkedIn, onde “Senior Specialist” e “Especialista Sênior” são a mesma
+     coisa escrita de quatro jeitos, e escala fina sobre texto sujo é falsa
+     precisão. A ordem importa: o primeiro que casar vence, e por isso
+     “diretor” vem antes de “gerente” — “diretor de compras” é diretor. */
+  const SENIORIDADE = [
+    { pontos: 8, rotulo: 'decide',
+      teste: /(^|[^a-z])(ceo|cfo|coo|cto|cio|cso|presiden[a-z]*|vice.?presiden[a-z]*|vp|s[oó]cio[a-z]*|propriet[aá]ri[a-z]*|fundador[a-z]*|founder|owner|partner|diretor[a-z]*|diretoria|dire[cç][aã]o|director|head|superintenden[a-z]*)([^a-z]|$)/ },
+    { pontos: 5, rotulo: 'manda em alguém',
+      teste: /(^|[^a-z])(gerent[a-z]*|ger[eê]ncia|manager|coordena[a-z]*|supervis[a-z]*|chefe|chefia|l[ií]der|leader|lead)([^a-z]|$)/ },
+    { pontos: 3, rotulo: 'faz e opina',
+      teste: /(^|[^a-z])(especialist[a-z]*|specialist|consultor[a-z]*|consultoria|engenheir[a-z]*|engenharia|engineer|arquitet[a-z]*|respons[aá]vel|encarregad[a-z]*)([^a-z]|$)/ },
+    { pontos: 1, rotulo: 'aprendiz',
+      teste: /(^|[^a-z])(analist[a-z]*|analyst|assistent[a-z]*|auxiliar[a-z]*|est[aá]gi[a-z]*|trainee|aprendiz)([^a-z]|$)/ }
+  ];
+
+  /* A partir de quanto um negócio “andou”. Não é maduro (24) e não é zero:
+     é o ponto em que o comprador produziu evidência em mais de uma decisão, o
+     que já separa segmento que conversa de segmento que não atende. */
+  const IAD_QUE_ANDOU = 8;
+
   const FAIXAS_EVIDENCIA = [
     { max: 7, rotulo: 'Ativo', classe: 'ok' },
     { max: 14, rotulo: 'Atenção', classe: 'warn' },
@@ -718,6 +787,7 @@
     PERFIS, PERFIS_MOBILIZADORES, ESTADOS_INSIGHT,
     RELACOES_CONTA, TIPOS_OPORTUNIDADE, FECHAMENTO_REUNIAO,
     CANAIS, FAIXAS_EVIDENCIA, ATIVIDADES_QUE_NAO_CONTAM,
+    FAIXAS_POTENCIAL, PESO_DO_PAPEL, SENIORIDADE, IAD_QUE_ANDOU,
     CANAIS_SINAL, TIPOS_SINAL, PESO_SINAL_FORTE, JANELA_SINAL
   };
 })(window);

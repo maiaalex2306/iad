@@ -841,6 +841,256 @@
     return (t && t.rotulo) || 'sinal';
   }
 
+  /* ================= POTENCIAL: vale a primeira hora? =================
+
+     Ver o comentário de FAIXAS_POTENCIAL no playbook para o porquê. Aqui está
+     o como, e ele é aritmética pura: nenhuma chamada de IA, nenhum token,
+     nada que deixe de funcionar quando o assistente cai.
+
+     Duas contas separadas, somadas so' no fim:
+
+       PERFIL    0 a 50 — parece com quem compra da gente?
+       INTERESSE 0 a 50 — ele já se mexeu?
+
+     Separadas de propósito, porque pedem ações opostas. Perfil 45 com
+     interesse 0 é um lead para TRABALHAR: a empresa certa, a pessoa certa, e
+     ninguém falou com ela ainda. Interesse 40 com perfil 8 é curiosidade que
+     consome tempo. A soma sozinha confundiria os dois em “45”, e o vendedor
+     trataria os dois igual.
+
+     Cada ponto vem com a frase que o explica (`porquês`), e isso não é
+     enfeite: número de qualificação sem motivo é número que ninguém
+     contesta — e qualificação que ninguém contesta nunca melhora. */
+
+  /* Onde a decisão já andou alguma vez. É o ICP aprendido da própria
+     carteira, e não uma lista que alguém digitou: lista digitada envelhece
+     calada, e ninguém nunca volta para corrigi-la.
+
+     Calculado uma vez por tela e passado adiante, porque a alternativa é
+     varrer a carteira inteira cento e uma vezes para desenhar cento e uma
+     linhas. */
+  function baseDoPotencial(oportunidades) {
+    const todas = oportunidades || (Store.dados().oportunidades || []);
+    const segmentos = {};
+    let ganhos = 0;
+    let andaram = 0;
+
+    todas.forEach(function (op) {
+      const seg = segmentoDe(op);
+      if (!seg || seg === 'Sem segmento') return;
+      if (op.desfecho && op.desfecho.tipo === 'ganho') {
+        segmentos[seg] = 'ganho';
+        ganhos++;
+        return;
+      }
+      if (segmentos[seg] === 'ganho') return;
+      if (iad(op) >= P.IAD_QUE_ANDOU) { segmentos[seg] = 'andou'; andaram++; }
+    });
+
+    /* Os perfis do LinkedIn que já disseram não. É o sinal mais forte que
+       existe e o mais barato de checar — e o único do conjunto que não soma
+       pontos: ele TRAVA a faixa, porque “não” não se compensa com cargo bom. */
+    const recusados = {};
+    (Store.recusas ? Store.recusas() : []).forEach(function (r) {
+      const chave = perfilLimpo(r.linkedin);
+      if (chave) recusados[chave] = r;
+    });
+
+    return {
+      segmentos: segmentos,
+      /* Sem nenhum ganho e sem nenhum negócio que andou, a carteira ainda não
+         tem o que ensinar. Dizer isso é melhor do que zerar todo mundo por
+         uma falta que é nossa, não dos leads. */
+      temHistorico: (ganhos + andaram) > 0,
+      recusados: recusados
+    };
+  }
+
+  function perfilLimpo(url) {
+    return String(url || '').trim().toLowerCase()
+      .replace(/^https?:\/\//, '').replace(/^www\./, '')
+      .replace(/\?.*$/, '').replace(/\/+$/, '');
+  }
+
+  function senioridade(cargo) {
+    const limpo = String(cargo || '').toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (!limpo.trim()) return null;
+    return P.SENIORIDADE.filter(function (n) { return n.teste.test(limpo); })[0] || null;
+  }
+
+  function perfilDoLead(op, base, pessoas) {
+    const conta = Store.conta(op.contaId);
+    const porques = [];
+    let pontos = 0;
+
+    /* 1. O papel de quem está do outro lado. O mais alto do grupo comprador,
+          e não a média: falar com o decisor econômico vale o que vale mesmo
+          que haja três usuários no cadastro. */
+    let melhor = null;
+    pessoas.forEach(function (c) {
+      const peso = P.PESO_DO_PAPEL[c.papel] || 0;
+      if (!melhor || peso > melhor.peso) melhor = { peso: peso, contato: c };
+    });
+    if (melhor && melhor.peso) {
+      pontos += melhor.peso;
+      porques.push({ sinal: '+', pontos: melhor.peso,
+        texto: melhor.contato.papel + ' no grupo comprador (' + (melhor.contato.nome || 'sem nome') + ')' });
+    } else {
+      porques.push({ sinal: '—', pontos: 0, texto: 'ninguém vinculado ao grupo comprador' });
+    }
+
+    /* 2. Senioridade escrita no cargo. Correlacionada com o papel, e não
+          igual: “Gerente de Compras” é sênior e é Compras; “Analista
+          Ambiental” é júnior e é Operações. */
+    const senior = melhor ? senioridade(melhor.contato.cargo) : null;
+    if (senior) {
+      pontos += senior.pontos;
+      porques.push({ sinal: '+', pontos: senior.pontos,
+        texto: 'o cargo ' + (melhor.contato.cargo || '') + ' ' + senior.rotulo });
+    } else if (melhor && !String(melhor.contato.cargo || '').trim()) {
+      porques.push({ sinal: '—', pontos: 0, texto: 'o contato está sem cargo no cadastro' });
+    }
+
+    /* 3. A empresa existe de verdade? Importação do LinkedIn sem empresa cria
+          conta chamada “Fulano (empresa não informada)”, e isso não é uma
+          empresa — é uma pessoa que ninguém terminou de cadastrar. */
+    let dados = 0;
+    const semEmpresa = !conta || /empresa n[a\u00e3]o informada/i.test(conta.nome || '');
+    if (!semEmpresa) dados += 4;
+    if (conta && conta.site) dados += 3;
+    if (conta && (conta.cidade || conta.uf)) dados += 2;
+    if (conta && conta.cnpj) dados += 1;
+    pontos += dados;
+    if (semEmpresa) {
+      porques.push({ sinal: '—', pontos: 0, texto: 'a empresa não foi informada na importação' });
+    } else if (dados >= 7) {
+      porques.push({ sinal: '+', pontos: dados, texto: 'empresa identificada, com site e endereço' });
+    } else {
+      porques.push({ sinal: '+', pontos: dados, texto: 'empresa identificada, cadastro incompleto' });
+    }
+
+    /* 4. O segmento, aprendido da própria carteira. */
+    const seg = segmentoDe(op);
+    if (!seg || seg === 'Sem segmento') {
+      porques.push({ sinal: '—', pontos: 0, texto: 'a empresa está sem segmento — preencha e o Potencial melhora' });
+    } else if (base.segmentos[seg] === 'ganho') {
+      pontos += 14;
+      porques.push({ sinal: '+', pontos: 14, texto: 'já ganhamos negócio em ' + seg });
+    } else if (base.segmentos[seg] === 'andou') {
+      pontos += 9;
+      porques.push({ sinal: '+', pontos: 9, texto: 'a decisão já andou em ' + seg + ', mas ainda sem venda' });
+    } else if (base.temHistorico) {
+      pontos += 2;
+      porques.push({ sinal: '+', pontos: 2, texto: seg + ' ainda não produziu nenhum negócio que andou' });
+    } else {
+      pontos += 7;
+      porques.push({ sinal: '=', pontos: 7,
+        texto: 'nenhum desfecho registrado ainda — o segmento entra neutro até a carteira ter o que ensinar' });
+    }
+
+    return { pontos: Math.min(50, pontos), porques: porques };
+  }
+
+  function interesseDoLead(op, pessoas) {
+    const porques = [];
+    let pontos = 0;
+
+    const decisoes = eventosDeDecisao(op);
+    if (!decisoes.length) {
+      porques.push({ sinal: '—', pontos: 0, texto: 'nenhuma evidência do cliente ainda — ele não se mexeu' });
+    } else {
+      pontos += 18;
+      porques.push({ sinal: '+', pontos: 18, texto: 'o cliente já produziu evidência' });
+      if (decisoes.length >= 2) {
+        pontos += 8;
+        porques.push({ sinal: '+', pontos: 8, texto: decisoes.length + ' evidências, não uma só' });
+      }
+      /* A idade da evidência só vale quando existe evidência: sem nenhuma,
+         `evidenceAge` conta a partir da criação do registro, e aí um lead
+         importado ontem pareceria quentíssimo. Foi esse mesmo engano que fez
+         a tela Hoje mostrar noventa e oito urgências. */
+      const idade = evidenceAge(op);
+      if (idade <= 14) { pontos += 10; porques.push({ sinal: '+', pontos: 10, texto: 'ele se mexeu há ' + idade + ' dias' }); }
+      else if (idade <= 30) { pontos += 5; porques.push({ sinal: '+', pontos: 5, texto: 'a última evidência tem ' + idade + ' dias' }); }
+      else if (idade <= 60) { pontos += 2; porques.push({ sinal: '+', pontos: 2, texto: 'a última evidência tem ' + idade + ' dias' }); }
+      else { porques.push({ sinal: '—', pontos: 0, texto: 'a última evidência tem ' + idade + ' dias — esfriou' }); }
+    }
+
+    const fortes = sinaisFortes(op, 30);
+    const recentes = sinaisRecentes(op, 30);
+    if (fortes.length) {
+      pontos += 10;
+      porques.push({ sinal: '+', pontos: 10, texto: 'sinal forte do comprador nos últimos 30 dias' });
+    } else if (recentes.length) {
+      pontos += 5;
+      porques.push({ sinal: '+', pontos: 5, texto: recentes.length + ' sinal(is) do comprador nos últimos 30 dias' });
+    }
+
+    const c = compromisso(op);
+    if (c && !c.vencido) {
+      pontos += 8;
+      porques.push({ sinal: '+', pontos: 8, texto: 'existe próximo passo combinado com data' });
+    }
+
+    /* Alcançável fora do LinkedIn. Não é interesse dele, é viabilidade nossa
+       — mas entra aqui porque a pergunta da tela é “vale a primeira hora?”,
+       e hora gasta com quem só tem InMail rende menos. */
+    const alcancavel = pessoas.some(function (x) { return x.telefone || x.email || x.emailPessoal; });
+    if (alcancavel) {
+      pontos += 6;
+      porques.push({ sinal: '+', pontos: 6, texto: 'dá para falar fora do LinkedIn (telefone ou e-mail)' });
+    } else if (pessoas.length) {
+      porques.push({ sinal: '—', pontos: 0, texto: 'só temos o LinkedIn para alcançar essa pessoa' });
+    }
+
+    return { pontos: Math.min(50, pontos), porques: porques };
+  }
+
+  function faixaDoPotencial(pontos) {
+    return P.FAIXAS_POTENCIAL.filter(function (f) { return pontos >= f.minimo; })[0];
+  }
+
+  /* O que tudo acima existe para produzir. `base` é opcional: quem desenha uma
+     lista calcula uma vez e passa; quem abre um negócio só chama. */
+  function potencial(op, base) {
+    if (!op) return null;
+    const b = base || baseDoPotencial();
+    const pessoas = stakeholdersDaOp(op);
+
+    /* Negócio encerrado não tem potencial — tem desfecho. Devolver uma faixa
+       aqui poria “Prioritário” num negócio ganho há seis meses. */
+    if (op.desfecho) return null;
+
+    const recusa = pessoas.map(function (c) { return b.recusados[perfilLimpo(c.linkedin)]; })
+      .filter(Boolean)[0];
+    const perfil = perfilDoLead(op, b, pessoas);
+    const interesse = interesseDoLead(op, pessoas);
+    const pontos = perfil.pontos + interesse.pontos;
+
+    if (recusa) {
+      return {
+        pontos: pontos,
+        perfil: perfil.pontos,
+        interesse: interesse.pontos,
+        faixa: P.FAIXAS_POTENCIAL.filter(function (f) { return f.id === 'fora'; })[0],
+        travado: true,
+        porques: [{ sinal: '\u2717', pontos: 0,
+          texto: 'respondeu NÃO' + (recusa.campanha ? ' na campanha ' + recusa.campanha : '') +
+                 (recusa.motivo ? ' (' + recusa.motivo + ')' : '') }].concat(perfil.porques, interesse.porques)
+      };
+    }
+
+    return {
+      pontos: pontos,
+      perfil: perfil.pontos,
+      interesse: interesse.pontos,
+      faixa: faixaDoPotencial(pontos),
+      travado: false,
+      porques: perfil.porques.concat(interesse.porques)
+    };
+  }
+
   function nuncaComecou(op) {
     return eventosDeDecisao(op).length === 0;
   }
@@ -1288,7 +1538,8 @@
   global.IADEngine = {
     iad, evidenceAge, faixaEvidencia, decisionVelocity, coverage, gates,
     saude, classificar, nextBestDecision, alertas, resumo, carteira,
-    fila, nuncaComecou, quemProva, canalDaFila, rotuloDoSinal, aprendizado, sugerirDimensao, podeComprovar, degrauPermitido, evidenciasDaDimensao,
+    fila, nuncaComecou, quemProva, canalDaFila, rotuloDoSinal,
+    potencial, baseDoPotencial, faixaDoPotencial, senioridade, aprendizado, sugerirDimensao, podeComprovar, degrauPermitido, evidenciasDaDimensao,
     tarefasAtrasadas,
     filtrar, mesesDisponiveis, segmentosDisponiveis, rotuloMes, segmentoDe, faixaSaude,
     porMes, porSegmento, porEtapa, matrizDecisoes, distribuicaoEvidencia,

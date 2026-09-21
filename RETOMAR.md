@@ -5,8 +5,8 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v205**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v205, o aparelho
+Publicado agora: **v206**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v206, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -397,6 +397,85 @@ com nada marcado. Marcar 99 e a seleção sobreviver a um refresh seria armadilh
 duas negociações de verdade. Filtrar por campanha, marcar os 51, mover com
 motivo e prazo, conferir que **ninguém foi encerrado**, devolver três, e que a
 passagem ficou no `historicoNutricao`.
+
+## 0-Y. Potencial — 1ª entrega, sem IA — v206, 21/09
+
+*“O RD tem um campo de qualificação mas eu acho muito fraco... Como podemos
+criar este campo dentro das oportunidades?”* — e depois *“Faça isso”* sobre o
+plano de três entregas. **Esta é a primeira: aritmética pura, zero token.**
+
+**O problema, em uma frase:** o IAD responde *“a decisão está madura?”*, e essa
+pergunta pressupõe que exista decisão. Noventa e oito leads do Linked Helper
+não têm nenhuma — **todos marcam IAD 0**, e IAD 0 não distingue o diretor de
+operações de uma indústria do segmento onde já ganhamos do estagiário de uma
+empresa sem site. Potencial responde a pergunta ANTERIOR: vale a primeira hora?
+
+**Quatro faixas com nome de ação**, não de temperatura — “Morno” não diz o que
+fazer na segunda de manhã; “A conferir” diz: **Prioritário** (60+) ·
+**Promissor** (38) · **A conferir** (18) · **Fora do alvo**.
+
+**Duas contas, mantidas separadas de propósito:**
+
+- **Perfil (0–50)** — papel no grupo comprador (até 18) + senioridade lida do
+  cargo (até 8) + a empresa existe de verdade (até 10) + **o segmento,
+  aprendido dos próprios desfechos** (até 14).
+- **Interesse (0–50)** — o cliente produziu evidência (18) + foram duas ou mais
+  (+8) + há quanto tempo (até +10) + sinal do comprador (até +10) + compromisso
+  com data (+8) + alcançável fora do LinkedIn (+6).
+
+Separadas porque pedem ações opostas: perfil 45 com interesse 0 é um lead para
+TRABALHAR; interesse 40 com perfil 8 é curiosidade que consome tempo. A soma
+sozinha confundiria os dois em “45”.
+
+**O ICP não é digitado por ninguém.** `baseDoPotencial()` varre a carteira e
+marca os segmentos onde já ganhamos (14 pontos) e onde a decisão ao menos andou
+(IAD 8+, 9 pontos). Lista de ICP digitada envelhece calada. E **enquanto não
+houver nenhum desfecho**, o segmento entra **neutro (7) para todos** e a pílula
+diz isso — zerar todo mundo por uma falta que é nossa seria mentir com número.
+
+**O motivo é a funcionalidade.** Cada ponto vem com a frase que o explica, e a
+pílula mostra todas. Qualificação com a qual ninguém consegue discordar nunca
+melhora — é exatamente o que mata o campo do RD: *“Estamos no jogo”* não tem
+como estar errado porque não diz nada conferível.
+
+**A trava:** quem já respondeu não (`recusas`, casado pelo perfil do LinkedIn)
+fica preso em Fora do alvo, com a campanha e o motivo na pílula. “Não” não se
+compensa com cargo bom.
+
+**Nada disto entra em `iad()`, `saude()` nem `classificar()`.** Mesma regra dos
+sinais, e um teste cobra isso lendo o código das três funções.
+
+**Onde aparece:** pílula ao lado do título no cockpit · coluna, filtro **e ordem
+da lista** na Nutrição (sem ordem, cem leads saem na ordem em que a ponte os
+entregou, que não é ordem nenhuma) · e no Hoje, a linha de triagem passa a
+dizer quantos daquele monte valem a primeira hora.
+
+**Não é guardado em lugar nenhum.** É recalculado a cada abertura de tela —
+sem coluna nova, sem SQL para o Alexandre rodar, sem migração. Preencher o
+segmento de uma conta muda a faixa na hora.
+
+**47 testes** (`potencial`). Três defeitos reais que eles pegaram:
+
+1. `est[aá]gi` seguido de `([^a-z]|$)` **nunca casava com “estagiário”** — a
+   palavra continua depois do radical. Todas as senioridades passaram a ser
+   radical + `[a-z]*`.
+2. “Coordenação de Produção” não pontuava: o LinkedIn escreve cargo como
+   substantivo (“Gerência”, “Diretoria”, “Coordenação”) e a lista só tinha as
+   formas de agente.
+3. **A ordenação punha o lead travado em segundo lugar.** Ordenar por pontos
+   ignora a trava — um “não” de diretor tem pontos altos. A faixa passa a vir
+   antes dos pontos no comparador.
+
+**A 2ª e a 3ª entregas** (IA lendo as respostas; calibração por desfecho) **não
+foram feitas** — e a 2ª exige colunas novas (`potencialIA`, `potencialManual`)
+com o SQL correspondente. A 3ª só faz sentido quando houver desfechos.
+
+**Onde está:** `FAIXAS_POTENCIAL`, `PESO_DO_PAPEL`, `SENIORIDADE` e
+`IAD_QUE_ANDOU` em `src/playbook.js`; `potencial()`, `baseDoPotencial()`,
+`perfilDoLead()`, `interesseDoLead()` e `senioridade()` em `src/engine.js`;
+`pilulaDoPotencial()`, `potencialDe()` e o filtro em `src/views.js`.
+
+---
 
 ## 0-X. Notas rápidas: o caderninho — v205, 21/09
 

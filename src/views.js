@@ -334,6 +334,7 @@
   let filtroHoje = 'todos';
 
   function hoje() {
+    renovarPotencial();
     const est = Store.dados();
     if (!est.oportunidades.length) return boasVindas();
 
@@ -643,10 +644,20 @@
      leads esperando triagem", que é a mesma carteira dita com honestidade. */
   function linhaDaTriagem(triagem) {
     if (!triagem || !triagem.length) return '';
+    /* Quantos daquele monte valem a primeira hora. Sem este número a linha
+       diz “noventa e oito coisas para triar”, que é uma tarefa que ninguém
+       começa. Com ele diz “seis valem a pena”, que é uma tarefa de hoje. */
+    const valem = triagem.filter(function (i) {
+      const pot = potencialDe(i.resumo ? i.resumo.op : i.op || i);
+      return pot && (pot.faixa.id === 'prioritario' || pot.faixa.id === 'promissor');
+    }).length;
+
     return '<div class="card" style="padding:10px 14px;margin-bottom:10px">' +
       '<div class="row"><span class="pill">' + triagem.length + '</span>' +
       '<span class="small">lead(s) sem evidência nenhuma do cliente. ' +
-      'Não são urgências — são triagem.</span><span class="espaco"></span>' +
+      'Não são urgências — são triagem.' +
+      (valem ? ' <strong>' + valem + '</strong> com potencial de sobra.' : '') +
+      '</span><span class="espaco"></span>' +
       '<button class="btn ghost mini" onclick="location.hash=\'#/nutricao\'"' +
       ajudaComLinhas('Triagem em lote',
         'Lead que nunca produziu evidência do cliente não é negócio atrasado: é negócio que nunca começou.',
@@ -1955,7 +1966,35 @@
   }
 
   /* ---------------- Cockpit da oportunidade ---------------- */
+  /* ---------------- A pílula do Potencial ----------------
+
+     Uma pílula e o motivo dentro do balão. O motivo não é enfeite: é o que
+     permite discordar, e qualificação com a qual ninguém discorda nunca
+     melhora. Foi o que sempre faltou no campo de qualificação dos outros
+     CRMs — “Estamos no jogo” não tem como estar errado, porque não diz nada
+     que possa ser conferido. */
+  function pilulaDoPotencial(pot, tamanho) {
+    if (!pot) return '';
+    const mini = tamanho === 'mini' ? ' mini' : '';
+    /* Todos os porquês, e não os primeiros. Cortar a lista fazia a soma das
+       linhas não bater com o total escrito em cima — e número que não fecha é
+       o jeito mais rápido de a pessoa parar de confiar na conta inteira. */
+    const linhas = pot.porques.map(function (q) {
+      return [q.sinal === '+' ? '+' + q.pontos : (q.sinal === '=' ? '= ' + q.pontos : q.sinal), q.texto];
+    });
+    return '<span class="pill ' + pot.faixa.classe + mini + '"' +
+      ajudaComLinhas('Potencial: ' + pot.faixa.rotulo,
+        pot.faixa.acao + ' — ' + pot.pontos + ' de 100 (perfil ' + pot.perfil +
+        ', interesse ' + pot.interesse + ').',
+        linhas.concat([['Isto não é o IAD',
+          'Potencial diz se o LEAD vale a primeira hora; o IAD diz se a DECISÃO do cliente amadureceu. ' +
+          'Nenhum ponto daqui entra no índice.']]),
+        pot.travado ? 'Travado em Fora do alvo: esta pessoa já respondeu não.' : '') +
+      '>Potencial: ' + esc(pot.faixa.rotulo) + '</span>';
+  }
+
   function cockpit(id) {
+    renovarPotencial();
     const op = Store.oportunidade(id);
     if (!op) return '<div class="vazio">Oportunidade não encontrada.</div>';
     const r = E.resumo(op);
@@ -1978,7 +2017,8 @@
     return barraDeAcoes(op) +
       (op.nutricao ? faixaDeNutricao(op) : '') +
       banner +
-      '<h1 style="margin-top:10px">' + esc(op.titulo) + '</h1>' +
+      '<div class="row" style="margin-top:10px"><h1 style="margin:0">' + esc(op.titulo) + '</h1>' +
+      pilulaDoPotencial(potencialDe(op)) + '</div>' +
       fichaDaOportunidade(op, r) +
       abasDoCockpit(op) +
       '<div class="corpo-aba">' + corpoDaAba(op, r) + '</div>';
@@ -4080,8 +4120,19 @@
   const nutri = {
     aba: 'ativa',
     marcadosPipeline: {}, marcadosNutricao: {},
-    busca: '', responsavel: 'todos', segmento: 'todos', saude: 'todas'
+    busca: '', responsavel: 'todos', segmento: 'todos', saude: 'todas', potencial: 'todos'
   };
+
+  /* O Potencial de um negócio precisa saber em que segmentos a carteira
+     inteira já ganhou. Calcular isso dentro de cada linha seria varrer cento
+     e uma oportunidades cento e uma vezes — dez mil passadas para desenhar
+     uma tela. Calculado uma vez e jogado fora quando a tela recomeça. */
+  let basePotencial = null;
+  function renovarPotencial() { basePotencial = null; }
+  function potencialDe(op) {
+    if (!basePotencial) basePotencial = E.baseDoPotencial();
+    return E.potencial(op, basePotencial);
+  }
 
   function cadastros() {
     const est = Store.dados();
@@ -4175,6 +4226,7 @@
   };
 
   function nutricao() {
+    renovarPotencial();
     const est = Store.dados();
     const todas = (est.oportunidades || []).filter(function (op) { return !op.desfecho; });
     const ativas = todas.filter(function (op) { return !op.nutricao; });
@@ -4224,6 +4276,13 @@
       opcoes(pessoas, nutri.responsavel) + '</select></label>' +
       '<label><span>Segmento</span><select onchange="App.filtroNutricao(\'segmento\', this.value)">' +
       opcoes(segs, nutri.segmento) + '</select></label>' +
+      /* O Potencial vem antes da Saúde da decisão de propósito: numa lista de
+         cem leads importados a saúde é IAD 0 para todos, e filtro que não
+         separa nada é filtro que ensina a não filtrar. */
+      '<label><span>Potencial</span><select onchange="App.filtroNutricao(\'potencial\', this.value)">' +
+      opcoes([{ valor: 'todos', rotulo: 'Todos os potenciais' }].concat(
+        P.FAIXAS_POTENCIAL.map(function (f) { return { valor: f.id, rotulo: f.rotulo }; })), nutri.potencial) +
+      '</select></label>' +
       '<label><span>Saúde da decisão</span><select onchange="App.filtroNutricao(\'saude\', this.value)">' +
       opcoes([{ valor: 'todas', rotulo: 'Todas' },
               { valor: 'zerado', rotulo: 'IAD 0 — nada registrado' },
@@ -4248,6 +4307,11 @@
     if (nutri.responsavel !== 'todos' && String(op.dono || '') !== String(nutri.responsavel)) return false;
     if (nutri.segmento !== 'todos' && String((conta && conta.segmento) || '') !== nutri.segmento) return false;
 
+    if (nutri.potencial !== 'todos') {
+      const pot = potencialDe(op);
+      if (!pot || pot.faixa.id !== nutri.potencial) return false;
+    }
+
     if (nutri.saude !== 'todas') {
       const r = E.resumo(op);
       if (nutri.saude === 'zerado' && r.iad !== 0) return false;
@@ -4261,7 +4325,24 @@
   function listaDaNutricao(lista, lado, est) {
     const naNutricao = lado === 'nutricao';
     const marcados = naNutricao ? nutri.marcadosNutricao : nutri.marcadosPipeline;
-    const filtradas = lista.filter(passaNoFiltroDaNutricao);
+    /* Ordem por Potencial, e não a ordem de importação.
+       Sem isto a lista sai na ordem em que a ponte entregou os leads, que é
+       nenhuma ordem — e triar cem linhas sem ordem é triar cem linhas duas
+       vezes. Empate no Potencial desempata pelo IAD: entre dois leads iguais
+       no papel, ganha aquele cuja decisão já andou. */
+    /* A FAIXA vem antes dos pontos, e não o contrário.
+       Quem já respondeu não fica travado em Fora do alvo sem perder os pontos
+       do cargo — e ordenar pelos pontos põe um “não” de diretor em segundo
+       lugar na lista de quem triar primeiro. A trava tem que vencer. */
+    const posicaoDaFaixa = function (pot) {
+      return pot ? P.FAIXAS_POTENCIAL.indexOf(pot.faixa) : 99;
+    };
+    const filtradas = lista.filter(passaNoFiltroDaNutricao).slice().sort(function (a, b) {
+      const pa = potencialDe(a), pb = potencialDe(b);
+      return (posicaoDaFaixa(pa) - posicaoDaFaixa(pb)) ||
+        ((pb ? pb.pontos : -1) - (pa ? pa.pontos : -1)) ||
+        (E.iad(b) - E.iad(a));
+    });
     const quantosMarcados = filtradas.filter(function (op) { return marcados[op.id]; }).length;
 
     const titulo = naNutricao ? 'Em nutrição' : 'Na carteira ativa';
@@ -4318,6 +4399,7 @@
         '<div class="tiny muted">' + esc((conta && conta.nome) || 'sem empresa') +
         (op.campanha ? ' · ' + esc(op.campanha) : '') +
         (dono ? ' · ' + esc(dono.nome) : '') + '</div></td>' +
+        '<td style="white-space:nowrap">' + pilulaDoPotencial(potencialDe(op), 'mini') + '</td>' +
         '<td style="white-space:nowrap"><span class="pill ' + r.faixa.classe + ' mini">IAD ' + r.iad + '</span></td>' +
         '<td class="tiny muted" style="white-space:nowrap">' + r.evidenceAge + 'd sem evidência</td>' +
         '<td class="tiny muted">' +
@@ -4333,7 +4415,7 @@
 
     return '<div class="card" style="margin-top:12px">' + cabeca +
       '<div class="tabela-rolagem" style="margin-top:10px"><table><thead><tr>' +
-      '<th style="width:34px"></th><th>Negócio</th><th>IAD</th><th>Parado</th>' +
+      '<th style="width:34px"></th><th>Negócio</th><th>Potencial</th><th>IAD</th><th>Parado</th>' +
       '<th>' + (naNutricao ? 'Motivo e revisão' : 'Etapa') + '</th>' +
       '</tr></thead><tbody>' + linhas + '</tbody></table></div></div>';
   }
@@ -4766,6 +4848,8 @@
      'O outro corte: o DIA, com trinta negócios ao mesmo tempo. A rotina hora a hora — o que abrir de manhã, o que ler antes de cada conversa, o que registrar logo depois — e o que o sistema devolve em troca.'],
     ['m-fila', 'A Fila: o que fazer primeiro',
      'A ordem em que a tela Hoje coloca a carteira e o porquê de cada posição; com quem falar para provar a decisão que falta, decisão por decisão; e por que os leads que nunca produziram evidência ficam fora da fila.'],
+    ['m-potencial', 'Potencial: vale a primeira hora?',
+     'A pergunta que vem antes do IAD, para quando você tem cem leads e IAD 0 em todos. As quatro faixas, as duas contas que as formam (perfil e interesse), de onde sai cada ponto e por que nada disso mexe no índice.'],
     ['m-notas', 'Notas rápidas: o caderninho',
      'Onde guardar a frase que você não pode esquecer, escrita ou ditada, sem preencher formulário nenhum. O que o app reconhece sozinho no texto, por que a anotação não conta como tarefa, e por que ninguém além de você lê esta tela.'],
     ['m-lh', 'A integração com o Linked Helper',
@@ -4835,7 +4919,7 @@
     ['📇', 'Cadastros', 'Onde ficam as empresas, as pessoas e as listas.',
      'Contas, contatos, oportunidades, e os catálogos: segmentos, tipos de tarefa, produtos, fontes e usuários. Produtos só o gestor cadastra.'],
     ['🌱', 'Nutrição', 'Quem eu tiro da previsão agora, e quem já pode voltar.',
-     'Duas abas — Carteira Ativa e Leads em Nutrição — com os mesmos filtros e o trânsito em lote entre elas. Nutrição não encerra ninguém: tira da previsão e mantém na agenda, com data para voltar a olhar.'],
+     'Duas abas — Carteira Ativa e Leads em Nutrição — com os mesmos filtros e o trânsito em lote entre elas. A lista sai ordenada por Potencial, e dá para filtrar por faixa. Nutrição não encerra ninguém: tira da previsão e mantém na agenda, com data para voltar a olhar.'],
     ['📝', 'Notas rápidas', 'O que eu não posso esquecer.',
      'Uma caixa, um botão de ditar e uma lista. É o caderninho, não a agenda: anotação não tem prazo, não tem dono e não entra em relatório nenhum. Quando uma delas virar compromisso, o botão "Virar tarefa" a atravessa para o método, já com o negócio e a pessoa que o texto citava.'],
     ['⚙️', 'Configuração', 'Instalação, dados, nuvem, IA e diagnóstico.',
@@ -5362,6 +5446,112 @@
      tela vira uma segunda lista de tarefas paralela à de verdade — e aí
      existem dois lugares para procurar a mesma coisa, que é o mesmo que não
      ter lugar nenhum. */
+  /* ---------- o Potencial, no manual ----------
+     A seção é longa porque a conta é pública de propósito. Qualificação
+     fechada é qualificação que ninguém contesta, e qualificação que ninguém
+     contesta nunca melhora — foi o que matou o campo do RD Station para o
+     Alexandre. Quem lê aqui consegue dizer “este peso está errado”, e isso é
+     a funcionalidade. */
+  function manualDoPotencial() {
+    const faixa = function (f) {
+      return '<tr><td style="white-space:nowrap"><span class="pill ' + f.classe + ' mini">' +
+        esc(f.rotulo) + '</span></td><td class="small" style="white-space:nowrap">' +
+        (f.minimo === -Infinity ? 'abaixo de 18' : f.minimo + ' ou mais') +
+        '</td><td class="small muted">' + esc(f.acao) + '</td></tr>';
+    };
+    const ponto = function (quanto, oQue, porque) {
+      return '<tr><td style="white-space:nowrap"><strong>' + esc(quanto) + '</strong></td>' +
+        '<td class="small">' + oQue + '</td><td class="small muted">' + porque + '</td></tr>';
+    };
+
+    return '<div class="card" id="m-potencial"><h2>Potencial: vale a primeira hora?</h2>' +
+
+      '<p class="small">O IAD responde <em>“a decisão está madura?”</em>. A pergunta pressupõe ' +
+      'que exista decisão para medir — e cem leads recém-importados do LinkedIn não têm nenhuma: ' +
+      '<strong>todos marcam IAD 0</strong>. IAD 0 não distingue o diretor de operações de uma ' +
+      'indústria do segmento onde já ganhamos do estagiário de uma empresa sem site.</p>' +
+
+      '<p class="small">Potencial responde a pergunta <strong>anterior</strong>: vale a primeira ' +
+      'hora? É a única coisa que o vendedor precisa saber diante de uma lista de cem nomes.</p>' +
+
+      '<h3>As quatro faixas</h3>' +
+      '<p class="small">Os nomes são de ação, não de temperatura. “Morno” não diz o que fazer na ' +
+      'segunda de manhã; “A conferir” diz.</p>' +
+      '<div class="tabela-rolagem"><table><thead><tr><th>Faixa</th><th>Pontos</th><th>O que fazer</th>' +
+      '</tr></thead><tbody>' + P.FAIXAS_POTENCIAL.map(faixa).join('') + '</tbody></table></div>' +
+
+      '<h3>Duas contas, somadas só no fim</h3>' +
+      '<p class="small">São mantidas separadas de propósito, porque pedem ações opostas. ' +
+      '<strong>Perfil 45 com interesse 0</strong> é um lead para trabalhar: a empresa certa, a ' +
+      'pessoa certa, e ninguém falou com ela ainda. <strong>Interesse 40 com perfil 8</strong> é ' +
+      'curiosidade que consome tempo. A soma sozinha confundiria os dois em “45”.</p>' +
+
+      '<h4>Perfil — até 50 pontos: parece com quem compra da gente?</h4>' +
+      '<div class="tabela-rolagem"><table><tbody>' +
+      ponto('até 18', 'O papel do grupo comprador mais alto que você tem na conta',
+        'Decisor econômico 18 · Champion 14 · Financeiro e Operações 12 · Técnico 10 · Compras 8 · Jurídico 6 · Usuário 4. ' +
+        'O mais alto, e não a média: falar com o decisor vale o que vale mesmo com três usuários no cadastro.') +
+      ponto('até 8', 'A senioridade escrita no cargo',
+        'Decide 8 · manda em alguém 5 · faz e opina 3 · aprendiz 1. Correlacionada com o papel e não igual: ' +
+        '“Gerente de Compras” é sênior e é Compras; “Analista Ambiental” é júnior e é Operações.') +
+      ponto('até 10', 'A empresa existe de verdade',
+        'Nome real 4 · site 3 · cidade 2 · CNPJ 1. Lead importado sem empresa vira conta ' +
+        '“Fulano (empresa não informada)”, que não é uma empresa — é alguém que ninguém terminou de cadastrar.') +
+      ponto('até 14', 'O segmento, aprendido da sua própria carteira',
+        'Já ganhamos ali 14 · a decisão já andou ali (IAD 8+) 9 · nunca produziu nada 2 · sem segmento 0. ' +
+        '<strong>Nada disso é digitado por ninguém:</strong> sai dos seus desfechos. Lista de ICP digitada ' +
+        'envelhece calada, e ninguém volta para corrigi-la.') +
+      '</tbody></table></div>' +
+      '<p class="tiny muted">Enquanto a carteira não tiver nenhum ganho e nenhum negócio que andou, ' +
+      'o segmento entra <strong>neutro</strong> (7) para todo mundo, e a pílula diz isso. Zerar ' +
+      'todos por uma falta que é nossa, e não dos leads, seria mentir com número.</p>' +
+
+      '<h4>Interesse — até 50 pontos: ele já se mexeu?</h4>' +
+      '<div class="tabela-rolagem"><table><tbody>' +
+      ponto('18', 'O cliente produziu alguma evidência', 'Respondeu, perguntou, mandou um número. É o degrau que separa lead de conversa.') +
+      ponto('+8', 'Foram duas ou mais', 'Uma resposta é educação; duas é interesse.') +
+      ponto('até +10', 'Há quanto tempo foi a última', 'Até 14 dias 10 · até 30 dias 5 · até 60 dias 2 · mais que isso, zero.') +
+      ponto('até +10', 'Sinal do comprador nos últimos 30 dias', 'Sinal forte 10 · qualquer sinal 5. Abrir a proposta de novo é ele se mexendo sem você.') +
+      ponto('+8', 'Existe próximo passo combinado com data', 'Compromisso com data é a prova mais barata de que a conversa continua.') +
+      ponto('+6', 'Dá para falar fora do LinkedIn', 'Telefone ou e-mail. Não é interesse dele, é viabilidade sua — mas a pergunta da tela é “vale a primeira hora?”.') +
+      '</tbody></table></div>' +
+      '<p class="tiny muted">O que você fez <strong>não</strong> entra: tarefa cumprida, e-mail enviado, ' +
+      'conexão aceita. É a mesma regra do IAD — esforço do vendedor não é evidência do comprador.</p>' +
+
+      '<h3>A trava</h3>' +
+      '<p class="small">Se a pessoa já <strong>respondeu não</strong> numa campanha, o Potencial fica ' +
+      'travado em <span class="pill dead mini">Fora do alvo</span> — e a pílula diz em qual campanha e ' +
+      'com que motivo. “Não” não se compensa com cargo bom.</p>' +
+
+      '<h3>O que isto NÃO faz</h3>' +
+      '<div class="passos-manual">' +
+      '<div class="passo-manual"><div class="numero">1</div><div><strong>Não mexe no IAD</strong>' +
+      '<span class="tiny muted">Nenhum ponto daqui entra no índice, na saúde nem na classificação do ' +
+      'pipeline. Potencial é sobre o <em>lead</em>; IAD é sobre a <em>decisão</em>. No dia em que um lead ' +
+      '“promissor” subir o índice sozinho, o índice deixa de medir o comprador e passa a medir a nossa ' +
+      'esperança.</span></div></div>' +
+      '<div class="passo-manual"><div class="numero">2</div><div><strong>Não usa IA e não custa nada</strong>' +
+      '<span class="tiny muted">É aritmética sobre o que já está cadastrado. Funciona com o assistente ' +
+      'fora do ar, e continua funcionando para sempre.</span></div></div>' +
+      '<div class="passo-manual"><div class="numero">3</div><div><strong>Não é previsão de venda</strong>' +
+      '<span class="tiny muted">Potencial alto não quer dizer que fecha. Quer dizer que vale a hora. ' +
+      'Quem diz se fecha são as oito decisões, e elas só andam com evidência do cliente.</span></div></div>' +
+      '<div class="passo-manual"><div class="numero">4</div><div><strong>Não fica guardado</strong>' +
+      '<span class="tiny muted">É recalculado toda vez que a tela abre. Preencher o segmento de uma ' +
+      'conta, ou cadastrar o telefone de um contato, muda a faixa na hora — e é por isso que a pílula ' +
+      'mostra o motivo: ela está te dizendo o que falta.</span></div></div>' +
+      '</div>' +
+
+      '<h3>Onde ele aparece</h3>' +
+      '<p class="small"><strong>No cabeçalho de cada negócio</strong>, ao lado do título — passe o mouse ' +
+      'para ver a conta inteira. <strong>Na Nutrição</strong>, como coluna, como filtro e como ' +
+      '<strong>ordem da lista</strong>: sem isso os cem leads saem na ordem em que a ponte os entregou, ' +
+      'que não é ordem nenhuma. E <strong>no Hoje</strong>, na linha de triagem, dizendo quantos daquele ' +
+      'monte valem a primeira hora — “noventa e oito coisas para triar” é tarefa que ninguém começa; ' +
+      '“seis valem a pena” é tarefa de hoje.</p>' +
+      '</div>';
+  }
+
   function manualDasNotas() {
     return '<div class="card" id="m-notas"><h2>Notas rápidas: o caderninho</h2>' +
 
@@ -6582,6 +6772,7 @@
       manualDoCaminho() +
       manualDoDia() +
       manualDaFila() +
+      manualDoPotencial() +
       manualDasNotas() +
       manualDoLinkedHelper() +
       manualDosSinais() +
