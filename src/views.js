@@ -4850,6 +4850,8 @@
      'A ordem em que a tela Hoje coloca a carteira e o porquê de cada posição; com quem falar para provar a decisão que falta, decisão por decisão; e por que os leads que nunca produziram evidência ficam fora da fila.'],
     ['m-potencial', 'Potencial: vale a primeira hora?',
      'A pergunta que vem antes do IAD, para quando você tem cem leads e IAD 0 em todos. As quatro faixas, as duas contas que as formam (perfil e interesse), de onde sai cada ponto e por que nada disso mexe no índice.'],
+    ['m-nutricao', 'O Processo de Nutrição: triar cem de uma vez',
+     'A tela onde se decide em lote quem sai da previsão e quem volta: as duas abas, os filtros que valem para as duas, a ordem por Potencial, o motivo e a data pedidos uma vez para o lote todo — e por que nada disso encerra ninguém.'],
     ['m-notas', 'Notas rápidas: o caderninho',
      'Onde guardar a frase que você não pode esquecer, escrita ou ditada, sem preencher formulário nenhum. O que o app reconhece sozinho no texto, por que a anotação não conta como tarefa, e por que ninguém além de você lê esta tela.'],
     ['m-lh', 'A integração com o Linked Helper',
@@ -4914,6 +4916,11 @@
      'A carteira lida pela decisão do comprador, não pela etapa. Sete grupos, filtros no topo e a gaveta de filtros finos. Em lista ou em kanban.'],
     ['✅', 'Tarefas', 'O que foi executado, e o que aquilo rendeu.',
      'Toda tarefa presa a uma empresa e a uma negociação. Filtros como os do pipeline, resumo da semana, e a coluna que diz qual decisão cada tarefa destrava.'],
+    /* Faltava. A tela existe no menu desde que o WhatsApp entrou, tem seção
+       própria no manual, e mesmo assim não tinha linha aqui — quem consultava
+       a tabela para saber em qual tela entrar simplesmente não via Conversas. */
+    ['💬', 'Conversas', 'Alguém me respondeu?',
+     'As conversas de WhatsApp, por pessoa. Mensagem não é evidência: você lê, e o que valeu a pena vira tarefa concluída com um botão — e aí sim as oito decisões andam.'],
     ['🔄', 'Revisão', 'O que precisa da minha decisão, não do meu esforço.',
      'A fila do que está fora do lugar: negócio sem próximo passo, papel crítico ausente, evidência velha, etapa adiantada demais.'],
     ['📇', 'Cadastros', 'Onde ficam as empresas, as pessoas e as listas.',
@@ -5552,6 +5559,75 @@
       '</div>';
   }
 
+  /* ---------- o Processo de Nutrição, no manual ----------
+     O manual explicava nutrição como ESTADO de um negócio (em “O caminho do
+     vendedor”), e isso continua certo. O que faltava era a TELA: o lugar onde
+     se decide cem de uma vez. São duas coisas diferentes — uma é o que
+     acontece com a conta, a outra é o trabalho de segunda-feira — e quem
+     procurava a segunda achava a primeira e ia embora. */
+  function manualDaNutricao() {
+    return '<div class="card" id="m-nutricao"><h2>O Processo de Nutrição: triar cem de uma vez</h2>' +
+
+      '<p class="small muted">O que a nutrição é — o estado, o que acontece com o negócio, ' +
+      'como ele volta — está em <a href="#/playbook" onclick="App.irNoManual(\'m-caminho\');return false;">' +
+      'O caminho do vendedor</a>. Esta seção é sobre a <strong>tela</strong>: o trabalho de decidir ' +
+      'em lote quem sai da previsão e quem volta.</p>' +
+
+      '<p class="small">Ele saiu de dentro de Cadastros e virou item próprio do menu, logo abaixo. ' +
+      'Aba de cadastro é lugar de lista que quase não muda; isto aqui é trabalho de todo mês — e ' +
+      'trabalho que mora dentro de um cadastro é trabalho que ninguém faz.</p>' +
+
+      '<h3>Duas abas, os mesmos filtros</h3>' +
+      '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' +
+      '<tr><td class="rotulo-manual"><strong>Carteira Ativa</strong></td><td>' +
+      '<strong>Os negócios abertos que contam na previsão</strong>' +
+      '<span class="tiny muted">É daqui que sai quem ainda não está pronto. O número na aba é ' +
+      'quantos você tem fora da nutrição.</span></td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>Leads em Nutrição</strong></td><td>' +
+      '<strong>Os que saíram da previsão e continuam abertos</strong>' +
+      '<span class="tiny muted">Com motivo e data para voltar a olhar. Aqui você vê quem tem revisão ' +
+      'vencida e devolve à carteira quem já ficou pronto.</span></td></tr>' +
+      '</tbody></table></div>' +
+      '<p class="tiny muted">Os filtros valem para as duas abas de propósito: filtrar a carteira, ' +
+      'trocar de aba e ver outra régua faria você comparar duas listas que não são comparáveis.</p>' +
+
+      '<h3>A lista sai ordenada por Potencial</h3>' +
+      '<p class="small">Sem isso, cem leads importados saem na ordem em que a ponte os entregou — que ' +
+      'não é ordem nenhuma — e todos marcam IAD 0, então o índice também não separa. Com o ' +
+      '<a href="#/playbook" onclick="App.irNoManual(\'m-potencial\');return false;">Potencial</a> ' +
+      'em coluna, em filtro e na ordem, a primeira tela já mostra quem vale a primeira hora. ' +
+      'Empate no Potencial desempata pelo IAD.</p>' +
+      '<p class="tiny muted">Quem já respondeu <strong>não</strong> vai para o fim mesmo tendo cargo alto: ' +
+      'a trava vence os pontos. Ordenar pelos pontos poria um “não” de diretor no alto da lista.</p>' +
+
+      '<h3>O trânsito em lote</h3>' +
+      '<div class="passos-manual">' +
+      '<div class="passo-manual"><div class="numero">1</div><div><strong>Filtre</strong>' +
+      '<span class="tiny muted">Por campanha (na busca), responsável, segmento, Potencial e saúde da ' +
+      'decisão. “Marcar todos” marca <strong>os que passam no filtro</strong>, nunca os cento e um — ' +
+      'marcar o que não está na tela é a forma mais fácil de mover um negócio sem querer.</span></div></div>' +
+      '<div class="passo-manual"><div class="numero">2</div><div><strong>Marque e mova</strong>' +
+      '<span class="tiny muted">O motivo e a data de revisão são pedidos uma vez e valem para o lote ' +
+      'inteiro. Nutrição sem data é esquecimento com nome bonito.</span></div></div>' +
+      '<div class="passo-manual"><div class="numero">3</div><div><strong>Nada disso encerra ninguém</strong>' +
+      '<span class="tiny muted">Mover para nutrição tira da previsão e <strong>mantém na agenda</strong>. ' +
+      'Encerrar é a forma mais cara de esquecer de uma conta — ela sai da previsão E da cabeça de todo ' +
+      'mundo. A passagem fica no histórico.</span></div></div>' +
+      '<div class="passo-manual"><div class="numero">4</div><div><strong>Volta sozinho</strong>' +
+      '<span class="tiny muted">Qualquer evidência nova do cliente devolve o negócio à carteira sem ' +
+      'ninguém apertar nada — é esse o sinal que a nutrição estava esperando. O botão de devolver ' +
+      'existe para quando o motivo deixou de valer: o orçamento saiu, o contrato do concorrente venceu, ' +
+      'a obra acabou.</span></div></div>' +
+      '</div>' +
+
+      '<h3>Por que a triagem não entra na Fila do dia</h3>' +
+      '<p class="small">Lead que nunca produziu evidência do cliente não é negócio atrasado: é negócio ' +
+      'que <strong>nunca começou</strong>. Se entrasse como urgência, a tela Hoje teria noventa e oito ' +
+      'linhas vermelhas e nenhuma prioridade real. Ele fica contado numa linha à parte, que diz quantos ' +
+      'daquele monte têm Potencial de sobra, e leva para cá.</p>' +
+      '</div>';
+  }
+
   function manualDasNotas() {
     return '<div class="card" id="m-notas"><h2>Notas rápidas: o caderninho</h2>' +
 
@@ -5631,7 +5707,8 @@
         'linha, <strong>o que fazer, com quem e por qual canal</strong> — e o motivo de aquilo ' +
         'estar naquela posição. Compromisso vencido vem primeiro; logo atrás vem o negócio em que ' +
         'o cliente se mexeu e o registro ficou para trás. Os leads que nunca produziram evidência ' +
-        'nenhuma não entram: ficam contados numa linha à parte, como triagem.</p>' +
+        'nenhuma não entram: ficam contados numa linha à parte, como triagem — e essa linha ' +
+        'já diz quantos deles têm <strong>Potencial</strong> de sobra.</p>' +
         '<p class="tiny muted" style="margin:4px 0 0">Onde: <strong>⚡ Hoje</strong> · detalhada em ' +
         '<a href="#/playbook" onclick="App.irNoManual(\'m-fila\');return false;">A Fila</a></p>') +
 
@@ -5677,6 +5754,24 @@
         'a conta estava esquentando ou esfriando.</p>' +
         '<p class="tiny muted" style="margin:4px 0 0">Onde: cockpit → <strong>Sinais</strong> → ' +
         '<strong>Registrar sinal</strong></p>') +
+
+      bloco('ao lembrar de algo', 'Anote antes de esquecer — escrito ou ditado',
+        '<p class="small" style="margin:4px 0 0">Você desliga o telefone com uma frase na cabeça: ' +
+        '<em>“ligar para o Carlos da Heineken”</em>. Não é tarefa ainda, e exigir empresa, canal e ' +
+        'vencimento para guardar uma frase é o que faz a frase acabar no papel. Uma caixa, ' +
+        '<strong>Enter</strong>, e pronto. Quando virar compromisso, <strong>Virar tarefa</strong> a ' +
+        'atravessa para o método já com o negócio e a pessoa que o texto citava. Só você lê.</p>' +
+        '<p class="tiny muted" style="margin:4px 0 0">Onde: <strong>📝 Notas rápidas</strong> · detalhada em ' +
+        '<a href="#/playbook" onclick="App.irNoManual(\'m-notas\');return false;">Notas rápidas</a></p>') +
+
+      bloco('quando a fila acabar', 'Sobrou tempo? Trie a lista de leads pelo Potencial',
+        '<p class="small" style="margin:4px 0 0">É o outro trabalho do dia, e o único que rende quando ' +
+        'ninguém tem compromisso vencido. Cem leads importados marcam <strong>IAD 0 todos</strong>, então ' +
+        'o índice não separa nada ali — quem separa é o <strong>Potencial</strong>, e a lista já vem ' +
+        'ordenada por ele. Trabalhe os <em>Prioritários</em> e os <em>Promissores</em>; mande o resto para ' +
+        'nutrição em lote, com motivo e data.</p>' +
+        '<p class="tiny muted" style="margin:4px 0 0">Onde: <strong>🌱 Nutrição</strong> · detalhada em ' +
+        '<a href="#/playbook" onclick="App.irNoManual(\'m-nutricao\');return false;">O Processo de Nutrição</a></p>') +
 
       bloco('uma vez na semana', 'Uma vez por semana, passe na Revisão e no Painel',
         '<p class="small" style="margin:4px 0 0"><strong>Revisão</strong> junta o que precisa de ' +
@@ -5729,6 +5824,28 @@
         'contato e negociação com um clique; aberturas de documento viram sinal.',
         'Conversas · Configuração → Buscar respostas') +
 
+      /* As três linhas novas. A tabela existe para responder “o que eu ganho
+         por preencher isto?”, e o Potencial criou duas respostas que antes não
+         existiam: campo de cadastro que parecia burocracia agora muda a ordem
+         da lista de amanhã. */
+      troca('O segmento da empresa',
+        'Entra direto no <strong>Potencial</strong> daquele lead — e, quando um negócio daquele ' +
+        'segmento fechar, ele passa a valer o dobro para todos os outros leads do mesmo ramo. ' +
+        'Conta sem segmento perde a nota inteira dessa parte.',
+        'Nutrição · cockpit') +
+
+      troca('O telefone e o e-mail do contato',
+        'Além de poder ligar: o <strong>Potencial</strong> sobe, porque lead que só se alcança por ' +
+        'InMail rende menos hora. E A Fila passa a poder sugerir o canal certo em vez de avisar que ' +
+        'falta contato.',
+        'Cockpit → Contatos') +
+
+      troca('Um desfecho registrado — ganho ou perda',
+        'O <strong>Potencial</strong> deixa de tratar todos os segmentos como iguais e passa a ' +
+        'aprender o seu ICP dos seus próprios ganhos. Enquanto não houver desfecho nenhum, ele diz ' +
+        'isso na cara, em vez de fingir que sabe.',
+        'Encerrar · Painel → Aprendizado') +
+
       '</tbody></table></div>' +
 
       '<h3>O mínimo, se o dia apertar</h3>' +
@@ -5736,6 +5853,9 @@
       'aconteceu</strong>, <strong>marque a próxima com data</strong> e <strong>mande documento por ' +
       'link rastreado</strong>. As três primeiras linhas da tabela acima saem daí, e elas são as que ' +
       'sustentam o resto.</p>' +
+      '<p class="small">E se sobrar tempo, o quarto: <strong>trie a lista de leads pelo Potencial</strong> ' +
+      'e mande em lote para nutrição quem não vale a primeira hora. É o único trabalho que rende num ' +
+      'dia sem compromisso vencido.</p>' +
       '<p class="small muted">O que nunca vale a pena: concluir tarefa em lote sem contar nada. O ' +
       'funil anda, nenhuma das oito decisões anda, e o sistema marca essa diferença — ela aparece ' +
       'depois no Aprendizado como trabalho que não virou avanço.</p>' +
@@ -6773,6 +6893,7 @@
       manualDoDia() +
       manualDaFila() +
       manualDoPotencial() +
+      manualDaNutricao() +
       manualDasNotas() +
       manualDoLinkedHelper() +
       manualDosSinais() +

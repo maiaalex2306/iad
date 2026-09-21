@@ -1267,6 +1267,12 @@ td.subiu { color: var(--ok); font-weight: 600; }
   padding: 10px 0; border-top: 1px solid var(--line);
 }
 .escada-manual > div:last-child { border-bottom: 1px solid var(--line); }
+/* Dentro de uma célula de tabela o `.tiny` já quebra linha (regra lá em
+   cima), e por isso ninguém notou: nos blocos numerados do manual ele ficava
+   inline e o subtítulo colava no título — “FiltrePor campanha”. Vale para as
+   seções da IA, do Potencial e da Nutrição de uma vez. */
+.passo-manual .tiny { display: block; margin-top: 3px; }
+
 .nota-manual { font-size: 1.3rem; font-weight: 700; line-height: 1.15; }
 .nota-manual.n0 { color: var(--muted); }
 .nota-manual.n1 { color: var(--warn); }

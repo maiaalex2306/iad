@@ -5,8 +5,8 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v206**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v206, o aparelho
+Publicado agora: **v207**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v207, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -397,6 +397,41 @@ com nada marcado. Marcar 99 e a seleção sobreviver a um refresh seria armadilh
 duas negociações de verdade. Filtrar por campanha, marcar os 51, mover com
 motivo e prazo, conferir que **ninguém foi encerrado**, devolver três, e que a
 passagem ficou no `historicoNutricao`.
+
+## 0-Z. O manual, auditado por teste — v207, 21/09
+
+*“Atualizou o manual do Método com tudo que acrescentamos?”* — auditado de
+verdade em vez de respondido de memória. Quatro buracos, dois deles antigos:
+
+1. **Não havia seção para a TELA de Nutrição.** `m-caminho` explica nutrição
+   como ESTADO de um negócio, e continua certo — mas quem procurava o trabalho
+   de triar cem de uma vez achava aquilo e ia embora. Nova seção `m-nutricao`:
+   as duas abas, os filtros que valem para as duas, a ordem por Potencial, o
+   motivo e a data pedidos uma vez para o lote, e por que a triagem fica fora
+   da Fila do dia.
+2. **A rotina do dia (`m-dia`) não citava as duas coisas mais novas.** Dois
+   blocos: *“ao lembrar de algo”* (Notas rápidas) e *“quando a fila acabar”*
+   (triar pelo Potencial). Mais três linhas na tabela “o que você alimenta, o
+   que recebe de volta” — segmento da conta, telefone/e-mail do contato e
+   desfecho registrado agora têm retorno visível, porque alimentam o Potencial.
+3. **Conversas não tinha linha na tabela “As telas”.** Buraco antigo: a tela
+   existe no menu desde o WhatsApp e tem seção própria, mas quem consultava a
+   tabela para saber em qual tela entrar simplesmente não a via.
+4. **Defeito visual nos blocos numerados:** `.tiny` só quebra linha dentro de
+   `<td>` (regra antiga), então o subtítulo colava no título — “FiltrePor
+   campanha”. Afetava também a seção da IA, que é de muito antes. Uma regra
+   (`.passo-manual .tiny`) conserta as três.
+
+**O que muda daqui para a frente:** a nova suíte `manual` (19 testes) audita
+sozinha e vale mais que esta lista. Ela cobra: toda tela do menu com linha na
+tabela “As telas”; todo item do índice com seção e toda seção no índice; todo
+item com resumo no balão; nenhum link interno quebrado; e treze
+funcionalidades nomeadas presentes no texto. Foi ela que achou o buraco da
+Conversas — que eu não tinha visto lendo.
+
+**28 itens no índice.** Suítes: 12 arquivos, 283 conferências, 0 falhas.
+
+---
 
 ## 0-Y. Potencial — 1ª entrega, sem IA — v206, 21/09
 
