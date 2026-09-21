@@ -50,7 +50,12 @@
       const registro = Object.assign({
         id: id, nome: arquivo.name, mime: arquivo.type || 'application/octet-stream',
         tamanho: arquivo.size, data: global.IADStore.hoje(),
-        oportunidadeId: null, contaId: null, categoria: 'Outro', enviadoPor: 'nos'
+        /* `tarefaId` faltava, e a falta tinha cara de perda: quem anexava pelo
+           formulário de Editar tarefa via o arquivo sumir. Ele não sumia — ia
+           para a aba Arquivos do negócio, que é onde documento mora. Só que
+           nada ligava o arquivo à tarefa que o trouxe, então o formulário não
+           tinha como mostrar de volta o que você acabou de pôr. */
+        oportunidadeId: null, contaId: null, tarefaId: null, categoria: 'Outro', enviadoPor: 'nos'
       }, meta);
       const tx = transacao(db, [META, DADOS], 'readwrite');
       tx.objectStore(META).put(registro);
@@ -75,6 +80,7 @@
         const lista = todos.filter(function (a) {
           if (por.oportunidadeId && a.oportunidadeId !== por.oportunidadeId) return false;
           if (por.contaId && a.contaId !== por.contaId) return false;
+          if (por.tarefaId && a.tarefaId !== por.tarefaId) return false;
           return true;
         });
         return lista.sort(function (a, b) { return b.data.localeCompare(a.data); });

@@ -359,11 +359,24 @@
        qualquer outro e não sai sozinho. */
     const sinc = global.IADSincronia && global.IADSincronia.estado();
     if (sinc && sinc.situacao === 'erro') {
+      /* A faixa diagnosticava certo e oferecia dois botões que não resolvem
+         nada: “tentar de novo” falha igual enquanto a causa estiver de pé, e
+         “descartar” joga fora exatamente o trabalho que a faixa existe para
+         proteger. Faltava o terceiro, que é o único que nunca perde: **tirar
+         uma cópia do que está na tela**. Ele vem primeiro de propósito. */
+      const semEmpresa = /empresa na nuvem/i.test(sinc.recado || '');
       return '<div class="aviso faixa-aviso erro-grave">' +
         '<strong>A sua última alteração não foi salva no servidor.</strong> ' +
         U.esc(sinc.recado) +
         ' Enquanto isto não for resolvido, o que está na tela existe só aqui — e recarregar perde.' +
-        '<button class="btn mini" onclick="App.tentarSalvarDeNovo()">Tentar salvar de novo</button>' +
+        '<button class="btn mini" onclick="App.exportar()"' +
+        ' data-ajuda-titulo="Baixar cópia" data-ajuda="Grava num arquivo tudo o que está neste navegador agora, inclusive o que ainda não subiu. É a única ação desta faixa que não pode dar errado — faça antes de qualquer outra.">' +
+        '⬇ Baixar cópia</button>' +
+        (semEmpresa
+          ? '<button class="btn alt mini" onclick="App.resolverEmpresaDaNuvem()"' +
+            ' data-ajuda-titulo="Resolver agora" data-ajuda="Liga o seu usuário a uma empresa do servidor. Enquanto ele não pertencer a nenhuma, nada sobe — de propósito: registro sem carimbo de empresa nasceria invisível para todo mundo, inclusive para você.">' +
+            'Resolver agora</button>'
+          : '<button class="btn mini" onclick="App.tentarSalvarDeNovo()">Tentar salvar de novo</button>') +
         '<button class="btn ghost mini" onclick="App.descartarAlteracao()">Descartar e recarregar</button></div>';
     }
     if (avisoSincronizacao) {
@@ -1032,7 +1045,10 @@
     /* O que a nota rápida consegue ler do próprio texto. Exposto porque é
        a única parte da tela com regra de verdade, e regra que decide em qual
        negócio uma tarefa vai cair precisa de teste. */
-    __palpiteDaNota: function (texto) { return palpiteDaNota(texto); }
+    __palpiteDaNota: function (texto) { return palpiteDaNota(texto); },
+    /* Exposto porque o caminho da FALHA ao anexar e' o que vinha sendo
+       engolido, e caminho de erro sem teste volta a ser engolido. */
+    __anexarAoRegistro: function (docs, alvo, aoTerminar) { return anexarAoRegistro(docs, alvo, aoTerminar); }
   };
 
   const App = {
@@ -2890,7 +2906,8 @@
         /* Tarefa a fazer também guarda o material: a proposta que vou enviar
            fica anexada ao negócio desde já. */
         if (!feita) {
-          anexarAoRegistro(docs, { oportunidadeId: alvo.id, contaId: alvo.contaId, categoria: 'Outro' });
+          anexarAoRegistro(docs, { oportunidadeId: alvo.id, contaId: alvo.contaId,
+            tarefaId: tarefa.id, categoria: 'Outro' }, function () { render(); });
           render();
           return;
         }
@@ -3438,11 +3455,13 @@
            seguinte, e anexar nas duas gravaria o mesmo arquivo duas vezes. */
         const quer = d.situacao === 'feita';
         if (aberta && quer) { concluirDaEdicao(alvo, id, d, docs); return; }
-        anexarAoRegistro(docs, { oportunidadeId: alvo.id, contaId: alvo.contaId, categoria: 'Outro' });
+        anexarAoRegistro(docs, { oportunidadeId: alvo.id, contaId: alvo.contaId,
+          tarefaId: id, categoria: 'Outro' }, function () { render(); });
         if (!aberta && !quer) { App.reabrirTarefa(id); return; }
         render();
       }, function (dlg) {
         U.ligarDocumentos(dlg, 'arquivo');
+        pintarAnexosDaTarefa(dlg, id);
         ligarPainelDeMetodo(dlg);
         ligarEmpresaENegocio(dlg);
         ligarContatoDaTarefa(dlg, atual);
@@ -3890,12 +3909,62 @@
       });
     },
 
-    definirEmpresaNuvem: function () {
+    /* Este botão só sabia CRIAR empresa — e quem chega aqui quase sempre JÁ
+       TEM uma, com a carteira inteira dentro dela: o que se perdeu foi o
+       vínculo, não a empresa. Criar uma segunda nesse estado é o pior desfecho
+       possível: some tudo da tela, o servidor continua com os dados, e nada
+       no app diz o que aconteceu. Agora ele pergunta primeiro. */
+    definirEmpresaNuvem: function () { App.resolverEmpresaDaNuvem(); },
+
+    resolverEmpresaDaNuvem: function () {
       const N = global.IADNuvem;
-      U.formulario('Minha empresa na nuvem', [
-        { id: 'nome', rotulo: 'Nome da empresa' },
-        { id: 'cnpj', rotulo: 'CNPJ' }
-      ], {}, function (d) {
+      /* Sem empresa no perfil, o RLS só deixa listar `tenants` quem é
+         administrador — para os outros a lista volta vazia, e aí criar é mesmo
+         a única saída pelo app. Dizer isso é melhor do que oferecer uma lista
+         vazia sem explicação. */
+      N.empresasDaNuvem().then(function (l) { return l || []; }, function () { return []; })
+        .then(function (lista) {
+          if (!lista.length) return App.criarEmpresaDaNuvem(true);
+
+          U.formulario('Minha empresa na nuvem', [
+            { tipo: 'aviso', rotulo: 'O seu usuário não está ligado a nenhuma empresa, e por isso ' +
+              'nada sobe. Se a sua carteira já está no servidor, o que se perdeu foi o vínculo — ' +
+              'escolha a empresa dela aqui. Criar uma nova começa do zero e não traz nada de volta.' },
+            { id: 'tenantId', rotulo: 'Entrar numa empresa que já existe', tipo: 'select',
+              opcoes: lista.map(function (t) { return { valor: t.id, rotulo: t.nome || t.id }; })
+                .concat([{ valor: '@nova', rotulo: '— criar uma empresa nova —' }]) }
+          ], {}, function (d) {
+            if (d.tenantId === '@nova') return App.criarEmpresaDaNuvem(false);
+            if (!d.tenantId) return;
+            recadoNuvem('Ligando o seu usuário à empresa…');
+            /* O próprio dono pode gravar o próprio perfil: a política
+               `perfis_atualizacao` do schema permite `id = auth.uid()`. */
+            N.salvarPerfil({ tenant_id: d.tenantId })
+              .then(function () { return N.meuPerfil(); })
+              .then(function (perfil) {
+                N.guardarPerfilNaSessao(perfil);
+                render();
+                recadoNuvem('Pronto. Agora clique em "Tentar salvar de novo" na faixa, ' +
+                  'ou em "Sincronizar agora" aqui embaixo.');
+              })
+              .catch(function (e) { render(); recadoNuvem('Falhou: ' + e.message, true); });
+          });
+        });
+    },
+
+    criarEmpresaDaNuvem: function (unicaSaida) {
+      const N = global.IADNuvem;
+      const campos = [];
+      if (unicaSaida) {
+        campos.push({ tipo: 'aviso', rotulo: 'Não consegui listar empresas no servidor. Ou não existe ' +
+          'nenhuma, ou o seu usuário ainda não tem permissão para vê-las — só quem administra ' +
+          'enxerga a lista de fora de uma empresa. Se a sua carteira já está no servidor, ' +
+          'criar aqui NÃO a traz de volta: peça a quem administra, ou rode ' +
+          'nuvem/socorro-perfil-sem-empresa.sql no SQL Editor do Supabase.' });
+      }
+      campos.push({ id: 'nome', rotulo: 'Nome da empresa' }, { id: 'cnpj', rotulo: 'CNPJ' });
+
+      U.formulario('Criar empresa na nuvem', campos, {}, function (d) {
         if (!d.nome) return;
         recadoNuvem('Criando empresa…');
         N.criarMinhaEmpresa(d.nome, d.cnpj)
@@ -6123,6 +6192,11 @@
          foi digitado; em qualquer caso os arquivos ficam anexados ao negócio. */
       { id: 'arquivo', tipo: 'file',
         rotulo: 'Anexar documentos (Word, PDF, Excel, PowerPoint, texto) — pode escolher vários' },
+      /* O que JÁ está anexado. Um `<input type="file">` sempre abre vazio — é
+         assim que ele funciona — e sem nada ao lado dizendo o contrário, quem
+         volta à tarefa lê “Nenhum arquivo escolhido” como “meu arquivo sumiu”.
+         Foi exatamente o que aconteceu. */
+      { tipo: 'slot', slot: 'anexos-da-tarefa' },
       /* Quem prospecta escreve os nomes das pessoas na descrição — é onde eles
          nascem, antes de existir contato nenhum. O botão lê o que está escrito
          e cadastra quem faltar na empresa da tarefa. */
@@ -7945,11 +8019,66 @@
      vendedor espera: ele carregou a proposta uma vez, ela tem de continuar
      ali. Falhar aqui não desfaz o cadastro — o registro já está salvo, e
      perder o anexo é menos grave do que perder a empresa. */
-  function anexarAoRegistro(docs, alvo) {
-    if (!docs || !docs.length || !Arq.disponivel()) return;
-    docs.forEach(function (d) {
-      if (!d.arquivo) return;
-      Arq.salvar(d.arquivo, alvo).catch(function () {});
+  /* Os anexos que esta tarefa já tem, dentro do próprio formulário. Abre
+     cada um e permite tirar o errado sem sair da tela.
+
+     Os antigos — anexados antes de o arquivo conhecer a tarefa — não aparecem
+     aqui, e não some com eles: estão na aba Arquivos do negócio, que é onde
+     documento mora. A linha embaixo diz isso, porque “não aparece” sem
+     explicação é a mesma sensação de perda que criou este conserto. */
+  function pintarAnexosDaTarefa(dlg, tarefaId) {
+    const alvo = dlg.querySelector('[data-anexos-da-tarefa]');
+    if (!alvo || !Arq.disponivel()) return;
+
+    const pintar = function () {
+      Arq.listar({ tarefaId: tarefaId }).then(function (lista) {
+        if (!dlg.isConnected) return;
+        alvo.innerHTML = '<div class="campo"><span>J\u00e1 anexado nesta tarefa</span>' +
+          (lista.length
+            ? '<div class="anexos-ia">' + lista.map(function (a) {
+                return '<span class="anexo"><button type="button" class="link" data-abrir="' +
+                  U.esc(a.id) + '">' + U.esc(a.nome) + '</button>' +
+                  '<button type="button" class="sai" data-tirar="' + U.esc(a.id) +
+                  '" aria-label="Tirar este anexo">\u2715</button></span>';
+              }).join('') + '</div>'
+            : '<small class="origem">Nenhum ainda. Os que voc\u00ea escolher acima entram ao salvar \u2014 ' +
+              'e tamb\u00e9m ficam na aba <strong>Arquivos</strong> do neg\u00f3cio.</small>') +
+          '</div>';
+
+        alvo.querySelectorAll('[data-abrir]').forEach(function (b) {
+          b.addEventListener('click', function () { Arq.abrir(b.dataset.abrir); });
+        });
+        alvo.querySelectorAll('[data-tirar]').forEach(function (b) {
+          b.addEventListener('click', function () {
+            if (!U.confirmar('Tirar este anexo? Ele sai tamb\u00e9m da aba Arquivos do neg\u00f3cio.')) return;
+            Arq.excluir(b.dataset.tirar).then(pintar);
+          });
+        });
+      });
+    };
+    pintar();
+  }
+
+  function anexarAoRegistro(docs, alvo, aoTerminar) {
+    if (!docs || !docs.length || !Arq.disponivel()) {
+      if (aoTerminar) aoTerminar();
+      return;
+    }
+    /* O `.catch(function () {})` que estava aqui engolia a falha inteira: sem
+       espaço no aparelho, ou em aba anônima, o arquivo simplesmente não era
+       gravado e o app não dizia nada. Documento que some calado é pior do que
+       documento que não entra — no segundo caso a pessoa tenta de novo. */
+    const falhas = [];
+    Promise.all(docs.filter(function (d) { return d.arquivo; }).map(function (d) {
+      return Arq.salvar(d.arquivo, alvo).catch(function (e) {
+        falhas.push(d.arquivo.name + ': ' + ((e && e.message) || 'não consegui gravar'));
+      });
+    })).then(function () {
+      if (falhas.length) {
+        alert('Não consegui guardar ' + falhas.length + ' anexo(s) neste aparelho:\n\n' +
+          falhas.join('\n') + '\n\nO resto foi salvo. Tente de novo, ou guarde o arquivo fora do app.');
+      }
+      if (aoTerminar) aoTerminar();
     });
   }
 

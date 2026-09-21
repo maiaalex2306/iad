@@ -5,8 +5,8 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v208**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v208, o aparelho
+Publicado agora: **v209**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v209, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -397,6 +397,69 @@ com nada marcado. Marcar 99 e a seleção sobreviver a um refresh seria armadilh
 duas negociações de verdade. Filtrar por campanha, marcar os 51, mover com
 motivo e prazo, conferir que **ninguém foi encerrado**, devolver três, e que a
 passagem ficou no `historicoNutricao`.
+
+## 0-AB. Dois relatos de perda de dados — v209, 21/09
+
+### 1. “A sua última alteração não foi salva”, direto — e um botão que pioraria
+
+O `tenant_id` do perfil do Alexandre ficou **nulo** no servidor. `empurrar()`
+recusa o envio nesse estado, de propósito: registro sem carimbo de empresa
+nasceria invisível para todo mundo. O preço é que o que está na tela existe só
+no navegador, e recarregar perde.
+
+**O defeito grave que isso revelou:** o botão *“Definir minha empresa”* só sabia
+chamar `criarMinhaEmpresa`. Quem chega a essa tela quase sempre **já tem
+empresa**, com a carteira inteira dentro dela — o que se perdeu foi o vínculo.
+Criar uma segunda nesse estado é o pior desfecho possível: some tudo da tela, o
+servidor continua com os dados, e nada no app diz o que aconteceu.
+
+Agora `resolverEmpresaDaNuvem()` **lista as empresas primeiro** e oferece entrar
+numa que já existe (grava o próprio perfil — a política `perfis_atualizacao`
+permite `id = auth.uid()`), com “— criar uma empresa nova —” como última
+opção. Sem empresa no perfil o RLS de `tenants` só deixa listar quem é
+administrador; para os outros a lista volta vazia, e aí o formulário **diz
+isso** e aponta o SQL, em vez de oferecer criar como se fosse a solução.
+
+**A faixa laranja também estava errada.** Diagnosticava certo e oferecia dois
+botões que não resolvem: “tentar de novo” falha igual enquanto a causa estiver
+de pé, e “descartar” joga fora exatamente o trabalho que a faixa existe para
+proteger. Faltava o único que nunca perde: **⬇ Baixar cópia**, agora em
+primeiro lugar. E, quando a causa é a empresa, um **Resolver agora** no lugar do
+“tentar de novo”.
+
+**`nuvem/socorro-perfil-sem-empresa.sql`** (novo, validado em Postgres 16 real
+com as duas opções): item 1 o retrato, item 2 quais empresas existem e quanta
+carteira cada uma tem, item 3 a religação — comentada, para ser lida antes de
+rodar. A opção B (“pega a de maior carteira”) vem com o aviso de que escolher
+pela contagem com duas empresas parecidas é adivinhar.
+
+### 2. “Coloco arquivo na tarefa, salvo, volto e não tem nada”
+
+**O arquivo nunca se perdeu** — ia para a aba **Arquivos do negócio**, que é
+onde documento mora. O registro guardava `oportunidadeId` e `contaId` e **nada
+mais**: nenhum campo ligava o arquivo à tarefa que o trouxe. E como
+`<input type="file">` sempre abre vazio, reabrir “Editar tarefa” mostrava
+*“Nenhum arquivo escolhido”* — que se lê como “sumiu”.
+
+- O anexo passa a guardar **`tarefaId`**, e `listar()` filtra por ele.
+- O formulário ganhou o bloco **“Já anexado nesta tarefa”**, com abrir e tirar.
+  Sem anexo, ele diz onde os documentos moram em vez de ficar mudo.
+- **`Arq.salvar(...).catch(function () {})`** — a falha era engolida inteira.
+  Sem espaço no aparelho, ou em aba anônima, o arquivo não era gravado e o app
+  não dizia nada. Documento que some calado é pior do que documento que não
+  entra: no segundo caso a pessoa tenta de novo.
+
+Anexo antigo, sem `tarefaId`, continua no negócio — não some com ele, só não
+aparece no bloco da tarefa.
+
+**14 testes** (`anexos`), incluindo o caminho da falha ao gravar — caminho de
+erro sem teste volta a ser engolido. Total: 14 suítes, 330 conferências.
+
+**Onde está:** `faixaDeAviso()`, `resolverEmpresaDaNuvem()`,
+`criarEmpresaDaNuvem()`, `pintarAnexosDaTarefa()` e `anexarAoRegistro()` em
+`src/app.js`; `tarefaId` em `src/arquivos.js`.
+
+---
 
 ## 0-AA. Seleção em lote no Pipeline — v208, 21/09
 
