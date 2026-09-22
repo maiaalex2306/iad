@@ -5,8 +5,8 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v210**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v210, o aparelho
+Publicado agora: **v211**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v211, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -397,6 +397,64 @@ com nada marcado. Marcar 99 e a seleção sobreviver a um refresh seria armadilh
 duas negociações de verdade. Filtrar por campanha, marcar os 51, mover com
 motivo e prazo, conferir que **ninguém foi encerrado**, devolver três, e que a
 passagem ficou no `historicoNutricao`.
+
+## 0-AD. A faixa laranja: a causa real, e ela era nossa — v211, 22/09
+
+*“Amigo, isso continua ocorrendo”* — com a v210 no ar, a faixa “não foi salva
+no servidor” continuava em todas as telas.
+
+**A pista estava no próprio print:** o cockpit mostrava a Terracom Construções,
+a campanha, a SDR. Desde a v180 o navegador não guarda carteira — aquilo veio
+do servidor. Mas com `tenant_id` nulo, `meu_tenant()` é nulo e o RLS não
+devolveria linha nenhuma… **a menos que `sou_admin()` seja verdadeiro.**
+
+Ou seja: ele **é administrador**, lê a carteira inteira, e não conseguia gravar
+nada. E aí o defeito fica óbvio:
+
+```js
+if (!perfil || !perfil.tenant_id) return Promise.reject(...)
+```
+
+Essa guarda está **certa para o vendedor**: o RLS confere
+`tenant_id = meu_tenant()`, e com nulo nenhuma linha dele passaria — recusar
+aqui, com o motivo na tela, é melhor do que o servidor recusar em silêncio.
+
+Está **errada para o administrador**. `sou_admin()` deixa gravar em qualquer
+empresa, e `donoDoRegistro()` — dez linhas abaixo da guarda — já carimba cada
+linha com a empresa **dela**, não com a do perfil. O envio funcionaria
+perfeitamente. O administrador via a carteira toda e não gravava nada, com uma
+faixa que dizia “falta empresa” enquanto o que faltava era só aquela linha.
+
+**O conserto:** administrador passa. O que não passa é o registro **sem carimbo
+de servidor** — sem UUID próprio e sem empresa no perfil, não há de quem ele
+seja, e inventar dono é exatamente o erro que `donoDoRegistro` existe para não
+cometer. Mandar com `tenant_id` nulo esbarraria no NOT NULL e **derrubaria a
+tabela inteira, levando junto as linhas certas**. Esse fica retido, e a tela diz
+quantos.
+
+E a tela de Configuração parou de mentir: para o administrador ela agora diz
+que ele **ainda sincroniza**, e o que não sobe. O texto anterior — *“defina
+antes de sincronizar”* — era falso para ele, e foi o que segurou um dia de
+trabalho.
+
+**17 testes** (`admsub`), com o POST interceptado para conferir o `tenant_id` de
+cada linha que sobe: vendedor sem empresa continua barrado; administrador sem
+empresa sobe as carimbadas **com o carimbo da própria empresa de cada uma** e
+retém as sem carimbo, sem nunca mandar `tenant_id` nulo; e os dois casos que
+já funcionavam (admin com empresa, vendedor com empresa) não mudaram.
+
+**A lição:** a v209 consertou os sintomas (a faixa sem saída, o botão que só
+criava empresa) e eu tratei a causa como sendo do lado dele — dados no
+servidor. Era nossa. **O print tinha a resposta: dados na tela que só o RLS de
+administrador explica.** Ler o print inteiro antes de escrever SQL de socorro
+teria economizado uma versão.
+
+Total: 16 suítes, 381 conferências.
+
+**Onde está:** `empurrar()` e `daEmpresa()` em `src/nuvem.js`; o aviso por papel
+em `src/views.js`.
+
+---
 
 ## 0-AC. Juntar negociações pela seleção do Pipeline — v210, 22/09
 

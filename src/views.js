@@ -7692,8 +7692,19 @@
       (perfil.papel === 'admin' ? ' · <strong>administrador</strong>' : '') + '</p>' +
       (e.ultima ? '<p class="tiny muted" style="margin:0 0 12px">Última sincronização: ' + esc(e.ultima.replace('T', ' ').slice(0, 16)) + '</p>' : '') +
       (semEmpresa
-        ? '<div class="aviso" style="margin-bottom:12px">Seu usuário ainda não tem empresa na nuvem. Defina antes de sincronizar — é ela que separa a sua carteira das outras.</div>' +
-          '<button class="btn alt mini" onclick="App.definirEmpresaNuvem()">Definir minha empresa</button>'
+        ? '<div class="aviso" style="margin-bottom:12px">Seu usuário não está ligado a nenhuma empresa. ' +
+          (perfil.papel === 'admin'
+            /* O administrador grava em qualquer empresa (`sou_admin()`), e cada
+               registro sobe com o carimbo DELE — então sincronizar funciona.
+               Só não sobe o que nunca teve carimbo de servidor, porque esse não
+               tem de quem ser. Dizer “defina antes de sincronizar” aqui seria
+               falso, e foi o que segurou o Alexandre por um dia. */
+            ? 'Como administrador você ainda sincroniza: cada registro sobe com o carimbo da empresa ' +
+              'dele. O que <strong>não</strong> sobe é o que nasceu neste aparelho sem carimbo de ' +
+              'servidor — esse não tem de quem ser. Ligar o seu usuário a uma empresa resolve isso.'
+            : 'Enquanto isto não for resolvido nada sobe: é o carimbo de empresa que separa a sua ' +
+              'carteira das outras, e sem ele o servidor recusa.') + '</div>' +
+          '<button class="btn alt mini" onclick="App.resolverEmpresaDaNuvem()">Resolver agora</button>'
         : '<div class="aviso-empresa">Sincronizando para <strong>' +
             esc((perfil.tenants && perfil.tenants.nome) || 'sua empresa') + '</strong>. ' +
             'Tudo que subir daqui passa a pertencer a ela.</div>' +

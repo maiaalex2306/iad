@@ -755,7 +755,29 @@
   /* ---------- sincronização ---------- */
   function empurrar() {
     const perfil = sessaoPerfil();
-    if (!perfil || !perfil.tenant_id) return Promise.reject(new Error('Seu usuário ainda não tem empresa na nuvem.'));
+    if (!perfil) return Promise.reject(new Error('Seu perfil não existe no banco.'));
+
+    /* Sem empresa no perfil, o envio parava aqui — para todo mundo. Certo para
+       o vendedor: o RLS do banco confere `tenant_id = meu_tenant()`, e com
+       `meu_tenant()` nulo nenhuma linha dele passaria; recusar aqui, com o
+       motivo na tela, é melhor do que deixar o servidor recusar em silêncio.
+
+       Errado para o ADMINISTRADOR, e custou caro: `sou_admin()` deixa ele
+       gravar em qualquer empresa, e `donoDoRegistro` abaixo carimba cada linha
+       com a empresa DELA — não com a do perfil. Ou seja, o envio funcionaria
+       perfeitamente. O que acontecia era o administrador ver a carteira
+       inteira na tela (porque `sou_admin()` deixa LER tudo) e não conseguir
+       gravar nada, com uma faixa laranja que dizia “falta empresa” enquanto o
+       que faltava era só esta linha.
+
+       Ele passa. O que não passa é o registro sem carimbo de servidor: sem
+       UUID próprio e sem empresa no perfil, não há de quem ele seja, e inventar
+       aqui é exatamente o erro que `donoDoRegistro` existe para não cometer.
+       Esse fica retido, e a tela diz quantos. */
+    const souAdmin = String(perfil.papel || '') === 'admin';
+    if (!perfil.tenant_id && !souAdmin) {
+      return Promise.reject(new Error('Seu usuário ainda não tem empresa na nuvem.'));
+    }
 
     const estado = Store.obter();
     const donoId = (sessao().user || {}).id;
@@ -796,10 +818,13 @@
        RLS do banco decide de novo do lado de lá. O que muda é só quem tem
        permissão de empurrar carimbo de outra empresa — e é o administrador,
        que já pode ler e escrever em todas. */
-    const souAdmin = String(perfil.papel || '') === 'admin';
-
     const daEmpresa = function (r) {
       const dele = String(r.tenantId || '');
+      /* Administrador sem empresa no perfil: só sobe o que tem carimbo de
+         servidor. O resto não tem para onde ir — e mandar com `tenant_id`
+         nulo esbarraria no NOT NULL e derrubaria a TABELA inteira, levando
+         junto as linhas que estavam certas. */
+      if (!perfil.tenant_id) return UUID.test(dele);
       if (!dele) return true;
       if (dele === String(perfil.tenant_id)) return true;
       if (souAdmin && UUID.test(dele)) return true;
