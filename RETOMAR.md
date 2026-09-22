@@ -5,8 +5,8 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v211**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v211, o aparelho
+Publicado agora: **v212**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v212, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -397,6 +397,62 @@ com nada marcado. Marcar 99 e a seleção sobreviver a um refresh seria armadilh
 duas negociações de verdade. Filtrar por campanha, marcar os 51, mover com
 motivo e prazo, conferir que **ninguém foi encerrado**, devolver três, e que a
 passagem ficou no `historicoNutricao`.
+
+## 0-AE. O carimbo do Manual dizia v204 com o conteúdo da v210 — v212, 22/09
+
+*“Amigo... tem algo errado nestas versões”* — com o print do Manual: carimbo
+**v204**, data 20/09, e embaixo um índice de **28 itens** com Potencial, Notas
+rápidas e o Processo de Nutrição, que são v206 em diante.
+
+**Erro meu, sete vezes seguidas.** O número vive em dois arquivos de propósito:
+
+| | |
+|---|---|
+| `sw.js` → `CACHE` | o que está **guardado** no aparelho |
+| `src/config.js` → `IADVersao` | o que está **rodando** agora |
+
+A discordância entre os dois é que denuncia uma troca pela metade — por isso
+são dois. **Os comentários dos dois arquivos dizem desde sempre que precisam
+ser trocados no mesmo commit.** Eu li os dois, e bumpei só o `sw.js` da v205
+até a v211.
+
+**Por que não é vaidade de número:** aquele carimbo é o que a pessoa usa para
+saber se o aparelho pegou a versão nova. Um número velho ali manda alguém
+limpar cache atrás de um problema que não existe — e faz duvidar do resto da
+tela.
+
+**Três consertos, e só o primeiro era óbvio:**
+
+1. `IADVersao` para **v211/2026-09-22** (e esta entrada leva a v212).
+2. **A comparação que o comentário promete e ninguém tinha escrito.**
+   `pintarVersao()` mostrava o cache guardado e nunca o comparava com
+   `IADVersao` — o app tinha as duas metades na mão e não as juntava. Agora,
+   quando discordam, Configuração → O aplicativo mostra os dois números, diz
+   que o carimbo do Manual mente, e manda recarregar. Serve também para o caso
+   legítimo: troca de versão pela metade no celular dele.
+3. **`nuvem/testes/versao.test.ts`** — lê os dois arquivos do disco e exige que
+   batam, mais uma data com menos de 30 dias. **Provei que ele pega:** com a
+   divergência de volta, falha e sai com 1.
+
+**A lição, e ela não é sobre versão:** um comentário que diz *“estes dois têm
+de andar juntos”* é uma regra sem quem a cobre. Enquanto for só comentário,
+alguém vai esquecer — e nesse caso o alguém fui eu, sete vezes, com o
+comentário na tela. **Regra que importa vira teste, ou não é regra.**
+
+E uma segunda: quem viu foi o Alexandre, olhando a tela. Tudo o que eu
+verifiquei nessas sete versões passava — porque nenhuma suíte conferia a coisa
+que ele olha primeiro.
+
+**Testes:** 4 novos em `versao.test.ts` (bun) e 4 na suíte `manual` — o carimbo
+da tela igual ao `IADVersao`, igual ao `CACHE` do `sw.js` buscado por HTTP, e a
+denúncia aparecendo com um cache falso plantado.
+
+Total: 16 suítes de navegador (385 conferências) + as de `bun`.
+
+**Onde está:** `IADVersao` em `src/config.js`; `pintarVersao()` em
+`src/app.js`; `nuvem/testes/versao.test.ts`.
+
+---
 
 ## 0-AD. A faixa laranja: a causa real, e ela era nossa — v211, 22/09
 

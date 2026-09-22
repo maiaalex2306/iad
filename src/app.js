@@ -532,12 +532,35 @@
         destino.textContent = 'Rodando direto da rede, sem cópia guardada neste aparelho.';
         return;
       }
+      const guardadas = meus.map(function (n) { return n.replace('iad-crm-', ''); });
+      const rodando = (global.IADVersao || {}).numero || '';
+
       /* Mais de um cache significa troca em andamento: o novo já baixou e o
          velho ainda não foi limpo. Mostrar os dois evita a conclusão errada. */
-      destino.textContent = meus.length === 1
-        ? 'Versão instalada: ' + meus[0].replace('iad-crm-', '')
-        : 'Versões guardadas: ' + meus.map(function (n) { return n.replace('iad-crm-', ''); }).join(', ') +
+      if (guardadas.length > 1) {
+        destino.textContent = 'Versões guardadas: ' + guardadas.join(', ') +
           ' — a troca ainda não terminou. Feche todas as abas do app e abra de novo.';
+        return;
+      }
+
+      /* A comparação que o comentário do `sw.js` promete há muito tempo e que
+         ninguém tinha escrito. O carimbo do Manual sai de `IADVersao`; o cache
+         sai do `sw.js`. Os dois precisam ser trocados no mesmo commit, e por
+         sete versões seguidas só um foi — o Manual anunciou v204 enquanto o
+         app rodava v211, e quem viu isso foi o Alexandre, não o app.
+
+         Não é detalhe de vaidade: o número do Manual é o que se usa para saber
+         se o aparelho pegou a versão nova. Um número velho ali manda a pessoa
+         limpar cache atrás de um problema que não existe. */
+      if (rodando && guardadas[0] !== rodando) {
+        destino.innerHTML = '<span class="aviso" style="display:block">Versão guardada neste aparelho: <strong>' +
+          U.esc(guardadas[0]) + '</strong>, mas o código que está rodando diz <strong>' +
+          U.esc(rodando) + '</strong>.<br>Se os dois não mudam juntos, o carimbo do Manual mente. ' +
+          'Recarregue com Ctrl+Shift+R; se continuar diferente, é defeito nosso — avise.</span>';
+        return;
+      }
+
+      destino.textContent = 'Versão instalada: ' + guardadas[0];
     }).catch(function () {});
   }
 
