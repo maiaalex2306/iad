@@ -3598,6 +3598,11 @@
        tarefas todas vencendo hoje, cair num "nenhuma tarefa neste filtro" que
        se lê como perda de dado. O atrasado continua no topo: a ordem é a data. */
     status: 'abertas',       /* abertas | atrasadas | pendentes | concluidas | sem-registro | todos */
+    /* Nutrição é "não é agora", dito por escrito e com data para rever. A
+       tarefa do negócio nutrido continua existindo — o negócio não foi
+       encerrado — mas ela não tem por que disputar espaço com o que está de
+       pé hoje. Este filtro separa os dois mundos; nenhum dos dois some. */
+    carteira: 'todas',       /* todas | pipeline | nutricao */
     tipos: [],               /* vazio = todos */
     de: '', ate: '',
     busca: '',
@@ -3609,6 +3614,14 @@
   };
   let tarefasFiltro = Object.assign({}, VAZIO_TAREFAS);
   let tarefasMarcadas = {};
+
+  /* O rótulo diz o que cada recorte é, não o campo do banco: "só o pipeline"
+     é a pergunta que o vendedor faz de manhã. */
+  const CARTEIRA_TAREFA = [
+    ['todas', 'Pipeline e nutrição', '▦'],
+    ['pipeline', 'Só o pipeline', '▶'],
+    ['nutricao', 'Só nutrição', '\u{1F331}']
+  ];
 
   const STATUS_TAREFA = [
     ['abertas', 'A fazer', '◻'],
@@ -3674,6 +3687,12 @@
     if (f.empresa && (!linha.conta || linha.conta.id !== f.empresa)) return false;
     if (f.negocio && (!linha.op || linha.op.id !== f.negocio)) return false;
 
+    /* Tarefa sem negócio conta como pipeline: ela não foi adiada por ninguém.
+       Escondê-la em "só o pipeline" seria sumir com a tarefa avulsa. */
+    const nutrida = !!(linha.op && linha.op.nutricao);
+    if (f.carteira === 'pipeline' && nutrida) return false;
+    if (f.carteira === 'nutricao' && !nutrida) return false;
+
     if (f.tipos.length && f.tipos.indexOf(t.tipo) === -1) return false;
 
     /* Feita se situa pela data em que foi feita; aberta, pelo vencimento.
@@ -3699,6 +3718,7 @@
         !global.IADAuth.usuarios().some(function (u) { return u.id === f.responsavel; })) {
       f.responsavel = 'todos';
     }
+    if (CARTEIRA_TAREFA.every(function (c) { return c[0] !== f.carteira; })) f.carteira = 'todas';
     const tipos = Store.nomesDoCatalogo('tiposTarefa');
     if (f.tipos.length) f.tipos = f.tipos.filter(function (t) { return tipos.indexOf(t) !== -1; });
   }
@@ -3749,6 +3769,10 @@
       chips.push(chip(o ? o.titulo : 'Negociação', 'negocio'));
     }
     f.tipos.forEach(function (t) { chips.push(chip(t, 'tipo:' + t)); });
+    if (f.carteira !== 'todas') {
+      const c = CARTEIRA_TAREFA.filter(function (x) { return x[0] === f.carteira; })[0];
+      chips.push(chip(c ? c[1] : f.carteira, 'carteira'));
+    }
     if (f.status !== 'todos') {
       const s = STATUS_TAREFA.filter(function (x) { return x[0] === f.status; })[0];
       chips.push(chip(s ? s[1] : f.status, 'status'));
@@ -3771,6 +3795,10 @@
       return !l.t.donoId || !eu || l.t.donoId === eu.id;
     });
     const atrasadas = minhas.filter(function (l) { return statusDaTarefa(l.t) === 'atrasada'; });
+    /* Quantas dessas 93 são de negócio que o próprio vendedor adiou. Sem esta
+       conta o número grande acusa quem fez a coisa certa: nutrir é decisão,
+       não atraso. O resumo não esconde nenhuma — só diz quantas são. */
+    const atrasadasNutridas = atrasadas.filter(function (l) { return l.op && l.op.nutricao; });
     const hojeAte = minhas.filter(function (l) {
       return l.t.status === 'aberta' && l.t.vencimento >= hoje && l.t.vencimento <= emSete;
     });
@@ -3807,6 +3835,13 @@
       '<div class="kpi-tarefa"><strong>' + U.moeda(valorParado) + '</strong>' +
       '<span class="tiny muted">em negócios com tarefa atrasada</span></div>' +
       '</div>' +
+      (atrasadasNutridas.length && tarefasFiltro.carteira === 'todas'
+        ? '<p class="tiny muted" style="margin:10px 0 0">' + atrasadasNutridas.length +
+          (atrasadasNutridas.length === 1
+            ? ' das atrasadas é de um negócio em nutrição — você disse que não era agora.'
+            : ' das atrasadas são de negócios em nutrição — você disse que não era agora.') +
+          ' <button class="btn ghost mini" onclick="App.tarefasCarteira(\'pipeline\')">Ver só o pipeline</button></p>'
+        : '') +
       (semRelato.length
         ? '<p class="aviso" style="margin:10px 0 0">' + semRelato.length +
           (semRelato.length === 1 ? ' tarefa foi fechada' : ' tarefas foram fechadas') +
@@ -3936,6 +3971,11 @@
           esc(o.rotulo) + '</option>';
       }).join('');
 
+    const opcaoCarteira = CARTEIRA_TAREFA.map(function (cx) {
+      return '<option value="' + cx[0] + '"' + (f.carteira === cx[0] ? ' selected' : '') + '>' +
+        cx[2] + ' ' + esc(cx[1]) + '</option>';
+    }).join('');
+
     const opcaoStatus = STATUS_TAREFA.map(function (sx) {
       return '<option value="' + sx[0] + '"' + (f.status === sx[0] ? ' selected' : '') + '>' +
         sx[2] + ' ' + esc(sx[1]) + '</option>';
@@ -3976,6 +4016,13 @@
       '" onchange="App.tarefasPeriodo(this.value, null)"></label>' +
       '<label class="campo mini"><span>Até</span><input type="date" value="' + esc(f.ate) +
       '" onchange="App.tarefasPeriodo(null, this.value)"></label>' +
+      '<label class="campo mini"><span>Carteira</span>' +
+      '<select onchange="App.tarefasCarteira(this.value)"' +
+      ' data-ajuda-titulo="Pipeline ou nutrição"' +
+      ' data-ajuda="Negócio em nutrição é negócio que você adiou de propósito, com data para rever.' +
+      ' A tarefa dele continua aqui, mas atrapalha quem quer ver o que está de pé hoje.' +
+      ' Este recorte separa os dois — e nenhum dos dois é apagado.">' +
+      opcaoCarteira + '</select></label>' +
       '<label class="campo mini"><span>Status</span>' +
       '<select onchange="App.tarefasStatus(this.value)">' + opcaoStatus + '</select></label>' +
       '<label class="campo mini cresce"><span>Buscar</span><input type="search" value="' + esc(f.busca) +
@@ -5749,6 +5796,30 @@
       '<li>Só na lista. No kanban o cartão já carrega o arrasto, e um clique que às vezes abre, às ' +
       'vezes marca e às vezes arrasta é um clique em que ninguém confia.</li>' +
       '</ul>' +
+
+      '<h3>E depois: a tela de Tarefas separa os dois</h3>' +
+      '<p class="small">Mover cem leads para nutrição tira os cem da previsão, mas as <strong>tarefas ' +
+      'deles continuam existindo</strong> — e continuam vencendo. Era assim que “93 atrasadas” virava ' +
+      'um número que ninguém olhava: quase todas de negócios que o próprio vendedor tinha adiado de ' +
+      'propósito.</p>' +
+      '<p class="small">Em <strong>Tarefas</strong>, o filtro <strong>Carteira</strong> separa:</p>' +
+      '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' +
+      '<tr><td class="rotulo-manual"><strong>Pipeline e nutrição</strong></td><td>' +
+      '<strong>Tudo, e é como a tela abre</strong><span class="tiny muted">Nada é escondido por ' +
+      'padrão. Quando há atrasadas de negócio nutrido, o resumo da semana diz quantas são e oferece ' +
+      'o recorte em um clique.</span></td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>Só o pipeline</strong></td><td>' +
+      '<strong>O que está de pé hoje</strong><span class="tiny muted">É a pergunta da manhã. Tarefa ' +
+      'sem negócio entra aqui: ninguém a adiou.</span></td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>Só nutrição</strong></td><td>' +
+      '<strong>O que você adiou, para quando for a hora</strong><span class="tiny muted">Útil no dia ' +
+      'de revisar a nutrição — e para conferir que o lote foi mesmo para onde você mandou.</span>' +
+      '</td></tr>' +
+      '</tbody></table></div>' +
+      '<p class="tiny muted">O recorte vira etiqueta na barra de filtros, como todos os outros, e sai ' +
+      'no ✕. Nenhuma tarefa é apagada nem adiada por causa dele: ela só deixa de disputar espaço ' +
+      'com o que é para agora. E retomar o negócio da nutrição devolve as tarefas dele ao ' +
+      'pipeline sozinho.</p>' +
 
       '<h3>⇄ Juntar numa só</h3>' +
       '<p class="small">A mesma venda entra duas vezes com frequência: uma pelo Linked Helper, outra à ' +

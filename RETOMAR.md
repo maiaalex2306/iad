@@ -5,8 +5,8 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v213**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v213, o aparelho
+Publicado agora: **v214**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v214, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -397,6 +397,29 @@ com nada marcado. Marcar 99 e a seleção sobreviver a um refresh seria armadilh
 duas negociações de verdade. Filtrar por campanha, marcar os 51, mover com
 motivo e prazo, conferir que **ninguém foi encerrado**, devolver três, e que a
 passagem ficou no `historicoNutricao`.
+
+## 0-AH. Tarefas: separar o pipeline da nutrição — v214, 22/09
+
+*“Aqui nesta tela precisa de um filtro para separar oportunidades que estão em
+nutrição das que estão no pipeline.”* — com o print: **93 atrasadas**, e a
+lista inteira de “Empresa Importada do LH – Fazer Contato”.
+
+O defeito era antigo e invisível: **mover um lote para nutrição não faz nada
+com as tarefas dele**. Tirava cem leads da previsão e deixava cem tarefas
+vencendo na agenda. O número grande passou a acusar justamente quem fez a
+coisa certa — nutrir é decisão, não atraso.
+
+Agora a tela de Tarefas tem o filtro **Carteira**: *Pipeline e nutrição*
+(padrão, nada some), *Só o pipeline*, *Só nutrição*. Tarefa **sem negócio**
+conta como pipeline — ninguém a adiou. O recorte vira etiqueta e sai no ✕.
+
+E o resumo da semana passou a dizer a conta que faltava: *“6 das atrasadas são
+de negócios em nutrição — você disse que não era agora”*, com o botão que
+aplica o recorte. Nada é escondido por padrão; a pergunta é que fica em pé.
+
+**21 testes** (`carteira.js`), com a carteira dele em miniatura: 6 leads do LH
+nutridos, 2 negócios de verdade e 1 tarefa avulsa. Provado também que retomar
+da nutrição devolve as tarefas ao pipeline sozinho.
 
 ## 0-AG. O campo Empresa vinha preenchido com quem nem era — v213, 22/09
 

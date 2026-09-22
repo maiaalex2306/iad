@@ -3166,6 +3166,7 @@
 
     tarefasResponsavel: function (v) { V.tarefasFiltrar({ responsavel: v, pagina: 1 }); render(); },
     tarefasStatus: function (v) { V.tarefasFiltrar({ status: v, pagina: 1 }); render(); },
+    tarefasCarteira: function (v) { V.tarefasFiltrar({ carteira: v, pagina: 1 }); render(); },
     /* Trocar de empresa zera a negociação: a negociação escolhida era de
        outra empresa, e mantê-la deixaria a lista vazia sem explicar por quê. */
     tarefasEmpresa: function (v) { V.tarefasFiltrar({ empresa: v, negocio: '', pagina: 1 }); render(); },
@@ -3292,6 +3293,7 @@
       else if (alvo === 'negocio') V.tarefasFiltrar({ negocio: '' });
       else if (alvo === 'periodo') V.tarefasFiltrar({ de: '', ate: '' });
       else if (alvo === 'status') V.tarefasFiltrar({ status: 'todos' });
+      else if (alvo === 'carteira') V.tarefasFiltrar({ carteira: 'todas' });
       else if (alvo === 'busca') V.tarefasFiltrar({ busca: '' });
       else if (alvo.indexOf('tipo:') === 0) {
         const nome = alvo.slice(5);
