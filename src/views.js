@@ -3673,6 +3673,14 @@
     concluida: ['CONCLUÍDA', 'ok'], 'sem-registro': ['SEM RELATO', 'risk']
   };
 
+  /* Tarefa sem negócio conta como pipeline: ela não foi adiada por ninguém.
+     Escondê-la em "só o pipeline" seria sumir com a tarefa avulsa. */
+  function naCarteira(linha, carteira) {
+    if (!carteira || carteira === 'todas') return true;
+    const nutrida = !!(linha.op && linha.op.nutricao);
+    return carteira === 'nutricao' ? nutrida : !nutrida;
+  }
+
   function tarefaPassaNoFiltro(linha, f, eu) {
     const t = linha.t;
     const situacao = statusDaTarefa(t);
@@ -3689,11 +3697,7 @@
     if (f.empresa && (!linha.conta || linha.conta.id !== f.empresa)) return false;
     if (f.negocio && (!linha.op || linha.op.id !== f.negocio)) return false;
 
-    /* Tarefa sem negócio conta como pipeline: ela não foi adiada por ninguém.
-       Escondê-la em "só o pipeline" seria sumir com a tarefa avulsa. */
-    const nutrida = !!(linha.op && linha.op.nutricao);
-    if (f.carteira === 'pipeline' && nutrida) return false;
-    if (f.carteira === 'nutricao' && !nutrida) return false;
+    if (!naCarteira(linha, f.carteira)) return false;
 
     if (f.tipos.length && f.tipos.indexOf(t.tipo) === -1) return false;
 
@@ -3793,8 +3797,15 @@
     const inicio = new Date(); inicio.setDate(inicio.getDate() - 7);
     const seteAtras = inicio.toISOString().slice(0, 10);
 
+    /* O resumo ignora os filtros de recorte de propósito — ele responde "em
+       que pé eu estou", antes de qualquer busca. Mas a CARTEIRA não é um
+       recorte de busca: é em que mundo se está trabalhando. Ignorá-la fazia
+       o pior dos dois: a pessoa marcava "Só o pipeline", a lista encolhia e
+       o número grande em cima continuava dizendo 93 — que se lê, com toda a
+       razão, como "o filtro não funcionou". */
+    const carteira = tarefasFiltro.carteira;
     const minhas = tarefasComContexto().filter(function (l) {
-      return !l.t.donoId || !eu || l.t.donoId === eu.id;
+      return (!l.t.donoId || !eu || l.t.donoId === eu.id) && naCarteira(l, carteira);
     });
     const atrasadas = minhas.filter(function (l) { return statusDaTarefa(l.t) === 'atrasada'; });
     /* Quantas dessas 93 são de negócio que o próprio vendedor adiou. Sem esta
@@ -3827,7 +3838,12 @@
 
     return '<details class="card resumo-tarefas"' + (tarefasFiltro.resumoAberto ? ' open' : '') +
       ' ontoggle="App.tarefasResumo(this.open)">' +
-      '<summary><strong>Resumo das tarefas da semana</strong></summary>' +
+      '<summary><strong>Resumo das tarefas da semana</strong>' +
+      (carteira === 'todas' ? ''
+        : ' <span class="pill tiny">' +
+          esc((CARTEIRA_TAREFA.filter(function (x) { return x[0] === carteira; })[0] || [])[1] || '') +
+          '</span>') +
+      '</summary>' +
       '<div class="row kpis-tarefa">' +
       numero(atrasadas.length, 'atrasadas', atrasadas.length ? 'atrasado' : '') +
       numero(hojeAte.length, 'nos próximos 7 dias') +
@@ -3837,12 +3853,22 @@
       '<div class="kpi-tarefa"><strong>' + U.moeda(valorParado) + '</strong>' +
       '<span class="tiny muted">em negócios com tarefa atrasada</span></div>' +
       '</div>' +
-      (atrasadasNutridas.length && tarefasFiltro.carteira === 'todas'
-        ? '<p class="tiny muted" style="margin:10px 0 0">' + atrasadasNutridas.length +
-          (atrasadasNutridas.length === 1
-            ? ' das atrasadas é de um negócio em nutrição — você disse que não era agora.'
-            : ' das atrasadas são de negócios em nutrição — você disse que não era agora.') +
-          ' <button class="btn ghost mini" onclick="App.tarefasCarteira(\'pipeline\')">Ver só o pipeline</button></p>'
+      (carteira === 'todas' && atrasadas.length
+        ? '<p class="tiny muted" style="margin:10px 0 0">' +
+          (atrasadasNutridas.length
+            ? atrasadasNutridas.length +
+              (atrasadasNutridas.length === 1
+                ? ' das atrasadas é de um negócio em nutrição — você disse que não era agora.'
+                : ' das atrasadas são de negócios em nutrição — você disse que não era agora.') +
+              ' <button class="btn ghost mini" onclick="App.tarefasCarteira(\'pipeline\')">Ver só o pipeline</button>'
+            /* O zero precisa ser dito. Sem ele, quem espera que os leads do
+               Linked Helper estejam em nutrição marca "Só o pipeline", vê a
+               mesma lista e conclui que o filtro está quebrado — quando a
+               verdade é que nenhum deles foi movido ainda. */
+            : 'Nenhuma destas atrasadas está em nutrição: todas contam na previsão. ' +
+              'Para tirar um lote da previsão sem encerrar ninguém, use ' +
+              '<button class="btn ghost mini" onclick="IADUI.fecharDialogos();location.hash=\'#/nutricao\'">Processo de Nutrição</button>') +
+          '</p>'
         : '') +
       (semRelato.length
         ? '<p class="aviso" style="margin:10px 0 0">' + semRelato.length +
@@ -3975,9 +4001,26 @@
           esc(o.rotulo) + '</option>';
       }).join('');
 
+    /* O número em cada opção, contado com os OUTROS filtros já aplicados.
+
+       Sem isto o filtro parecia quebrado quando estava certo: marcar "Só o
+       pipeline" e a lista não mudar é indistinguível de um filtro que não
+       funciona — a não ser que a tela diga, ali mesmo, que "Só nutrição" tem
+       ZERO. Aí a resposta deixa de ser "o filtro falhou" e passa a ser
+       "nenhum destes negócios foi para nutrição ainda", que é outra
+       conversa, e a verdadeira. */
+    const souEu = global.IADAuth.atual();
+    const todasAsLinhas = tarefasComContexto();
+    const contaDaCarteira = {};
+    CARTEIRA_TAREFA.forEach(function (cx) {
+      contaDaCarteira[cx[0]] = todasAsLinhas.filter(function (l) {
+        return tarefaPassaNoFiltro(l, Object.assign({}, f, { carteira: cx[0] }), souEu);
+      }).length;
+    });
+
     const opcaoCarteira = CARTEIRA_TAREFA.map(function (cx) {
       return '<option value="' + cx[0] + '"' + (f.carteira === cx[0] ? ' selected' : '') + '>' +
-        cx[2] + ' ' + esc(cx[1]) + '</option>';
+        cx[2] + ' ' + esc(cx[1]) + ' (' + contaDaCarteira[cx[0]] + ')</option>';
     }).join('');
 
     const opcaoStatus = STATUS_TAREFA.map(function (sx) {

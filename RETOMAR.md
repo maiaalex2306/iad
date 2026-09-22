@@ -5,8 +5,8 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v215**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v215, o aparelho
+Publicado agora: **v216**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v216, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -397,6 +397,41 @@ com nada marcado. Marcar 99 e a seleção sobreviver a um refresh seria armadilh
 duas negociações de verdade. Filtrar por campanha, marcar os 51, mover com
 motivo e prazo, conferir que **ninguém foi encerrado**, devolver três, e que a
 passagem ficou no `historicoNutricao`.
+
+## 0-AJ. “Não funcionou os filtros” — e ele tinha razão pela metade — v216, 22/09
+
+Print: **Carteira = Só o pipeline**, **Status = Atrasadas**, os leads do LH
+todos na tela, e em cima, intacto, **93 atrasadas**.
+
+**O filtro estava certo. A tela é que mentia em dois lugares.**
+
+**1. O resumo não seguia a carteira.** Foi decisão minha, herdada: o resumo
+responde “em que pé eu estou” *antes de qualquer filtro*. Mas carteira não é
+recorte de busca — é em que mundo se está trabalhando. O efeito foi o pior
+possível: marcar “Só o pipeline”, a lista encolher e o número grande logo
+acima continuar dizendo 93. Qualquer um lê isso como filtro quebrado.
+Agora o resumo segue a carteira e carrega a etiqueta do recorte.
+
+**2. O zero não era dito.** O mais provável, no caso dele, é que **nenhum
+daqueles negócios esteja em nutrição** — e aí “Só o pipeline” mostrar tudo é o
+comportamento correto, indistinguível de um filtro morto.
+
+Duas coisas resolvem, e as duas ficam na tela:
+
+- Cada opção da Carteira mostra **quantas tarefas tem**, já com os outros
+  filtros aplicados: *Só o pipeline (93)*, *Só nutrição (0)*. Abrir a lista
+  responde a pergunta sem ninguém explicar nada.
+- Com o recorte em “Pipeline e nutrição” e zero nutridas, o resumo diz:
+  *“Nenhuma destas atrasadas está em nutrição: todas contam na previsão”*, com
+  o botão que leva ao Processo de Nutrição.
+
+**A lição, que é a de sempre aqui:** um filtro que não muda nada e um filtro
+quebrado têm a mesma aparência. Quem escreve o filtro sabe a diferença; quem
+usa, não — a menos que a tela diga.
+
+**17 testes** (`diagf.js`), montados sobre o caso dele: dez leads atrasados e
+nenhum nutrido. Provam o zero, a contagem por opção, e que o número grande
+cai junto com a lista quando há nutrição de verdade.
 
 ## 0-AI. O e-mail preso na conversa, e o botão Visualizar — v215, 22/09
 
