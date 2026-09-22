@@ -3760,6 +3760,147 @@
       if (!repintarPipeline()) render();
     },
 
+    /* Juntar em lote, da seleção do Pipeline.
+
+       Não é um laço em cima de `juntarOportunidades`: aquele confirma e avisa
+       uma vez por juntação, e três marcadas virariam três confirmações e três
+       alertas — e quem clica em três confirmações seguidas para de ler na
+       segunda. Aqui a conta é feita antes, a pergunta é uma só, e o trabalho
+       de verdade continua sendo o `Store.juntarOportunidades`. */
+    juntarSelecionadas: function () {
+      const marcadas = V.marcadasNoPipeline();
+      if (marcadas.length < 2) {
+        alert('Marque pelo menos duas negociações da mesma empresa.');
+        return;
+      }
+      const contas = {};
+      marcadas.forEach(function (o) { contas[o.contaId || '(sem)'] = true; });
+      if (Object.keys(contas).length !== 1) {
+        alert('As marcadas são de empresas diferentes, e juntar apagaria um negócio de verdade.\n\n' +
+          'Se a EMPRESA é que está duplicada, junte as empresas primeiro em ' +
+          'Configuração → Juntar empresas.');
+        return;
+      }
+
+      const evidenciasDe = function (o) {
+        return (o.eventos || []).filter(function (e) { return e.tipo === 'decision'; }).length;
+      };
+
+      /* O padrão é a de mais evidência do cliente, e não a de maior IAD: nota
+         alta sem evidência é exatamente o que este app existe para desconfiar.
+         Mas quem escolhe é o vendedor — o título de quem fica sobrevive, e o
+         título bom raramente é o que a importação gerou. */
+      const ordenadas = marcadas.slice().sort(function (a, b) {
+        return (evidenciasDe(b) - evidenciasDe(a)) || (E.iad(b) - E.iad(a));
+      });
+
+      const opcoes = ordenadas.map(function (o) {
+        return { valor: o.id,
+          rotulo: o.titulo + ' — ' + o.etapa + ' · IAD ' + E.iad(o) +
+            ' · ' + evidenciasDe(o) + ' evidência(s)' +
+            (o.valor ? ' · ' + U.moeda(o.valor) : '') };
+      });
+
+      const conta = Store.conta(marcadas[0].contaId);
+      U.formulario('Juntar ' + marcadas.length + ' negociações numa só', [
+        { tipo: 'aviso', rotulo: 'Todas as ' + marcadas.length + ' são da ' +
+          ((conta && conta.nome) || 'mesma empresa') + '. Histórico, pessoas, tarefas, sinais e ' +
+          'anexos passam para a que você escolher; as outras deixam de existir. ' +
+          'O título, o valor, a previsão e a etapa de quem fica são os que sobrevivem.' },
+        { id: 'fica', rotulo: 'Qual delas fica', tipo: 'select', opcoes: opcoes }
+      ], { fica: opcoes[0].valor }, function (d) {
+        if (!d.fica) return;
+        App.confirmarJuntarLote(d.fica, marcadas.filter(function (o) { return o.id !== d.fica; }));
+      });
+    },
+
+    confirmarJuntarLote: function (ficaId, outras) {
+      const fica = Store.oportunidade(ficaId);
+      if (!fica || !outras.length) return;
+
+      /* Tudo calculado ANTES de mexer em nada. É este texto que torna a
+         confirmação uma decisão, e não um reflexo. */
+      const tarefas = Store.dados().tarefas;
+      let eventos = 0, evid = 0, pessoas = 0, tar = 0;
+      outras.forEach(function (o) {
+        eventos += (o.eventos || []).length;
+        evid += (o.eventos || []).filter(function (e) { return e.tipo === 'decision'; }).length;
+        pessoas += (o.stakeholders || []).length;
+        tar += tarefas.filter(function (t) { return t.oportunidadeId === o.id; }).length;
+      });
+
+      const sobem = (P.DIMENSOES || []).map(function (dim) {
+        const maior = outras.reduce(function (m, o) {
+          return Math.max(m, (o.dims || {})[dim.id] || 0);
+        }, 0);
+        const atual = fica.dims[dim.id] || 0;
+        return maior > atual ? dim.nome + ' ' + atual + '→' + maior : null;
+      }).filter(Boolean);
+
+      const linhas = [
+        'Juntar ' + outras.length + ' negociação(ões) dentro de "' + fica.titulo + '"?',
+        '',
+        'Deixam de existir:',
+      ].concat(outras.map(function (o) { return '• ' + o.titulo; })).concat([
+        '',
+        'Passam para "' + fica.titulo + '":',
+        '• ' + eventos + ' registro(s) de histórico, sendo ' + evid + ' evidência(s) do cliente',
+        '• ' + pessoas + ' pessoa(s) do grupo comprador',
+        '• ' + tar + ' tarefa(s), os sinais e os anexos',
+        '',
+        sobem.length
+          ? 'Notas que sobem (a evidência que as sustenta vem junto): ' + sobem.join(', ')
+          : 'Nenhuma nota muda.',
+        '',
+        'Valor, previsão e etapa de "' + fica.titulo + '" NÃO mudam.',
+        'Isto não tem como desfazer.'
+      ]);
+
+      if (!U.confirmar(linhas.join('\n'))) return;
+
+      const Arq = global.IADArquivos;
+      const total = { eventos: 0, stakeholders: 0, tarefas: 0, sinais: 0, arquivos: 0 };
+      const erros = [];
+      /* Sequencial de propósito: cada juntação lê e reescreve a mesma
+         negociação que fica. Em paralelo, a segunda sobrescreveria a primeira. */
+      const passo = function (i) {
+        if (i >= outras.length) {
+          V.ligarSelecaoDoPipeline(false);
+          render();
+          alert('Pronto.\n\n' + total.eventos + ' registro(s) de histórico, ' +
+            total.stakeholders + ' pessoa(s), ' + total.tarefas + ' tarefa(s), ' +
+            total.sinais + ' sinal(is) e ' + total.arquivos + ' anexo(s) agora estão em "' +
+            fica.titulo + '".' +
+            (erros.length ? '\n\nCom ressalva: ' + erros.join(' ') : '') +
+            '\n\nO histórico registra cada junção, para a pergunta "onde foi parar aquele ' +
+            'negócio" ter resposta.');
+          return;
+        }
+        const vaiId = outras[i].id;
+        const r = Store.juntarOportunidades(ficaId, vaiId);
+        if (!r.ok) { erros.push(r.erro); passo(i + 1); return; }
+        total.eventos += r.eventos; total.stakeholders += r.stakeholders;
+        total.tarefas += r.tarefas; total.sinais += r.sinais;
+
+        /* Os anexos moram no IndexedDB, fora do estado — vão por fora e depois.
+           Falhar aqui não desfaz o resto: o pior caso é um anexo ainda preso ao
+           id antigo, e a mensagem final diz isso em vez de ficar calada. */
+        if (Arq && Arq.repontar) {
+          Arq.repontar(vaiId, ficaId).then(function (n) {
+            total.arquivos += (n || 0);
+            passo(i + 1);
+          }, function (e) {
+            erros.push('não consegui mover os anexos de "' + outras[i].titulo + '" (' +
+              ((e && e.message) || 'erro') + ') — eles não foram apagados, só continuam presos ao id antigo.');
+            passo(i + 1);
+          });
+        } else {
+          passo(i + 1);
+        }
+      };
+      passo(0);
+    },
+
     nutrirSelecionadas: function () {
       pedirNutricaoEmLote(V.marcadasNoPipeline(), function () {
         V.ligarSelecaoDoPipeline(false);

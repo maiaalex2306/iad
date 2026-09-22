@@ -5,8 +5,8 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v209**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v209, o aparelho
+Publicado agora: **v210**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v210, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -397,6 +397,64 @@ com nada marcado. Marcar 99 e a seleção sobreviver a um refresh seria armadilh
 duas negociações de verdade. Filtrar por campanha, marcar os 51, mover com
 motivo e prazo, conferir que **ninguém foi encerrado**, devolver três, e que a
 passagem ficou no `historicoNutricao`.
+
+## 0-AC. Juntar negociações pela seleção do Pipeline — v210, 22/09
+
+*“Dentro desta opção selecionar várias... coloque uma opção que permita juntar
+duas oportunidades de uma empresa numa única. Suzano e Suzano Limeira tem que
+virar uma oportunidade.”*
+
+O caso real: a mesma venda entra duas vezes — uma pelo Linked Helper, outra à
+mão — e as duas ficam na carteira **competindo pela mesma receita**, com a
+previsão contando o negócio em dobro.
+
+A engrenagem já existia inteira: `Store.juntarOportunidades` (eventos em ordem
+de data, pessoas sem repetir, tarefas e sinais repontados, a MAIOR nota de cada
+decisão, campos vazios completados, anexos por fora no IndexedDB, e o evento de
+histórico que responde *“onde foi parar aquele negócio”*). O que faltava era a
+porta: ela só existia **dentro** de um negócio, e a duplicata se enxerga **na
+lista**, olhando as duas lado a lado.
+
+**⇄ Juntar**, na barra de seleção. Acende com **duas ou mais da MESMA
+empresa**; fora disso fica visível e desabilitado, com o balão dizendo o que
+falta — sumir com ele ensinaria a não procurar. Empresas diferentes não são
+duplicata: são dois negócios, e juntar apagaria um. A mensagem manda para
+Configuração → Juntar empresas.
+
+**O padrão de “quem fica” é a de MAIS EVIDÊNCIA do cliente, e não a de maior
+IAD.** Nota alta sem evidência é exatamente o que este app existe para
+desconfiar. No caso dele isso importa duas vezes: a do LH tinha IAD **17** e a
+descritiva **15** — ordenar por IAD sugeriria manter *“Suzano — origem LH”*, e
+**o título de quem fica sobrevive**. O título bom raramente é o que a
+importação gerou; por isso o formulário diz isso na cara e quem escolhe é o
+vendedor.
+
+**Uma confirmação para o lote, não um laço.** `juntarSelecionadas` não repete
+`App.juntarOportunidades`: aquele confirma e avisa uma vez por juntação, e três
+marcadas virariam três confirmações e três alertas — e quem clica em três
+confirmações seguidas **para de ler na segunda**. A conta (eventos, evidências,
+pessoas, tarefas, quais notas sobem) é feita ANTES, a pergunta é uma só, e o
+trabalho continua sendo o `Store.juntarOportunidades`.
+
+As juntações rodam **sequenciais** de propósito: cada uma lê e reescreve a
+mesma negociação que fica, e em paralelo a segunda sobrescreveria a primeira.
+Falha ao mover anexo não desfaz o resto — vai para as ressalvas da mensagem
+final, em vez de ficar calada.
+
+**32 testes** (`juntar`): o botão desabilitado nos três casos e o motivo no
+balão, o padrão escolhendo por evidência e não por IAD, cancelar não juntar
+nada, e a juntação de verdade conferida campo a campo (título e valor de quem
+fica intactos, pessoas somadas sem repetir, risco 0→4, problema 3 que não cai,
+campanha vazia completada, tarefa repontada, histórico registrado, seleção
+desligada). Mais três numa só com **dois diálogos no total**, não seis.
+
+Total: 15 suítes, 364 conferências.
+
+**Onde está:** `barraDeSelecao()` em `src/views.js`; `juntarSelecionadas()` e
+`confirmarJuntarLote()` em `src/app.js`. O trabalho de verdade continua em
+`Store.juntarOportunidades`, intocado.
+
+---
 
 ## 0-AB. Dois relatos de perda de dados — v209, 21/09
 

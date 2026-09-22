@@ -1917,11 +1917,36 @@
     const todasMarcadas = elegiveis.length && marcadas.length === elegiveis.length;
     const valor = marcadas.reduce(function (t, r) { return t + (r.op.valor || 0); }, 0);
 
+    /* Juntar pede duas coisas que mover não pede: pelo menos duas marcadas, e
+       todas da MESMA empresa. Duas negociações de empresas diferentes não são
+       uma duplicata — são dois negócios —, e juntar apagaria um deles. O botão
+       fica visível e desabilitado, com o balão dizendo o que falta: sumir com
+       ele ensinaria a não procurar. */
+    const contas = {};
+    marcadas.forEach(function (r) { contas[r.op.contaId || '(sem)'] = true; });
+    const umaEmpresa = Object.keys(contas).length === 1;
+    const podeJuntar = marcadas.length >= 2 && umaEmpresa;
+    const porQueNaoJuntar = marcadas.length < 2
+      ? 'Marque pelo menos duas negociações da mesma empresa.'
+      : 'As marcadas são de empresas diferentes. Se a EMPRESA é que está duplicada, ' +
+        'junte as empresas primeiro em Configuração → Juntar empresas.';
+
     return '<div class="espaco-flutua"></div><div class="flutua-acoes selecionando">' +
       '<span class="conta">' + marcadas.length + ' de ' + elegiveis.length +
       (valor ? ' · ' + U.compacto(valor) : '') + '</span>' +
       '<button class="btn ghost mini" onclick="App.marcarTodosNoPipeline()">' +
       (todasMarcadas ? 'Desmarcar' : 'Marcar as ' + elegiveis.length) + '</button>' +
+      '<button class="btn ghost mini"' + (podeJuntar ? '' : ' disabled') +
+      ' onclick="App.juntarSelecionadas()"' +
+      ajudaComLinhas('Juntar numa só',
+        podeJuntar
+          ? 'As marcadas viram uma negociação só. Histórico, pessoas, tarefas, sinais e anexos passam todos para a que você escolher.'
+          : porQueNaoJuntar,
+        [['Quando usar', 'A mesma venda entrou duas vezes — uma pelo Linked Helper, outra à mão — e as duas estão na carteira competindo pela mesma receita.'],
+         ['Quem fica', 'Você escolhe. O título, o valor, a previsão e a etapa de quem fica são os que sobrevivem.'],
+         ['As notas sobem', 'Cada uma das oito decisões fica com a MAIOR nota entre as juntadas — e a evidência que a sustenta vem junto.'],
+         ['Não tem volta', 'As outras deixam de existir. O histórico registra a junção, para a pergunta “onde foi parar aquele negócio” ter resposta.']]) +
+      '>⇄ Juntar' + (podeJuntar ? ' as ' + marcadas.length : '') + '</button>' +
       '<button class="btn mini"' + (marcadas.length ? '' : ' disabled') +
       ' onclick="App.nutrirSelecionadas()">Mover ' + (marcadas.length || '') + ' para nutrição →</button>' +
       '<button class="btn ghost mini" onclick="App.selecionarNoPipeline(false)">Cancelar</button>' +
@@ -4938,7 +4963,7 @@
     ['m-potencial', 'Potencial: vale a primeira hora?',
      'A pergunta que vem antes do IAD, para quando você tem cem leads e IAD 0 em todos. As quatro faixas, as duas contas que as formam (perfil e interesse), de onde sai cada ponto e por que nada disso mexe no índice.'],
     ['m-nutricao', 'O Processo de Nutrição: triar cem de uma vez',
-     'A tela onde se decide em lote quem sai da previsão e quem volta: as duas abas, os filtros que valem para as duas, a ordem por Potencial, o motivo e a data pedidos uma vez para o lote todo, a seleção em lote direto do Pipeline — e por que nada disso encerra ninguém.'],
+     'A tela onde se decide em lote quem sai da previsão e quem volta: as duas abas, os filtros que valem para as duas, a ordem por Potencial, o motivo e a data pedidos uma vez para o lote todo, a seleção em lote direto do Pipeline, e como juntar duas negociações repetidas da mesma empresa numa só.'],
     ['m-notas', 'Notas rápidas: o caderninho',
      'Onde guardar a frase que você não pode esquecer, escrita ou ditada, sem preencher formulário nenhum. O que o app reconhece sozinho no texto, por que a anotação não conta como tarefa, e por que ninguém além de você lê esta tela.'],
     ['m-lh', 'A integração com o Linked Helper',
@@ -5000,7 +5025,7 @@
     ['📊', 'Painel', 'Como está a carteira, e o que ela está me ensinando.',
      'Pipeline por saúde da decisão, o que está travando a receita, tempo sem evidência, riscos críticos — e, no fim, o Aprendizado da carteira com a evolução semana a semana e o plano de desenvolvimento.'],
     ['🗂️', 'Pipeline', 'Quais negócios são reais.',
-     'A carteira lida pela decisão do comprador, não pela etapa. Sete grupos, filtros no topo e a gaveta de filtros finos. Em lista ou em kanban — e, na lista, o botão do canto inferior direito marca vários negócios e manda todos para nutrição de uma vez.'],
+     'A carteira lida pela decisão do comprador, não pela etapa. Sete grupos, filtros no topo e a gaveta de filtros finos. Em lista ou em kanban — e, na lista, o botão do canto inferior direito marca vários negócios para mandar à nutrição de uma vez, ou para juntar numa só os que são a mesma venda repetida.'],
     ['✅', 'Tarefas', 'O que foi executado, e o que aquilo rendeu.',
      'Toda tarefa presa a uma empresa e a uma negociação. Filtros como os do pipeline, resumo da semana, e a coluna que diz qual decisão cada tarefa destrava.'],
     /* Faltava. A tela existe no menu desde que o WhatsApp entrou, tem seção
@@ -5724,6 +5749,36 @@
       '<li>Só na lista. No kanban o cartão já carrega o arrasto, e um clique que às vezes abre, às ' +
       'vezes marca e às vezes arrasta é um clique em que ninguém confia.</li>' +
       '</ul>' +
+
+      '<h3>⇄ Juntar numa só</h3>' +
+      '<p class="small">A mesma venda entra duas vezes com frequência: uma pelo Linked Helper, outra à ' +
+      'mão. As duas ficam na carteira competindo pela mesma receita, e a previsão conta o negócio em ' +
+      'dobro. Marque as duas e clique em <strong>⇄ Juntar</strong> — o botão só acende com ' +
+      '<strong>duas ou mais da MESMA empresa</strong>.</p>' +
+      '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' +
+      '<tr><td class="rotulo-manual"><strong>Quem fica</strong></td><td>' +
+      '<strong>Você escolhe</strong><span class="tiny muted">O título, o valor, a previsão e a etapa de ' +
+      'quem fica são os que sobrevivem. O padrão sugerido é a de <em>mais evidência do cliente</em>, e ' +
+      'não a de maior IAD — nota alta sem evidência é justamente o que este app existe para ' +
+      'desconfiar. Mas o título bom raramente é o que a importação gerou, então confira.</span></td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>O que passa</strong></td><td>' +
+      '<strong>Tudo o que é histórico</strong><span class="tiny muted">Eventos, pessoas do grupo ' +
+      'comprador, tarefas, sinais, anexos, itens de produto e as notas. Os eventos entram em ordem de ' +
+      'data — a evidência de ontem não vai parar no meio da de três meses atrás.</span></td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>As oito decisões</strong></td><td>' +
+      '<strong>Fica a MAIOR nota de cada uma</strong><span class="tiny muted">E a evidência que a ' +
+      'sustenta vem junto, senão a nota ficaria de pé sozinha — que é o defeito que a régua ' +
+      'existe para pegar. A confirmação lista quais sobem, antes de você decidir.</span></td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>Empresas diferentes</strong></td><td>' +
+      '<strong>Não junta, e diz por quê</strong><span class="tiny muted">Duas negociações de empresas ' +
+      'diferentes não são uma duplicata — são dois negócios, e juntar apagaria um. Se a EMPRESA é que ' +
+      'está duplicada, junte as empresas primeiro em Configuração → Juntar empresas.</span></td></tr>' +
+      '</tbody></table></div>' +
+      '<p class="tiny muted">Três marcadas viram <strong>uma confirmação só</strong>, com a conta ' +
+      'inteira do que vai mudar. Quem clica em três confirmações seguidas para de ler na segunda. ' +
+      'Não tem como desfazer — mas o histórico registra cada junção, para a pergunta “onde foi parar ' +
+      'aquele negócio” ter resposta daqui a seis meses. O mesmo botão existe dentro de cada negócio, ' +
+      'em <strong>Juntar</strong>, para quando você já está com ele aberto.</p>' +
       '<p class="tiny muted">O formulário de motivo e data é o mesmo das duas portas, de propósito: ' +
       'duas cópias divergiriam, e aí o mesmo botão pediria coisas diferentes em lugares diferentes.</p>' +
 
