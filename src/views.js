@@ -3459,6 +3459,8 @@
             ' data-ajuda-titulo="Concluir com o que aconteceu" data-ajuda="Cole ou anexe o que aconteceu. O assistente separa as evidências, relê as oito decisões e registra o próximo passo — tudo no mesmo gesto de concluir a tarefa.">Concluir</button>' +
             '<button class="btn ghost mini" onclick="App.adiarUmaTarefa(\'' + t.id + '\')"' +
             ' data-ajuda-titulo="Adiar" data-ajuda="Nova data e o motivo. O número de adiamentos fica na linha: negócio adiado três vezes é um dado sobre o negócio.">Adiar</button>') +
+        '<button class="btn ghost mini" onclick="App.verTarefa(\'' + t.id + '\')"' +
+        ' data-ajuda-titulo="Visualizar" data-ajuda="A tarefa inteira só para ler: a conversa que veio do Linked Helper sem recorte, os anexos, e o telefone e o e-mail de quem é. Nada aqui altera nada.">Visualizar</button>' +
         '<button class="btn ghost mini" onclick="App.editarTarefa(\'' + t.id + '\')"' +
         ' data-ajuda-titulo="Editar" data-ajuda="A tarefa inteira: título, descrição, documentos anexados, canal, situação, decisão-alvo, com quem, data e responsável. Marcar a situação como “Já foi feita” abre a mesma tela de contar o que aconteceu.">Editar</button>' +
         /* Escrito, não um X. O X ao lado de "Editar" era o único botão da
@@ -3905,6 +3907,8 @@
         ? '<button class="btn mini" onclick="App.concluirComRelato(\'' + op.id + '\',\'' + t.id + '\')"' +
           ' data-ajuda-titulo="Concluir contando o que aconteceu" data-ajuda="É aqui que a conta anda: o assistente lê o que você escrever e anexar, separa o que o CLIENTE fez e relê as oito decisões.">Concluir</button>'
         : '') +
+      '<button class="btn ghost mini" onclick="App.verTarefa(\'' + t.id + '\')"' +
+      ' data-ajuda-titulo="Visualizar" data-ajuda="Só para ler: a descrição inteira, os anexos e o contato com telefone e e-mail. Nada aqui altera nada.">Ver</button>' +
       '<button class="btn ghost mini" onclick="App.editarTarefa(\'' + t.id + '\')">Editar</button>' +
       '</td></tr>';
   }
@@ -5227,7 +5231,45 @@
       '("adiada 4x") e escrito no histórico. Mudar a data pela edição é correção e não conta.</td></tr>' +
       '<tr><td class="rotulo-manual"><strong>Vinda do Linked Helper</strong></td><td>Toda empresa importada do LH abre uma tarefa de ' +
       'Apresentação vencendo no dia da importação, com campanha, SDR e a conversa inteira do LinkedIn na descrição.</td></tr>' +
-      '</tbody></table></div></div>';
+      '<tr><td class="rotulo-manual"><strong>Carteira: pipeline ou nutrição</strong></td><td>Mover cem leads para nutrição tira os ' +
+      'cem da previsão, mas as tarefas deles continuam vencendo — era assim que “93 atrasadas” virava um número que ninguém ' +
+      'olhava. O filtro separa <em>Só o pipeline</em> de <em>Só nutrição</em>. Abre em “Pipeline e nutrição”: nada some sem ' +
+      'você mandar.</td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>Visualizar</strong></td><td>A tarefa inteira só para ler, ao lado de Concluir. A ' +
+      'conversa do LinkedIn aparece sem recorte — é onde está o e-mail e o celular que o cliente mandou — e o telefone e o ' +
+      'e-mail de quem é vêm junto. Nada ali altera nada: para mexer existe Editar.</td></tr>' +
+      '</tbody></table></div>' +
+
+      '<h3>O e-mail e o celular presos na conversa</h3>' +
+      '<p class="small">A mensagem que vem do Linked Helper costuma trazer o contato no meio do texto: ' +
+      '<em>“Ana Bom dia Sim helcio.moraes@peri.com.br Abraço”</em>. Era dado que chegava e morria ali — a ficha do ' +
+      'contato seguia vazia e alguém copiava à mão, quando lembrava de abrir a tarefa.</p>' +
+      '<p class="small">Na edição da tarefa, o botão <strong>✨ Varrer contatos do texto</strong> lê o que está escrito e ' +
+      'o que foi anexado, e propõe:</p>' +
+      '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' +
+      '<tr><td class="rotulo-manual"><strong>E-mail e telefone</strong></td><td>' +
+      '<strong>Por regra, sem IA e sem custo</strong><span class="tiny muted">Eles têm forma, e forma se reconhece sem ' +
+      'gastar uma chamada. Funciona com o assistente desligado — antes o botão nem aparecia, e o celular ficava preso na ' +
+      'descrição para sempre. Data, CNPJ e DDD que não existe são recusados: telefone inventado na ficha é pior que campo ' +
+      'vazio, porque ninguém desconfia de campo preenchido.</span></td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>Nome de gente</strong></td><td>' +
+      '<strong>Aí sim é o assistente</strong><span class="tiny muted">Reconhecer que “Helcio Moraes” é uma pessoa e ' +
+      '“Managing Director” é o cargo dele é o que só a IA faz. Se ela falhar, a varredura por regra vale do mesmo jeito.' +
+      '</span></td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>De quem é</strong></td><td>' +
+      '<strong>O endereço costuma dizer</strong><span class="tiny muted">“helcio.moraes@” é o Helcio Moraes que já está ' +
+      'cadastrado. Quando não dá para saber — “ana@” com duas Anas na empresa, ou “contato@” — o dado fica <em>sem dono</em> ' +
+      'e você escolhe na hora. Colar o e-mail na Ana errada é um erro que ninguém descobre depois.</span></td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>Onde entra</strong></td><td>' +
+      '<strong>Só em campo vazio</strong><span class="tiny muted">A ficha tem <strong>dois e-mails</strong> (profissional e ' +
+      'pessoal) e <strong>dois telefones</strong> (WhatsApp e comercial). O primeiro vazio recebe; se os dois estiverem ' +
+      'ocupados, nada entra. O que você digitou vence o que o robô leu, sempre — e varrer a mesma tarefa de novo não ' +
+      'duplica nada: ele diz “já estava na ficha” e para.</span></td></tr>' +
+      '</tbody></table></div>' +
+      '<p class="tiny muted">O mesmo número escrito de três jeitos — <em>+55 24 99931-6448</em>, <em>(24) 99931-6448</em>, ' +
+      '<em>24999316448</em> — é reconhecido como um só: a comparação é pelos últimos oito dígitos, a mesma regra que faz a ' +
+      'conversa de WhatsApp casar com a pessoa certa.</p>' +
+      '</div>';
   }
 
   function manualDoAprendizado() {

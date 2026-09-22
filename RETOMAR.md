@@ -5,8 +5,8 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v214**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v214, o aparelho
+Publicado agora: **v215**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v215, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -397,6 +397,57 @@ com nada marcado. Marcar 99 e a seleção sobreviver a um refresh seria armadilh
 duas negociações de verdade. Filtrar por campanha, marcar os 51, mover com
 motivo e prazo, conferir que **ninguém foi encerrado**, devolver três, e que a
 passagem ficou no `historicoNutricao`.
+
+## 0-AI. O e-mail preso na conversa, e o botão Visualizar — v215, 22/09
+
+Dois pedidos do mesmo print (a tarefa da PERI):
+
+*“Quando vem as mensagens numa importação do LH muitas vezes vem informações
+como celular whatsapp e e-mail... Precisamos ter condições da IA varrer isso e
+levar tudo para o contato.”* e *“Aqui do lado de concluir temos que ter um
+botão visualizar.”*
+
+**Sobre os campos:** ele pediu para criar um segundo e-mail e um segundo
+telefone se só houvesse um. **Já havia os quatro** — E-mail profissional,
+E-mail pessoal, WhatsApp e Telefone comercial. O que faltava não era campo:
+era o dado chegar neles.
+
+**A varredura.** O botão da edição de tarefa virou **✨ Varrer contatos do
+texto** e mudou de natureza:
+
+| | |
+|---|---|
+| E-mail e telefone | **Por regra, sem IA e sem custo.** Têm forma; forma se reconhece sem gastar chamada. |
+| Nome de gente | **Aí sim é o assistente** — e se ele falhar, a regra vale do mesmo jeito. |
+
+Antes o botão **só existia com o assistente ligado**, e sumia junto com ele —
+o celular ficava preso na descrição para sempre. Agora ele aparece sempre.
+
+O que a regra recusa importa tanto quanto o que aceita: **data, CNPJ, DDD
+inexistente e celular que não começa com 9**. Telefone inventado na ficha é
+pior que campo vazio, porque ninguém desconfia de campo preenchido.
+
+**De quem é:** o endereço costuma dizer — `helcio.moraes@` é o Helcio Moraes
+já cadastrado. Quando não dá para saber (`ana@` com duas Anas, ou `contato@`),
+fica **sem dono** e o vendedor escolhe. Colar o e-mail na Ana errada é um erro
+que ninguém descobre depois.
+
+**Onde entra:** só em campo **vazio**, e o primeiro vazio dos dois. Nunca
+sobrescreve. Varrer a mesma tarefa de novo não duplica: diz *“já estava na
+ficha”* e para. O mesmo número em três formatos é um só — comparação pelos
+últimos oito dígitos, a mesma regra do WhatsApp.
+
+Uma caixa só para as duas coisas (gente nova + ficha para completar): duas
+confirmações seguidas fazem qualquer pessoa parar de ler na segunda.
+
+**Visualizar.** Ao lado de Concluir, na aba do negócio e na tela geral (como
+“Ver”). A tarefa inteira só para ler: a conversa **sem recorte** — na linha ela
+vinha em duas linhas com barra de rolagem, e é ali que está o e-mail — mais
+empresa, negociação, e o telefone e o e-mail de quem é. Os anexos aparecem sem
+o ✕: para mexer existe Editar. Antes, ler a conversa obrigava a abrir o
+formulário de edição, com sete campos editáveis e o risco de salvar sem querer.
+
+**64 testes** (`varre.js` 38, `vertela.js` 26), incluindo o texto real do print.
 
 ## 0-AH. Tarefas: separar o pipeline da nutrição — v214, 22/09
 

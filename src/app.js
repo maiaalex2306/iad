@@ -1071,7 +1071,17 @@
     __palpiteDaNota: function (texto) { return palpiteDaNota(texto); },
     /* Exposto porque o caminho da FALHA ao anexar e' o que vinha sendo
        engolido, e caminho de erro sem teste volta a ser engolido. */
-    __anexarAoRegistro: function (docs, alvo, aoTerminar) { return anexarAoRegistro(docs, alvo, aoTerminar); }
+    __anexarAoRegistro: function (docs, alvo, aoTerminar) { return anexarAoRegistro(docs, alvo, aoTerminar); },
+    /* A varredura do texto e' pura: entra texto, sai e-mail e telefone. E'
+       justamente o tipo de coisa que falha calada — um DDD a menos na lista e
+       o celular do cliente some sem ninguem notar. */
+    __dadosNoTexto: function (texto) { return dadosNoTexto(texto); },
+    __ligarAcharPessoas: function (dlg, op) { return ligarAcharPessoas(dlg, op); },
+    __telefoneValido: function (bruto) { return telefoneValido(bruto); },
+    __donoDoEmail: function (email, contatos) { return donoDoEmail(email, contatos); },
+    __campoLivre: function (contato, valor, ehEmail) { return campoLivre(contato, valor, ehEmail); },
+    __propostasDoTexto: function (texto, contaId, contatoId) { return propostasDoTexto(texto, contaId, contatoId); },
+    __aplicarPropostas: function (escolhidas) { return aplicarPropostas(escolhidas); }
   };
 
   const App = {
@@ -3167,6 +3177,7 @@
     tarefasResponsavel: function (v) { V.tarefasFiltrar({ responsavel: v, pagina: 1 }); render(); },
     tarefasStatus: function (v) { V.tarefasFiltrar({ status: v, pagina: 1 }); render(); },
     tarefasCarteira: function (v) { V.tarefasFiltrar({ carteira: v, pagina: 1 }); render(); },
+    verTarefa: function (id) { verTarefa(id); },
     /* Trocar de empresa zera a negociação: a negociação escolhida era de
        outra empresa, e mantê-la deixaria a lista vazia sem explicar por quê. */
     tarefasEmpresa: function (v) { V.tarefasFiltrar({ empresa: v, negocio: '', pagina: 1 }); render(); },
@@ -7728,21 +7739,65 @@
 
   function ligarAcharPessoas(dlg, op) {
     const alvo = dlg.querySelector('[data-achar-pessoas]');
-    if (!alvo || !U.assistenteAtivo()) return;
+    if (!alvo) return;
+    /* O botão aparece com ou sem assistente, porque metade do trabalho dele
+       não precisa de IA nenhuma: e-mail e telefone têm forma e se acham por
+       regra. Antes, com o assistente desligado, o botão sumia e o celular
+       que o cliente mandou ficava preso na descrição para sempre. */
+    const comIA = U.assistenteAtivo();
     alvo.innerHTML = '<div class="row" style="margin-bottom:10px">' +
-      '<button type="button" class="btn ghost mini" data-buscar-pessoas>✨ Achar contatos no texto</button>' +
+      '<button type="button" class="btn ghost mini" data-buscar-pessoas>' +
+      (comIA ? '✨ Varrer contatos do texto' : '🔎 Achar e-mail e telefone no texto') + '</button>' +
       '<span class="tiny muted" data-aviso-pessoas></span></div>';
     const botao = alvo.querySelector('[data-buscar-pessoas]');
     const aviso = alvo.querySelector('[data-aviso-pessoas]');
+
+    const contatoDoForm = function () {
+      const sel = dlg.querySelector('[name="contatoId"]');
+      const v = sel ? sel.value : '';
+      return v && v !== NOVO_CONTATO ? v : '';
+    };
+
+    const repintarContatos = function (contaId) {
+      const sel = dlg.querySelector('[name="contatoId"]');
+      if (!sel) return;
+      const escolhido = sel.value;
+      sel.innerHTML = opcoesDeContato(contaId).map(function (x) {
+        return '<option value="' + U.esc(x.valor) + '">' + U.esc(x.rotulo) + '</option>';
+      }).join('');
+      sel.value = escolhido;
+    };
+
+    const mostrar = function (contaId, pessoas, recadoDaIA) {
+      const r = propostasDoTexto(textoDaTarefa(dlg), contaId, contatoDoForm());
+      if (!pessoas.length && !r.propostas.length) {
+        aviso.textContent = recadoDaIA || 'Não achei pessoa, e-mail nem telefone neste texto.';
+        return;
+      }
+      aviso.textContent = '';
+      escolherPessoas(contaId, pessoas, r.propostas, r.contatos, function (quantos, gravados, semDono) {
+        const partes = [];
+        if (quantos) partes.push(quantos + (quantos === 1 ? ' contato cadastrado' : ' contatos cadastrados'));
+        if (gravados) partes.push(gravados + (gravados === 1 ? ' dado gravado na ficha' : ' dados gravados nas fichas'));
+        if (semDono) {
+          partes.push(semDono + (semDono === 1 ? ' não entrou' : ' não entraram') +
+            ' — sem dono escolhido, ou o campo já estava preenchido');
+        }
+        aviso.textContent = partes.length ? partes.join(' · ') + '.' : 'Nada foi gravado.';
+        repintarContatos(contaId);
+      });
+    };
 
     botao.addEventListener('click', function () {
       const contaId = contaDoFormulario(dlg, op);
       if (!contaId) { aviso.textContent = 'Escolha a empresa primeiro.'; return; }
       const texto = textoDaTarefa(dlg);
       if (texto.length < 12) {
-        aviso.textContent = 'Escreva os nomes na descrição, ou anexe o arquivo com eles.';
+        aviso.textContent = 'Escreva na descrição, ou anexe o arquivo com os dados.';
         return;
       }
+
+      if (!comIA) { mostrar(contaId, [], ''); return; }
 
       const rotulo = botao.textContent;
       botao.disabled = true;
@@ -7755,60 +7810,257 @@
       }).then(function (r) {
         botao.disabled = false;
         botao.textContent = rotulo;
+        /* Se a IA falhar, a varredura por regra continua valendo: o e-mail
+           está no texto de qualquer jeito, e perder o achado porque a função
+           publicada é velha seria jogar fora o que não dependia dela. */
         if (r.erro) {
-          /* A função antiga não conhece esta leitura. "tipo desconhecido" é
-             verdade e não diz o que fazer. */
-          aviso.textContent = /tipo desconhecido/i.test(r.erro)
-            ? 'A função assistente publicada ainda não sabe ler pessoas. Republique-a e tente de novo.'
-            : r.erro;
+          const recado = /tipo desconhecido/i.test(r.erro)
+            ? 'A função assistente ainda não sabe ler pessoas; achei só e-mail e telefone.'
+            : 'O assistente falhou (' + r.erro + '); achei só e-mail e telefone.';
+          mostrar(contaId, [], recado);
           return;
         }
-        const achados = (r.contatos || []).filter(function (c) { return c && c.nome; });
-        if (!achados.length) {
-          aviso.textContent = 'Não achei nome de pessoa neste texto.';
-          return;
-        }
-        aviso.textContent = '';
-        escolherPessoas(contaId, achados, function (quantos) {
-          aviso.textContent = quantos
-            ? quantos + (quantos === 1 ? ' contato cadastrado.' : ' contatos cadastrados.')
-            : 'Nenhum cadastrado.';
-          /* O select de contato foi pintado antes destes existirem. */
-          const sel = dlg.querySelector('[name="contatoId"]');
-          if (!sel) return;
-          const escolhido = sel.value;
-          sel.innerHTML = opcoesDeContato(contaId).map(function (x) {
-            return '<option value="' + U.esc(x.valor) + '">' + U.esc(x.rotulo) + '</option>';
-          }).join('');
-          sel.value = escolhido;
-        });
+        mostrar(contaId, (r.contatos || []).filter(function (c) { return c && c.nome; }), '');
       });
     });
   }
 
+  /* ---------- o que o texto carrega, além dos nomes ----------
+
+     A mensagem importada do Linked Helper traz o e-mail e o celular no meio
+     da conversa: "Ana Bom dia Sim helcio.moraes@peri.com.br Abraço". Era
+     dado que chegava e morria ali — a ficha do contato seguia vazia e o
+     vendedor copiava à mão, quando lembrava de abrir a tarefa.
+
+     A varredura é de REGRA, não de IA: e-mail e telefone têm forma, e forma
+     se reconhece sem gastar uma chamada nem esperar dois segundos. Vale
+     também com o assistente desligado. A IA continua fazendo o que só ela
+     faz, que é achar NOME de gente no meio de um texto. */
+
+  const RE_EMAIL = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi;
+  /* +55 24 99931-6448, (19) 99604-7481, 11 3240-4888, 24999316448. */
+  const RE_TELEFONE = /(?:\+?\s*55[\s.-]*)?\(?\d{2}\)?[\s.-]?9?\d{4}[\s.-]?\d{4}/g;
+
+  /* Os DDDs que existem. Sem esta lista um pedaço de CNPJ vira telefone — e
+     telefone inventado na ficha é pior do que campo vazio, porque ninguém
+     desconfia de um campo preenchido. */
+  const DDDS = ('11 12 13 14 15 16 17 18 19 21 22 24 27 28 31 32 33 34 35 37 38 ' +
+    '41 42 43 44 45 46 47 48 49 51 53 54 55 61 62 63 64 65 66 67 68 69 ' +
+    '71 73 74 75 77 79 81 82 83 84 85 86 87 88 89 91 92 93 94 95 96 97 98 99').split(' ');
+
+  function soDigitos(v) { return String(v || '').replace(/\D/g, ''); }
+
+  /* Devolve o telefone escrito como gente escreve, ou '' quando o que foi
+     achado não é telefone nenhum. */
+  function telefoneValido(bruto) {
+    let d = soDigitos(bruto);
+    if ((d.length === 12 || d.length === 13) && d.slice(0, 2) === '55') d = d.slice(2);
+    if (d.length !== 10 && d.length !== 11) return '';
+    if (DDDS.indexOf(d.slice(0, 2)) === -1) return '';
+    const resto = d.slice(2);
+    /* Celular tem nove dígitos e começa com 9; fixo tem oito e começa de 2 a 5. */
+    if (resto.length === 9 && resto[0] !== '9') return '';
+    if (resto.length === 8 && '2345'.indexOf(resto[0]) === -1) return '';
+    return '(' + d.slice(0, 2) + ') ' + resto.slice(0, resto.length - 4) + '-' + resto.slice(-4);
+  }
+
+  /* Acha sem lookbehind, de propósito: a regra "não pode ter dígito colado
+     antes nem depois" é o que impede um CNPJ de virar telefone, e nem todo
+     navegador que o Alexandre usa tem lookbehind. */
+  function acharSoltos(texto, re) {
+    const achados = [];
+    let m;
+    re.lastIndex = 0;
+    while ((m = re.exec(texto)) !== null) {
+      const antes = texto[m.index - 1] || '';
+      const depois = texto[m.index + m[0].length] || '';
+      if (!/\d/.test(antes) && !/\d/.test(depois)) achados.push(m[0]);
+      if (m.index === re.lastIndex) re.lastIndex++;
+    }
+    return achados;
+  }
+
+  function dadosNoTexto(texto) {
+    const t = String(texto || '');
+    const emails = [], telefones = [], vistos = {};
+    (t.match(RE_EMAIL) || []).forEach(function (e) {
+      const limpo = e.toLowerCase().replace(/[.,;:)\]]+$/, '');
+      if (!vistos['e' + limpo]) { vistos['e' + limpo] = 1; emails.push(limpo); }
+    });
+    /* O e-mail sai do texto antes da busca por telefone: "joao2024@x.com.br"
+       não pode render um telefone de mentira. */
+    const semEmail = t.replace(RE_EMAIL, ' ');
+    acharSoltos(semEmail, RE_TELEFONE).forEach(function (n) {
+      const bom = telefoneValido(n);
+      if (!bom) return;
+      const chave = 't' + soDigitos(bom).slice(-8);
+      if (!vistos[chave]) { vistos[chave] = 1; telefones.push(bom); }
+    });
+    return { emails: emails, telefones: telefones };
+  }
+
+  function semAcento(v) {
+    return String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  }
+
+  /* De quem é este e-mail. O endereço costuma dizer: "helcio.moraes@" é o
+     Helcio Moraes que já está cadastrado. Dois pedaços do nome batendo é
+     certeza; um pedaço só ("ana@") só vale quando existe uma Ana na empresa,
+     porque colar o e-mail na Ana errada é um erro que ninguém descobre. */
+  function donoDoEmail(email, contatos) {
+    const local = semAcento(String(email).split('@')[0]).replace(/\d+/g, '');
+    const pedacos = local.split(/[._\-+]+/).filter(function (x) { return x.length >= 3; });
+    if (!pedacos.length) return null;
+    let melhor = null, pontosDoMelhor = 0, empatados = 0;
+    contatos.forEach(function (c) {
+      const nome = semAcento(c.nome).split(/\s+/).filter(function (x) { return x.length >= 3; });
+      const pontos = pedacos.filter(function (x) { return nome.indexOf(x) !== -1; }).length;
+      if (pontos > pontosDoMelhor) { pontosDoMelhor = pontos; melhor = c; empatados = 1; }
+      else if (pontos && pontos === pontosDoMelhor) empatados++;
+    });
+    if (!pontosDoMelhor || empatados > 1) return null;
+    return pontosDoMelhor >= 2 || pedacos.length === 1 ? melhor : null;
+  }
+
+  const ROTULO_CAMPO = {
+    email: 'E-mail profissional', emailPessoal: 'E-mail pessoal',
+    telefone: 'WhatsApp', telefoneComercial: 'Telefone comercial'
+  };
+
+  /* Onde o achado cabe nesta ficha — e '' quando não cabe: ou o dado já está
+     lá, ou os dois campos já estão ocupados por outros. NUNCA sobrescreve. O
+     que o vendedor digitou vence o que o robô leu, sempre. */
+  function campoLivre(contato, valor, ehEmail) {
+    const campos = ehEmail ? ['email', 'emailPessoal'] : ['telefone', 'telefoneComercial'];
+    const igual = ehEmail
+      ? function (a, b) { return String(a).toLowerCase() === String(b).toLowerCase(); }
+      : function (a, b) { return soDigitos(a).slice(-8) === soDigitos(b).slice(-8); };
+    let jaTem = false, vago = '';
+    campos.forEach(function (nome) {
+      const atual = String(contato[nome] || '').trim();
+      if (atual && igual(atual, valor)) jaTem = true;
+      else if (!atual && !vago) vago = nome;
+    });
+    return jaTem ? '' : vago;
+  }
+
+  /* Cada e-mail e cada telefone do texto, já com o dono e o campo onde
+     entra. `motivo` é o que se diz quando não entra em lugar nenhum: o
+     vendedor merece saber que o dado foi visto e descartado, em vez de ele
+     simplesmente não aparecer. */
+  function propostasDoTexto(texto, contaId, contatoId) {
+    const achados = dadosNoTexto(texto);
+    const contatos = Store.contatosDaConta(contaId);
+    const daTarefa = contatoId ? Store.contato(contatoId) : null;
+    const lista = [];
+    const juntar = function (valor, ehEmail) {
+      const dono = ehEmail ? donoDoEmail(valor, contatos) : null;
+      const alvo = dono || daTarefa || (contatos.length === 1 ? contatos[0] : null);
+      if (!alvo) { lista.push({ valor: valor, ehEmail: ehEmail, contatoId: '', campo: '', motivo: '' }); return; }
+      const campo = campoLivre(alvo, valor, ehEmail);
+      lista.push({ valor: valor, ehEmail: ehEmail, contatoId: alvo.id, campo: campo,
+        motivo: campo ? '' : 'já está na ficha de ' + alvo.nome });
+    };
+    achados.emails.forEach(function (e) { juntar(e, true); });
+    achados.telefones.forEach(function (n) { juntar(n, false); });
+    return { propostas: lista, contatos: contatos };
+  }
+
+  /* Grava o que foi marcado. O campo é recalculado AGORA e não na montagem:
+     entre abrir a caixa e salvar, as pessoas novas foram cadastradas e podem
+     já ter trazido o e-mail junto. */
+  function aplicarPropostas(escolhidas) {
+    let n = 0;
+    escolhidas.forEach(function (x) {
+      const c = Store.contato(x.contatoId);
+      if (!c) return;
+      const campo = campoLivre(c, x.valor, x.ehEmail);
+      if (!campo) return;
+      c[campo] = x.valor;
+      n++;
+    });
+    if (n) Store.salvar();
+    return n;
+  }
+
   /* A pessoa confere antes de entrar. O assistente lê bem e erra às vezes, e
      contato errado no CRM não avisa que está errado: fica lá, contando como
-     cobertura do grupo comprador que ninguém tem. */
-  function escolherPessoas(contaId, achados, aoTerminar) {
-    U.formulario('Cadastrar quem está no texto', [
-      { tipo: 'aviso', rotulo: 'Achei estas pessoas. Elas entram como contatos de ' +
-        ((Store.conta(contaId) || {}).nome || 'a empresa') +
-        ', sem papel na compra e fora do grupo comprador — quem entra no grupo é quem participa de uma tarefa.' },
-      { tipo: 'slot', slot: 'pessoas' }
+     cobertura do grupo comprador que ninguém tem.
+
+     Uma caixa só para as duas coisas — gente nova e ficha para completar.
+     Duas confirmações seguidas fazem qualquer pessoa parar de ler na
+     segunda, e é justamente a segunda que escreve na ficha. */
+  function escolherPessoas(contaId, achados, propostas, contatos, aoTerminar) {
+    const gente = achados || [];
+    const cabem = (propostas || []).filter(function (x) { return x.campo || !x.contatoId; });
+    const sobraram = (propostas || []).filter(function (x) { return !x.campo && x.contatoId; });
+    const nomeDaConta = (Store.conta(contaId) || {}).nome || 'a empresa';
+
+    U.formulario('O que achei neste texto', [
+      { tipo: 'aviso', rotulo: gente.length
+        ? 'Pessoas novas entram como contatos de ' + nomeDaConta + ', sem papel na compra e ' +
+          'fora do grupo comprador — quem entra no grupo é quem participa de uma tarefa. ' +
+          'E-mail e telefone só preenchem campo VAZIO: nada que você já digitou é sobrescrito.'
+        : 'E-mail e telefone só preenchem campo VAZIO: nada que você já digitou é sobrescrito.' },
+      { tipo: 'slot', slot: 'pessoas' },
+      { tipo: 'slot', slot: 'dados' }
     ], {}, function (d) {
-      const escolhidos = achados.filter(function (_, i) { return d['p' + i]; });
+      const escolhidos = gente.filter(function (_, i) { return d['p' + i]; });
       const quantos = criarContatosPropostos(contaId, escolhidos);
+      /* Depois de criar: o dono escolhido à mão vence o que foi adivinhado,
+         e quem ficou sem dono e sem escolha não entra em lugar nenhum. */
+      const marcadas = cabem.filter(function (x, i) { return d['d' + i]; });
+      const comDono = cabem.map(function (x, i) {
+        return d['d' + i] ? Object.assign({}, x, { contatoId: d['q' + i] || x.contatoId }) : null;
+      }).filter(function (x) { return x && x.contatoId; });
+      const gravados = aplicarPropostas(comDono);
       render();
-      if (aoTerminar) aoTerminar(quantos);
+      if (aoTerminar) aoTerminar(quantos, gravados, marcadas.length - gravados.length);
     }, function (dlg) {
-      const alvo = dlg.querySelector('[data-pessoas]');
-      alvo.innerHTML = '<div class="lista-multi">' + achados.map(function (c, i) {
-        const detalhe = [c.cargo, c.area, c.email, c.telefone].filter(Boolean).join(' · ');
-        return '<label class="item-multi"><input type="checkbox" name="p' + i + '" checked>' +
-          ' <span>' + U.esc(c.nome) +
-          (detalhe ? '<em>' + U.esc(detalhe) + '</em>' : '<em>só o nome — complete depois</em>') +
-          '</span></label>';
-      }).join('') + '</div>';
+      const alvoP = dlg.querySelector('[data-pessoas]');
+      alvoP.innerHTML = gente.length
+        ? '<div class="campo"><span>Pessoas para cadastrar</span><div class="lista-multi">' +
+          gente.map(function (c, i) {
+            const detalhe = [c.cargo, c.area, c.email, c.telefone].filter(Boolean).join(' · ');
+            return '<label class="item-multi"><input type="checkbox" name="p' + i + '" checked>' +
+              ' <span>' + U.esc(c.nome) +
+              (detalhe ? '<em>' + U.esc(detalhe) + '</em>' : '<em>só o nome — complete depois</em>') +
+              '</span></label>';
+          }).join('') + '</div></div>'
+        : '';
+
+      const opcoesDeDono = function (escolhido) {
+        return [{ valor: '', rotulo: '— não usar —' }].concat(contatos.map(function (c) {
+          return { valor: c.id, rotulo: c.nome };
+        })).map(function (o) {
+          return '<option value="' + U.esc(o.valor) + '"' +
+            (o.valor === escolhido ? ' selected' : '') + '>' + U.esc(o.rotulo) + '</option>';
+        }).join('');
+      };
+
+      const alvoD = dlg.querySelector('[data-dados]');
+      alvoD.innerHTML = (cabem.length
+        ? '<div class="campo"><span>E-mail e telefone para a ficha</span><div class="lista-multi">' +
+          cabem.map(function (x, i) {
+            const dono = x.contatoId ? Store.contato(x.contatoId) : null;
+            const campo = ROTULO_CAMPO[x.campo] || (x.ehEmail ? 'E-mail' : 'Telefone');
+            return '<label class="item-multi"><input type="checkbox" name="d' + i + '"' +
+              (dono ? ' checked' : '') + '> <span><strong>' + U.esc(x.valor) + '</strong>' +
+              '<em>' + U.esc(campo) + ' de ' +
+              (dono ? U.esc(dono.nome) : 'quem?') + '</em></span></label>' +
+              (dono
+                ? '<input type="hidden" name="q' + i + '" value="' + U.esc(x.contatoId) + '">'
+                : '<select name="q' + i + '" class="dono-do-achado">' + opcoesDeDono('') + '</select>');
+          }).join('') + '</div></div>'
+        : '') +
+        (sobraram.length
+          ? '<p class="tiny muted">' + sobraram.length +
+            (sobraram.length === 1 ? ' dado do texto já estava na ficha: ' : ' dados do texto já estavam na ficha: ') +
+            U.esc(sobraram.map(function (x) { return x.valor; }).join(', ')) + '.</p>'
+          : '') +
+        (!gente.length && !cabem.length && !sobraram.length
+          ? '<p class="nota-form">Não achei pessoa, e-mail nem telefone neste texto.</p>'
+          : '');
     });
   }
 
@@ -8192,23 +8444,27 @@
      aqui, e não some com eles: estão na aba Arquivos do negócio, que é onde
      documento mora. A linha embaixo diz isso, porque “não aparece” sem
      explicação é a mesma sensação de perda que criou este conserto. */
-  function pintarAnexosDaTarefa(dlg, tarefaId) {
+  function pintarAnexosDaTarefa(dlg, tarefaId, soLeitura) {
     const alvo = dlg.querySelector('[data-anexos-da-tarefa]');
     if (!alvo || !Arq.disponivel()) return;
 
     const pintar = function () {
       Arq.listar({ tarefaId: tarefaId }).then(function (lista) {
         if (!dlg.isConnected) return;
-        alvo.innerHTML = '<div class="campo"><span>J\u00e1 anexado nesta tarefa</span>' +
+        /* Em Visualizar não há ✕: a ficha existe para ler sem risco de
+           estragar. Quem quer tirar um anexo passa por Editar, de propósito. */
+        alvo.innerHTML = '<div class="campo"><span>Anexos desta tarefa</span>' +
           (lista.length
             ? '<div class="anexos-ia">' + lista.map(function (a) {
                 return '<span class="anexo"><button type="button" class="link" data-abrir="' +
                   U.esc(a.id) + '">' + U.esc(a.nome) + '</button>' +
-                  '<button type="button" class="sai" data-tirar="' + U.esc(a.id) +
-                  '" aria-label="Tirar este anexo">\u2715</button></span>';
+                  (soLeitura ? '' : '<button type="button" class="sai" data-tirar="' + U.esc(a.id) +
+                  '" aria-label="Tirar este anexo">\u2715</button>') + '</span>';
               }).join('') + '</div>'
-            : '<small class="origem">Nenhum ainda. Os que voc\u00ea escolher acima entram ao salvar \u2014 ' +
-              'e tamb\u00e9m ficam na aba <strong>Arquivos</strong> do neg\u00f3cio.</small>') +
+            : '<small class="origem">' + (soLeitura
+                ? 'Nenhum arquivo nesta tarefa.'
+                : 'Nenhum ainda. Os que voc\u00ea escolher acima entram ao salvar \u2014 ' +
+                  'e tamb\u00e9m ficam na aba <strong>Arquivos</strong> do neg\u00f3cio.') + '</small>') +
           '</div>';
 
         alvo.querySelectorAll('[data-abrir]').forEach(function (b) {
@@ -8223,6 +8479,70 @@
       });
     };
     pintar();
+  }
+
+  /* A tarefa inteira, sem poder estragá-la.
+
+     Antes só havia "Editar", e ler o que veio do Linked Helper obrigava a
+     abrir o formulário de edição: sete campos editáveis para ver duas linhas
+     de conversa, com o risco de salvar sem querer alguma coisa que se mexeu
+     por engano. A descrição aparecia recortada em duas linhas, com barra de
+     rolagem — que é onde estão o e-mail e o celular que o cliente mandou.
+
+     Aqui a descrição vem inteira, e a ficha de quem é vem junto: o telefone
+     e o e-mail do contato ficam a um clique de distância em vez de dois. */
+  function verTarefa(id) {
+    const t = Store.tarefa(id);
+    if (!t) return;
+    const op = t.oportunidadeId ? Store.oportunidade(t.oportunidadeId) : null;
+    const conta = op ? Store.conta(op.contaId) : null;
+    const contato = t.contatoId ? Store.contato(t.contatoId) : null;
+    const dono = t.donoId ? (A.usuarios().filter(function (u) { return u.id === t.donoId; })[0] || null) : null;
+    const dim = P.DIMENSOES.filter(function (x) { return x.id === t.decisaoAlvo; })[0];
+    const aberta = t.status === 'aberta';
+    const atrasada = aberta && t.vencimento < Store.hoje();
+    const situacao = aberta
+      ? (atrasada ? 'Atrasada' : 'A fazer')
+      : (t.semRegistro ? 'Concluída sem relato' : 'Concluída');
+
+    const zap = contato ? paraWhatsapp(contato.telefone) : '';
+    const corpo = corpoDaFicha([
+      linhaDaFicha('Situação', situacao),
+      linhaDaFicha('Canal', t.tipo),
+      linhaDaFicha(aberta ? 'Vence em' : 'Concluída em',
+        U.data(aberta ? t.vencimento : (t.concluidaEm || t.vencimento)) + (t.hora ? ' às ' + t.hora : '')),
+      linhaDaFicha('Adiamentos', t.adiamentos ? String(t.adiamentos) : ''),
+      linhaDaFicha('Responsável', dono ? dono.nome : ''),
+      linhaDaFicha('Empresa', conta ? conta.nome : ''),
+      linhaDaFicha('Negociação', op ? op.titulo : ''),
+      linhaDaFicha('Com quem', contato ? contato.nome + (contato.cargo ? ' — ' + contato.cargo : '') : ''),
+      contato ? linhaDaFicha('WhatsApp', contato.telefone, zap ? 'https://wa.me/' + zap : '') : '',
+      contato ? linhaDaFicha('Telefone comercial', contato.telefoneComercial,
+        contato.telefoneComercial ? 'tel:' + String(contato.telefoneComercial).replace(/[^\d+]/g, '') : '') : '',
+      contato ? linhaDaFicha('E-mail', contato.email, contato.email ? 'mailto:' + contato.email : '') : '',
+      contato ? linhaDaFicha('E-mail pessoal', contato.emailPessoal,
+        contato.emailPessoal ? 'mailto:' + contato.emailPessoal : '') : '',
+      linhaDaFicha('Decisão que pretende provocar', dim ? dim.nome : '')
+    ], 'Esta tarefa não tem nada além do assunto.') +
+      (t.descricao
+        ? '<div class="campo" style="margin-top:12px"><span>O que estava combinado</span>' +
+          '<pre class="texto-tarefa">' + U.esc(t.descricao) + '</pre></div>'
+        : '') +
+      '<div data-anexos-da-tarefa></div>';
+
+    const acoes = (aberta && op
+      ? '<button class="btn ghost" type="button" data-concluir>Concluir</button>'
+      : '') +
+      '<button class="btn ghost" type="button" data-editar>Editar</button>';
+
+    const dlg = U.ficha(t.titulo || 'Tarefa', corpo, acoes);
+    pintarAnexosDaTarefa(dlg, id, true);
+    const ligar = function (marca, acao) {
+      const b = dlg.querySelector('[data-' + marca + ']');
+      if (b) b.addEventListener('click', function () { dlg.close(); acao(); });
+    };
+    ligar('concluir', function () { App.concluirComRelato(op.id, id); });
+    ligar('editar', function () { App.editarTarefa(id); });
   }
 
   function anexarAoRegistro(docs, alvo, aoTerminar) {
