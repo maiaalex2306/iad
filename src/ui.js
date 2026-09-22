@@ -393,11 +393,11 @@
       '<span class="rotulo">✨ ' + esc(c.rotulo || 'Cole a ata ou conte o que aconteceu') + '</span>' +
       '<textarea name="' + c.id + '" placeholder="' + esc(c.placeholder || '') + '">' + esc(c.padrao || '') + '</textarea>' +
       '<input type="file" multiple hidden data-ia-arquivos="' + c.id + '"' +
-      ' accept=".pdf,.docx,.xlsx,.pptx,.txt,.md,.csv,.tsv,.json,.rtf,.vtt,.srt">' +
+      ' accept="' + ACEITA_DOCUMENTOS + '">' +
       '<div class="linha">' +
         '<button type="button" class="btn mini" data-ia="' + c.id + '">Análise da IA</button>' +
         '<button type="button" class="btn ghost mini" data-ia-carregar="' + c.id + '"' +
-        ' data-ajuda-titulo="Carregar documentos" data-ajuda="Word, Excel, PowerPoint, PDF, texto e planilhas. Pode escolher vários de uma vez. A IA lê todos junto com o que você escreveu.">📎 Carregar documentos</button>' +
+        ' data-ajuda-titulo="Carregar documentos" data-ajuda="Word, Excel, PowerPoint, PDF, texto e planilhas — ou um ZIP com tudo isso dentro, que o app abre e lê arquivo por arquivo. Pode escolher vários de uma vez. A IA lê todos junto com o que você escreveu.">📎 Carregar documentos</button>' +
         botaoVoz(c.id) +
         '<span class="estado" data-ia-estado="' + c.id + '"></span>' +
       '</div>' +
@@ -457,7 +457,11 @@
      arquivo, para a pessoa ver exatamente o que vai ser enviado — e os
      arquivos ficam em dlg.documentosIA, para quem salva anexá-los ao
      registro. */
-  const ACEITA_DOCUMENTOS = '.pdf,.docx,.xlsx,.pptx,.txt,.md,.csv,.tsv,.json,.rtf,.vtt,.srt';
+  /* O .zip entra na lista porque o app o abre e lê o que há dentro. RAR e 7z
+     ficam de fora de propósito: o navegador não os descomprime, e oferecer no
+     seletor o que não dá para ler é pior do que não oferecer — a pessoa
+     escolhe, espera, e só então descobre. */
+  const ACEITA_DOCUMENTOS = '.pdf,.docx,.xlsx,.pptx,.txt,.md,.csv,.tsv,.json,.rtf,.vtt,.srt,.zip';
 
   /* Quanto de documento cabe na caixa, somando todos. 15 000 e não mais:
      acima disso o modelo recusa por tamanho em contas de plano gratuito, e
@@ -538,7 +542,7 @@
       estado.textContent = 'Lendo ' + escolhidos.length + ' arquivo' + (escolhidos.length > 1 ? 's' : '') + '…';
 
       global.IADDocumentos.lerVarios(escolhidos).then(function (lidos) {
-        lidos.forEach(function (d, i) { d.arquivo = escolhidos[i]; docs.push(d); });
+        lidos.forEach(function (d) { docs.push(d); });
         dlg.documentosIA = docs;
         entrada.value = '';                       /* deixa reescolher o mesmo arquivo */
 
@@ -611,7 +615,7 @@
           if (!escolhidos.length) return;
           estado.textContent = 'Lendo ' + escolhidos.length + ' arquivo' + (escolhidos.length > 1 ? 's' : '') + '…';
           global.IADDocumentos.lerVarios(escolhidos).then(function (lidos) {
-            lidos.forEach(function (d, i) { d.arquivo = escolhidos[i]; docs.push(d); });
+            lidos.forEach(function (d) { docs.push(d); });
             dlg.documentosIA = docs;
             entrada.value = '';                       /* deixa reescolher o mesmo arquivo */
             pintarLista();

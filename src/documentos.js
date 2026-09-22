@@ -23,9 +23,22 @@
     return m ? m[1] : '';
   }
 
+  /* Um .zip vale o que vale o que está dentro dele: ele não é lido como
+     documento, é aberto, e cada arquivo de dentro segue o caminho normal.
+     Por isso aparece nesta lista. */
+  const LEGIVEIS = ['docx', 'xlsx', 'pptx', 'pdf', 'txt', 'md', 'csv', 'tsv', 'vtt', 'srt', 'json', 'rtf'];
+
+  /* Quantos arquivos de dentro de um zip entram, e quanto eles podem somar
+     descomprimidos. O primeiro número é sobre a cota da IA: vinte dossiês
+     repartem a cota em vinte pedaços pequenos demais para servirem a alguém.
+     O segundo é sobre o aparelho: um zip de 2 MB pode descomprimir para
+     gigabytes, e tudo isto roda na memória do navegador. */
+  const MAX_DO_ZIP = 20;
+  const MAX_DESCOMPRIMIDO = 80 * 1024 * 1024;
+
   function aceito(arquivo) {
-    return ['docx', 'xlsx', 'pptx', 'pdf', 'txt', 'md', 'csv', 'tsv', 'vtt', 'srt', 'json', 'rtf']
-      .indexOf(extensao(arquivo && arquivo.name)) !== -1;
+    const ext = extensao(arquivo && arquivo.name);
+    return ext === 'zip' || LEGIVEIS.indexOf(ext) !== -1;
   }
 
   /* ---------- ZIP ----------
@@ -52,28 +65,50 @@
       if (dv.getUint32(p, true) !== 0x02014b50) break;
       const metodo = dv.getUint16(p + 10, true);
       const comprimido = dv.getUint32(p + 20, true);
+      const tamanho = dv.getUint32(p + 24, true);
       const tamNome = dv.getUint16(p + 28, true);
       const tamExtra = dv.getUint16(p + 30, true);
       const tamComentario = dv.getUint16(p + 32, true);
       const inicioLocal = dv.getUint32(p + 42, true);
       const nome = new TextDecoder().decode(bytes.subarray(p + 46, p + 46 + tamNome));
-      entradas.push({ nome: nome, metodo: metodo, comprimido: comprimido, inicioLocal: inicioLocal });
+      entradas.push({ nome: nome, metodo: metodo, comprimido: comprimido,
+                      tamanho: tamanho, inicioLocal: inicioLocal });
       p += 46 + tamNome + tamExtra + tamComentario;
     }
 
     return {
       nomes: function () { return entradas.map(function (e) { return e.nome; }); },
-      texto: function (nome) {
+      /* Tamanho descomprimido de cada entrada, para decidir o que cabe ANTES
+         de descomprimir. Descobrir depois é descobrir com a memória já
+         estourada. */
+      entradas: function () {
+        return entradas.map(function (e) {
+          return { nome: e.nome, tamanho: e.tamanho };
+        });
+      },
+      cru: function (nome) {
         const e = entradas.filter(function (x) { return x.nome === nome; })[0];
-        if (!e) return Promise.resolve('');
+        if (!e) return null;
         /* O cabeçalho local repete nome e extra com tamanhos próprios: é ele
            que diz onde o dado começa de verdade. */
         const tamNome = dv.getUint16(e.inicioLocal + 26, true);
         const tamExtra = dv.getUint16(e.inicioLocal + 28, true);
         const inicio = e.inicioLocal + 30 + tamNome + tamExtra;
-        const dado = bytes.subarray(inicio, inicio + e.comprimido);
-        if (e.metodo === 0) return Promise.resolve(new TextDecoder().decode(dado));
-        return inflar(dado);
+        return { metodo: e.metodo, dado: bytes.subarray(inicio, inicio + e.comprimido) };
+      },
+      texto: function (nome) {
+        const c = this.cru(nome);
+        if (!c) return Promise.resolve('');
+        if (c.metodo === 0) return Promise.resolve(new TextDecoder().decode(c.dado));
+        return inflar(c.dado);
+      },
+      /* Os bytes, e não o texto. Um .docx dentro de um .zip é binário: passar
+         pelo TextDecoder o corromperia antes de alguém tentar abri-lo. */
+      bytes: function (nome) {
+        const c = this.cru(nome);
+        if (!c) return Promise.resolve(new Uint8Array(0));
+        if (c.metodo === 0) return Promise.resolve(c.dado.slice());
+        return inflarBytes(c.dado);
       }
     };
   }
@@ -91,6 +126,18 @@
     return new Response(fluxo).arrayBuffer().then(function (b) {
       return new TextDecoder().decode(new Uint8Array(b));
     });
+  }
+
+  /* O mesmo `inflar`, parando antes do TextDecoder. Existe separado porque a
+     diferença é justamente essa: texto para o XML de dentro de um docx, bytes
+     para um docx inteiro de dentro de um zip. */
+  function inflarBytes(dado, formato) {
+    if (typeof DecompressionStream !== 'function') {
+      return Promise.reject(new Error('Este navegador não descomprime arquivos. Use um Chrome, Edge, Firefox ou Safari atual.'));
+    }
+    const ds = new DecompressionStream(formato || 'deflate-raw');
+    const fluxo = new Blob([dado]).stream().pipeThrough(ds);
+    return new Response(fluxo).arrayBuffer().then(function (b) { return new Uint8Array(b); });
   }
 
   function semTags(xml) {
@@ -469,6 +516,34 @@
         return cortar(ext === 'vtt' || ext === 'srt' ? limparLegenda(t) : t);
       });
     }
+    /* RAR e 7z não dão, e a mensagem diz por quê em vez de mandar a pessoa
+       tentar de novo. Não é falta de vontade: o navegador descomprime `deflate`
+       de graça — é o mesmo motor que abre docx, xlsx e zip — e não descomprime
+       RAR. Ler RAR exigiria carregar uma biblioteca de centenas de kilobytes
+       num app que não tem nenhuma dependência, para um formato que o próprio
+       Windows e o próprio Mac substituem por zip com dois cliques. */
+    /* Quem chama `ler()` direto espera UMA string. Com um zip isso só pode
+       ser a soma do que há dentro, cada pedaço com o nome do arquivo na
+       frente — senão a IA lê seis documentos como se fossem um. */
+    if (ext === 'zip') {
+      return membrosDoZip(arquivo).then(function (r) {
+        return lerVarios(r.arquivos).then(function (lidos) {
+          const bons = lidos.filter(function (d) { return d.texto; });
+          if (!bons.length) throw new Error('Não consegui tirar texto de nenhum arquivo do ZIP.');
+          return bons.map(function (d) {
+            return '=== ' + d.nome + ' ===\n' + d.texto;
+          }).join('\n\n');
+        });
+      });
+    }
+
+    if (ext === 'rar' || ext === '7z') {
+      return Promise.reject(new Error(
+        'Não consigo abrir .' + ext + ' — o navegador só descomprime ZIP, e ' +
+        'trazer um leitor de ' + ext.toUpperCase() + ' para dentro do app custaria mais do que vale. ' +
+        'Salve a pasta como ZIP (botão direito → Compactar, no Windows e no Mac) e anexe de novo.'));
+    }
+
     return arquivo.arrayBuffer().then(function (buffer) {
       if (ext === 'pdf') return lerPdf(buffer);
       const zip = abrirZip(buffer);
@@ -477,6 +552,78 @@
       if (ext === 'pptx') return lerPptx(zip);
       throw new Error('Não sei ler arquivos .' + ext + '.');
     }).then(cortar);
+  }
+
+  /* ---------- o zip, aberto ----------
+
+     Um .zip não vira um documento: vira OS DOCUMENTOS DE DENTRO DELE, cada um
+     com o seu nome, exatamente como se a pessoa tivesse arrastado os seis
+     arquivos em vez da pasta compactada. Isso importa por três motivos:
+
+     • a cota da IA já é repartida por documento, e um zip concatenado num
+       texto só gastaria a cota de UM arquivo em seis;
+     • a lista da tela mostra os seis nomes, e dá para tirar o que não serve;
+     • a IA sabe qual número saiu de qual arquivo — “a planilha diz 4%” é
+       diferente de “o dossiê diz 4%”.
+
+     Zip dentro de zip não é aberto de propósito: ninguém manda um por acidente,
+     e recursão com arquivo de gente de fora é como se abre um buraco. */
+  function membrosDoZip(arquivo) {
+    return arquivo.arrayBuffer().then(function (buffer) {
+      const zip = abrirZip(buffer);
+
+      const uteis = zip.entradas().filter(function (e) {
+        if (/\/$/.test(e.nome)) return false;                 /* pasta */
+        if (/^__MACOSX\//.test(e.nome)) return false;          /* lixo do Mac */
+        const base = e.nome.split('/').pop();
+        if (!base || base.charAt(0) === '.') return false;     /* ._foo, .DS_Store */
+        return true;
+      });
+
+      const legiveis = uteis.filter(function (e) {
+        return LEGIVEIS.indexOf(extensao(e.nome)) !== -1;
+      });
+      const ignorados = uteis.filter(function (e) {
+        return LEGIVEIS.indexOf(extensao(e.nome)) === -1;
+      }).map(function (e) { return e.nome.split('/').pop(); });
+
+      if (!legiveis.length) {
+        throw new Error('O ZIP não tem nenhum arquivo que eu saiba ler.' +
+          (ignorados.length ? ' Dentro dele: ' + ignorados.slice(0, 6).join(', ') + '.' : '') +
+          ' Leio PDF, Word, Excel, PowerPoint e texto.');
+      }
+
+      /* Os maiores primeiro não: a ORDEM do zip é a que a pessoa montou, e
+         mexer nela faria o corte em 20 pegar arquivos diferentes dos que ela
+         veria numa janela do explorador. */
+      const escolhidos = legiveis.slice(0, MAX_DO_ZIP);
+      const cortados = legiveis.length - escolhidos.length;
+
+      let soma = 0;
+      const cabem = [];
+      escolhidos.forEach(function (e) {
+        if (soma + e.tamanho > MAX_DESCOMPRIMIDO) return;
+        soma += e.tamanho;
+        cabem.push(e);
+      });
+      const grandes = escolhidos.length - cabem.length;
+
+      return Promise.all(cabem.map(function (e) {
+        return zip.bytes(e.nome).then(function (b) {
+          /* Vira um File de verdade, e aí `ler()` o trata como qualquer outro
+             anexo. Sem isso, cada formato precisaria de um caminho novo aqui
+             dentro — e seriam dois lugares para consertar o mesmo defeito. */
+          return new File([b], e.nome.split('/').pop());
+        }, function () { return null; });
+      })).then(function (arquivos) {
+        return {
+          arquivos: arquivos.filter(Boolean),
+          ignorados: ignorados,
+          cortados: cortados,
+          grandes: grandes
+        };
+      });
+    });
   }
 
   /* Legenda tem uma linha de tempo a cada fala. Sem limpar, metade do que a
@@ -500,12 +647,46 @@
      motivo, para a tela mostrar ao lado do nome dele. */
   function lerVarios(arquivos) {
     return Promise.all(Array.prototype.map.call(arquivos || [], function (a) {
+      if (extensao(a.name) === 'zip') return lerZip(a);
+      /* `arquivo` viaja junto porque quem chama precisa dele para anexar — e
+         com o zip a lista deixou de ser um-para-um com o que foi escolhido.
+         Casar por posição depois disso anexaria o arquivo errado. */
       return ler(a).then(
-        function (texto) { return { nome: a.name, tamanho: a.size, texto: texto, erro: '' }; },
-        function (e) { return { nome: a.name, tamanho: a.size, texto: '', erro: e.message }; }
+        function (texto) { return [{ nome: a.name, tamanho: a.size, texto: texto, erro: '', arquivo: a }]; },
+        function (e) { return [{ nome: a.name, tamanho: a.size, texto: '', erro: e.message, arquivo: a }]; }
       );
-    }));
+    })).then(function (grupos) {
+      /* Um zip devolve vários; os outros devolvem um. Achatar aqui deixa quem
+         chama sem saber a diferença — que é exatamente o ponto. */
+      return grupos.reduce(function (todos, g) { return todos.concat(g); }, []);
+    });
   }
 
-  global.IADDocumentos = { ler: ler, lerVarios: lerVarios, aceito: aceito, extensao: extensao };
+  /* O zip vira várias linhas na lista, cada uma com o nome do arquivo de
+     dentro e o do zip ao lado. Se algo foi deixado de fora, a primeira linha
+     diz o quê — em vez de o app calar e a pessoa achar que leu tudo. */
+  function lerZip(arquivo) {
+    return membrosDoZip(arquivo).then(function (r) {
+      return lerVarios(r.arquivos).then(function (lidos) {
+        lidos.forEach(function (d) { d.deZip = arquivo.name; });
+
+        const sobras = [];
+        if (r.cortados) sobras.push(r.cortados + ' arquivo(s) além dos ' + MAX_DO_ZIP + ' primeiros');
+        if (r.grandes) sobras.push(r.grandes + ' grande(s) demais para caber na memória');
+        if (r.ignorados.length) sobras.push(r.ignorados.length + ' que não sei ler (' +
+          r.ignorados.slice(0, 4).join(', ') + (r.ignorados.length > 4 ? '…' : '') + ')');
+
+        if (sobras.length) {
+          lidos.unshift({ nome: arquivo.name, tamanho: arquivo.size, texto: '',
+            erro: 'abri ' + lidos.length + ', deixei de fora ' + sobras.join(', ') + '.' });
+        }
+        return lidos;
+      });
+    }, function (e) {
+      return [{ nome: arquivo.name, tamanho: arquivo.size, texto: '', erro: e.message }];
+    });
+  }
+
+  global.IADDocumentos = { ler: ler, lerVarios: lerVarios, aceito: aceito, extensao: extensao,
+                           membrosDoZip: membrosDoZip, MAX_DO_ZIP: MAX_DO_ZIP };
 })(window);

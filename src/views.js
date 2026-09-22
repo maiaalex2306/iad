@@ -6902,6 +6902,29 @@
       'Nota inflada vira previsão falsa no painel do dono da empresa, e ninguém descobre a tempo.</span></div></div>' +
       '</div>' +
 
+      '<h3>Uma pasta inteira de uma vez: o ZIP</h3>' +
+      '<p class="small">Onde dá para anexar documento, dá para anexar um <strong>.zip</strong>. Ele não ' +
+      'vira “um documento”: o app abre e cada arquivo de dentro entra na lista com o próprio nome, ' +
+      'como se você tivesse arrastado os seis em vez da pasta. Isso importa — a IA sabe qual número ' +
+      'saiu de qual arquivo, e <em>“a planilha diz 4%”</em> é diferente de <em>“o dossiê diz 4%”</em>. ' +
+      'Dá para tirar da lista o que não serve antes de mandar ler.</p>' +
+      '<ul class="small">' +
+      '<li><strong>Um arquivo ruim não derruba os outros.</strong> PDF digitalizado dentro do ZIP volta ' +
+      'com o motivo ao lado do nome dele; o resto é lido normalmente.</li>' +
+      '<li><strong>Pasta, <code>__MACOSX</code> e <code>.DS_Store</code></strong> são ignorados sozinhos. ' +
+      'O que o app não sabe ler — imagem, executável — fica de fora, e a primeira linha da lista diz ' +
+      'o quê, em vez de deixar você achar que leu tudo.</li>' +
+      '<li><strong>Até 20 arquivos por ZIP.</strong> Acima disso a cota da IA se reparte em pedaços ' +
+      'pequenos demais para servirem a alguém — e o app avisa quantos ficaram de fora.</li>' +
+      '<li><strong>ZIP dentro de ZIP não é aberto</strong>, de propósito.</li>' +
+      '</ul>' +
+      '<p class="tiny muted"><strong>RAR e 7z não dão, e não é esquecimento.</strong> O navegador ' +
+      'descomprime ZIP de graça — é o mesmo motor que abre Word e Excel, que por dentro são ZIP. ' +
+      'RAR exigiria carregar uma biblioteca de centenas de kilobytes num app que não tem nenhuma ' +
+      'dependência, para um formato que o próprio Windows e o próprio Mac substituem por ZIP com dois ' +
+      'cliques (botão direito → Compactar). Se você anexar um, a mensagem diz isso em vez de falhar ' +
+      'sem explicação.</p>' +
+
       '<h3>E o que ela não faz, por mais que pareça</h3>' +
       '<p class="small">Ela não classifica o pipeline — Zumbi, Falso avançado e os outros saem de regra ' +
       'fixa. Ela não pontua sozinha em definitivo: propõe, e os degraus 3 e 4 continuam exigindo prova. Ela nunca ' +

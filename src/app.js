@@ -2961,7 +2961,7 @@
       const campos = [
         { id: 'feitaEm', rotulo: 'Quando foi feita', tipo: 'date', padrao: Store.hoje(), largura: 'metade' },
         { id: 'arquivo', tipo: 'file',
-          rotulo: 'Anexar documentos (Word, PDF, Excel, PowerPoint, texto) — pode escolher vários' },
+          rotulo: 'Anexar documentos (Word, PDF, Excel, PowerPoint, texto ou um ZIP com vários) — pode escolher vários' },
         { id: 'relato', rotulo: 'Cole a ata, a transcrição ou conte o que aconteceu', tipo: 'textarea', voz: true,
           placeholder: 'Cole aqui o resumo automático da call, a transcrição ou suas anotações. Some ao conteúdo dos documentos anexados acima.' }
       ];
@@ -3428,7 +3428,7 @@
       const contas = Store.dados().contas.slice().sort(function (a, b) {
         return String(a.nome).localeCompare(String(b.nome));
       });
-      const contaAtual = atual ? atual.contaId : (contas[0] ? contas[0].id : '');
+      const contaAtual = atual ? atual.contaId : '';
       const aberta = t.status === 'aberta';
 
       U.formulario('Editar tarefa', [
@@ -3438,8 +3438,7 @@
            num negócio parecido de outra empresa. */
         { tipo: 'secao', rotulo: 'A que negócio esta tarefa pertence' },
         { id: 'contaId', rotulo: 'Empresa', tipo: 'select', padrao: contaAtual,
-          lupa: 'Ver os dados desta empresa',
-          opcoes: contas.map(function (c) { return { valor: c.id, rotulo: c.nome }; }) },
+          lupa: 'Ver os dados desta empresa', opcoes: opcoesDeEmpresa(contas) },
         { id: 'oportunidadeId', rotulo: 'Negociação', tipo: 'select', padrao: t.oportunidadeId || '',
           opcoes: opcoesDeNegocio(contaAtual) },
         { id: 'negocioNovo', rotulo: 'Nome da nova negociação',
@@ -6311,16 +6310,13 @@
     const contas = Store.dados().contas.slice().sort(function (a, b) {
       return String(a.nome).localeCompare(String(b.nome));
     });
-    const padraoConta = o.contaId || (contas[0] ? contas[0].id : '');
+    const padraoConta = o.contaId || '';
 
     return [
       { tipo: 'secao', rotulo: 'A que negócio esta tarefa pertence',
         ajuda: 'Uma empresa pode ter várias negociações abertas. A tarefa entra em uma delas — é por ela que o avanço da decisão é contado.' },
       { id: 'contaId', rotulo: 'Empresa', tipo: 'select', padrao: padraoConta,
-        lupa: 'Ver os dados desta empresa',
-        opcoes: contas.length
-          ? contas.map(function (c) { return { valor: c.id, rotulo: c.nome }; })
-          : [{ valor: '', rotulo: '— nenhuma empresa cadastrada —' }] },
+        lupa: 'Ver os dados desta empresa', opcoes: opcoesDeEmpresa(contas) },
       { id: 'oportunidadeId', rotulo: 'Negociação', tipo: 'select', padrao: o.oportunidadeId || '',
         opcoes: opcoesDeNegocio(padraoConta) },
       /* Só aparece quando a escolha é "nova". Sem este campo a negociação
@@ -6355,7 +6351,7 @@
          dele. Se a tarefa for concluída, a IA lê o conteúdo junto com o que
          foi digitado; em qualquer caso os arquivos ficam anexados ao negócio. */
       { id: 'arquivo', tipo: 'file',
-        rotulo: 'Anexar documentos (Word, PDF, Excel, PowerPoint, texto) — pode escolher vários' },
+        rotulo: 'Anexar documentos (Word, PDF, Excel, PowerPoint, texto ou um ZIP com vários) — pode escolher vários' },
       /* O que JÁ está anexado. Um `<input type="file">` sempre abre vazio — é
          assim que ele funciona — e sem nada ao lado dizendo o contrário, quem
          volta à tarefa lê “Nenhum arquivo escolhido” como “meu arquivo sumiu”.
@@ -6707,6 +6703,10 @@
      outra coisa — e obrigar a sair da tela para cadastrar antes é o tipo de
      desvio em que a tarefa não é registrada. */
   function opcoesDeNegocio(contaId) {
+    /* Sem empresa escolhida não há negociação para listar — e oferecer
+       "nova negociação nesta empresa" quando empresa nenhuma foi escolhida
+       é convidar para o mesmo erro pela outra porta. */
+    if (!contaId) return [{ valor: '', rotulo: '— escolha a empresa primeiro —' }];
     const abertas = Store.dados().oportunidades.filter(function (x) {
       return x.contaId === contaId && !x.desfecho;
     });
@@ -8277,6 +8277,20 @@
   }
 
   const NOVA_CONTA = '__nova_empresa__';
+
+  /* A primeira empresa da lista não é um palpite do app: é só quem venceu a
+     ordem alfabética. Vinha escolhida de saída, e bastava não mexer no campo
+     para o negócio (ou a tarefa) nascer na empresa errada — erro silencioso,
+     que só aparece dias depois no pipeline de quem não tem nada com aquilo.
+     Campo vazio: escolher custa um clique, desfazer custa meia hora. */
+  function opcoesDeEmpresa(contas, comCadastro) {
+    const lista = [{ valor: '', rotulo: contas.length
+      ? '— escolher a empresa —' : '— nenhuma empresa cadastrada ainda —' }]
+      .concat(contas.map(function (c) { return { valor: c.id, rotulo: c.nome }; }));
+    return comCadastro
+      ? lista.concat([{ valor: NOVA_CONTA, rotulo: '+ Cadastrar nova empresa…' }])
+      : lista;
+  }
   const AVULSO = '__item_avulso__';
 
   /* Depois de a IA ler o material, a empresa que ela achou já existe ou não.
@@ -8715,7 +8729,7 @@
 
   function camposOportunidade(contas, contaPadrao, opcoes) {
     const o = opcoes || {};
-    const contaInicial = contaPadrao || (contas[0] && contas[0].id) || '';
+    const contaInicial = contaPadrao || '';
     const base = [
       { id: 'atalhoOp', tipo: 'ia', extrair: 'oportunidade',
         rotulo: 'Cole, dite ou carregue o que você tem sobre este negócio',
@@ -8730,10 +8744,7 @@
       /* A opção de cadastrar vem sempre, e primeiro quando não há nenhuma:
          é a única coisa útil a fazer ali naquele momento. */
       { id: 'contaId', rotulo: 'Empresa', tipo: 'select',
-        padrao: contaInicial,
-        opcoes: (contas.length ? [] : [{ valor: '', rotulo: '— nenhuma empresa cadastrada ainda —' }])
-          .concat(contas.map(function (c) { return { valor: c.id, rotulo: c.nome }; }))
-          .concat([{ valor: NOVA_CONTA, rotulo: '+ Cadastrar nova empresa…' }]) }
+        padrao: contaInicial, opcoes: opcoesDeEmpresa(contas, true) }
     ];
 
     /* Na edição o contato não aparece: quem já tem negócio tem grupo

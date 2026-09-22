@@ -1,12 +1,12 @@
-# Onde paramos — 21/09/2026
+# Onde paramos — 22/09/2026
 
 Este arquivo existe para a próxima sessão começar sabendo o que já aconteceu.
 Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v212**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v212, o aparelho
+Publicado agora: **v213**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v213, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -397,6 +397,60 @@ com nada marcado. Marcar 99 e a seleção sobreviver a um refresh seria armadilh
 duas negociações de verdade. Filtrar por campanha, marcar os 51, mover com
 motivo e prazo, conferir que **ninguém foi encerrado**, devolver três, e que a
 passagem ficou no `historicoNutricao`.
+
+## 0-AG. O campo Empresa vinha preenchido com quem nem era — v213, 22/09
+
+*“Quando vamos cadastrar uma nova oportunidade não pode vir o nome de empresas
+cadastradas... Traga vazio o campo onde está Eternit e a pessoa escolhe.”*
+
+A Eternit não era um palpite do app: era só **quem venceu a ordem
+alfabética**. Três formulários faziam `contas[0]` de padrão — Nova
+oportunidade, Nova tarefa e Editar tarefa (esta quando a tarefa ainda não
+tinha negócio). Bastava não mexer no campo para o registro nascer na empresa
+errada, e esse é o pior tipo de erro: silencioso, descoberto dias depois no
+pipeline de quem não tem nada com aquilo.
+
+Agora os três abrem em **“— escolher a empresa —”**, e os três já sabiam
+recusar o vazio (“Escolha a empresa deste negócio”, “Escolha a empresa da
+negociação”) — a mudança só tirou o preenchimento falso de cima da recusa.
+Junto: a lista de **negociação** da tarefa passa a dizer *“— escolha a empresa
+primeiro —”* em vez de oferecer “+ Nova negociação **nesta** empresa” quando
+empresa nenhuma foi escolhida.
+
+Um só lugar decide isso agora, `opcoesDeEmpresa()` — era a duplicação que
+deixou o mesmo defeito em três telas.
+
+**16 testes** (`vazia.js`): nasce vazio, as empresas continuam todas na lista,
+cadastrar nova continua no fim, escolher a Eternit traz o contato dela, salvar
+sem empresa **não cria** negócio nenhum e pede a empresa, e editar uma tarefa
+que já tem negócio continua mostrando o dele.
+
+## 0-AF. Anexar uma pasta inteira: o ZIP — v213, 22/09
+
+*“Preciso que você permita anexar arquivos compactados, tipo zip, rar... e a IA
+ter condições de interpretar tudo que está dentro deles.”*
+
+**ZIP sim, RAR e 7z não** — e o não é honesto, não é esquecimento: o navegador
+só descomprime *deflate* (`DecompressionStream`), que é o formato do ZIP. Um
+leitor de RAR seriam centenas de kilobytes de dependência num app que não tem
+nenhuma. A saída está escrita na mensagem de recusa e no Manual: botão direito
+→ Compactar, no Windows e no Mac.
+
+**A decisão de projeto:** um ZIP vira **os arquivos de dentro dele**, não um
+blocão só. Cada membro entra como um documento — com nome próprio, removível
+da lista, contando na cota de leitura da IA, e anexado ao registro como
+qualquer outro. Assim nada do que já existia precisou mudar de forma.
+
+Limites, para não travar o aparelho: **20 arquivos** por ZIP (na ordem em que
+estão lá dentro) e **80 MB** descomprimidos. Pasta, `__MACOSX/` e arquivo
+oculto ficam de fora. O que sobrou da conta é dito em uma linha, não escondido.
+
+Provado no ZIP real dele (Projeto Marilan, 6,3 MB): **5 dos 6** arquivos
+lidos; o sexto é um infográfico **escaneado** — PDF sem texto dentro — e ele
+diz isso **sem derrubar os outros cinco**, que é o comportamento que importa.
+
+**29 testes** (`zipt.js`). Os `.zip` de teste ficam fora do repositório, e
+agora há um `.gitignore` para que continuem fora.
 
 ## 0-AE. O carimbo do Manual dizia v204 com o conteúdo da v210 — v212, 22/09
 
