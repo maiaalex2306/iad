@@ -58,9 +58,31 @@
     catch (e) { return null; }
   }
 
+  /* Guardamos QUANDO o token morre, e não quanto falta.
+
+     O GoTrue manda `expires_in` — segundos a partir de agora — e `expires_in`
+     só vale no instante em que a resposta chegou. É exatamente a aba que
+     ficou três horas parada que precisa desta conta, e ali "3600" não diz
+     nada. A data absoluta diz. */
   function guardarSessao(s) {
-    if (s) localStorage.setItem(CHAVE_SESSAO, JSON.stringify(s));
-    else localStorage.removeItem(CHAVE_SESSAO);
+    if (s) {
+      if (!s.expires_at && s.expires_in) {
+        s.expires_at = Math.floor(Date.now() / 1000) + Number(s.expires_in);
+      }
+      localStorage.setItem(CHAVE_SESSAO, JSON.stringify(s));
+    } else localStorage.removeItem(CHAVE_SESSAO);
+  }
+
+  /* Um minuto de folga. Renovar o token que morre em trinta segundos evita a
+     falha aparecer na tela; renovar a cada chamada seria pedir credencial
+     nova o dia inteiro. Sem `expires_at` — sessão guardada por uma versão
+     antiga — devolve false e o caminho do 401 continua valendo. */
+  const FOLGA_DO_TOKEN = 60;
+
+  function precisaRenovar() {
+    const s = sessao();
+    if (!s || !s.refresh_token || !s.expires_at) return false;
+    return Number(s.expires_at) - FOLGA_DO_TOKEN <= Math.floor(Date.now() / 1000);
   }
 
   function conectado() { return !!(configurada() && sessao() && sessao().access_token); }
@@ -1042,7 +1064,7 @@
 
   global.IADNuvem = {
     config, salvarConfig, configurada, conectado, mandaNoAcesso, estado, sessao,
-    cadastrar, entrar, sair, renovar, eu, meuPerfil, salvarPerfil, criarMinhaEmpresa,
+    cadastrar, entrar, sair, renovar, precisaRenovar, eu, meuPerfil, salvarPerfil, criarMinhaEmpresa,
     guardarPerfilNaSessao, empurrar, puxar, sincronizar, ultimaSincronizacao,
     perfisDaNuvem, empresasDaNuvem, souAdminNaNuvem, existeEmpresa,
     definirEmpresaDoPerfil, definirPapelDoPerfil, salvarMeuNome,

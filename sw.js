@@ -3,13 +3,13 @@
    mesmo commit: um diz o que está guardado no aparelho, o outro o que está
    rodando, e é a discordância entre os dois que denuncia uma troca pela
    metade. */
-const CACHE = 'iad-crm-v216';
+const CACHE = 'iad-crm-v217';
 const ARQUIVOS = [
   './', './index.html', './manifest.webmanifest',
   './assets/styles.css',
   './src/config.js',
   './src/playbook.js', './src/store.js', './src/auth.js', './src/engine.js',
-  './src/arquivos.js', './src/csv.js', './src/graficos.js', './src/integracoes.js', './src/nuvem.js', './src/sincronia.js', './src/ia.js', './src/documentos.js',
+  './src/arquivos.js', './src/pendencias.js', './src/csv.js', './src/graficos.js', './src/integracoes.js', './src/nuvem.js', './src/sincronia.js', './src/ia.js', './src/documentos.js',
   './src/ui.js', './src/ajuda.js', './src/seed.js', './src/whatsapp.js', './src/email.js', './src/conversa.js', './src/views.js', './src/app.js',
   './icons/icon-192.png', './icons/icon-512.png'
 ];

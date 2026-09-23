@@ -1,12 +1,12 @@
-# Onde paramos — 22/09/2026
+# Onde paramos — 23/09/2026
 
 Este arquivo existe para a próxima sessão começar sabendo o que já aconteceu.
 Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v216**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v216, o aparelho
+Publicado agora: **v217**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v217, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -397,6 +397,63 @@ com nada marcado. Marcar 99 e a seleção sobreviver a um refresh seria armadilh
 duas negociações de verdade. Filtrar por campanha, marcar os 51, mover com
 motivo e prazo, conferir que **ninguém foi encerrado**, devolver três, e que a
 passagem ficou no `historicoNutricao`.
+
+## 0-AK. A perda de verdade: 17 oportunidades — v217, 23/09
+
+*“Quando o programa fica parado um tempo, ele deixa eu fazer uma ação e depois
+diz que o servidor está fora do ar... Acabei de perder 17 oportunidades que eu
+puxei do LH.”*
+
+**Este é o erro mais grave que este app já teve, e a causa era um buraco na
+decisão da v180.**
+
+“O servidor é a única verdade, a memória é a única cópia local” resolveu o
+vazamento entre empresas — e criou uma janela que ninguém tinha pagado ainda:
+**quando o envio falha, o que foi feito existe SÓ na aba aberta.** Fechar,
+recarregar, o celular matar a aba para economizar memória, e dezessete
+oportunidades somem sem nunca terem existido em lugar nenhum.
+
+E piorava: a `sincronia` mostrava a faixa e **parava de tentar**. Só voltava se
+alguém clicasse em “Tentar de novo”. O gatilho dele — *ficar parado um tempo* —
+é o token de uma hora do Supabase morrendo em silêncio.
+
+**A caixa de saída (`src/pendencias.js`).** Não é uma segunda verdade que
+compete com o servidor, e nada lê dela para montar a tela: é a **fila de
+envio**. Gravada em IndexedDB **antes de cada tentativa**, apagada só quando o
+servidor confirma. Guarda o dono junto — fila de um login não é resgatada por
+outro, que seria o vazamento da v180 de volta.
+
+**Três mudanças, todas sobre não perder:**
+
+| | |
+|---|---|
+| Grava antes de tentar | Fechar a aba deixou de ser destruir o trabalho |
+| Insiste sozinho | 2s, 5s, 15s, 30s, 60s — e **na hora** em que a internet volta ou a aba é reaberta. Nunca desiste |
+| Renova a sessão antes | `precisaRenovar()` com a data absoluta de vencimento. `expires_in` só vale no instante em que chegou — e é a aba parada há três horas que precisa da conta |
+
+**A ordem na entrada é a coisa toda:** `puxar` sobrescreve a memória com o que
+o servidor tem. Se ele rodar primeiro, a fila é apagada pela versão antiga e a
+perda vira **definitiva**. Então a fila sobe ANTES, e o app diz o que
+recuperou — *“Recuperei o que tinha ficado para trás (17 oportunidades)”*.
+
+**A faixa mudou de frase porque o fato mudou.** Era “recarregar perde”, que
+era verdade e tinha de estar em negrito. Agora: *“ainda não chegou ao servidor
+— está guardada neste aparelho e sobe sozinha, pode fechar o app sem perder.
+Só não aparece nos outros aparelhos enquanto isso.”* Assustar à toa gasta o
+crédito da faixa para quando ela precisar ser levada a sério.
+
+`Descartar e recarregar` agora apaga a fila junto — senão a entrada seguinte
+ofereceria de volta o que a pessoa acabou de mandar jogar fora.
+
+**25 testes** (`fila17.js`), montados sobre o relato: 17 oportunidades, o
+servidor cai no meio, a aba é **recarregada de verdade** — e as 17 voltam e
+sobem. Mais: reabrir duas vezes não duplica; a volta da internet envia sem
+clique; descartar apaga mesmo.
+
+Nova seção no Manual: **“Quando o servidor não responde”** (índice: 29 itens).
+
+**O que ele perdeu ontem não volta** — aquilo nunca chegou a existir fora da
+aba. A partir da v217, volta.
 
 ## 0-AJ. “Não funcionou os filtros” — e ele tinha razão pela metade — v216, 22/09
 

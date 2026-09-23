@@ -365,10 +365,23 @@
          proteger. Faltava o terceiro, que é o único que nunca perde: **tirar
          uma cópia do que está na tela**. Ele vem primeiro de propósito. */
       const semEmpresa = /empresa na nuvem/i.test(sinc.recado || '');
+      /* A frase mudou porque o fato mudou. Enquanto a fila só existia na
+         memória, "recarregar perde" era a verdade e tinha de estar em
+         negrito. Agora o que foi feito é gravado neste aparelho antes de
+         cada tentativa e o envio insiste sozinho — dizer que perde seria
+         assustar à toa, e assustar à toa gasta o crédito da faixa para
+         quando ela precisar ser levada a sério.
+
+         O que continua verdade, e continua dito: ainda NÃO está no servidor.
+         Nenhum outro aparelho vê. */
       return '<div class="aviso faixa-aviso erro-grave">' +
-        '<strong>A sua última alteração não foi salva no servidor.</strong> ' +
+        '<strong>A sua última alteração ainda não chegou ao servidor.</strong> ' +
         U.esc(sinc.recado) +
-        ' Enquanto isto não for resolvido, o que está na tela existe só aqui — e recarregar perde.' +
+        (sinc.naFila
+          ? ' Ela está guardada neste aparelho e sobe sozinha assim que der — ' +
+            'pode fechar o app sem perder. Só não aparece nos outros aparelhos enquanto isso.'
+          : ' Enquanto isto não for resolvido, o que está na tela existe só aqui — e recarregar perde.') +
+        (sinc.tentandoDeNovo ? ' <span class="tiny">Tentando de novo…</span>' : '') +
         '<button class="btn mini" onclick="App.exportar()"' +
         ' data-ajuda-titulo="Baixar cópia" data-ajuda="Grava num arquivo tudo o que está neste navegador agora, inclusive o que ainda não subiu. É a única ação desta faixa que não pode dar errado — faça antes de qualquer outra.">' +
         '⬇ Baixar cópia</button>' +
@@ -377,7 +390,9 @@
             ' data-ajuda-titulo="Resolver agora" data-ajuda="Liga o seu usuário a uma empresa do servidor. Enquanto ele não pertencer a nenhuma, nada sobe — de propósito: registro sem carimbo de empresa nasceria invisível para todo mundo, inclusive para você.">' +
             'Resolver agora</button>'
           : '<button class="btn mini" onclick="App.tentarSalvarDeNovo()">Tentar salvar de novo</button>') +
-        '<button class="btn ghost mini" onclick="App.descartarAlteracao()">Descartar e recarregar</button></div>';
+        '<button class="btn ghost mini" onclick="App.descartarAlteracao()"' +
+        ' data-ajuda-titulo="Descartar e recarregar" data-ajuda="Joga fora o que ainda não subiu, inclusive o que está guardado neste aparelho, e recomeça do que o servidor tem. Não tem volta — baixe a cópia antes.">' +
+        'Descartar e recarregar</button></div>';
     }
     if (avisoSincronizacao) {
       return '<div class="aviso faixa-aviso">' + U.esc(avisoSincronizacao) +
@@ -751,12 +766,53 @@
     });
   }
 
+  /* O trabalho que ficou de uma sessão que não chegou ao fim.
+
+     A ORDEM AQUI É A COISA TODA. `puxar` sobrescreve a memória com o que o
+     servidor tem. Se ele rodar primeiro, o que estava na fila é apagado pela
+     versão antiga do servidor e a perda vira definitiva — foi assim que
+     dezessete oportunidades importadas do Linked Helper sumiram. Então a fila
+     sobe ANTES, e só depois o app baixa.
+
+     Aqui a memória está vazia: a aba acabou de abrir. Repor a fila não
+     atropela nada — é retomar de onde parou.
+
+     Se o envio falhar de novo, a fila continua gravada e a entrada segue: ver
+     a carteira que existe é melhor do que ficar preso, e a faixa continua
+     dizendo o que falta. */
+  function resgatarFilaPendente() {
+    const S = global.IADSincronia, N = global.IADNuvem, P = global.IADPendencias;
+    if (!S || !S.filaPendente || !P) return Promise.resolve();
+    return S.filaPendente().then(function (fila) {
+      if (!fila || !fila.estado) return;
+      const quanto = P.resumir(fila.estado);
+      const quando = fila.quando ? new Date(fila.quando) : null;
+      const dia = quando ? U.data(fila.quando.slice(0, 10)) : '';
+      S.marcarNaFila(true);
+      Store.semSincronizar(function () { Store.substituir(fila.estado); });
+      return N.empurrar().then(function () {
+        return S.limparFila().then(function () {
+          avisoSincronizacao = 'Recuperei o que tinha ficado para trás' +
+            (dia ? ' de ' + dia : '') + (quanto ? ' (' + quanto + ')' : '') +
+            ' e mandei para o servidor. Nada se perdeu.';
+          render();
+        });
+      }, function (e) {
+        avisoSincronizacao = 'Há trabalho seu que ainda não chegou ao servidor' +
+          (dia ? ', de ' + dia : '') + (quanto ? ' (' + quanto + ')' : '') + ': ' +
+          ((e && e.message) || 'erro desconhecido') +
+          ' — está guardado neste aparelho e o app continua tentando sozinho.';
+        render();
+      });
+    }, function () {});
+  }
+
   function baixarDoServidor() {
     const N = global.IADNuvem;
     if (!N.conectado() || !A.atual()) return Promise.resolve();
     avisoSincronizacao = '';
     espelharEmpresaDoServidor();
-    return N.puxar().then(function () {
+    return resgatarFilaPendente().then(function () { return N.puxar(); }).then(function () {
       semServidor = '';
       render();
       /* Depois de baixar, e não antes: a colheita grava sinal, e sinal gravado

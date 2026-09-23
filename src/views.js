@@ -5080,6 +5080,8 @@
      'Uma linha por tela do menu, com a pergunta que cada uma responde antes do que ela mostra. É a tabela para consultar quando você não sabe em qual entrar.'],
     ['m-pipeline', 'Os grupos do pipeline',
      'Os grupos que classificam a carteira pela decisão do comprador, não pela etapa: o que entra, o que sai e o que fazer em cada um. A classificação é regra fixa, não é a IA — mesmo dado, mesmo grupo, sempre.'],
+    ['m-fila-envio', 'Quando o servidor não responde',
+     'O que acontece com o que você acabou de fazer se a internet cair ou a sessão vencer: onde aquilo fica guardado, como volta sozinho, e o que a faixa laranja quer dizer.'],
     ['m-tarefas', 'A tela de Tarefas',
      'Como a tela organiza o que foi executado e o que aquilo rendeu: por que toda tarefa está presa a uma empresa E a uma negociação, como a lista abre, e a coluna que diz quantos pontos de decisão cada tarefa fez andar.'],
     ['m-conversas', 'As conversas do WhatsApp',
@@ -5251,6 +5253,52 @@
       '<p class="small">Conversa de grupo não sincroniza, fica só no aplicativo. O WhatsApp Business ' +
       'precisa ser aberto ao menos uma vez a cada treze dias. Receber é grátis, e responder dentro de ' +
       'vinte e quatro horas também — o que custa é disparo de marketing, que não é o que o IAD faz.</p>' +
+      '</div>';
+  }
+
+  /* A seção que não existia — e a falta dela era parte do estrago: quem via
+     a faixa laranja não sabia se o trabalho estava seguro ou não, e no
+     silêncio a suposição foi a pior possível. */
+  function manualDaFilaDeEnvio() {
+    return '<div class="card" id="m-fila-envio"><h2>Quando o servidor não responde</h2>' +
+      '<p class="small">A carteira mora no <strong>servidor</strong>, e é isso que faz ela ser a mesma em ' +
+      'qualquer aparelho em que você entrar. Cada coisa que você faz sobe na hora, sozinha — não existe ' +
+      'botão de salvar, e isso é de propósito.</p>' +
+      '<p class="small">Mas a internet cai, e a sessão vence quando o app fica parado. Quando isso ' +
+      'acontece <em>no meio</em> do que você estava fazendo, o app agora faz três coisas:</p>' +
+      '<div class="passos-manual">' +
+      '<div class="passo-manual"><div class="numero">1</div><div><strong>Guarda neste aparelho, antes de tentar</strong>' +
+      '<span class="tiny muted">O que você fez é gravado no próprio aparelho ANTES de cada tentativa de ' +
+      'envio, e só é apagado quando o servidor confirma. Pode fechar o app, recarregar a página, o ' +
+      'celular matar a aba — na próxima vez que você entrar, aquilo sobe.</span></div></div>' +
+      '<div class="passo-manual"><div class="numero">2</div><div><strong>Insiste sozinho</strong>' +
+      '<span class="tiny muted">Tenta de novo em 2 segundos, 5, 15, 30, e daí de minuto em minuto. E ' +
+      'tenta na hora em que a internet volta ou em que você volta para a aba — que é exatamente quando ' +
+      'o app ficou parado e a sessão venceu. Nunca desiste.</span></div></div>' +
+      '<div class="passo-manual"><div class="numero">3</div><div><strong>Renova a sessão antes, não depois</strong>' +
+      '<span class="tiny muted">A credencial do servidor dura cerca de uma hora. Quando ela está perto ' +
+      'de vencer, o app pede uma nova antes de tentar gravar — em vez de descobrir que venceu só ' +
+      'quando a gravação falha na sua frente.</span></div></div>' +
+      '</div>' +
+      '<h3>A faixa laranja, e o que ela quer dizer</h3>' +
+      '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' +
+      '<tr><td class="rotulo-manual"><strong>“Ainda não chegou ao servidor”</strong></td><td>' +
+      '<strong>Está guardado aqui, e subindo sozinho</strong><span class="tiny muted">Pode continuar ' +
+      'trabalhando e pode fechar. O que isso quer dizer, e é só isso: os OUTROS aparelhos ainda não ' +
+      'veem. Quando a faixa sumir, viram.</span></td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>⬇ Baixar cópia</strong></td><td>' +
+      '<strong>A ação que nunca dá errado</strong><span class="tiny muted">Grava num arquivo tudo o que ' +
+      'está neste navegador agora, inclusive o que ainda não subiu. Vem primeiro na faixa por isso.' +
+      '</span></td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>Descartar e recarregar</strong></td><td>' +
+      '<strong>A única coisa aqui que perde de verdade</strong><span class="tiny muted">Joga fora o que ' +
+      'não subiu — inclusive o que estava guardado no aparelho — e recomeça do que o servidor tem. Não ' +
+      'tem volta. Baixe a cópia antes.</span></td></tr>' +
+      '</tbody></table></div>' +
+      '<p class="tiny muted">Ao entrar, se tiver ficado coisa de uma sessão anterior, ela é enviada ' +
+      '<strong>antes</strong> de o app baixar a carteira do servidor — e o app diz o que recuperou. A ' +
+      'ordem importa: baixar primeiro sobrescreveria com a versão antiga justamente o que ficou ' +
+      'faltando, e aí a perda seria definitiva.</p>' +
       '</div>';
   }
 
@@ -7290,6 +7338,7 @@
       '<div class="tabela-rolagem"><table><tbody>' + forcas + '</tbody></table></div></div>' +
       manualDasTelas() +
       manualDoPipeline() +
+      manualDaFilaDeEnvio() +
       manualDasTarefas() +
       manualDasConversas() +
       manualDoAprendizado() +
