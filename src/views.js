@@ -5280,6 +5280,18 @@
       'de vencer, o app pede uma nova antes de tentar gravar — em vez de descobrir que venceu só ' +
       'quando a gravação falha na sua frente.</span></div></div>' +
       '</div>' +
+      '<h3>Quando ele interrompe você</h3>' +
+      '<p class="small">Se a gravação falhar e <strong>continuar falhando</strong>, o app abre uma caixa no ' +
+      'meio da tela — não só a faixa no alto. Isso é de propósito, e é a correção do erro que custou ' +
+      'dezessete oportunidades: quem está trabalhando olha para o formulário, não para o topo da página. ' +
+      'Um app que aceita meia hora de trabalho em silêncio, sabendo que não está gravando, é um app que ' +
+      '<em>fabrica</em> a perda.</p>' +
+      '<p class="small">A caixa diz há quanto tempo não grava, o motivo que o servidor deu, e se o ' +
+      'trabalho está ou não guardado aqui. <strong>Ela não trava você</strong> — “Continuar assim mesmo” ' +
+      'existe, porque travar um vendedor no meio de uma ligação seria trocar um problema por outro. Mas ' +
+      'a escolha de seguir passa a ser sua, e informada. Ela volta de cinco em cinco minutos enquanto ' +
+      'não gravar.</p>' +
+
       '<h3>A faixa laranja, e o que ela quer dizer</h3>' +
       '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' +
       '<tr><td class="rotulo-manual"><strong>“Ainda não chegou ao servidor”</strong></td><td>' +

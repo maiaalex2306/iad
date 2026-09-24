@@ -5,8 +5,8 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v218**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v218, o aparelho
+Publicado agora: **v219**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v219, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -397,6 +397,52 @@ com nada marcado. Marcar 99 e a seleção sobreviver a um refresh seria armadilh
 duas negociações de verdade. Filtrar por campanha, marcar os 51, mover com
 motivo e prazo, conferir que **ninguém foi encerrado**, devolver três, e que a
 passagem ficou no `historicoNutricao`.
+
+## 0-AM. “Gera a perda pq eu faço e ele não grava” — v219, 24/09
+
+Eu tinha acabado de explicar por que deslogar aos 10 minutos seria pior. Ele
+respondeu com a frase que desmonta a minha explicação:
+
+> *“Amigo gera a perda pq eu faço e ele não grava”*
+
+**Ele está certo, e eu tinha passado por cima do argumento mais forte.**
+
+O problema nunca foi a sessão vencer. Foi o app **continuar aceitando trabalho
+que não consegue gravar**, com o aviso no alto da tela enquanto a pessoa está
+olhando para uma caixa no meio dela. A falha em si é banal — internet cai,
+sessão vence. O que não é banal é descobrir meia hora depois.
+
+**Aceitar trabalho que não se consegue gravar, em silêncio, é o que FABRICA a
+perda.** A faixa estava certa e não bastava, e a diferença entre as duas
+coisas custou dezessete oportunidades.
+
+**Agora o app interrompe.** Caixa modal, no meio da tela, depois de 12
+segundos insistindo sem sucesso (dá tempo de uma repetição resolver sozinha, e
+não interrompe por um soluço de rede). Diz:
+
+- **há quanto tempo** não grava;
+- **o motivo** que o servidor deu, com as palavras dele;
+- se o trabalho está guardado aqui — e, se estiver, que *ninguém mais vê*,
+  que é a única coisa ruim que ainda é verdade depois da v217.
+
+**Não trava.** “Continuar assim mesmo” existe, porque travar um vendedor no
+meio de uma ligação seria trocar um problema por outro — e depois da v217 o
+trabalho fica mesmo guardado. Mas seguir passa a ser escolha **dele**, e
+informada. Volta de 5 em 5 minutos enquanto não gravar: aviso que se diz uma
+vez e cala é aviso que a sessão de duas horas engole.
+
+Detalhe que quase passou: o relógio do episódio **não reinicia** entre
+tentativas. A situação oscila entre `erro` e `salvando` a cada repetição, e
+zerar ali faria “há quanto tempo” recomeçar do zero para sempre — que é
+exatamente como um aviso deixa de avisar.
+
+**20 testes** (`interr.js`): não interrompe quem está gravando, não interrompe
+na primeira falha, interrompe depois de insistir, some sozinho quando grava, e
+o relógio só cresce.
+
+**A sequência inteira, para a próxima sessão ler junto:** v217 a rede de
+segurança, v218 a causa raiz, v219 o aviso chegar a quem trabalha. As três
+foram necessárias, e as duas primeiras não teriam bastado.
 
 ## 0-AL. A CAUSA RAIZ: renovar a credencial apagava o perfil — v218, 24/09
 

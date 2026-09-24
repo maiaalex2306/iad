@@ -352,6 +352,106 @@
     return 'Sincronize para mandar esta carteira ao servidor.';
   }
 
+  /* ---------- quando o app não consegue salvar ----------
+
+     A faixa no alto da tela estava certa e não bastava, e a diferença entre
+     as duas coisas custou dezessete oportunidades.
+
+     Quem está trabalhando está olhando para o MEIO da tela — para a caixa de
+     Nova oportunidade, para o formulário da tarefa. A faixa fica no alto, e
+     no alto ela não é lida. Enquanto isso o app continua aceitando tudo: mais
+     um negócio, mais um contato, mais uma hora de trabalho empilhada em cima
+     de um envio que não está acontecendo.
+
+     ACEITAR TRABALHO QUE NÃO SE CONSEGUE GRAVAR, EM SILÊNCIO, É O QUE FABRICA
+     A PERDA. A falha em si é banal — internet cai, sessão vence. O que não é
+     banal é a pessoa descobrir meia hora depois.
+
+     Então o app interrompe: uma caixa modal, no meio da tela, onde ela está
+     olhando. Não bloqueia para sempre — depois da v217 o trabalho fica mesmo
+     guardado no aparelho, e travar um vendedor no meio de uma ligação seria
+     trocar um problema por outro. Mas a escolha de continuar passa a ser
+     DELA, e informada.
+
+     Volta a aparecer de cinco em cinco minutos enquanto não gravar. Um aviso
+     que se diz uma vez e cala é um aviso que a sessão de duas horas engole. */
+  const ESPERA_PARA_INTERROMPER = 12000;   /* dá tempo de uma repetição resolver sozinha */
+  const REPETIR_O_AVISO = 5 * 60 * 1000;
+  let avisadoEm = 0;
+  let relogioDoAviso = null;
+  let caixaDoAviso = null;
+
+  function vigiarGravacao(sinc) {
+    if (!sinc || sinc.situacao !== 'erro' || !sinc.desde) {
+      /* Gravou: o episódio acabou. A caixa aberta some sozinha — deixar na
+         tela um aviso que já não é verdade ensina a ignorar os próximos. */
+      avisadoEm = 0;
+      if (relogioDoAviso) { clearTimeout(relogioDoAviso); relogioDoAviso = null; }
+      if (caixaDoAviso && caixaDoAviso.isConnected) { try { caixaDoAviso.close(); } catch (e) {} }
+      caixaDoAviso = null;
+      return;
+    }
+
+    const parado = Date.now() - sinc.desde;
+    const naHora = avisadoEm ? (Date.now() - avisadoEm >= REPETIR_O_AVISO) : (parado >= ESPERA_PARA_INTERROMPER);
+    if (!naHora) {
+      /* Ainda não é hora, mas vai ser: sem este relógio o aviso só apareceria
+         na próxima falha, e entre uma e outra pode passar um minuto inteiro. */
+      if (!relogioDoAviso) {
+        relogioDoAviso = setTimeout(function () {
+          relogioDoAviso = null;
+          vigiarGravacao(global.IADSincronia.estado());
+        }, Math.max(1000, ESPERA_PARA_INTERROMPER - parado));
+      }
+      return;
+    }
+    if (caixaDoAviso && caixaDoAviso.isConnected) return;   /* já está na tela */
+    avisadoEm = Date.now();
+    mostrarQueNaoEstaSalvando(sinc);
+  }
+
+  function minutosDe(ms) {
+    const m = Math.floor(ms / 60000);
+    if (m < 1) return 'menos de um minuto';
+    return m === 1 ? 'um minuto' : m + ' minutos';
+  }
+
+  function mostrarQueNaoEstaSalvando(sinc) {
+    const parado = sinc.desde ? Date.now() - sinc.desde : 0;
+    const guardado = !!sinc.naFila;
+
+    const corpo =
+      '<p class="nota-form"><strong>Faz ' + U.esc(minutosDe(parado)) +
+      ' que eu não consigo gravar no servidor.</strong></p>' +
+      '<p class="small">O motivo que o servidor deu: <em>' + U.esc(sinc.recado || 'sem explicação') + '</em></p>' +
+      (guardado
+        ? '<p class="small"><strong>O que você fez não se perdeu.</strong> Está gravado neste aparelho e ' +
+          'sobe sozinho assim que o envio voltar — pode fechar o app. O que <em>não</em> acontece enquanto ' +
+          'isso: ninguém mais vê. Nos outros aparelhos e para o resto da equipe, este trabalho ainda não existe.</p>'
+        : '<p class="small"><strong>E não consegui nem guardar aqui.</strong> O que está na tela existe só ' +
+          'nesta aba: fechar ou recarregar perde. Baixe a cópia antes de qualquer outra coisa.</p>') +
+      '<p class="small muted">Você pode continuar trabalhando — só precisa saber disto antes de continuar.</p>';
+
+    const acoes =
+      '<button class="btn" type="button" data-copia>⬇ Baixar cópia</button>' +
+      '<button class="btn alt" type="button" data-agora>Tentar gravar agora</button>';
+
+    const dlg = U.ficha('O seu trabalho não está indo para o servidor', corpo, acoes);
+    caixaDoAviso = dlg;
+    /* "Fechar" já é "continuar assim mesmo", e é o rótulo honesto para o que
+       o botão faz: some o aviso, o trabalho segue guardado, o envio segue
+       tentando. Renomear é só dizer isso em voz alta. */
+    const fechar = dlg.querySelector('[data-fechar]');
+    if (fechar) fechar.textContent = 'Continuar assim mesmo';
+    const ligar = function (marca, fn) {
+      const b = dlg.querySelector('[data-' + marca + ']');
+      if (b) b.addEventListener('click', fn);
+    };
+    ligar('copia', function () { App.exportar(); });
+    ligar('agora', function () { dlg.close(); App.tentarSalvarDeNovo(); });
+    dlg.addEventListener('close', function () { caixaDoAviso = null; });
+  }
+
   function faixaDeAviso() {
     /* O envio que não foi. É o aviso mais grave que existe na tela: quer
        dizer que o que a pessoa acabou de fazer NÃO está no servidor, e como
@@ -9189,7 +9289,7 @@
     /* Cada alteração passa a subir sozinha, e o estado do envio aparece na
        tela sem ninguém precisar perguntar. */
     global.IADSincronia.ligar();
-    global.IADSincronia.aoMudar(function () { render(); });
+    global.IADSincronia.aoMudar(function (sinc) { vigiarGravacao(sinc); render(); });
     global.IADAjuda.ligar();
     montarNav();
 

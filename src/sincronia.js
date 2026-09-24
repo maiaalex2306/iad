@@ -51,11 +51,19 @@
   let relogioDeNovo = null;
   let degrau = 0;
   let naFila = false;            /* há coisa gravada e não confirmada */
+  /* Desde quando não consegue salvar, e quantas vezes tentou. Não é
+     estatística: é o que permite ao app INTERROMPER quem está trabalhando em
+     vez de deixar a pessoa empilhar uma hora de trabalho olhando para uma
+     faixa no alto da tela que ela não está vendo. */
+  let erradoDesde = 0;
+  let falhas = 0;
   let ouvinte = null;
 
   function estado() {
     return { situacao: situacao, recado: recado, naFila: naFila,
-      tentandoDeNovo: !!relogioDeNovo };
+      tentandoDeNovo: !!relogioDeNovo,
+      falhas: falhas, desde: erradoDesde,
+      segundosParado: erradoDesde ? Math.round((Date.now() - erradoDesde) / 1000) : 0 };
   }
 
   function aoMudar(fn) { ouvinte = fn; }
@@ -63,7 +71,18 @@
   function avisar() { if (ouvinte) ouvinte(estado()); }
 
   function definir(nova, texto) {
-    if (situacao === nova && recado === (texto || '')) return;
+    /* O episódio começa na primeira falha e só termina quando grava. Entre
+       uma tentativa e outra a situação oscila entre 'erro' e 'salvando', e
+       zerar o relógio nessa oscilação faria "há quanto tempo não salva"
+       recomeçar do zero para sempre — que é como um aviso deixa de avisar. */
+    if (nova === 'erro') {
+      falhas++;
+      if (!erradoDesde) erradoDesde = Date.now();
+    } else if (nova === 'ocioso') {
+      falhas = 0;
+      erradoDesde = 0;
+    }
+    if (situacao === nova && recado === (texto || '')) { avisar(); return; }
     situacao = nova;
     recado = texto || '';
     avisar();
