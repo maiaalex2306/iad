@@ -231,12 +231,35 @@
     return chamar('/auth/v1/logout', { metodo: 'POST' }).catch(function () {});
   }
 
+  /* ESTE ERA O DEFEITO, e ele explica a história inteira.
+
+     O GoTrue devolve CREDENCIAL, e só: token novo, refresh novo, usuário.
+     Gravar essa resposta crua por cima da sessão apagava o `perfil` — que é
+     coisa do app, guardada ali para não perguntar ao servidor a cada envio.
+
+     O estrago em cadeia: o app fica parado, o token de uma hora vence,
+     `renovar` roda, o perfil some. A partir daí TODO envio morre em
+     "Seu perfil não existe no banco" — para sempre, porque nada o repunha.
+     O vendedor continua trabalhando, o app continua aceitando, e nada mais
+     chega ao servidor. Foi assim que dezessete oportunidades se perderam.
+
+     Guardar o perfil só quando é a MESMA pessoa: refresh que volta com outro
+     usuário é outra sessão, e carregar o perfil de alguém para dentro dela
+     seria o vazamento entre empresas pela porta dos fundos. */
   function renovar() {
     const s = sessao();
     if (!s || !s.refresh_token) return Promise.reject(new Error('Sem sessão para renovar.'));
     return chamar('/auth/v1/token?grant_type=refresh_token', {
       metodo: 'POST', autenticado: false, corpo: { refresh_token: s.refresh_token }
-    }).then(function (r) { guardarSessao(r); return r; });
+    }).then(function (r) {
+      const nova = Object.assign({}, r);
+      const antes = (s.user && s.user.id) || '';
+      const agora = (nova.user && nova.user.id) || '';
+      if (!nova.user && s.user) nova.user = s.user;
+      if (s.perfil && (!agora || !antes || agora === antes)) nova.perfil = s.perfil;
+      guardarSessao(nova);
+      return nova;
+    });
   }
 
   function eu() {
@@ -775,9 +798,36 @@
   }
 
   /* ---------- sincronização ---------- */
+
+  /* O perfil fica na sessão para não pedir ao servidor a cada envio. Quando
+     ele não está lá, a saída não é desistir: é PERGUNTAR.
+
+     Antes, a falta do perfil era um beco sem saída — a mensagem "Seu perfil
+     não existe no banco" acusava o banco de um problema que estava aqui
+     dentro, e só sair e entrar de novo consertava. Quem não soubesse disso
+     trabalhava o dia inteiro sem nada subir.
+
+     Isto conserta sozinho também quem já está preso nesse estado: a próxima
+     tentativa relê o perfil e segue. */
+  function perfilParaEnviar() {
+    const p = sessaoPerfil();
+    if (p) return Promise.resolve(p);
+    if (!conectado()) return Promise.reject(new Error('Você não está conectado ao servidor.'));
+    return meuPerfil().then(function (perfil) {
+      if (!perfil) {
+        throw new Error('O seu usuário não tem perfil no banco. ' +
+          'Peça a quem administra para criá-lo — sem ele o servidor não sabe de quem é o que sobe.');
+      }
+      guardarPerfilNaSessao(perfil);
+      return perfil;
+    });
+  }
+
   function empurrar() {
-    const perfil = sessaoPerfil();
-    if (!perfil) return Promise.reject(new Error('Seu perfil não existe no banco.'));
+    return perfilParaEnviar().then(empurrarComPerfil);
+  }
+
+  function empurrarComPerfil(perfil) {
 
     /* Sem empresa no perfil, o envio parava aqui — para todo mundo. Certo para
        o vendedor: o RLS do banco confere `tenant_id = meu_tenant()`, e com

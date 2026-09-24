@@ -1,12 +1,12 @@
-# Onde paramos — 23/09/2026
+# Onde paramos — 24/09/2026
 
 Este arquivo existe para a próxima sessão começar sabendo o que já aconteceu.
 Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v217**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v217, o aparelho
+Publicado agora: **v218**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v218, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -397,6 +397,58 @@ com nada marcado. Marcar 99 e a seleção sobreviver a um refresh seria armadilh
 duas negociações de verdade. Filtrar por campanha, marcar os 51, mover com
 motivo e prazo, conferir que **ninguém foi encerrado**, devolver três, e que a
 passagem ficou no `historicoNutricao`.
+
+## 0-AL. A CAUSA RAIZ: renovar a credencial apagava o perfil — v218, 24/09
+
+*“amigo este erro não para...”* — e o print trouxe a resposta, porque a faixa
+agora dizia outra coisa: **“Seu perfil não existe no banco.”**
+
+Três linhas de código explicam tudo o que aconteceu nesta semana:
+
+```js
+function renovar() {
+  return chamar('/auth/v1/token?grant_type=refresh_token', {...})
+    .then(function (r) { guardarSessao(r); return r; });   // ← aqui
+}
+```
+
+O GoTrue devolve **credencial, e só**: token novo, refresh novo, usuário.
+Gravar essa resposta crua por cima da sessão **apagava o `perfil`** — que é
+coisa do app, guardada ali para não perguntar ao servidor a cada envio.
+
+**A cadeia inteira:** o app fica parado → o token de uma hora vence →
+`renovar` roda → o perfil some → `empurrar` bate em `if (!perfil) reject` →
+**todo envio morre em “Seu perfil não existe no banco”, para sempre.** O
+vendedor continua trabalhando, o app continua aceitando tudo, e nada mais
+chega ao servidor. Só sair e entrar de novo consertava — e ninguém sabia
+disso.
+
+Era exatamente o *“quando o programa fica parado um tempo”* do primeiro
+relato. **A v217 não era o conserto; era a rede de segurança.** E pior: o
+`renovarSePreciso()` que eu acrescentei ali faz `renovar` rodar com mais
+frequência — eu tinha aumentado a frequência do defeito enquanto protegia o
+sintoma dele.
+
+**Dois consertos:**
+
+1. **`renovar` preserva o perfil** (e o usuário). Só quando é a MESMA pessoa:
+   refresh que volta com outro usuário é outra sessão, e herdar perfil ali
+   seria o vazamento entre empresas pela porta dos fundos.
+2. **`empurrar` pergunta em vez de desistir.** Sem perfil na sessão, relê do
+   servidor e segue. Isso conserta sozinho **quem já está preso** nesse
+   estado — inclusive o Alexandre, sem precisar sair e entrar. E a mensagem
+   deixou de acusar o banco de um problema que estava aqui dentro.
+
+**16 testes** (`perfil.js`), com o GoTrue respondendo como ele responde de
+verdade — credencial sem perfil: renovar não apaga, o token novo é o que
+vale, a sessão vencida salva as 17 assim mesmo, a sessão já quebrada se
+conserta na próxima tentativa, e refresh de outro usuário não herda perfil.
+
+**A lição:** eu tratei o sintoma duas vezes (v209, v211) e construí uma rede
+de segurança (v217) antes de ler a mensagem que o próprio app estava
+mostrando. A frase na faixa mudou de *“sem conexão”* para *“Seu perfil não
+existe”* — e foi só quando essa frase apareceu num print que a causa ficou
+visível. A faixa estava certa o tempo todo; eu é que não a estava lendo.
 
 ## 0-AK. A perda de verdade: 17 oportunidades — v217, 23/09
 
