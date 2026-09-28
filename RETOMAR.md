@@ -1,12 +1,12 @@
-# Onde paramos — 24/09/2026
+# Onde paramos — 28/09/2026
 
 Este arquivo existe para a próxima sessão começar sabendo o que já aconteceu.
 Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v219**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v219, o aparelho
+Publicado agora: **v220**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v220, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -397,6 +397,27 @@ com nada marcado. Marcar 99 e a seleção sobreviver a um refresh seria armadilh
 duas negociações de verdade. Filtrar por campanha, marcar os 51, mover com
 motivo e prazo, conferir que **ninguém foi encerrado**, devolver três, e que a
 passagem ficou no `historicoNutricao`.
+
+## 0-AN. Município e estado no cabeçalho do negócio — v220, 28/09
+
+*“Na frente de concorrentes coloca o município e depois o estado da empresa.”*
+
+Os dois campos já existiam no cadastro da empresa (`cidade`, `uf`) — só não
+apareciam onde a decisão é tomada. Agora estão no cabeçalho do negócio, logo
+depois de Concorrentes, na ordem pedida.
+
+**Por que ali importa:** quem vai rodar o Vale do Paraíba na terça precisa
+saber, olhando o negócio, se ele fica em Taubaté ou em Goiânia. Ir buscar isso
+no cadastro da empresa, um a um, é o tipo de consulta que ninguém faz — e que
+faz a rota sair errada.
+
+O lápis do Município leva ao **cadastro da empresa**, e não abre um campo ali:
+o dado é da conta, não da negociação, e dois lugares de mexer no mesmo dado é
+como ter dois relógios. A UF sai em maiúsculas mesmo que tenha sido digitada
+em minúsculas. Empresa sem endereço mostra travessão em vez de sumir com a
+linha — campo que aparece e desaparece esconde que o dado está faltando.
+
+**11 testes** (`local.js`), incluindo a ordem exata e a empresa sem endereço.
 
 ## 0-AM. “Gera a perda pq eu faço e ele não grava” — v219, 24/09
 

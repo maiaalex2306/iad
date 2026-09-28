@@ -2216,7 +2216,20 @@
       ['Campanha', op.campanha ? esc(op.campanha) : '—'],
       ['SDR', op.sdr ? esc(op.sdr) : '—'],
       ['Criada em', op.criadoEm ? U.data(op.criadoEm) : '—'],
-      ['Concorrentes', op.concorrentes ? esc(op.concorrentes) : '—']
+      ['Concorrentes', op.concorrentes ? esc(op.concorrentes) : '—'],
+      /* Onde a empresa fica, no cabeçalho do negócio. É dado da CONTA e não
+         da negociação — por isso o lápis leva para o cadastro dela, e não
+         abre um campo aqui: dois lugares de mexer no mesmo dado é como ter
+         dois relógios.
+
+         Está aqui porque é o que decide a visita. Quem vai rodar o Vale do
+         Paraíba na terça precisa saber, olhando o negócio, se ele fica em
+         Taubaté ou em Goiânia — e ir buscar isso no cadastro da empresa, um
+         a um, é o tipo de consulta que ninguém faz e que faz a rota sair
+         errada. */
+      ['Município', (conta && conta.cidade ? esc(conta.cidade) : '—') +
+        (conta ? acao('a cidade, no cadastro da empresa', 'App.editarConta(\'' + conta.id + '\')') : '')],
+      ['Estado', conta && conta.uf ? esc(String(conta.uf).toUpperCase()) : '—']
     ];
 
     /* O mensal ganha linha própria em vez de entrar no valor total como se
