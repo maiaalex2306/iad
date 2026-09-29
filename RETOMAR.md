@@ -1,4 +1,4 @@
-# Onde paramos — 28/09/2026
+# Onde paramos — 29/09/2026
 
 Este arquivo existe para a próxima sessão começar sabendo o que já aconteceu.
 Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
@@ -397,6 +397,60 @@ com nada marcado. Marcar 99 e a seleção sobreviver a um refresh seria armadilh
 duas negociações de verdade. Filtrar por campanha, marcar os 51, mover com
 motivo e prazo, conferir que **ninguém foi encerrado**, devolver três, e que a
 passagem ficou no `historicoNutricao`.
+
+## 0-AO. A coluna que eu esqueci de criar — 29/09
+
+Faixa laranja que não saía, com o recado do próprio app:
+
+> *O banco está atrás do aplicativo: falta a coluna
+> `oportunidades.historico_nutricao`.*
+
+**A mensagem estava certa. O conselho dela estava errado** — mandava rodar
+`correcao-16-tudo-em-dia.sql`, e aquele arquivo **não tinha** essa coluna.
+Ele rodaria e continuaria preso.
+
+**A causa:** o campo `historicoNutricao` nasceu quando a nutrição passou a
+guardar as passagens (v208/v210). Eu nunca escrevi a migração. Funcionou por
+semanas, porque em memória funciona sempre — e quebrou no dia em que alguém
+tirou a primeira negociação da nutrição.
+
+**E não quebra só a nutrição.** O envio manda a tabela INTEIRA de uma vez, e o
+PostgREST recusa o lote todo quando encontra uma chave que não conhece. Uma
+coluna esquecida derrubou as 166 negociações.
+
+**Consertos:**
+
+- `nuvem/correcao-24-historico-da-nutricao.sql` — novo, validado em Postgres
+  16 de verdade, e repetível (rodei duas vezes seguidas).
+- A coluna entrou também no `schema.sql` (banco novo nasce certo) e no
+  `correcao-16` — que é o arquivo que a mensagem do app manda rodar, e que
+  agora cumpre o que ela promete.
+- `nuvem/testes/colunas.test.ts` — **o conserto que importa.** Compara todo
+  campo que o `store.js` grava contra todas as colunas do SQL. Provado: com a
+  coluna removida dos três arquivos, sai com código 1.
+
+**Duas armadilhas encontradas no caminho, e as duas valem para o futuro:**
+
+1. A auditoria ingênua (`conta.x =`, `contato.x =`) deu **falso positivo** —
+   variáveis com nome de um registro guardando outro. O teste final exige que
+   o campo exista em *alguma* tabela, não na tabela certa: pega o defeito real
+   (campo que não existe em lugar nenhum) sem gritar à toa. Teste que grita à
+   toa é teste que se aprende a ignorar.
+2. `sair()` com `throw` **não funciona** num arquivo que usa `await` no topo:
+   vira rejeição não tratada e o bun **sai com zero**. O teste acusava na tela
+   e a CI passaria. Agora é `process.exit(c)`.
+
+**Nada mudou no aplicativo** — só SQL e testes. Sem bump de versão, de
+propósito: a v220 continua sendo o que está rodando.
+
+**Pendência dele:** rodar `nuvem/correcao-24-historico-da-nutricao.sql` no SQL
+Editor do Supabase. Enquanto não rodar, a carteira fica guardada no aparelho
+(v217) e sobe sozinha quando o banco aceitar.
+
+**Achado à parte, não resolvido:** o repositório **não tem workflow de CI**
+(`.github/workflows` não existe). Os checks `build`/`deploy` vêm da
+configuração de Pages do GitHub, e **não rodam** `nuvem/testes/*.test.ts`.
+Os dois testes só protegem quando alguém os roda à mão.
 
 ## 0-AN. Município e estado no cabeçalho do negócio — v220, 28/09
 

@@ -124,6 +124,9 @@ create table if not exists public.oportunidades (
   /* Nulo quer dizer "não está em nutrição", que é diferente de estar com os
      campos vazios. */
   nutricao             jsonb,
+  /* As passagens pela nutrição: entrou quando, por quê, e por que voltou.
+     Responde "quantas vezes esta conta já entrou e saiu" seis meses depois. */
+  historico_nutricao   jsonb not null default '[]'::jsonb,
   desfecho             jsonb,
   criado_em            date default current_date,
   atualizado_em        timestamptz default now()

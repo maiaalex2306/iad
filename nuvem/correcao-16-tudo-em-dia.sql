@@ -62,6 +62,10 @@ alter table public.oportunidades add column if not exists sdr_email text default
 -- dizer "não está em nutrição", que é diferente de estar com os campos vazios.
 alter table public.oportunidades add column if not exists nutricao  jsonb;
 
+-- E o histórico das passagens: entrou quando, por quê, e por que voltou. Sem
+-- esta coluna o envio da carteira INTEIRA é recusado, não só o da nutrição.
+alter table public.oportunidades add column if not exists historico_nutricao jsonb not null default '[]'::jsonb;
+
 -- Aponta para fontes.id. A coluna origem continua guardando o texto solto do
 -- que foi criado antes de a tabela de fontes existir.
 alter table public.oportunidades add column if not exists fonte_id  text not null default '';
@@ -183,6 +187,10 @@ union all select 'oportunidades.nutricao',
 union all select 'oportunidades.valor_mensal',
   case when exists (select 1 from information_schema.columns
     where table_schema = 'public' and table_name = 'oportunidades' and column_name = 'valor_mensal')
+    then 'ok' else 'FALTA' end
+union all select 'oportunidades.historico_nutricao',
+  case when exists (select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'oportunidades' and column_name = 'historico_nutricao')
     then 'ok' else 'FALTA' end
 union all select 'tarefas.adiamentos',
   case when exists (select 1 from information_schema.columns
