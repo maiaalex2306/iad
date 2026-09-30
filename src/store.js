@@ -1689,6 +1689,42 @@
     return t;
   }
 
+  /* Excluir contato não existia, e a falta apareceu do pior jeito: gente
+     cadastrada na empresa errada — colega de casa que foi citado numa conversa
+     sobre o cliente — sem nenhum caminho para tirar. Ficava lá, contando como
+     cobertura do grupo comprador e arrastando o e-mail interno para dentro da
+     carteira do cliente.
+
+     Tirar a pessoa é tirar de TODO lugar que aponta para ela. Deixar o id
+     pendurado num grupo comprador ou numa tarefa cria o pior tipo de defeito:
+     a tela procura um contato que não existe e mostra vazio, e ninguém liga
+     o vazio ao que foi apagado semanas antes.
+
+     O que ela DISSE não some: evidência é do negócio, registrada no evento, e
+     não da ficha de quem falou. Apagar o histórico junto seria perder a
+     decisão do cliente por causa de um erro de cadastro. */
+  function excluirContato(id) {
+    estado.contatos = (estado.contatos || []).filter(function (c) { return c.id !== id; });
+
+    (estado.oportunidades || []).forEach(function (op) {
+      if (op.stakeholders && op.stakeholders.indexOf(id) !== -1) {
+        op.stakeholders = op.stakeholders.filter(function (x) { return x !== id; });
+      }
+    });
+    (estado.tarefas || []).forEach(function (t) {
+      if (t.contatoId === id) t.contatoId = null;
+    });
+    (estado.contatos || []).forEach(function (c) {
+      if (c.reportaA === id) c.reportaA = null;
+    });
+    (estado.sinais || []).forEach(function (sg) {
+      if (sg.contatoId === id) sg.contatoId = null;
+    });
+
+    registrarExclusao('contatos', id);
+    salvar();
+  }
+
   function excluirTarefa(id) {
     estado.tarefas = estado.tarefas.filter(function (t) { return t.id !== id; });
     registrarExclusao('tarefas', id);
@@ -1999,6 +2035,7 @@
   global.IADStore = {
     uid, hoje, carregar, salvar, inscrever, obter, substituir, estadoVazio,
     guardarCopiaDeSeguranca, copiaDeSeguranca, restaurarCopiaDeSeguranca, descartarCopiaDeSeguranca,
+    excluirContato,
     quandoMudar, semSincronizar, registrarExclusao, exclusoesPendentes, esquecerExclusoes,
     moverRegistros, esquecerEmpresa,
     conta, contato, oportunidade, tarefa, contatosDaConta, tarefasDaOportunidade,

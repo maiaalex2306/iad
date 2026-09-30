@@ -1,12 +1,12 @@
-# Onde paramos — 29/09/2026
+# Onde paramos — 30/09/2026
 
 Este arquivo existe para a próxima sessão começar sabendo o que já aconteceu.
 Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v220**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v220, o aparelho
+Publicado agora: **v221**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v221, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -397,6 +397,53 @@ com nada marcado. Marcar 99 e a seleção sobreviver a um refresh seria armadilh
 duas negociações de verdade. Filtrar por campanha, marcar os 51, mover com
 motivo e prazo, conferir que **ninguém foi encerrado**, devolver três, e que a
 passagem ficou no `historicoNutricao`.
+
+## 0-AP. “Conversar comigo sobre a Suzano não faz a pessoa ser da Suzano” — v221, 30/09
+
+A aba de E-mail da Suzano mostrando 16 conversas: convite de agenda cancelado,
+comunicado de treinamento do CRM, discussão sobre domínio de internet,
+newsletter da FENASAN. **Nada daquilo é a Suzano.** Todos os remetentes são
+`@biosolvit.com` — colegas da própria casa dele.
+
+E a tela de Contatos explicava por quê: Janaina, Moises, Emili e Guilhermo
+estavam cadastrados como **contatos da Suzano**.
+
+**A cadeia:** a IA lê uma ata ou conversa que fala da Suzano → acha seis nomes
+no texto → cadastra os seis como gente da Suzano. Entre eles, os colegas que
+estavam discutindo o assunto. Aí a camada de casamento por endereço faz o seu
+trabalho corretamente, e a carteira do cliente enche de e-mail interno.
+
+A frase dele é a regra que faltava: *“conversar comigo sobre a empresa não
+significa que a pessoa é da empresa”*.
+
+**O conceito novo: o domínio da CASA.** Sai dos e-mails dos próprios usuários
+do app — não de uma configuração que alguém teria de lembrar de preencher.
+Domínio gratuito nunca entra (se o vendedor usa Gmail, a casa não é o Gmail).
+
+**Três consertos, em camadas:**
+
+| Onde | O quê |
+|---|---|
+| `casar()` | E-mail cujo outro lado é da casa **não é conversa de cliente**. Vem antes de tudo, **inclusive do casamento gravado à mão** — foi o casamento errado que criou o problema. O domínio não mente; o cadastro pode estar errado. |
+| `criarContatosPropostos()` | Recusa quem tem e-mail da casa, ou de outra conta da carteira. Gratuito passa (metade dos compradores usa Gmail); sem e-mail passa (é o caso comum). Os recusados voltam com o motivo — recusar calado trocaria um erro invisível por outro. |
+| Contatos do negócio | Terceiro bloco: **“⚠ O e-mail destes diz que eles não são desta empresa”**, com Excluir. Separado e não apagado sozinho: o app tem dúvida, não certeza, e quem decide é quem conhece as pessoas. |
+
+**`Store.excluirContato()` não existia** — e a falta apareceu do pior jeito:
+não havia caminho nenhum para desfazer um cadastro errado. Ele tira a pessoa
+de todo lugar que aponta para ela (grupo comprador, tarefas, `reportaA`,
+sinais), porque id pendurado apontando para o nada é o defeito que ninguém
+liga à causa semanas depois. **O que ela disse não some:** evidência é do
+negócio, registrada no evento, não da ficha de quem falou.
+
+**25 testes** (`casa.js`), com a carteira dele reproduzida: Janaina e Moises
+`@biosolvit.com` cadastrados na Suzano, Ana Luiza `@suzano.com.br`, e o Ítalo
+no Gmail — que não pode ser acusado de nada.
+
+**Achado de segurança grave, comunicado a ele:** um dos e-mails da caixa —
+agora no banco do CRM e sincronizado ao Supabase — traz **duas senhas em texto
+claro** de contas `@biopartners.com.br` (a dele e a da Rosa), enviadas pela
+Janaina. Precisam ser trocadas, e a prática de mandar senha por e-mail,
+interrompida.
 
 ## 0-AO. A coluna que eu esqueci de criar — 29/09
 

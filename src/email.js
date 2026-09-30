@@ -54,6 +54,46 @@
 
   function ehGratuito(d) { return GRATUITOS.indexOf(String(d || '').toLowerCase()) !== -1; }
 
+  /* ---------------- o domínio da CASA ----------------
+
+     O defeito que isto conserta: a aba de E-mail da Suzano mostrava convites
+     de agenda, comunicado de treinamento e conversa sobre domínio de internet
+     — tudo de colegas @biosolvit.com. Nada daquilo é a Suzano, e nada daquilo
+     é evidência de cliente nenhum.
+
+     Como chegou ali: alguém da casa tinha sido cadastrado como contato DA
+     SUZANO — porque conversou com o vendedor SOBRE a Suzano. A camada de
+     casamento por endereço então fazia o seu trabalho direito, e o resultado
+     era a carteira do cliente cheia de e-mail interno.
+
+     A regra nova é simples e não tem exceção: e-mail cujo outro lado é da
+     própria casa NÃO É CONVERSA DE CLIENTE. Vale mesmo que exista um contato
+     cadastrado com aquele endereço — o cadastro pode estar errado, o domínio
+     não mente.
+
+     Quem é "da casa": os domínios dos e-mails dos usuários do próprio app.
+     Sai da lista de usuários, não de uma configuração que alguém teria de
+     lembrar de preencher. Domínio gratuito nunca entra: se o vendedor entra
+     com um Gmail, a casa não é o Gmail inteiro. */
+  function dominiosDaCasa() {
+    const A = global.IADAuth;
+    const vistos = {};
+    const junta = function (email) {
+      const d = dominio(email);
+      if (d && !ehGratuito(d)) vistos[d] = true;
+    };
+    if (A && A.usuarios) (A.usuarios() || []).forEach(function (u) { junta(u.email); });
+    if (N && N.estado) { const e = N.estado(); if (e) junta(e.email); }
+    (minhasCaixas() || []).forEach(function (c) { junta(c.endereco || c.email); });
+    return Object.keys(vistos);
+  }
+
+  function ehDaCasa(email) {
+    const d = dominio(email);
+    if (!d) return false;
+    return dominiosDaCasa().indexOf(d) !== -1;
+  }
+
   /* ---------------- buscar ----------------
      Uma vez por sessão, e de novo quando alguém pedir. A tela desenha antes de
      a resposta chegar: e-mail é bom de ter, não é pré-requisito para o app
@@ -163,6 +203,14 @@
   }
 
   function casar(m) {
+    /* Antes de qualquer camada: se o outro lado é da casa, isto é e-mail
+       interno. Não tem dono de cliente, e não vai para negociação nenhuma.
+       Vem primeiro de propósito — inclusive antes do casamento GRAVADO à mão,
+       porque foi exatamente o casamento errado que criou o problema. */
+    if (ehDaCasa(doOutroLado(m))) {
+      return { contato: null, conta: null, op: null, como: 'interno' };
+    }
+
     const gravadoContato = m.contato_id ? Store.contato(m.contato_id) : null;
     const gravadaOp = m.oportunidade_id ? Store.oportunidade(m.oportunidade_id) : null;
     if (gravadoContato || gravadaOp) {
@@ -241,7 +289,10 @@
   /* As que o app reconheceu a empresa mas não a pessoa, e as que não casaram
      com nada. É a fila que faz o cadastro crescer sozinho. */
   function paraCasar() {
-    return conversas().filter(function (c) { return !c.contato; });
+    /* Conversa interna não entra na fila de casar: ela não está esperando um
+       contato, ela simplesmente não é do cliente. Oferecer "criar contato"
+       ali era o convite para refazer a bagunça. */
+    return conversas().filter(function (c) { return !c.contato && c.como !== 'interno'; });
   }
 
   function naoLidasDaOp(opId) {
@@ -337,6 +388,7 @@
     paraCasar: paraCasar, casar: casar, naFila: naFila, limpo: limpo,
     naoLidasDaOp: naoLidasDaOp, totalNaoLidas: totalNaoLidas,
     endereco: endereco, dominio: dominio, ehGratuito: ehGratuito,
+    dominiosDaCasa: dominiosDaCasa, ehDaCasa: ehDaCasa,
     contatoDoEndereco: contatoDoEndereco, contaDoDominio: contaDoDominio,
     negociacaoDaConta: negociacaoDaConta, GRATUITOS: GRATUITOS
   };

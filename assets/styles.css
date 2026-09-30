@@ -891,6 +891,14 @@ dialog.caixa-ficha { width: min(520px, 94vw); }
   white-space: pre-wrap; word-break: break-word; color: var(--muted);
 }
 
+/* Quem o e-mail diz que não é desta empresa. Listrado e não vermelho: é
+   dúvida do app, não erro provado — quem decide é quem conhece as pessoas. */
+.item-multi.suspeito, .linha-ficha.suspeito {
+  background: color-mix(in srgb, var(--warn, #b45309) 8%, transparent);
+  border-radius: 6px;
+}
+.linha-ficha.suspeito em { display: block; font-style: normal; font-size: .72rem; margin-bottom: 4px; }
+
 /* A conversa que veio do Linked Helper, inteira, na ficha de Visualizar. Na
    linha da lista ela fica recolhida e recortada; aqui ela é o conteúdo. Seleção
    livre porque é daqui que o vendedor copia o e-mail que o cliente mandou. */

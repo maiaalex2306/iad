@@ -1232,6 +1232,8 @@
        justamente o tipo de coisa que falha calada — um DDD a menos na lista e
        o celular do cliente some sem ninguem notar. */
     __dadosNoTexto: function (texto) { return dadosNoTexto(texto); },
+    __porQueNaoEntra: function (contaId, p) { return porQueNaoEntra(contaId, p); },
+    __criarContatosPropostos: function (contaId, ps, rec) { return criarContatosPropostos(contaId, ps, rec); },
     __ligarAcharPessoas: function (dlg, op) { return ligarAcharPessoas(dlg, op); },
     __telefoneValido: function (bruto) { return telefoneValido(bruto); },
     __donoDoEmail: function (email, contatos) { return donoDoEmail(email, contatos); },
@@ -7788,6 +7790,21 @@
 
   /* Sai da ficha antes de abrir o cadastro: dois modais empilhados deixam o
      de baixo capturando teclado, e o Esc fecha o errado. */
+  /* Tirar da empresa quem nunca foi dela. Pergunta antes, e diz o que
+     acontece — excluir contato não desfaz evidência, e quem está limpando
+     cadastro errado precisa saber que não está apagando histórico. */
+  App.tirarContatoDaEmpresa = function (contatoId, opId) {
+    const c = Store.contato(contatoId);
+    if (!c) return;
+    if (!U.confirmar('Excluir ' + c.nome + ' do cadastro?\n\n' +
+      'Ele sai da empresa e do grupo comprador. O que ele disse, se virou evidência, ' +
+      'continua no histórico do negócio.\n\nNão tem volta.')) return;
+    Store.excluirContato(contatoId);
+    render();
+    U.fecharDialogos();
+    setTimeout(function () { App.contatosDaEmpresa(opId); }, 0);
+  };
+
   App.novoContatoDoNegocio = function (opId) {
     const op = Store.oportunidade(opId);
     if (!op) return;
@@ -7855,8 +7872,43 @@
       return '<div class="secao-form"><span>' + titulo + '</span></div>' +
         lista.map(function (c) { return linhaDeContato(c, dentroDoGrupo, op.id); }).join('');
     };
-    return bloco('No grupo comprador deste negócio', dentro, true) +
-      bloco('Da empresa, fora do grupo', fora, false);
+    /* O terceiro bloco, e o que este app precisou aprender do jeito difícil:
+       gente que está cadastrada aqui mas cujo E-MAIL diz outra coisa.
+
+       Conversar com o vendedor SOBRE a Suzano não faz ninguém ser da Suzano —
+       e foi assim que colegas de casa e fornecedores citados numa ata viraram
+       "contatos da Suzano", levando junto para a aba de E-mail do cliente
+       todo o convite de agenda e comunicado interno que eles mandaram.
+
+       Separado, e não apagado automaticamente: o app não tem certeza, e
+       apagar cadastro por conta própria é pior do que mostrar a dúvida. Quem
+       decide é quem conhece as pessoas. */
+    const M = global.IADEmail;
+    const foraDeLugar = !M || !M.dominio ? [] : todos.filter(function (c) {
+      return !!porQueNaoEntra(op.contaId, c);
+    });
+    const fdl = {};
+    foraDeLugar.forEach(function (c) { fdl[c.id] = true; });
+
+    const limpos = function (lista) { return lista.filter(function (c) { return !fdl[c.id]; }); };
+
+    return bloco('No grupo comprador deste negócio', limpos(dentro), true) +
+      bloco('Da empresa, fora do grupo', limpos(fora), false) +
+      (foraDeLugar.length
+        ? '<div class="secao-form"><span>⚠ O e-mail destes diz que eles não são desta empresa</span>' +
+          '<em>Provavelmente entraram porque foram citados numa conversa sobre ela. ' +
+          'Enquanto estiverem aqui, o e-mail deles aparece como se fosse do cliente.</em></div>' +
+          foraDeLugar.map(function (c) {
+            return '<div class="linha-ficha suspeito"><span class="rotulo">' + U.esc(c.nome) + '</span>' +
+              '<span><em class="atrasado">' + U.esc(porQueNaoEntra(op.contaId, c)) + '</em> ' +
+              '<button class="btn ghost mini" onclick="App.verContato(\'' + c.id + '\')">Ver ficha</button>' +
+              '<button class="btn ghost mini" onclick="App.editarContato(\'' + c.id + '\')">Editar</button>' +
+              '<button class="btn ghost mini" onclick="App.tirarContatoDaEmpresa(\'' + c.id + '\',\'' + op.id + '\')">Excluir</button>' +
+              '</span></div>';
+          }).join('') +
+          '<p class="tiny muted">Excluir apaga o contato. O que ele disse, se foi registrado como ' +
+          'evidência, continua no histórico do negócio — evidência é do negócio, não da ficha.</p>'
+        : '');
   }
 
   /* ---------- As pessoas que estão no texto e não estão no CRM ----------
@@ -8162,7 +8214,16 @@
       { tipo: 'slot', slot: 'dados' }
     ], {}, function (d) {
       const escolhidos = gente.filter(function (_, i) { return d['p' + i]; });
-      const quantos = criarContatosPropostos(contaId, escolhidos);
+      const recusados = [];
+      const quantos = criarContatosPropostos(contaId, escolhidos, recusados);
+      if (recusados.length) {
+        alert('Não cadastrei ' + (recusados.length === 1 ? 'esta pessoa' : 'estas pessoas') + ':\n\n' +
+          recusados.map(function (r) {
+            return '\u00b7 ' + r.nome + (r.email ? ' (' + r.email + ')' : '') + ' \u2014 ' + r.porque;
+          }).join('\n') +
+          '\n\nConversar sobre uma empresa não faz ninguém ser dela. Se for engano, ' +
+          'cadastre em Contatos \u2192 + Novo contato, escolhendo a empresa certa.');
+      }
       /* Depois de criar: o dono escolhido à mão vence o que foi adivinhado,
          e quem ficou sem dono e sem escolha não entra em lugar nenhum. */
       const marcadas = cabem.filter(function (x, i) { return d['d' + i]; });
@@ -8178,11 +8239,23 @@
         ? '<div class="campo"><span>Pessoas para cadastrar</span><div class="lista-multi">' +
           gente.map(function (c, i) {
             const detalhe = [c.cargo, c.area, c.email, c.telefone].filter(Boolean).join(' · ');
-            return '<label class="item-multi"><input type="checkbox" name="p' + i + '" checked>' +
+            /* O aviso vem ANTES de gravar, e desmarcado. Conversar sobre a
+               Suzano não faz ninguém ser da Suzano — e quem descobre isso
+               depois já tem a carteira do cliente cheia de colega de casa. */
+            const barra = porQueNaoEntra(contaId, c);
+            return '<label class="item-multi' + (barra ? ' suspeito' : '') + '">' +
+              '<input type="checkbox" name="p' + i + '"' + (barra ? '' : ' checked') + '>' +
               ' <span>' + U.esc(c.nome) +
               (detalhe ? '<em>' + U.esc(detalhe) + '</em>' : '<em>só o nome — complete depois</em>') +
+              (barra ? '<em class="atrasado">⚠ ' + U.esc(barra) + '</em>' : '') +
               '</span></label>';
-          }).join('') + '</div></div>'
+          }).join('') + '</div>' +
+          (gente.some(function (c) { return !!porQueNaoEntra(contaId, c); })
+            ? '<small class="origem">Os marcados com ⚠ vêm desmarcados e não entram nem se você marcar: ' +
+              'o endereço deles diz que são de outro lugar. Para cadastrar mesmo assim, use ' +
+              '<strong>Contatos → + Novo contato</strong>, onde você escolhe a empresa.</small>'
+            : '') +
+          '</div>'
         : '';
 
       const opcoesDeDono = function (escolhido) {
@@ -8732,7 +8805,50 @@
 
      Repetido não entra: o mesmo dossiê analisado duas vezes não pode duplicar
      a Aline. */
-  function criarContatosPropostos(contaId, pessoas) {
+  /* Por que esta pessoa NÃO pode virar contato desta empresa — ou '' quando
+     pode.
+
+     O erro que isto conserta, dito pelo próprio Alexandre: "conversar comigo
+     sobre a Suzano não significa que a pessoa é da Suzano". A IA lê uma ata ou
+     uma conversa que fala da Suzano, encontra seis nomes no texto, e cadastra
+     os seis como gente da Suzano — inclusive os colegas de casa que estavam
+     discutindo o assunto, e o fornecedor que foi citado.
+
+     O e-mail é a prova, e é a única que não depende de interpretação. Quando
+     ele existe, o domínio decide:
+
+       · domínio da CASA      → é colega, não é cliente. Nunca entra.
+       · domínio de OUTRA conta da carteira → é de lá, não daqui.
+       · domínio gratuito     → não prova nada, então passa: metade dos
+                                compradores de verdade usa Gmail, e recusar
+                                por isso jogaria fora contato bom.
+       · sem e-mail           → passa. É o caso comum, e exigir e-mail para
+                                cadastrar alguém emperraria o cadastro. */
+  function porQueNaoEntra(contaId, pessoa) {
+    const M = global.IADEmail;
+    const email = String((pessoa && pessoa.email) || '').trim();
+    if (!email || !M || !M.dominio) return '';
+
+    const d = M.dominio(email);
+    if (!d) return '';
+    if (M.ehDaCasa && M.ehDaCasa(email)) {
+      return 'é da sua própria empresa (' + d + ') — colega não é contato de cliente';
+    }
+    if (M.ehGratuito && M.ehGratuito(d)) return '';
+
+    /* De outra conta da carteira? Só quando o domínio já está amarrado a ela
+       por um contato ou pelo site — o mesmo critério do casamento de e-mail. */
+    const dona = M.contaDoDominio ? M.contaDoDominio(d) : null;
+    if (dona && dona.id !== contaId) {
+      return 'o endereço é de ' + dona.nome + ' (' + d + '), não desta empresa';
+    }
+    return '';
+  }
+
+  /* Devolve quantos entraram. Os recusados saem em `recusados`, para a tela
+     poder dizer quem ficou de fora e por quê — recusar em silêncio seria
+     trocar um erro invisível por outro. */
+  function criarContatosPropostos(contaId, pessoas, recusados) {
     if (!contaId || !pessoas || !pessoas.length) return 0;
     const chave = function (t) {
       return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
@@ -8741,6 +8857,11 @@
     let n = 0;
     pessoas.forEach(function (p) {
       if (!p || !p.nome || existentes.indexOf(chave(p.nome)) !== -1) return;
+      const porque = porQueNaoEntra(contaId, p);
+      if (porque) {
+        if (recusados) recusados.push({ nome: p.nome, email: p.email || '', porque: porque });
+        return;
+      }
       Store.criarContato({
         contaId: contaId,
         nome: p.nome,
