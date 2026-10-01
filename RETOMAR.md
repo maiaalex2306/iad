@@ -5,8 +5,8 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v224**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v224, o aparelho
+Publicado agora: **v225**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v225, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -397,6 +397,52 @@ com nada marcado. Marcar 99 e a seleção sobreviver a um refresh seria armadilh
 duas negociações de verdade. Filtrar por campanha, marcar os 51, mover com
 motivo e prazo, conferir que **ninguém foi encerrado**, devolver três, e que a
 passagem ficou no `historicoNutricao`.
+
+## 0-AT. O funil desenhado, em trapézios — v225, 01/10
+
+*“Eu quero a opção de visualizar graficamente o Funil… como na imagem.”*
+
+Agora **Funil** desenha o funil clássico — faixas em trapézio que estreitam de
+cima para baixo — e virou o padrão dos dois cartões. A forma anterior, em
+linhas, continua como **Lista**: cabe mais texto nela, e às vezes é o que se
+quer.
+
+**Três decisões que fazem ele funcionar, e que faltam nos funis que se veem
+por aí:**
+
+1. **A largura é proporcional à quantidade, sempre.** Funil decorativo desenha
+   faixas iguais e escreve o número dentro — aí a figura não diz nada, e o
+   número teria ficado melhor numa tabela.
+2. **Nenhum texto dentro da faixa.** Rótulo à esquerda, número à direita, em
+   tinta de texto. Texto dentro de faixa colorida muda de legibilidade a cada
+   degrau da rampa, e no escuro vira loteria.
+3. **A queda entre dois degraus fica escrita no vão** (↓ 40%). É o número que
+   o gestor caça e que funil desenhado nenhum costuma mostrar.
+
+A base de cada faixa é a largura do **próximo** degrau — é isso que faz as
+faixas encaixarem como funil em vez de empilharem como blocos soltos. E faixa
+de valor zero tem largura mínima: some justamente onde a notícia é pior.
+
+**A rampa é SEQUENCIAL, não categórica.** São passos ordenados de um processo
+só; o arco-íris dos funis de internet diz “estas são oito coisas sem relação”,
+que é falso.
+
+**E foi medida, não escolhida.** A conta mostrou o que eu não teria adivinhado:
+
+- No modo escuro, uma rampa que **escurece** até o fim faz a última faixa
+  desaparecer no fundo — **1,18:1 medido** contra `#131c2b`. A rampa escura
+  **clareia**.
+- Texto branco dentro da faixa reprovaria na metade clara (1,99:1). Foi o que
+  decidiu tirar todo texto de dentro — que, por acaso, é também o que a regra
+  do skill manda: tinta de texto, nunca a cor da série.
+
+**17 testes** (`trapezio.js`): a faixa estreita de cima para baixo, a largura
+acompanha o valor, a base de uma é o topo da seguinte, nenhum texto cai dentro
+do polígono, a queda é a porcentagem certa, e o zero continua visível.
+
+**Duas suítes quebraram com a mudança de padrão** (`funis`, `formas`): elas
+contavam `.degrau-funil`, que agora só existe na forma Lista. As expectativas
+é que estavam velhas — passaram a contar os trapézios.
 
 ## 0-AS. Funil, barras, linhas e pizza — v224, 01/10
 

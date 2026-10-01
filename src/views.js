@@ -813,8 +813,8 @@
       'acontecem. Conta quem passou por esta E por todas as anteriores: decisão construída fora de ordem ' +
       'é decisão construída no ar. O corte é nota 2 — <strong>o cliente disse, com palavras dele</strong>; ' +
       'abaixo disso é suposição nossa, e contar suposição é o que infla pipeline.</p>' +
-      G.seletorDeForma('decisao', formaDoCartao.decisao, ['funil', 'barras', 'linhas', 'pizza']) +
-      (formaDoCartao.decisao === 'funil'
+      G.seletorDeForma('decisao', formaDoCartao.decisao, ['funil', 'lista', 'barras', 'linhas', 'pizza']) +
+      (formaDoCartao.decisao === 'lista'
         ? '<div class="funil">' +
           degrauDoFunil('Entraram', d.entrada, 1, 'negócios abertos no recorte', 'entrada') +
           d.degraus.map(function (g) {
@@ -840,8 +840,8 @@
     return '<div class="card"><h2>O funil declarado \u2014 as etapas do CRM</h2>' +
       '<p class="small muted">Onde o VENDEDOR colocou cada negócio. É o funil que todo CRM mostra, e é ' +
       'sobre nós, não sobre o cliente. Serve para uma coisa: comparar com o de cima.</p>' +
-      G.seletorDeForma('etapa', formaDoCartao.etapa, ['funil', 'barras', 'linhas', 'pizza']) +
-      (formaDoCartao.etapa === 'funil'
+      G.seletorDeForma('etapa', formaDoCartao.etapa, ['funil', 'lista', 'barras', 'linhas', 'pizza']) +
+      (formaDoCartao.etapa === 'lista'
         ? '<div class="funil">' +
           e.degraus.map(function (g) {
             return degrauDoFunil(g.etapa, g.chegaram, g.deEntrada,

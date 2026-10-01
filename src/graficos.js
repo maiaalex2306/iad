@@ -393,6 +393,83 @@
       linhas, op.titulo || 'Pizza');
   }
 
+
+  /* ---------- O FUNIL DESENHADO (trapézios) ----------
+
+     O funil que todo mundo reconhece: faixas em trapézio que estreitam de cima
+     para baixo. Ele existe porque a FORMA diz a coisa de um golpe — onde a
+     carteira estrangula aparece antes de qualquer número ser lido.
+
+     Três decisões que fazem ele funcionar, e que faltam nos funis que se veem
+     por aí:
+
+     1. A LARGURA é proporcional à quantidade, sempre. Funil decorativo desenha
+        faixas de largura igual e escreve o número dentro — aí a figura não diz
+        nada e o número teria ficado melhor numa tabela.
+     2. Nenhum texto DENTRO da faixa. Rótulo à esquerda, número à direita, em
+        tinta de texto. Texto dentro de faixa colorida muda de legibilidade a
+        cada degrau da rampa, e no modo escuro vira loteria.
+     3. A QUEDA entre dois degraus é escrita no vão entre eles. É o número que
+        o gestor procura — "perdi 40% aqui" — e que nenhum funil desenhado
+        costuma mostrar.
+
+     A rampa é sequencial (--fun-1..8): são passos ordenados de um processo só,
+     não oito categorias. Ver o comentário no CSS para a medição. */
+  function funilDesenhado(dados, o) {
+    const op = o || {};
+    const L = 620, topo = 16, alturaFaixa = 52, vao = 16;
+    const H = topo + dados.length * (alturaFaixa + vao) + 10;
+    const eixo = L / 2;
+    const larguraMax = 300;           /* meia-largura máxima = 150 de cada lado */
+    const base = Math.max.apply(null, dados.map(function (d) { return d.valor || 0; }).concat([1]));
+
+    /* Largura mínima visível: faixa de valor zero vira uma linha e some, e some
+       justamente onde a notícia é pior. */
+    const meiaLargura = function (v) {
+      return Math.max(14, ((v || 0) / base) * (larguraMax / 2));
+    };
+
+    const corpo = dados.map(function (d, i) {
+      const y = topo + i * (alturaFaixa + vao);
+      const a = meiaLargura(d.valor);
+      const b = meiaLargura(i + 1 < dados.length ? dados[i + 1].valor : d.valor);
+      const cor = 'var(--fun-' + Math.min(8, i + 1) + ')';
+      const antes = i ? (dados[i - 1].valor || 0) : null;
+      const queda = antes != null && antes > 0
+        ? Math.round((1 - (d.valor || 0) / antes) * 100) : null;
+      const prop = base ? Math.round(((d.valor || 0) / base) * 100) : 0;
+
+      /* O trapézio: largo em cima, estreito embaixo — e o de baixo é a largura
+         do PRÓXIMO degrau, para as faixas encaixarem como um funil de verdade
+         em vez de uma pilha de blocos soltos. */
+      const pontos = [
+        (eixo - a) + ',' + y,
+        (eixo + a) + ',' + y,
+        (eixo + b) + ',' + (y + alturaFaixa),
+        (eixo - b) + ',' + (y + alturaFaixa)
+      ].join(' ');
+
+      const meio = y + alturaFaixa / 2 + 4;
+      return '<g>' +
+        '<title>' + esc(d.rotulo) + ': ' + fmt(d.valor, op.moeda) + ' (' + prop + '% da entrada)' +
+        (queda != null ? ' — caiu ' + queda + '% do passo anterior' : '') + '</title>' +
+        '<polygon points="' + pontos + '" fill="' + cor + '"></polygon>' +
+        '<text x="' + (eixo - larguraMax / 2 - 14) + '" y="' + meio + '" text-anchor="end" class="g-rot">' +
+        esc(cortar(d.rotulo, 26)) + '</text>' +
+        '<text x="' + (eixo + larguraMax / 2 + 14) + '" y="' + (meio - 7) + '" class="g-num-funil">' +
+        fmt(d.valor, op.moeda) + '</text>' +
+        '<text x="' + (eixo + larguraMax / 2 + 14) + '" y="' + (meio + 9) + '" class="g-eixo">' +
+        prop + '% da entrada</text>' +
+        (queda != null && queda > 0
+          ? '<text x="' + eixo + '" y="' + (y - 5) + '" text-anchor="middle" class="g-queda">\u2193 ' +
+            queda + '%</text>'
+          : '') +
+        '</g>';
+    }).join('');
+
+    return svg(L, H, corpo, op.titulo || 'Funil');
+  }
+
   /* O despachante. `tipo` que não existe cai em barras, que é a forma que
      menos erra — e nunca devolve tela em branco. */
   function desenhar(tipo, dados, opcoes) {
@@ -405,16 +482,18 @@
       return pizzaSvg(dobrados, o);
     }
     if (tipo === 'linhas') return linhasSvg(limpos, o) + legenda([]);
-    if (tipo === 'funil') return funilSvg(limpos, o);
+    if (tipo === 'funil') return funilDesenhado(limpos, o);
+    if (tipo === 'barraFunil') return funilSvg(limpos, o);
     return barrasSvg(dobrarEmOutros(limpos, o.semDobrar ? 999 : MAX_FATIAS), o);
   }
 
   /* Os botões de forma. `atual` fica fora daqui: quem guarda o estado é a
      tela, porque cada cartão lembra a sua própria escolha. */
   function seletorDeForma(id, atual, formas) {
-    const nomes = { funil: 'Funil', barras: 'Barras', linhas: 'Linhas', pizza: 'Pizza' };
+    const nomes = { funil: 'Funil', lista: 'Lista', barras: 'Barras', linhas: 'Linhas', pizza: 'Pizza' };
     const ajuda = {
-      funil: 'Quanto se perde de um passo para o outro.',
+      funil: 'O desenho clássico: faixas em trapézio que estreitam. A forma mostra onde estrangula antes de você ler um número.',
+      lista: 'O mesmo funil em linhas, com o valor, a porcentagem do passo anterior e a marca do gargalo. Cabe mais texto que no desenho.',
       barras: 'Comparar tamanhos. É a forma que menos erra.',
       linhas: 'Para sequência — dia, mês. Em categoria solta, uma reta ligando duas campanhas não quer dizer nada.',
       pizza: 'Parte do todo, e só isso. Da sétima fatia em diante tudo dobra em "Outros".'
@@ -428,5 +507,5 @@
   }
 
   global.IADGraficos = { colunasPorMes, barrasHorizontais, composicao, matriz, CORES_SAUDE, ROTULOS_SAUDE, legendaSaude,
-    desenhar, seletorDeForma, legenda, dobrarEmOutros, CAT, MAX_FATIAS };
+    desenhar, seletorDeForma, legenda, dobrarEmOutros, funilDesenhado, CAT, MAX_FATIAS };
 })(window);
