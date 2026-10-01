@@ -5305,6 +5305,17 @@
       'a escolha de seguir passa a ser sua, e informada. Ela volta de cinco em cinco minutos enquanto ' +
       'não gravar.</p>' +
 
+      '<h3>Sair sozinho depois de 20 minutos parado</h3>' +
+      '<p class="small">Sem nenhuma ação por <strong>20 minutos</strong>, o app encerra a sessão e volta ' +
+      'para a tela de login. É segurança, não economia: a carteira da empresa não pode ficar aberta numa ' +
+      'máquina de sala de reunião que ninguém está olhando.</p>' +
+      '<p class="small">Um minuto antes aparece a pergunta <em>“Ainda está aí?”</em> — qualquer clique, ' +
+      'tecla ou rolagem continua a sessão e zera o relógio. <strong>Mexer o mouse não conta</strong>, e é ' +
+      'de propósito: um mouse encostado numa mesa que treme manteria a sessão viva para sempre.</p>' +
+      '<p class="small">Antes de sair, o app tenta gravar o que estiver pendente. Se não conseguir, sai ' +
+      'assim mesmo e a tela de login avisa — o que não subiu fica guardado neste aparelho e volta quando ' +
+      'você entrar de novo, como em qualquer outra falha de envio.</p>' +
+
       '<h3>A faixa laranja, e o que ela quer dizer</h3>' +
       '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' +
       '<tr><td class="rotulo-manual"><strong>“Ainda não chegou ao servidor”</strong></td><td>' +

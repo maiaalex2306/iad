@@ -1,12 +1,12 @@
-# Onde paramos — 30/09/2026
+# Onde paramos — 01/10/2026
 
 Este arquivo existe para a próxima sessão começar sabendo o que já aconteceu.
 Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v221**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v221, o aparelho
+Publicado agora: **v222**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v222, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -397,6 +397,36 @@ com nada marcado. Marcar 99 e a seleção sobreviver a um refresh seria armadilh
 duas negociações de verdade. Filtrar por campanha, marcar os 51, mover com
 motivo e prazo, conferir que **ninguém foi encerrado**, devolver três, e que a
 passagem ficou no `historicoNutricao`.
+
+## 0-AQ. Sair sozinho depois de 20 minutos — v222, 01/10
+
+*“Se a aplicação ficar mais de 20 minutos sem ação, desconecta o usuário e
+volta para a tela de login. Entrei ontem, não fiz nada e continua logado.”*
+
+**Eu tinha argumentado contra, e o argumento valia — até a v217.** Enquanto o
+trabalho morria com a aba, logout automático era a forma mais rápida de perder
+o que estava na tela. Com a caixa de saída, o que não subiu fica gravado no
+aparelho com o dono carimbado e volta no próximo login da mesma pessoa. O
+terreno mudou, e aí sair por inatividade passa a valer pelo que sempre valeu:
+a carteira não fica aberta numa máquina de sala de reunião.
+
+**Decisões de implementação, e os porquês:**
+
+| | |
+|---|---|
+| **Mexer o mouse NÃO conta** | Clicar, digitar, rolar, tocar e voltar para a aba contam. Mouse encostado numa mesa que treme manteria a sessão viva para sempre — o recurso existiria no código e não na prática. |
+| **Avisa um minuto antes** | *“Ainda está aí?”*, com Continuar e Sair agora. Qualquer ação zera o relógio e fecha a caixa. Derrubar em silêncio quem estava lendo um e-mail longo seria trocar um problema por outro. |
+| **Grava antes de sair** | Tenta o envio e espera até 6s. Se não conseguir, **sai assim mesmo** — ninguém está na frente da tela, e travar a saída por servidor fora do ar deixaria a sessão aberta justamente no caso ruim. A fila da v217 segura o dado. |
+| **A tela de login diz por quê** | E diz diferente conforme tenha ficado coisa pendente ou não. `App.sair(semPerguntar, recado)` já carregava recado desde antes; só faltava usar. |
+| **O relógio não corre no login** | Sem sessão não há o que encerrar. |
+
+**23 testes** (`ocio.js`). O relógio é adiantado por `__envelhecerOcio`, não
+esperado: vinte minutos por teste seria o mesmo que não testar.
+
+**Pendente, se ele quiser:** o limite está numa constante só
+(`MINUTOS_ATE_SAIR`). Virar opção na Configuração é meia hora de trabalho — não
+fiz porque ele pediu 20, e número configurável que ninguém configura é tela a
+mais.
 
 ## 0-AP. “Conversar comigo sobre a Suzano não faz a pessoa ser da Suzano” — v221, 30/09
 

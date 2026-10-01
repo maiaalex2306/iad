@@ -452,6 +452,136 @@
     dlg.addEventListener('close', function () { caixaDoAviso = null; });
   }
 
+  /* ---------- sair sozinho depois de parado ----------
+
+     Pedido com todas as letras: "se a aplicação ficar mais de 20 minutos sem
+     ação, desconecta o usuário e volta para a tela de login".
+
+     Eu tinha argumentado contra, e o argumento era bom ENQUANTO o trabalho
+     morria com a aba: um logout automático teria sido a forma mais rápida de
+     perder o que estava na tela. A v217 mudou o terreno — o que não subiu fica
+     gravado no aparelho, com o dono carimbado, e volta no próximo login da
+     mesma pessoa. Com isso, sair por inatividade deixou de custar dado e passa
+     a valer pelo que ele sempre valeu: a carteira da empresa não fica aberta
+     numa máquina de sala de reunião.
+
+     O que conta como ação: clicar, digitar, rolar, tocar na tela, e voltar
+     para a aba. MOVER O MOUSE NÃO CONTA, de propósito: um mouse encostado numa
+     mesa que treme mantém a sessão viva para sempre, e aí o recurso existe no
+     código e não existe na prática.
+
+     Antes de sair, o app tenta gravar o que estiver pendente e espera um
+     pouco. Se não conseguir, sai mesmo assim — a fila da v217 segura — e a
+     tela de login diz isso. */
+  const MINUTOS_ATE_SAIR = 20;
+  const AVISO_ANTES = 60 * 1000;          /* um minuto de contagem na tela */
+  const ESPERA_PARA_GRAVAR = 6000;
+
+  let ultimaAcao = Date.now();
+  let relogioOcioso = null;
+  let caixaDaContagem = null;
+  let saindoPorOcio = false;
+
+  function limiteDeOcio() { return MINUTOS_ATE_SAIR * 60 * 1000; }
+
+  function houveAcao() {
+    ultimaAcao = Date.now();
+    if (caixaDaContagem) {
+      /* Voltou a trabalhar: a contagem some e o relógio recomeça do zero. */
+      if (caixaDaContagem.isConnected) { try { caixaDaContagem.close(); } catch (e) {} }
+      caixaDaContagem = null;
+    }
+  }
+
+  function tempoParado() { return Date.now() - ultimaAcao; }
+
+  /* Só vale quando há alguém dentro. Na tela de login não existe sessão para
+     encerrar, e um relógio correndo ali seria só gasto. */
+  function alguemDentro() { return !!(A.atual && A.atual()); }
+
+  function vigiarOcio() {
+    if (!alguemDentro() || saindoPorOcio) return;
+    const parado = tempoParado();
+
+    if (parado >= limiteDeOcio()) { sairPorOcio(); return; }
+
+    if (parado >= limiteDeOcio() - AVISO_ANTES && !caixaDaContagem) {
+      mostrarContagem();
+    }
+  }
+
+  function mostrarContagem() {
+    const corpo =
+      '<p class="nota-form"><strong>Você vai sair do sistema em instantes.</strong></p>' +
+      '<p class="small">Faz ' + MINUTOS_ATE_SAIR + ' minutos que não há nenhuma ação aqui. ' +
+      'Por segurança, o app encerra a sessão — a carteira da empresa não fica aberta numa tela ' +
+      'que ninguém está olhando.</p>' +
+      '<p class="small">O que você fez está salvo. Se alguma coisa não tiver subido ainda, ela fica ' +
+      'guardada neste aparelho e volta quando você entrar de novo.</p>' +
+      '<p class="small muted">Qualquer clique ou tecla continua a sessão.</p>';
+    const dlg = U.ficha('Ainda está aí?', corpo,
+      '<button class="btn" type="button" data-fico>Continuar trabalhando</button>');
+    caixaDaContagem = dlg;
+    const b = dlg.querySelector('[data-fico]');
+    if (b) b.addEventListener('click', function () { houveAcao(); dlg.close(); });
+    const fechar = dlg.querySelector('[data-fechar]');
+    if (fechar) fechar.textContent = 'Sair agora';
+    if (fechar) fechar.addEventListener('click', function () { sairPorOcio(); });
+    dlg.addEventListener('close', function () {
+      if (caixaDaContagem === dlg) caixaDaContagem = null;
+    });
+  }
+
+  /* Grava o que dá, espera um pouco, e sai. A espera é curta de propósito:
+     ninguém está na frente da tela, e travar a saída por causa de um servidor
+     fora do ar seria deixar a sessão aberta justamente no caso ruim. */
+  function sairPorOcio() {
+    if (saindoPorOcio) return;
+    saindoPorOcio = true;
+    if (caixaDaContagem && caixaDaContagem.isConnected) { try { caixaDaContagem.close(); } catch (e) {} }
+    caixaDaContagem = null;
+
+    const S = global.IADSincronia;
+    const pendente = function () {
+      const e = S && S.estado ? S.estado() : null;
+      return !!(e && (e.situacao !== 'ocioso' || e.naFila));
+    };
+
+    const terminar = function () {
+      const sobrou = pendente();
+      saindoPorOcio = false;
+      ultimaAcao = Date.now();
+      App.sair(true, sobrou
+        ? 'Você saiu depois de ' + MINUTOS_ATE_SAIR + ' minutos parado. Ficou coisa para subir — ' +
+          'ela está guardada neste aparelho e sobe quando você entrar de novo.'
+        : 'Você saiu depois de ' + MINUTOS_ATE_SAIR + ' minutos parado. Tudo foi salvo no servidor.');
+    };
+
+    if (!pendente()) { terminar(); return; }
+
+    if (S && S.tentarDeNovo) S.tentarDeNovo();
+    const ate = Date.now() + ESPERA_PARA_GRAVAR;
+    const olhar = function () {
+      if (!pendente() || Date.now() >= ate) { terminar(); return; }
+      setTimeout(olhar, 300);
+    };
+    setTimeout(olhar, 300);
+  }
+
+  function ligarOcio() {
+    ['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(function (ev) {
+      document.addEventListener(ev, houveAcao, { passive: true, capture: true });
+    });
+    /* Rolar dentro de uma lista não dispara `wheel` no celular, e `scroll` não
+       sobe para o document — daí o true. */
+    document.addEventListener('scroll', houveAcao, { passive: true, capture: true });
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') houveAcao();
+    });
+    if (relogioOcioso) clearInterval(relogioOcioso);
+    relogioOcioso = setInterval(vigiarOcio, 5000);
+  }
+
   function faixaDeAviso() {
     /* O envio que não foi. É o aviso mais grave que existe na tela: quer
        dizer que o que a pessoa acabou de fazer NÃO está no servidor, e como
@@ -1232,6 +1362,13 @@
        justamente o tipo de coisa que falha calada — um DDD a menos na lista e
        o celular do cliente some sem ninguem notar. */
     __dadosNoTexto: function (texto) { return dadosNoTexto(texto); },
+    /* A ociosidade é de relógio, e relógio de verdade levaria vinte minutos
+       por teste. Estes três deixam o teste adiantar o relógio sem mexer no
+       limite de produção. */
+    __minutosAteSair: function () { return MINUTOS_ATE_SAIR; },
+    __envelhecerOcio: function (ms) { ultimaAcao = Date.now() - ms; },
+    __vigiarOcio: function () { return vigiarOcio(); },
+    __tempoParado: function () { return tempoParado(); },
     __porQueNaoEntra: function (contaId, p) { return porQueNaoEntra(contaId, p); },
     __criarContatosPropostos: function (contaId, ps, rec) { return criarContatosPropostos(contaId, ps, rec); },
     __ligarAcharPessoas: function (dlg, op) { return ligarAcharPessoas(dlg, op); },
@@ -9412,6 +9549,7 @@
     global.IADSincronia.ligar();
     global.IADSincronia.aoMudar(function (sinc) { vigiarGravacao(sinc); render(); });
     global.IADAjuda.ligar();
+    ligarOcio();
     montarNav();
 
     /* Antes de tudo: quem chega pelo link do e-mail já vem autenticado, e
