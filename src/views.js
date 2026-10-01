@@ -761,6 +761,18 @@
   let filtroFunil = null;
   let funilAberto = true;
 
+  /* A forma escolhida em cada cartão. Lembrada por cartão e não global: o
+     gestor quer o funil da decisão em funil E as campanhas em pizza ao mesmo
+     tempo, e um seletor único o obrigaria a escolher entre as duas. */
+  const formaDoCartao = {
+    decisao: 'funil', etapa: 'funil', motivos: 'barras',
+    semana: 'barras', campanhas: 'barras', sdrs: 'barras'
+  };
+
+  function definirForma(id, forma) {
+    if (formaDoCartao[id] !== undefined) formaDoCartao[id] = forma;
+  }
+
   function estadoDoFunil() {
     if (!filtroFunil) filtroFunil = global.IADFunis.vazio();
     return filtroFunil;
@@ -791,6 +803,7 @@
   }
 
   function cartaoFunilDaDecisao(d) {
+    const G = global.IADGraficos;
     if (!d.entrada) {
       return '<div class="card"><h2>O funil real: as oito decisões</h2>' +
         '<p class="nota-form">Nenhum negócio aberto neste recorte.</p></div>';
@@ -800,14 +813,19 @@
       'acontecem. Conta quem passou por esta E por todas as anteriores: decisão construída fora de ordem ' +
       'é decisão construída no ar. O corte é nota 2 — <strong>o cliente disse, com palavras dele</strong>; ' +
       'abaixo disso é suposição nossa, e contar suposição é o que infla pipeline.</p>' +
-      '<div class="funil">' +
-      degrauDoFunil('Entraram', d.entrada, 1, 'negócios abertos no recorte', 'entrada') +
-      d.degraus.map(function (g) {
-        return degrauDoFunil(g.nome, g.qtd, g.deEntrada,
-          U.moeda(g.valor) + ' · ' + pct(g.doAnterior) + ' do passo anterior',
-          g.perdidos && d.gargalo && g.id === d.gargalo.id ? 'gargalo' : '');
-      }).join('') +
-      '</div>' +
+      G.seletorDeForma('decisao', formaDoCartao.decisao, ['funil', 'barras', 'linhas', 'pizza']) +
+      (formaDoCartao.decisao === 'funil'
+        ? '<div class="funil">' +
+          degrauDoFunil('Entraram', d.entrada, 1, 'negócios abertos no recorte', 'entrada') +
+          d.degraus.map(function (g) {
+            return degrauDoFunil(g.nome, g.qtd, g.deEntrada,
+              U.moeda(g.valor) + ' · ' + pct(g.doAnterior) + ' do passo anterior',
+              g.perdidos && d.gargalo && g.id === d.gargalo.id ? 'gargalo' : '');
+          }).join('') +
+          '</div>'
+        : G.desenhar(formaDoCartao.decisao,
+            d.degraus.map(function (g) { return { rotulo: g.nome, valor: g.qtd }; }),
+            { titulo: 'As oito decisões', semDobrar: true })) +
       (d.gargalo && d.gargalo.perdidos
         ? '<p class="small" style="margin-top:10px"><strong>Onde a carteira trava:</strong> ' +
           esc(d.gargalo.nome) + '. ' + d.gargalo.perdidos +
@@ -818,16 +836,22 @@
   }
 
   function cartaoFunilDaEtapa(e, falsos) {
+    const G = global.IADGraficos;
     return '<div class="card"><h2>O funil declarado \u2014 as etapas do CRM</h2>' +
       '<p class="small muted">Onde o VENDEDOR colocou cada negócio. É o funil que todo CRM mostra, e é ' +
       'sobre nós, não sobre o cliente. Serve para uma coisa: comparar com o de cima.</p>' +
-      '<div class="funil">' +
-      e.degraus.map(function (g) {
-        return degrauDoFunil(g.etapa, g.chegaram, g.deEntrada,
-          U.moeda(g.valor) + ' · ' + g.qtd + ' parados aqui · IAD médio ' + U.numero(g.iadMedio, 1),
-          g.falsos ? 'alerta' : '');
-      }).join('') +
-      '</div>' +
+      G.seletorDeForma('etapa', formaDoCartao.etapa, ['funil', 'barras', 'linhas', 'pizza']) +
+      (formaDoCartao.etapa === 'funil'
+        ? '<div class="funil">' +
+          e.degraus.map(function (g) {
+            return degrauDoFunil(g.etapa, g.chegaram, g.deEntrada,
+              U.moeda(g.valor) + ' · ' + g.qtd + ' parados aqui · IAD médio ' + U.numero(g.iadMedio, 1),
+              g.falsos ? 'alerta' : '');
+          }).join('') +
+          '</div>'
+        : G.desenhar(formaDoCartao.etapa,
+            e.degraus.map(function (g) { return { rotulo: g.etapa, valor: g.chegaram }; }),
+            { titulo: 'Etapas do CRM', semDobrar: true })) +
       (falsos
         ? '<p class="aviso" style="margin-top:10px"><strong>' + falsos +
           (falsos === 1 ? ' negócio está em etapa adiantada' : ' negócios estão em etapa adiantada') +
@@ -839,6 +863,7 @@
   }
 
   function cartaoDaNutricao(n) {
+    const G = global.IADGraficos;
     const kpi = function (num, rot, classe) {
       return '<div class="kpi-tarefa"><strong class="' + (classe || '') + '">' + num + '</strong>' +
         '<span class="tiny muted">' + esc(rot) + '</span></div>';
@@ -862,18 +887,17 @@
           'bonito: ' + n.semData + ' negócio(s) não têm quando voltar a olhar.</p>'
         : '') +
       (n.porMotivo.length
-        ? '<div class="tabela-rolagem" style="margin-top:12px"><table class="tabela-tarefas"><thead><tr>' +
-          '<th>Por que está em nutrição</th><th class="right">Negócios</th><th class="right">Valor</th>' +
-          '</tr></thead><tbody>' +
-          n.porMotivo.map(function (m) {
-            return '<tr><td>' + esc(m.motivo) + '</td><td class="right">' + m.qtd + '</td>' +
-              '<td class="right nowrap">' + U.moeda(m.valor) + '</td></tr>';
-          }).join('') + '</tbody></table></div>'
+        ? '<div class="secao-form"><span>Por que estão em nutrição</span></div>' +
+          G.seletorDeForma('motivos', formaDoCartao.motivos, ['barras', 'pizza']) +
+          G.desenhar(formaDoCartao.motivos,
+            n.porMotivo.map(function (m) { return { rotulo: m.motivo, valor: m.qtd }; }),
+            { titulo: 'Motivos da nutrição' })
         : '') +
       '</div>';
   }
 
   function cartaoDaSemana(linhas) {
+    const G = global.IADGraficos;
     const maxT = Math.max.apply(null, linhas.map(function (l) { return l.concluidas; }).concat([1]));
     const maxG = Math.max.apply(null, linhas.map(function (l) { return l.ganhos; }).concat([1]));
     const topoT = linhas.slice().sort(function (a, b) { return b.concluidas - a.concluidas; })[0];
@@ -883,6 +907,19 @@
       '<p class="small muted">Duas perguntas diferentes, e misturá-las é o erro comum: em que dia se ' +
       '<strong>trabalha</strong> mais, e em que dia se <strong>vende</strong> mais. Quando os dois não ' +
       'coincidem, há um padrão para explorar.</p>' +
+      G.seletorDeForma('semana', formaDoCartao.semana, ['barras', 'linhas', 'pizza']) +
+      /* Dois gráficos e não um com duas escalas: trabalho e venda têm ordens de
+         grandeza diferentes, e um eixo duplo é a mentira mais comum do ramo. */
+      '<div class="dois-funis">' +
+      '<div><p class="tiny muted">Tarefas feitas</p>' +
+      G.desenhar(formaDoCartao.semana,
+        linhas.map(function (l) { return { rotulo: l.nome, valor: l.concluidas }; }),
+        { titulo: 'Tarefas feitas por dia', semDobrar: true }) + '</div>' +
+      '<div><p class="tiny muted">Negócios ganhos</p>' +
+      G.desenhar(formaDoCartao.semana,
+        linhas.map(function (l) { return { rotulo: l.nome, valor: l.ganhos }; }),
+        { titulo: 'Ganhos por dia', semDobrar: true }) + '</div>' +
+      '</div>' +
       '<div class="tabela-rolagem"><table class="tabela-tarefas"><thead><tr>' +
       '<th>Dia</th><th class="right">Tarefas feitas</th><th class="right">Evidências do cliente</th>' +
       '<th class="right">Negócios criados</th><th class="right">Ganhos</th><th class="right">Valor ganho</th>' +
@@ -909,10 +946,15 @@
       '</div>';
   }
 
-  function tabelaDeGrupo(titulo, explicacao, lista, rotuloColuna) {
+  function tabelaDeGrupo(titulo, explicacao, lista, rotuloColuna, id) {
     if (!lista.length) return '';
+    const G = global.IADGraficos;
     return '<div class="card"><h2>' + esc(titulo) + '</h2>' +
       '<p class="small muted">' + explicacao + '</p>' +
+      (id ? G.seletorDeForma(id, formaDoCartao[id], ['barras', 'pizza', 'linhas']) +
+        G.desenhar(formaDoCartao[id],
+          lista.map(function (g) { return { rotulo: g.rotulo, valor: g.qtd }; }),
+          { titulo: titulo }) : '') +
       '<div class="tabela-rolagem"><table class="tabela-tarefas"><thead><tr>' +
       '<th>' + esc(rotuloColuna) + '</th><th class="right">Negócios</th><th class="right">IAD médio</th>' +
       '<th class="right">Com evidência</th><th class="right">Em nutrição</th>' +
@@ -1030,9 +1072,9 @@
           cartaoDaSemana(r.semana) +
           tabelaDeGrupo('Campanhas', 'Eficiente não é quem trouxe mais lead: é quem trouxe lead que ' +
             'DECIDE. Cem leads com IAD 1 custam mais caro que dez com IAD 12, porque as cem horas saíram ' +
-            'do mesmo dia.', r.campanhas, 'Campanha') +
+            'do mesmo dia.', r.campanhas, 'Campanha', 'campanhas') +
           tabelaDeGrupo('Quem prospectou (SDR)', 'O mesmo recorte, por quem abriu a porta.',
-            r.sdrs, 'SDR')
+            r.sdrs, 'SDR', 'sdrs')
         : '<div class="vazio">Nenhum negócio neste recorte. Afrouxe os filtros acima.</div>') +
       '</details>';
   }
@@ -9056,7 +9098,7 @@
     iconeWhatsapp, linkWhatsapp,
     acesso, barraAdmin, menuDoUsuario, definirTelaAcesso, definirPrimeiraEmpresa, listaUsuariosNuvem,
     pendenteAcesso: function () { return pendente; },
-    definirFiltroFunil, limparFiltroFunil, definirFunilAberto, tarefasFiltrar, tarefasEstado, tarefasVisiveis, tarefasDaPagina, tarefasSelecionadas, tarefasMarcar,
+    definirFiltroFunil, limparFiltroFunil, definirFunilAberto, definirForma, tarefasFiltrar, tarefasEstado, tarefasVisiveis, tarefasDaPagina, tarefasSelecionadas, tarefasMarcar,
     pipelineEstado, pipelineFiltrar, pipelineLimparTudo, gavetaDeFiltros, conferirSessao, zerarFiltros,
     definirSemanasDoAprendizado: function (n) { semanasDoAprendizado = n; },
     semanasDoAprendizado: function () { return semanasDoAprendizado; },

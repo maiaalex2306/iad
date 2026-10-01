@@ -20,6 +20,25 @@
   --dica-fundo: #f2edfb;
   --dica-tinta: #35225c;
   --dica-borda: #ddd0f2;
+  /* ---------- a paleta categórica dos gráficos ----------
+     Seis cores, em ordem FIXA — nunca cicladas. A sétima categoria em diante
+     dobra em "Outros", cinza: inventar uma cor nova para a oitava fatia é o
+     que transforma gráfico em arco-íris ilegível.
+
+     Validadas por script (não a olho) contra as duas superfícies reais do app,
+     #ffffff e #131c2b: faixa de luminosidade, piso de croma, separação para
+     daltonismo e contraste. O único aviso que sobra é verde↔âmbar a ΔE 6.2
+     para protanopia — legal na banda 6–8 SOMENTE com codificação secundária, e
+     por isso todo gráfico aqui tem rótulo direto, legenda e 2px de respiro
+     entre as fatias. Mexer nestas cores sem rodar o validador de novo é
+     desfazer a conta. */
+  --cat-1: #4f46e5;
+  --cat-2: #0891b2;
+  --cat-3: #d97706;
+  --cat-4: #16a34a;
+  --cat-5: #c026d3;
+  --cat-6: #dc2626;
+  --cat-outros: #5d7085;
   --radius: 14px;
   --shadow: 0 1px 2px rgba(16, 32, 47, .06), 0 6px 20px rgba(16, 32, 47, .06);
   --safe-b: env(safe-area-inset-bottom, 0px);
@@ -30,6 +49,12 @@
     --navy: #0a1f3a; --navy-2: #1b4f86; --orange: #ff7a29; --orange-soft: #2a1a0c;
     --bg: #0b1220; --surface: #131c2b; --line: #26344a; --text: #e8eef6; --muted: #94a6bd;
     --dica-fundo: #241c3a; --dica-tinta: #e7dffa; --dica-borda: #3d3060;
+    /* O escuro NÃO é o claro invertido: são passos próprios, validados contra
+       #131c2b. Só o índigo precisou subir — no fundo escuro ele caía para
+       2,72:1 de contraste, abaixo do mínimo de 3:1. Os outros cinco já
+       passavam, e trocá-los por trocar seria estragar o que estava certo. */
+    --cat-1: #6d67ee;
+    --cat-outros: #94a6bd;
     --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
   }
 }
@@ -923,6 +948,24 @@ dialog.caixa-ficha { width: min(520px, 94vw); }
 .degrau-funil.gargalo { background: color-mix(in srgb, var(--warn, #b45309) 10%, transparent); border-radius: 6px; }
 .degrau-funil.gargalo .barra-funil i { background: var(--warn, #b45309); }
 .degrau-funil.alerta .barra-funil i { background: color-mix(in srgb, var(--warn, #b45309) 60%, var(--acento, #5b21b6)); }
+
+/* Os botões de forma. Discretos: a escolha é do gestor, mas a forma padrão é
+   a certa — e um seletor berrante sugere que trocar é obrigatório. */
+.formas { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 4px; }
+.formas .btn.ativa {
+  background: var(--dica-fundo); color: var(--dica-tinta);
+  border-color: var(--dica-borda); font-weight: 600;
+}
+
+/* Texto dentro do SVG usa TOKEN DE TINTA, nunca a cor da série: valor pintado
+   da cor da barra fica ilegível na barra clara e compete com a marca. */
+.g-rot { font-size: 12px; fill: var(--text); }
+.g-val { font-size: 12px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.g-eixo { font-size: 11px; fill: var(--muted); }
+.g-centro { font-size: 17px; font-weight: 700; fill: var(--text); }
+/* Grade recessiva: ela orienta, não compete. */
+.g-grade { stroke: var(--line); stroke-width: 1; }
+.grafico svg { overflow: visible; }
 
 /* A barrinha dentro da célula da tabela: compara sem precisar de gráfico. */
 .mini-barra {

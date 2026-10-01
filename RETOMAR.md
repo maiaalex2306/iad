@@ -5,8 +5,8 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v223**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v223, o aparelho
+Publicado agora: **v224**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v224, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -397,6 +397,58 @@ com nada marcado. Marcar 99 e a seleção sobreviver a um refresh seria armadilh
 duas negociações de verdade. Filtrar por campanha, marcar os 51, mover com
 motivo e prazo, conferir que **ninguém foi encerrado**, devolver três, e que a
 passagem ficou no `historicoNutricao`.
+
+## 0-AS. Funil, barras, linhas e pizza — v224, 01/10
+
+*“Eu quero a opção de colocar os dados em funil, em barras, em linhas… Pizza…”*
+
+Cada cartão dos funis ganhou um seletor de forma, e a forma é **lembrada por
+cartão**: o gestor quer o funil da decisão em funil E as campanhas em pizza ao
+mesmo tempo, e um seletor único o obrigaria a escolher entre as duas.
+
+**O que cada forma responde** (está no balão de cada botão, e nos comentários
+do `graficos.js`):
+
+| | |
+|---|---|
+| **Funil** | quanto se perde de um passo para o outro. Só em série que afunila de verdade |
+| **Barras** | comparar tamanhos. É a forma que menos erra, e o padrão quando há dúvida |
+| **Linhas** | **sequência** — dia, mês. Em categoria solta não é oferecida como padrão: ligar “PAPEL” a “CONSTRUTORAS” com uma reta não quer dizer nada |
+| **Pizza** | parte do todo, e só isso. É rosca, com o total no meio — o número que falta em toda pizza |
+
+**A paleta foi CALCULADA, não escolhida a olho.** Rodei o validador do skill
+de visualização contra as duas superfícies reais do app (`#ffffff` e
+`#131c2b`), conferindo faixa de luminosidade, piso de croma, separação para
+daltonismo e contraste.
+
+O que a conta ensinou, e que eu não teria adivinhado:
+
+- **Oito cores não passam.** Comprimir oito matizes na faixa estreita do modo
+  escuro (L 0,48–0,67) derrubava a separação para visão normal abaixo do piso.
+  **Cortei para seis**, e da sétima categoria em diante tudo dobra em
+  “Outros”, cinza. Inventar cor para a oitava fatia é o que faz arco-íris.
+- **Vermelho ao lado de verde reprova** (ΔE 5,0 para deuteranopia). A ordem
+  final separa os dois.
+- **O escuro não é o claro invertido.** Só o índigo precisou subir — no fundo
+  escuro ele caía para 2,72:1, abaixo do mínimo de 3:1. Os outros cinco já
+  passavam, e trocá-los seria estragar o que estava certo.
+- Sobra **um aviso**: verde↔âmbar a ΔE 6,2 para protanopia, legal na banda 6–8
+  **somente com codificação secundária**. Por isso todo gráfico aqui tem
+  rótulo direto, legenda e 2px de respiro entre as fatias — não é enfeite, é o
+  que torna aquele par legal.
+
+As cores entram no SVG como `var(--cat-N)`, nunca hexadecimal cru: é o que faz
+o modo escuro trocar sozinho. O texto dentro do gráfico usa token de tinta,
+**nunca a cor da série** — valor pintado da cor da barra fica ilegível e
+compete com a marca.
+
+**27 testes** (`formas.js`), incluindo abrir a tela e **olhar**: geometria,
+sem rolagem lateral, e os dois modos em captura de tela. O validador confere
+cor, não layout.
+
+**Falso positivo que o teste pegou em mim:** exigi altura > 40px de todo
+gráfico, e o de um SDR só tem 38px — uma barra. Era a expectativa que estava
+errada, não o desenho.
 
 ## 0-AR. Os funis, no topo do Painel — v223, 01/10
 

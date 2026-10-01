@@ -3481,6 +3481,7 @@
     },
     funilLimpar: function () { V.limparFiltroFunil(); render(); },
     funilAbrir: function (aberto) { V.definirFunilAberto(aberto); },
+    formaDoGrafico: function (id, forma) { V.definirForma(id, forma); render(); },
     verTarefa: function (id) { verTarefa(id); },
     /* Trocar de empresa zera a negociação: a negociação escolhida era de
        outra empresa, e mantê-la deixaria a lista vazia sem explicar por quê. */
