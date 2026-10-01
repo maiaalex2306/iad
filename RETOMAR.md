@@ -5,8 +5,8 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v222**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v222, o aparelho
+Publicado agora: **v223**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v223, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -397,6 +397,60 @@ com nada marcado. Marcar 99 e a seleção sobreviver a um refresh seria armadilh
 duas negociações de verdade. Filtrar por campanha, marcar os 51, mover com
 motivo e prazo, conferir que **ninguém foi encerrado**, devolver três, e que a
 passagem ficou no `historicoNutricao`.
+
+## 0-AR. Os funis, no topo do Painel — v223, 01/10
+
+Ele mandou o resultado de uma pesquisa sobre “funil de vendas inteligente
+integrado ao funil de nutrição” — topo, meio e fundo, ToFu/MoFu/BoFu — e
+pediu: *“quero algo que realmente ajude o vendedor e o gestor a entender o que
+está acontecendo… analise a nossa metodologia baseada em decisões… até os dias
+que mais trabalham, os dias que mais vendem, campanhas mais eficientes, dias de
+atraso”*.
+
+**A decisão de projeto, e é ela que separa isto de um funil genérico:** o
+funil que a internet ensina mede ONDE O VENDEDOR COLOCOU o negócio. Copiá-lo
+aqui contradiria a tese do app inteiro — etapa não é decisão. Então são
+**dois funis lado a lado**:
+
+| | |
+|---|---|
+| **O declarado** | As etapas do CRM. É sobre nós. Serve para uma coisa: comparar com o outro. |
+| **O real** | As oito decisões, na ordem em que acontecem dentro do cliente. É sobre eles. |
+| **A diferença** | O **falso avançado** — a parte da previsão que não vai acontecer. Nenhum outro CRM mostra isso porque nenhum outro mede os dois lados. |
+
+**Decisões de cálculo que valem registrar:**
+
+- O funil real é **cumulativo**: cada degrau conta quem passou por ele *e por
+  todos os anteriores*. Contar cada decisão isolada daria um gráfico de barras,
+  não um funil — e esconderia o negócio com “critérios” sem “problema”, que é
+  decisão construída no ar.
+- O corte é **nota 2 (Declarado)**: o cliente disse, com palavras dele. Abaixo
+  é suposição nossa, e contar suposição é o que infla pipeline.
+- O **gargalo** não é o degrau mais vazio: é o que derruba mais entre um passo
+  e o seguinte.
+- A nutrição não é funil de etapas, é **ciclo**: o número que importa é quantos
+  VOLTARAM e quantos fecharam depois — é ele que diz se nutrir paga nesta
+  carteira ou virou cemitério com nome melhor.
+- `diaDaSemana` lê a data **ao meio-dia**: `'2026-10-01'` interpretado como UTC
+  vira 30/09 à noite no Brasil, e aí toda segunda viraria domingo.
+- Campanha “eficiente” não é a que traz mais lead: é a que traz lead que
+  **decide**. A tabela mostra IAD médio e taxa de evidência ao lado do volume.
+
+**`src/funis.js`** é só cálculo — entra lista, sai número; nada lê a tela, nada
+grava. É o que permite conferir cada conta sem navegador.
+
+**Filtros**, todos opcionais e combináveis: período, situação (tudo / abertas /
+ganhas / perdidas / em nutrição), responsável, segmento, campanha, SDR, estado
+e origem. As opções saem dos próprios dados — oferecer campanha sem negócio é
+ruído com cara de opção.
+
+**61 testes** (`funis.js`), sobre uma carteira pequena e conferível à mão: cada
+número do teste pode ser contado no papel.
+
+**O que ficou de fora, de propósito:** gráfico de funil desenhado (SVG), o
+ToFu/MoFu/BoFu de marketing (o app não tem dado de atração — não há visita de
+blog nem abertura de newsletter aqui; inventar seria mentir), e exportação em
+CSV dos recortes. Os três cabem depois, se ele pedir.
 
 ## 0-AQ. Sair sozinho depois de 20 minutos — v222, 01/10
 

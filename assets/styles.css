@@ -891,6 +891,46 @@ dialog.caixa-ficha { width: min(520px, 94vw); }
   white-space: pre-wrap; word-break: break-word; color: var(--muted);
 }
 
+/* ---------- os funis do Painel ----------
+   O funil afunila de verdade: a largura da barra é a proporção de quem chegou
+   ali. O número fica FORA da barra, porque barra curta com número dentro é
+   número que não se lê — e é justamente a barra curta que interessa. */
+.secao-funis > summary {
+  cursor: pointer; list-style: none; padding: 2px 0 10px;
+  font-size: 1rem; user-select: none;
+}
+.secao-funis > summary::-webkit-details-marker { display: none; }
+.secao-funis > summary::before { content: '▸ '; color: var(--muted); }
+.secao-funis[open] > summary::before { content: '▾ '; }
+.secao-funis > .card { box-shadow: none; }
+
+.dois-funis { display: grid; gap: 14px; grid-template-columns: 1fr; }
+@media (min-width: 1100px) { .dois-funis { grid-template-columns: 1fr 1fr; } }
+
+.funil { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.degrau-funil {
+  display: grid; align-items: center; gap: 8px;
+  grid-template-columns: minmax(96px, 24%) minmax(60px, 1fr) auto;
+  grid-template-areas: 'rot barra num' 'nota nota nota';
+  padding: 4px 0; border-bottom: 1px solid var(--line);
+}
+.degrau-funil .rot { grid-area: rot; font-size: .82rem; overflow-wrap: anywhere; }
+.degrau-funil .barra-funil { grid-area: barra; height: 16px; background: var(--bg); border-radius: 8px; overflow: hidden; }
+.degrau-funil .barra-funil i { display: block; height: 100%; background: var(--acento, #5b21b6); border-radius: 8px; }
+.degrau-funil .num { grid-area: num; font-weight: 600; font-variant-numeric: tabular-nums; }
+.degrau-funil .nota { grid-area: nota; }
+.degrau-funil.entrada .barra-funil i { background: var(--muted); }
+.degrau-funil.gargalo { background: color-mix(in srgb, var(--warn, #b45309) 10%, transparent); border-radius: 6px; }
+.degrau-funil.gargalo .barra-funil i { background: var(--warn, #b45309); }
+.degrau-funil.alerta .barra-funil i { background: color-mix(in srgb, var(--warn, #b45309) 60%, var(--acento, #5b21b6)); }
+
+/* A barrinha dentro da célula da tabela: compara sem precisar de gráfico. */
+.mini-barra {
+  display: inline-block; width: 46px; height: 7px; vertical-align: middle;
+  background: var(--bg); border-radius: 4px; overflow: hidden; margin-right: 5px;
+}
+.mini-barra i { display: block; height: 100%; background: var(--acento, #5b21b6); }
+
 /* Quem o e-mail diz que não é desta empresa. Listrado e não vermelho: é
    dúvida do app, não erro provado — quem decide é quem conhece as pessoas. */
 .item-multi.suspeito, .linha-ficha.suspeito {

@@ -3472,6 +3472,15 @@
     tarefasResponsavel: function (v) { V.tarefasFiltrar({ responsavel: v, pagina: 1 }); render(); },
     tarefasStatus: function (v) { V.tarefasFiltrar({ status: v, pagina: 1 }); render(); },
     tarefasCarteira: function (v) { V.tarefasFiltrar({ carteira: v, pagina: 1 }); render(); },
+
+    /* Os funis do Painel. Recorte próprio, que não mexe no resto da tela. */
+    funilFiltrar: function (campo, valor) {
+      const m = {}; m[campo] = valor;
+      V.definirFiltroFunil(m);
+      render();
+    },
+    funilLimpar: function () { V.limparFiltroFunil(); render(); },
+    funilAbrir: function (aberto) { V.definirFunilAberto(aberto); },
     verTarefa: function (id) { verTarefa(id); },
     /* Trocar de empresa zera a negociação: a negociação escolhida era de
        outra empresa, e mantê-la deixaria a lista vazia sem explicar por quê. */

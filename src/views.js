@@ -746,6 +746,297 @@
   let filtroPeriodo = 'todos';
   let filtroSegmento = 'todos';
 
+  /* ================= OS FUNIS, no topo do Painel =================
+
+     Dois funis lado a lado, e a razão de serem dois está no src/funis.js: o
+     DECLARADO (etapas do CRM, onde o vendedor pôs cada negócio) e o REAL (as
+     oito decisões, na ordem em que acontecem dentro do cliente). A diferença
+     entre eles é o falso avançado — o número que nenhum outro CRM mostra
+     porque nenhum outro mede os dois lados.
+
+     Abaixo, o que o gestor pediu para conseguir analisar: dia da semana que
+     mais trabalha contra o que mais vende, campanha por campanha, SDR por SDR,
+     o ciclo de venda, os atrasos e o ciclo da nutrição. */
+
+  let filtroFunil = null;
+  let funilAberto = true;
+
+  function estadoDoFunil() {
+    if (!filtroFunil) filtroFunil = global.IADFunis.vazio();
+    return filtroFunil;
+  }
+
+  function definirFiltroFunil(mudancas) {
+    Object.assign(estadoDoFunil(), mudancas || {});
+  }
+
+  function limparFiltroFunil() { filtroFunil = global.IADFunis.vazio(); }
+
+  function definirFunilAberto(aberto) { funilAberto = !!aberto; }
+
+  function pct(v) { return U.numero((v || 0) * 100, 0) + '%'; }
+
+  /* Uma barra que afunila: a largura é a proporção de quem chegou ali. O
+     número fica SEMPRE visível ao lado, e não dentro da barra — barra curta
+     com número dentro é número que não se lê, e é justamente a barra curta
+     que interessa. */
+  function degrauDoFunil(rotulo, qtd, proporcao, nota, classe) {
+    const largura = Math.max(2, Math.round((proporcao || 0) * 100));
+    return '<div class="degrau-funil' + (classe ? ' ' + classe : '') + '">' +
+      '<span class="rot">' + esc(rotulo) + '</span>' +
+      '<span class="barra-funil"><i style="width:' + largura + '%"></i></span>' +
+      '<span class="num">' + U.numero(qtd, 0) + '</span>' +
+      '<span class="tiny muted nota">' + (nota || '') + '</span>' +
+      '</div>';
+  }
+
+  function cartaoFunilDaDecisao(d) {
+    if (!d.entrada) {
+      return '<div class="card"><h2>O funil real: as oito decisões</h2>' +
+        '<p class="nota-form">Nenhum negócio aberto neste recorte.</p></div>';
+    }
+    return '<div class="card"><h2>O funil real \u2014 as oito decisões</h2>' +
+      '<p class="small muted">Quantos negócios o CLIENTE já levou até cada decisão, na ordem em que elas ' +
+      'acontecem. Conta quem passou por esta E por todas as anteriores: decisão construída fora de ordem ' +
+      'é decisão construída no ar. O corte é nota 2 — <strong>o cliente disse, com palavras dele</strong>; ' +
+      'abaixo disso é suposição nossa, e contar suposição é o que infla pipeline.</p>' +
+      '<div class="funil">' +
+      degrauDoFunil('Entraram', d.entrada, 1, 'negócios abertos no recorte', 'entrada') +
+      d.degraus.map(function (g) {
+        return degrauDoFunil(g.nome, g.qtd, g.deEntrada,
+          U.moeda(g.valor) + ' · ' + pct(g.doAnterior) + ' do passo anterior',
+          g.perdidos && d.gargalo && g.id === d.gargalo.id ? 'gargalo' : '');
+      }).join('') +
+      '</div>' +
+      (d.gargalo && d.gargalo.perdidos
+        ? '<p class="small" style="margin-top:10px"><strong>Onde a carteira trava:</strong> ' +
+          esc(d.gargalo.nome) + '. ' + d.gargalo.perdidos +
+          (d.gargalo.perdidos === 1 ? ' negócio não passou' : ' negócios não passaram') +
+          ' deste degrau. É aqui que a próxima conversa tem mais a ganhar.</p>'
+        : '') +
+      '</div>';
+  }
+
+  function cartaoFunilDaEtapa(e, falsos) {
+    return '<div class="card"><h2>O funil declarado \u2014 as etapas do CRM</h2>' +
+      '<p class="small muted">Onde o VENDEDOR colocou cada negócio. É o funil que todo CRM mostra, e é ' +
+      'sobre nós, não sobre o cliente. Serve para uma coisa: comparar com o de cima.</p>' +
+      '<div class="funil">' +
+      e.degraus.map(function (g) {
+        return degrauDoFunil(g.etapa, g.chegaram, g.deEntrada,
+          U.moeda(g.valor) + ' · ' + g.qtd + ' parados aqui · IAD médio ' + U.numero(g.iadMedio, 1),
+          g.falsos ? 'alerta' : '');
+      }).join('') +
+      '</div>' +
+      (falsos
+        ? '<p class="aviso" style="margin-top:10px"><strong>' + falsos +
+          (falsos === 1 ? ' negócio está em etapa adiantada' : ' negócios estão em etapa adiantada') +
+          ' sem a decisão correspondente.</strong> É a diferença entre os dois funis — e é a parte da ' +
+          'previsão que não vai acontecer.</p>'
+        : '<p class="tiny muted" style="margin-top:10px">Nenhum falso avançado neste recorte: ' +
+          'onde o vendedor pôs bate com o que o cliente decidiu.</p>') +
+      '</div>';
+  }
+
+  function cartaoDaNutricao(n) {
+    const kpi = function (num, rot, classe) {
+      return '<div class="kpi-tarefa"><strong class="' + (classe || '') + '">' + num + '</strong>' +
+        '<span class="tiny muted">' + esc(rot) + '</span></div>';
+    };
+    return '<div class="card"><h2>O ciclo da nutrição</h2>' +
+      '<p class="small muted">Nutrição não é funil de etapas: é um ciclo. Entra quem não está pronto, e o ' +
+      'número que importa é quantos VOLTARAM — é ele que diz se nutrir serve nesta carteira ou se virou ' +
+      'um cemitério com nome melhor.</p>' +
+      '<div class="row kpis-tarefa">' +
+      kpi(n.dentro, 'em nutrição agora') +
+      kpi(U.moeda(n.valorDentro), 'fora da previsão') +
+      kpi(n.vencidos, 'com revisão vencida', n.vencidos ? 'atrasado' : '') +
+      kpi(n.semData, 'sem data de revisão', n.semData ? 'atrasado' : '') +
+      kpi(n.voltaram, 'já voltaram à carteira') +
+      kpi(n.ganharamDepois, 'fecharam depois de voltar', n.ganharamDepois ? 'subiu' : '') +
+      kpi(pct(n.aproveitamento), 'dos que voltaram, fecharam') +
+      kpi(U.numero(n.diasMedios, 0), 'dias médios em nutrição') +
+      '</div>' +
+      (n.semData
+        ? '<p class="tiny atrasado" style="margin-top:8px">Nutrição sem data é esquecimento com nome ' +
+          'bonito: ' + n.semData + ' negócio(s) não têm quando voltar a olhar.</p>'
+        : '') +
+      (n.porMotivo.length
+        ? '<div class="tabela-rolagem" style="margin-top:12px"><table class="tabela-tarefas"><thead><tr>' +
+          '<th>Por que está em nutrição</th><th class="right">Negócios</th><th class="right">Valor</th>' +
+          '</tr></thead><tbody>' +
+          n.porMotivo.map(function (m) {
+            return '<tr><td>' + esc(m.motivo) + '</td><td class="right">' + m.qtd + '</td>' +
+              '<td class="right nowrap">' + U.moeda(m.valor) + '</td></tr>';
+          }).join('') + '</tbody></table></div>'
+        : '') +
+      '</div>';
+  }
+
+  function cartaoDaSemana(linhas) {
+    const maxT = Math.max.apply(null, linhas.map(function (l) { return l.concluidas; }).concat([1]));
+    const maxG = Math.max.apply(null, linhas.map(function (l) { return l.ganhos; }).concat([1]));
+    const topoT = linhas.slice().sort(function (a, b) { return b.concluidas - a.concluidas; })[0];
+    const topoG = linhas.slice().sort(function (a, b) { return b.ganhos - a.ganhos; })[0];
+
+    return '<div class="card"><h2>O dia da semana</h2>' +
+      '<p class="small muted">Duas perguntas diferentes, e misturá-las é o erro comum: em que dia se ' +
+      '<strong>trabalha</strong> mais, e em que dia se <strong>vende</strong> mais. Quando os dois não ' +
+      'coincidem, há um padrão para explorar.</p>' +
+      '<div class="tabela-rolagem"><table class="tabela-tarefas"><thead><tr>' +
+      '<th>Dia</th><th class="right">Tarefas feitas</th><th class="right">Evidências do cliente</th>' +
+      '<th class="right">Negócios criados</th><th class="right">Ganhos</th><th class="right">Valor ganho</th>' +
+      '</tr></thead><tbody>' +
+      linhas.map(function (l) {
+        const barra = function (v, m) {
+          return '<span class="mini-barra"><i style="width:' +
+            Math.round((v / m) * 100) + '%"></i></span>';
+        };
+        return '<tr><td>' + esc(l.nome) + '</td>' +
+          '<td class="right">' + barra(l.concluidas, maxT) + ' ' + l.concluidas + '</td>' +
+          '<td class="right">' + l.evidencias + '</td>' +
+          '<td class="right">' + l.criadas + '</td>' +
+          '<td class="right">' + barra(l.ganhos, maxG) + ' ' + l.ganhos + '</td>' +
+          '<td class="right nowrap">' + U.moeda(l.valorGanho) + '</td></tr>';
+      }).join('') + '</tbody></table></div>' +
+      (topoT && topoG && topoT.concluidas && topoG.ganhos
+        ? '<p class="small" style="margin-top:10px">Mais trabalho na <strong>' + esc(topoT.nome) +
+          '</strong>; mais fechamento na <strong>' + esc(topoG.nome) + '</strong>.' +
+          (topoT.dia !== topoG.dia
+            ? ' Não é o mesmo dia — vale olhar o que acontece na ' + esc(topoG.nome) + ' que não acontece nos outros.'
+            : ' É o mesmo dia.') + '</p>'
+        : '') +
+      '</div>';
+  }
+
+  function tabelaDeGrupo(titulo, explicacao, lista, rotuloColuna) {
+    if (!lista.length) return '';
+    return '<div class="card"><h2>' + esc(titulo) + '</h2>' +
+      '<p class="small muted">' + explicacao + '</p>' +
+      '<div class="tabela-rolagem"><table class="tabela-tarefas"><thead><tr>' +
+      '<th>' + esc(rotuloColuna) + '</th><th class="right">Negócios</th><th class="right">IAD médio</th>' +
+      '<th class="right">Com evidência</th><th class="right">Em nutrição</th>' +
+      '<th class="right">Ganhos</th><th class="right">Taxa de ganho</th><th class="right">Valor ganho</th>' +
+      '</tr></thead><tbody>' +
+      lista.map(function (g) {
+        return '<tr><td>' + esc(g.rotulo) + '</td>' +
+          '<td class="right">' + g.qtd + '</td>' +
+          '<td class="right">' + U.numero(g.iadMedio, 1) + '</td>' +
+          '<td class="right">' + pct(g.taxaEvidencia) + '</td>' +
+          '<td class="right">' + g.emNutricao + '</td>' +
+          '<td class="right">' + g.ganhos + '</td>' +
+          '<td class="right">' + (g.ganhos + g.perdidos ? pct(g.taxaGanho) : '—') + '</td>' +
+          '<td class="right nowrap">' + U.moeda(g.valorGanho) + '</td></tr>';
+      }).join('') + '</tbody></table></div></div>';
+  }
+
+  function cartaoDoCiclo(c, a) {
+    const kpi = function (num, rot, classe) {
+      return '<div class="kpi-tarefa"><strong class="' + (classe || '') + '">' + num + '</strong>' +
+        '<span class="tiny muted">' + esc(rot) + '</span></div>';
+    };
+    return '<div class="card"><h2>Ciclo de venda e cumprimento</h2>' +
+      '<p class="small muted">Perder rápido é barato; perder devagar é o que custa caro. E o IAD com que ' +
+      'se ganha contra o IAD com que se perde é a validação do método nesta carteira.</p>' +
+      '<div class="row kpis-tarefa">' +
+      kpi(U.numero(c.diasParaGanhar, 0) + 'd', 'para ganhar') +
+      kpi(U.numero(c.diasParaPerder, 0) + 'd', 'para perder') +
+      kpi(pct(c.taxaGanho), 'taxa de ganho') +
+      kpi(U.moeda(c.ticketMedio), 'ticket médio') +
+      kpi(U.numero(c.iadAoGanhar, 1), 'IAD ao ganhar', 'subiu') +
+      kpi(U.numero(c.iadAoPerder, 1), 'IAD ao perder', 'atrasado') +
+      '</div>' +
+      '<div class="row kpis-tarefa" style="margin-top:10px">' +
+      kpi(a.atrasadas, 'tarefas atrasadas', a.atrasadas ? 'atrasado' : '') +
+      kpi(U.numero(a.diasDeAtrasoMedio, 0) + 'd', 'atraso médio') +
+      kpi(a.piorAtraso + 'd', 'pior atraso') +
+      kpi(pct(a.pontualidade), 'feitas no prazo') +
+      kpi(a.adiamentos, 'adiamentos') +
+      kpi(a.semRelato, 'fechadas sem relato', a.semRelato ? 'atrasado' : '') +
+      '</div>' +
+      (c.iadAoGanhar && c.iadAoPerder
+        ? '<p class="small" style="margin-top:10px">' +
+          (c.iadAoGanhar > c.iadAoPerder
+            ? 'Quem fecha chega com <strong>' + U.numero(c.iadAoGanhar - c.iadAoPerder, 1) +
+              ' pontos a mais</strong> de decisão. A régua está medindo o que importa.'
+            : 'O IAD ao ganhar não é maior que o de perder neste recorte. Ou a amostra é pequena, ou ' +
+              'alguém está pontuando por otimismo — e a segunda hipótese se confere lendo as evidências.') +
+          '</p>'
+        : '') +
+      '</div>';
+  }
+
+  /* A barra de filtros. Tudo opcional, tudo combinável: o que não foi
+     escolhido não recorta nada. */
+  function barraDeFiltrosDoFunil(est) {
+    const F = global.IADFunis;
+    const f = estadoDoFunil();
+    const o = F.opcoesDeFiltro(est);
+    const usuarios = global.IADAuth.usuarios();
+
+    const sel = function (nome, rotulo, valor, lista, rotuloVazio) {
+      return '<label class="campo mini"><span>' + esc(rotulo) + '</span>' +
+        '<select onchange="App.funilFiltrar(\'' + nome + '\', this.value)">' +
+        '<option value="">' + esc(rotuloVazio) + '</option>' +
+        lista.map(function (x) {
+          const v = typeof x === 'string' ? x : x.valor;
+          const r = typeof x === 'string' ? x : x.rotulo;
+          return '<option value="' + esc(v) + '"' + (valor === v ? ' selected' : '') + '>' + esc(r) + '</option>';
+        }).join('') + '</select></label>';
+    };
+
+    const quantos = [f.de, f.ate, f.responsavel, f.segmento, f.campanha, f.sdr, f.uf, f.origem]
+      .filter(Boolean).length + (f.situacao !== 'todas' ? 1 : 0);
+
+    return '<div class="filtros-tarefa">' +
+      '<label class="campo mini"><span>De</span><input type="date" value="' + esc(f.de) +
+      '" onchange="App.funilFiltrar(\'de\', this.value)"></label>' +
+      '<label class="campo mini"><span>Até</span><input type="date" value="' + esc(f.ate) +
+      '" onchange="App.funilFiltrar(\'ate\', this.value)"></label>' +
+      sel('situacao', 'Situação', f.situacao, [
+        { valor: 'todas', rotulo: 'Tudo' }, { valor: 'abertas', rotulo: 'Só abertas' },
+        { valor: 'ganhas', rotulo: 'Só ganhas' }, { valor: 'perdidas', rotulo: 'Só perdidas' },
+        { valor: 'nutricao', rotulo: 'Só em nutrição' }], 'Tudo') +
+      sel('responsavel', 'Responsável', f.responsavel,
+        usuarios.map(function (u) { return { valor: u.id, rotulo: u.nome }; }), 'Todas as pessoas') +
+      sel('segmento', 'Segmento', f.segmento, o.segmentos, 'Todos') +
+      sel('campanha', 'Campanha', f.campanha, o.campanhas, 'Todas') +
+      sel('sdr', 'SDR', f.sdr, o.sdrs, 'Todos') +
+      sel('uf', 'Estado', f.uf, o.ufs, 'Todos') +
+      sel('origem', 'Origem', f.origem, o.origens, 'Todas') +
+      (quantos
+        ? '<button class="btn ghost mini" onclick="App.funilLimpar()">Limpar os ' + quantos + ' filtros</button>'
+        : '') +
+      '</div>';
+  }
+
+  function blocoDosFunis(est) {
+    const F = global.IADFunis;
+    if (!F) return '';
+    const r = F.tudo(est, estadoDoFunil());
+
+    return '<details class="card secao-funis"' + (funilAberto ? ' open' : '') +
+      ' ontoggle="App.funilAbrir(this.open)">' +
+      '<summary><strong>Funis de venda e de nutrição</strong>' +
+      '<span class="tiny muted"> · ' + r.qtd + ' negócio(s) no recorte</span></summary>' +
+      barraDeFiltrosDoFunil(est) +
+      (r.qtd
+        ? '<div class="dois-funis">' +
+            cartaoFunilDaDecisao(r.decisao) +
+            cartaoFunilDaEtapa(r.etapa, r.falsos) +
+          '</div>' +
+          cartaoDaNutricao(r.nutricao) +
+          cartaoDoCiclo(r.ciclo, r.atrasos) +
+          cartaoDaSemana(r.semana) +
+          tabelaDeGrupo('Campanhas', 'Eficiente não é quem trouxe mais lead: é quem trouxe lead que ' +
+            'DECIDE. Cem leads com IAD 1 custam mais caro que dez com IAD 12, porque as cem horas saíram ' +
+            'do mesmo dia.', r.campanhas, 'Campanha') +
+          tabelaDeGrupo('Quem prospectou (SDR)', 'O mesmo recorte, por quem abriu a porta.',
+            r.sdrs, 'SDR')
+        : '<div class="vazio">Nenhum negócio neste recorte. Afrouxe os filtros acima.</div>') +
+      '</details>';
+  }
+
   function painel() {
     const est = Store.dados();
     if (!est.oportunidades.length) return boasVindas();
@@ -778,7 +1069,7 @@
       '</div>';
 
     if (!resumos.length) {
-      return '<h1>Painel de decisão</h1>' + filtros +
+      return '<h1>Painel de decisão</h1>' + blocoDosFunis(est) + filtros +
         '<div class="card"><div class="vazio">Nenhuma oportunidade aberta neste recorte.</div></div>';
     }
 
@@ -810,6 +1101,14 @@
     return '<div class="row"><h1>Painel de decisão</h1><span class="espaco"></span>' +
       '<span class="tiny muted">' + (filtroPeriodo === 'todos' ? 'todos os meses' : E.rotuloMes(filtroPeriodo)) +
       ' · ' + (filtroSegmento === 'todos' ? 'todos os segmentos' : esc(filtroSegmento)) + '</span></div>' +
+
+      /* Os funis vêm ANTES de tudo, e com filtros próprios: a pergunta "onde a
+         carteira trava" é a primeira que o gestor faz ao abrir o painel, e
+         fazê-lo rolar até o fim para encontrá-la seria escondê-la. Os filtros
+         do painel (período e segmento) continuam valendo só para o que vem
+         depois — misturar os dois conjuntos faria um recortar o outro sem
+         ninguém entender por quê. */
+      blocoDosFunis(est) +
       filtros +
 
       '<div class="grid k4">' +
@@ -8757,7 +9056,7 @@
     iconeWhatsapp, linkWhatsapp,
     acesso, barraAdmin, menuDoUsuario, definirTelaAcesso, definirPrimeiraEmpresa, listaUsuariosNuvem,
     pendenteAcesso: function () { return pendente; },
-    tarefasFiltrar, tarefasEstado, tarefasVisiveis, tarefasDaPagina, tarefasSelecionadas, tarefasMarcar,
+    definirFiltroFunil, limparFiltroFunil, definirFunilAberto, tarefasFiltrar, tarefasEstado, tarefasVisiveis, tarefasDaPagina, tarefasSelecionadas, tarefasMarcar,
     pipelineEstado, pipelineFiltrar, pipelineLimparTudo, gavetaDeFiltros, conferirSessao, zerarFiltros,
     definirSemanasDoAprendizado: function (n) { semanasDoAprendizado = n; },
     semanasDoAprendizado: function () { return semanasDoAprendizado; },
