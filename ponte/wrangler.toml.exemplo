@@ -1,0 +1,12 @@
+name = "ponte-iad"
+main = "src/index.js"
+compatibility_date = "2026-01-01"
+
+# npx wrangler kv namespace create LEADS  →  cole o id devolvido aqui
+[[kv_namespaces]]
+binding = "LEADS"
+id = "cole-o-id-do-seu-namespace-aqui"
+
+# As chaves não ficam neste arquivo. Defina-as como secrets:
+#   npx wrangler secret put CHAVE_ESCRITA
+#   npx wrangler secret put CHAVE_LEITURA

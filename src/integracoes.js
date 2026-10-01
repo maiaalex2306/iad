@@ -1,0 +1,662 @@
+/* Ponte com o Linked Helper.
+
+   Um PWA não recebe webhook: webhook precisa de um endereço público que fique
+   de pé o tempo todo, e este app roda dentro do navegador. Então o Linked Helper
+   publica num coletor (ponte/worker.js, um Cloudflare Worker de 60 linhas) e o
+   app busca de lá quando você manda buscar.
+
+   Os nomes dos campos variam conforme a ação e as opções de exportação do
+   Linked Helper, então a normalização aceita várias grafias em vez de exigir uma. */
+(function (global) {
+  'use strict';
+
+
+  /* ---------- onde a ponte mora ----------
+
+     Morava só aqui, no localStorage deste navegador. A intenção era boa — a
+     chave de leitura é segredo e segredo não devia viajar junto com a carteira
+     — mas o preço apareceu no uso: reiniciar o computador e abrir noutro
+     perfil dava um app sem ponte, sem botão de importar e sem explicação. Cada
+     máquina virava uma instalação diferente do mesmo sistema.
+
+     Agora a ponte é da EMPRESA, não do aparelho: mora na linha da empresa, no
+     servidor, e desce com ela em qualquer lugar em que alguém entre. Quem já
+     enxerga a carteira daquela empresa já enxerga tudo o que a ponte traria —
+     a chave de leitura não amplia o acesso de ninguém que não o tivesse.
+
+     O localStorage continua existindo, como retaguarda: vale quando não há
+     empresa ainda, quando o banco está atrás do app (as colunas novas não
+     existem lá) e quando não há internet. Ler prefere a empresa; gravar grava
+     nos dois. */
+  /* A linha da empresa que está lendo. `empresaAtual()` (mais abaixo) é quem
+     decide QUAL é — e recusa quando o administrador está em "Todas as
+     empresas", porque aí não há uma. A ponte segue a mesma regra do balde, e
+     tem de seguir: sem saber de qual empresa se fala, não dá para dizer qual
+     ponte é a dela. */
+  function linhaDaEmpresa() {
+    const Store = global.IADStore;
+    const id = empresaAtual();
+    if (!Store || !id) return null;
+    return (Store.obter().tenants || []).filter(function (t) { return t.id === id; })[0] || null;
+  }
+
+  /* A ponte é da empresa, e só.
+
+     Havia um plano B no aparelho, para o caso de o banco estar atrás do app
+     ou faltar internet. Ele fazia o que todo plano B silencioso faz: escondia
+     a falha de quem podia consertá-la. Na máquina de quem configurou, a ponte
+     aparecia — vinda do navegador dele —, e na máquina da gestora, noutra
+     cidade, não aparecia nada. Mesmo login, duas telas, e nenhum sinal de que
+     a configuração nunca tinha chegado à empresa.
+
+     Sem plano B, as duas máquinas contam a mesma história: ou a empresa tem
+     ponte e todo mundo tem, ou ninguém tem e alguém precisa configurar. */
+  function config() {
+    const t = linhaDaEmpresa();
+    if (t && t.ponteUrl) return { url: t.ponteUrl, token: t.ponteChave || '' };
+    return { url: '', token: '' };
+  }
+
+  /* Gravar é gravar no servidor. Não dar certo lá é não ter dado certo —
+     antes isto guardava no aparelho de qualquer jeito e dizia "pronto", que é
+     como a ponte passou a existir num computador só. */
+  function salvarConfig(nova) {
+    const url = String(nova.url || '').trim();
+    const token = String(nova.token || '').trim();
+
+    const t = linhaDaEmpresa();
+    if (!t) {
+      return Promise.reject(new Error('Escolha a empresa no alto da tela antes de configurar a ponte. ' +
+        'Cada empresa tem a própria, e em "Todas as empresas" eu não sei qual estou configurando.'));
+    }
+
+    const N = global.IADNuvem;
+    if (!N || !N.conectado() || !N.definirPonteDaEmpresa) {
+      return Promise.reject(new Error('Sem conexão com o servidor. A ponte é da empresa e mora lá — ' +
+        'guardar só neste computador faria a configuração existir para você e para mais ninguém.'));
+    }
+
+    return N.definirPonteDaEmpresa(t.id, url, token).then(function () {
+      /* A cópia local muda só depois que o servidor aceitou, para a tela nunca
+         mostrar uma ponte que o resto da equipe não tem. */
+      t.ponteUrl = url;
+      t.ponteChave = token;
+      global.IADStore.salvar();
+      return { naEmpresa: true, naNuvem: true };
+    });
+  }
+
+  function configurada() {
+    const c = config();
+    return !!c.url;
+  }
+
+  /* Por que não há ponte — porque "não há" tem duas causas e correções
+     opostas, e some o mesmo botão nas duas.
+
+     Uma é o recorte: administrador em "Todas as empresas" não tem UMA
+     empresa, e a ponte é de empresa. Some o botão, e o conserto é escolher a
+     empresa no alto da tela. A outra é a empresa não ter ponte configurada, e
+     o conserto é configurar.
+
+     Enquanto havia cópia no navegador, nenhuma das duas aparecia — o plano B
+     escondia as duas. Tirar o plano B sem dizer o motivo trocou um defeito
+     silencioso por um botão que some sem explicação, que é a mesma doença. */
+  function porQueSemPonte() {
+    const Store = global.IADStore;
+    if (!Store || !Store.contexto) return 'sem-empresa';
+    const ctx = Store.contexto();
+    if (!ctx.usuario) return 'sem-empresa';
+    if (!empresaAtual()) return 'sem-empresa';
+    return config().url ? '' : 'nao-configurada';
+  }
+
+  /* "Head line", "head_line" e "headline" são o mesmo campo: comparamos sem
+     separadores para não depender da grafia que o Linked Helper usar. */
+  function chave(nome) { return String(nome).toLowerCase().replace(/[^a-z0-9]/g, ''); }
+
+  function primeiro(objeto, nomes) {
+    for (let i = 0; i < nomes.length; i++) {
+      const valor = objeto[chave(nomes[i])];
+      if (valor != null && String(valor).trim() !== '') return String(valor).trim();
+    }
+    return '';
+  }
+
+  /* ---------- a conversa ----------
+     Vem inteira — o que a SDR mandou e o que o prospect respondeu —, porque
+     quem abre a oportunidade depois precisa ler a pergunta para entender a
+     resposta. O que muda por autor é o uso: só o lado do cliente vira
+     evidência.
+
+     ---------- de quem é a mensagem ----------
+     O Linked Helper nomeia as mensagens do ponto de vista do prospect:
+     "sent" é o que ELE enviou — e que nós recebemos —, e "received" é o que
+     ele recebeu, ou seja, a nossa própria prospecção.
+
+     Ler o campo errado aqui gravaria a mensagem que o vendedor mandou como se
+     fosse evidência do cliente. É exatamente o que o método proíbe: atividade
+     nossa virando avanço da decisão, e o IAD da carteira inteira subindo
+     sozinho. Por isso a escolha é por autor, nunca por nome de campo. */
+  function mensagensDaConversa(plano, nomeDoLead, meuNome) {
+    const nosso = chave(meuNome || '');
+    const dele = chave(nomeDoLead || '');
+    const todas = [];
+    const vistas = {};
+
+    const juntar = function (de, texto, quando) {
+      if (!texto || !String(texto).trim()) return;
+      const autor = chave(de || '');
+      const limpo = String(texto).replace(/\s+/g, ' ').trim();
+      const assinatura = autor + '|' + limpo;
+      if (vistas[assinatura]) return;              /* o mesmo texto em dois campos */
+      vistas[assinatura] = true;
+      todas.push({
+        de: de || '',
+        texto: limpo,
+        quando: String(quando || ''),
+        /* Quem falou decide tudo o que vem depois: só o lado do cliente vira
+           evidência, e só o nosso lado explica o que a SDR perguntou. */
+        nosso: !!(nosso && autor === nosso),
+        dele: !!(dele && autor === dele)
+      });
+    };
+
+    for (let i = 1; i <= 10; i++) {
+      juntar(plano['repliedmessage' + i + 'from'], plano['repliedmessage' + i + 'text'],
+        plano['repliedmessage' + i + 'sendatiso']);
+      juntar(plano['message' + i + 'from'], plano['message' + i + 'text'],
+        plano['message' + i + 'sendatiso']);
+    }
+    juntar(plano.lastsentmessagefrom, plano.lastsentmessagetext, plano.lastsentmessagesendatiso);
+
+    /* Algumas ações entregam a resposta num campo solto, sem autor. Só valem
+       os nomes que já dizem que é resposta DELE — "reply", "answer". Nomes
+       ambíguos como "message" e "last_message" ficam de fora de propósito:
+       podem ser a nossa própria mensagem, e o preço de errar aqui é alto. */
+    if (!todas.some(function (m) { return !m.nosso; })) {
+      const solta = primeiro(plano, ['reply', 'reply_text', 'last_reply', 'reply_message', 'answer']);
+      if (solta) {
+        juntar(nomeDoLead || '', solta,
+          primeiro(plano, ['reply_date', 'replied_at', 'reply_send_at']));
+      }
+    }
+
+    todas.sort(function (a, b) { return a.quando.localeCompare(b.quando); });
+    return todas;
+  }
+
+  /* As que valem como evidência: nem nossas, nem de terceiro. */
+  function mensagensDoCliente(conversa, temNomeDoLead) {
+    return conversa.filter(function (m) {
+      if (m.nosso) return false;
+      if (temNomeDoLead && chave(m.de) && !m.dele) return false;   /* terceiro */
+      return true;
+    });
+  }
+
+  /* ---------- emprego atual ----------
+     current_company costuma vir vazio em perfil recém-raspado — foi o que
+     fez a importação nascer sem empresa. O emprego mais recente de verdade
+     está em organization_1. */
+  function empregoAtual(plano) {
+    return {
+      /* Os nomes que o Linked Helper usa mudam com a ação e com a versão, e
+         `chave()` já achata maiúsculas, espaços e sublinhados — então
+         `company_name`, `companyName` e `Company Name` são a mesma entrada.
+         O que não é a mesma coisa é o sufixo numérico: `company_name_1` não
+         casava com `company_name`, e bastava isso para a empresa sumir e o
+         nome da pessoa virar razão social. */
+      nome: primeiro(plano, ['company_name', 'company', 'current_company',
+        'organization_name', 'organization_1',
+        'company_name_1', 'current_company_name', 'organization_name_1',
+        'current_organization', 'company_1', 'employer', 'employer_name']),
+      cargo: primeiro(plano, ['organization_title_1', 'current_company_position',
+        'position', 'title', 'job_title']),
+      site: primeiro(plano, ['organization_website_1']),
+      dominio: primeiro(plano, ['organization_domain_1']),
+      cidade: primeiro(plano, ['organization_location_1']),
+      setor: primeiro(plano, ['current_company_industry', 'industry']),
+      descricao: primeiro(plano, ['organization_description_1']),
+      fim: primeiro(plano, ['organization_end_1'])
+    };
+  }
+
+  /* "2026.08" já passou → a pessoa saiu. Criar a conta a partir dela produz
+     uma conta cujo único contato não trabalha mais lá. */
+  function saidaNoPassado(fim) {
+    const m = /^(\d{4})[.\-\/](\d{1,2})/.exec(String(fim || ''));
+    if (!m) return '';
+    const meses = Number(m[1]) * 12 + Number(m[2]);
+    const hoje = new Date();
+    if (meses >= hoje.getFullYear() * 12 + (hoje.getMonth() + 1)) return '';
+    return String(Number(m[2])).padStart(2, '0') + '/' + m[1];
+  }
+
+  /* Campos personalizados cs_msg-*: a sequência que o vendedor escreveu para
+     este prospect. O de "interesse" é o reenquadramento — insight pronto. */
+  const ORDEM_INSIGHT = ['csmsginteresse', 'csmsgdesejo', 'csmsgatencao', 'csmsgacao'];
+
+  function insightDaCampanha(plano) {
+    for (let i = 0; i < ORDEM_INSIGHT.length; i++) {
+      const v = plano[ORDEM_INSIGHT[i]];
+      if (v && String(v).trim()) return String(v).replace(/\s+/g, ' ').trim();
+    }
+    return '';
+  }
+
+  /* Aceita o objeto achatado (opção "flat objects", igual ao CSV) e o aninhado. */
+  function normalizar(bruto) {
+    const d = bruto && bruto.dados ? bruto.dados : (bruto || {});
+    const plano = {};
+    Object.keys(d).forEach(function (k) { plano[chave(k)] = d[k]; });
+
+    const nome = primeiro(plano, ['full_name', 'fullname', 'name', 'profile_name']) ||
+      [primeiro(plano, ['first_name', 'firstname', 'given_name']),
+       primeiro(plano, ['last_name', 'lastname', 'family_name'])].filter(Boolean).join(' ');
+
+    const emprego = empregoAtual(plano);
+    const meuNome = primeiro(plano, ['my_full_name']);
+    const conversa = mensagensDaConversa(plano, nome, meuNome);
+    const dele = mensagensDoCliente(conversa, !!nome);
+    const ultima = dele[dele.length - 1] || null;
+
+    /* O headline do LinkedIn é vitrine, não cargo: "Gerente de Produção |
+       Coordenador | Operações Industriais | ..." tem 199 caracteres. Só serve
+       de cargo quando não há nada melhor, e mesmo assim cortado. */
+    const headline = primeiro(plano, ['headline', 'original_headline']);
+    const cargo = emprego.cargo || primeiro(plano, ['position', 'title', 'job_title']) ||
+      headline.split(/\s*\|\s*/)[0].slice(0, 80);
+
+    return {
+      id: bruto && bruto.id ? bruto.id : primeiro(plano, ['id', 'member_id', 'profile_id', 'public_identifier']),
+      recebidoEm: (bruto && bruto.recebidoEm) || '',
+
+      /* pessoa */
+      nome: nome,
+      cargo: cargo,
+      headline: headline,
+      linkedin: primeiro(plano, ['profile_url', 'linkedin_url', 'url', 'profile_link', 'public_profile_url']),
+      email: primeiro(plano, ['email', 'email_address', 'work_email', 'third_party_email_1']),
+      emailTipo: primeiro(plano, ['email_type']),
+      telefone: primeiro(plano, ['phone', 'phone_number', 'mobile', 'phone_1', 'phone_2']),
+      local: primeiro(plano, ['location_name', 'location', 'address', 'city', 'country', 'region']),
+      resumo: primeiro(plano, ['summary']),
+      competencias: primeiro(plano, ['skills']),
+
+      /* empresa onde trabalha (ou trabalhava) */
+      empresa: emprego.nome,
+      empresaSite: emprego.site,
+      empresaDominio: emprego.dominio,
+      empresaCidade: emprego.cidade,
+      empresaSetor: emprego.setor,
+      /* Matéria-prima para classificar o segmento sem sair para a internet:
+         na maioria das vezes a descrição que o próprio LinkedIn traz basta. */
+      empresaDescricao: String(emprego.descricao || '').replace(/\s+/g, ' ').slice(0, 600),
+      oQueFazLa: String(primeiro(plano, ['position_description_1']) || '').replace(/\s+/g, ' ').slice(0, 300),
+      saiuEm: saidaNoPassado(emprego.fim),
+
+      /* conversa — a única camada que é evidência do cliente.
+         A troca inteira vem junto: quem abre a oportunidade três semanas
+         depois precisa da pergunta da SDR para entender a resposta. */
+      resposta: ultima ? ultima.texto : '',
+      respostaEm: ultima ? String(ultima.quando).slice(0, 10) : '',
+      mensagensDele: dele.length,
+      conversa: conversa.map(function (m) {
+        return { de: m.de, texto: m.texto, quando: String(m.quando).slice(0, 10), nosso: m.nosso };
+      }),
+
+      /* relacionamento */
+      grau: primeiro(plano, ['member_distance']),
+      mutuos: primeiro(plano, ['mutual_count']),
+      conexoes: primeiro(plano, ['connections_count']),
+      conectadoEm: String(primeiro(plano, ['connected_at_iso'])).slice(0, 10),
+
+      /* operação */
+      campanha: primeiro(plano, ['campaign', 'campaign_name', 'list', 'list_name']),
+      operador: meuNome,
+      operadorEmail: primeiro(plano, ['my_email']),
+      insight: insightDaCampanha(plano),
+
+      bruto: d
+    };
+  }
+
+  /* ---------- de qual empresa é esta prospecção ----------
+
+     O IAD é multiempresa e a ponte não sabia disso: guardava tudo num balde só,
+     e a primeira empresa que mandasse buscar levava os leads de todas. Agora o
+     identificador da empresa vai na URL, e o app pede sempre o da empresa de
+     quem está logado — não há campo para digitar, justamente para não haver
+     como digitar o da empresa errada. */
+  /* Qual empresa está lendo a ponte — e a resposta tem de ser inequívoca.
+
+     tenantDeTrabalho() serve para decidir onde um registro NOVO nasce, e para
+     isso ele tem um palpite razoável: se o administrador está vendo "Todas as
+     empresas", usa a primeira da lista. Aqui esse palpite é veneno. Ler a
+     ponte com a empresa errada devolve o balde de outra pessoa — ou, como
+     aconteceu, o balde de uma empresa morta, e o app diz "nenhuma resposta
+     nova" com toda a convicção enquanto os leads estão ali do lado.
+
+     Então: administrador em "Todas" não tem empresa definida, e a leitura
+     recusa em vez de chutar. */
+  function empresaAtual() {
+    const Store = global.IADStore;
+    if (!Store || !Store.contexto) return '';
+    const ctx = Store.contexto();
+    if (!ctx.usuario) return '';
+    if (ctx.admin) {
+      const escolhida = ctx.filtros && ctx.filtros.tenant;
+      return (escolhida && escolhida !== 'todas') ? escolhida : '';
+    }
+    return ctx.tenantId || '';
+  }
+
+  /* O nome da empresa que está lendo, para as mensagens dizerem de quem é o
+     balde. "Nenhuma resposta nova" sem dizer de quem é a metade da informação. */
+  function nomeDaEmpresaAtual() {
+    const Store = global.IADStore;
+    const id = empresaAtual();
+    if (!id || !Store) return '';
+    const t = (Store.obter().tenants || []).filter(function (x) { return x.id === id; })[0];
+    return (t && t.nome) || id;
+  }
+
+  /* O endereço que a SDR cola no Linked Helper. Precisa da chave de escrita,
+     que NÃO é a que fica no app: são duas de propósito, e vazar uma não expõe
+     a outra. Por isso a chave de escrita entra aqui como parâmetro — ela vive
+     no Cloudflare e na cabeça de quem administra, nunca guardada no navegador. */
+  function enderecoDeEntrada(chaveDeEscrita, empresaId) {
+    const c = config();
+    if (!c.url) return '';
+    const base = c.url.replace(/[?#].*$/, '');
+    const partes = [];
+    if (chaveDeEscrita) partes.push('k=' + encodeURIComponent(chaveDeEscrita));
+    if (empresaId) partes.push('e=' + encodeURIComponent(empresaId));
+    return base + (partes.length ? '?' + partes.join('&') : '');
+  }
+
+  /* O balde antigo, e por que ele precisa de porta própria.
+
+     Antes dos baldes por empresa, a ponte guardava tudo num lugar só. Quem
+     montou o endereço do Linked Helper naquela época — ou quem montou depois
+     sem o `e=` — continua entregando ali. E o app, que agora pergunta sempre
+     pelo balde de uma empresa, nunca mais vê essas entregas: elas ficam
+     visíveis para ninguém até expirarem em trinta dias.
+
+     Esta é a porta de resgate. Ela lê o balde sem identificador e traz para a
+     empresa que está escolhida agora — o que é uma decisão de quem clica, não
+     um palpite do app, e por isso ela mora num botão e não no caminho normal. */
+  function requisitarNoBaldeAntigo(metodo, corpo, balde) {
+    const c = config();
+    if (!c.url) return Promise.reject(new Error('Configure o endereço da ponte em Configuração → Linked Helper.'));
+    const separador = c.url.indexOf('?') === -1 ? '?' : '&';
+    const endereco = c.url +
+      (c.token ? separador + 'token=' + encodeURIComponent(c.token) : '') +
+      (balde ? (c.token ? '&' : separador) + 'e=' + encodeURIComponent(balde) : '');
+    return fetch(endereco, {
+      method: metodo,
+      headers: corpo ? { 'content-type': 'application/json' } : undefined,
+      body: corpo ? JSON.stringify(corpo) : undefined
+    }).then(function (resposta) {
+      if (resposta.status === 401) throw new Error('A ponte recusou a chave de leitura.');
+      if (!resposta.ok) throw new Error('A ponte respondeu ' + resposta.status + '.');
+      return resposta.json();
+    });
+  }
+
+  /* Balde vazio quer dizer o antigo, o de antes dos identificadores. Com um
+     identificador, lê o balde daquela empresa — que é o caso de quem digitou
+     o `e=` errado no Linked Helper e mandou meses de prospecção para o balde
+     do vizinho. */
+  function buscarNoBalde(balde) {
+    return requisitarNoBaldeAntigo('GET', null, balde).then(function (corpo) {
+      return (corpo.itens || []).map(normalizar);
+    });
+  }
+
+  function marcarNoBalde(ids, balde) {
+    return requisitarNoBaldeAntigo('POST', { marcar: ids }, balde).catch(function (e) {
+      console.warn('Não consegui dar baixa no balde:', e);
+    });
+  }
+
+  function requisitar(metodo, corpo) {
+    const c = config();
+    if (!c.url) return Promise.reject(new Error('Configure o endereço da ponte em Configuração → Linked Helper.'));
+    if (!empresaAtual()) {
+      return Promise.reject(new Error('Escolha uma empresa antes de buscar. Cada empresa tem o próprio ' +
+        'balde na ponte, e com o recorte em "Todas as empresas" eu não sei qual ler — ' +
+        'ler o balde errado devolveria a prospecção de outra pessoa.'));
+    }
+    const separador = c.url.indexOf('?') === -1 ? '?' : '&';
+    const empresa = empresaAtual();
+    const endereco = c.url +
+      (c.token ? separador + 'token=' + encodeURIComponent(c.token) : '') +
+      (empresa ? (c.token ? '&' : separador) + 'e=' + encodeURIComponent(empresa) : '');
+
+    return fetch(endereco, {
+      method: metodo,
+      headers: corpo ? { 'content-type': 'application/json' } : undefined,
+      body: corpo ? JSON.stringify(corpo) : undefined
+    }).then(function (resposta) {
+      if (resposta.status === 401) throw new Error('A ponte recusou a chave de leitura.');
+      if (!resposta.ok) throw new Error('A ponte respondeu ' + resposta.status + '.');
+      return resposta.json();
+    });
+  }
+
+  /* ---------------- links rastreados ----------------
+
+     A ponte ganhou duas rotas com caminho próprio (`/links` e `/aberturas`),
+     e o endereço guardado aqui é a raiz dela. Juntar os dois exige cuidado
+     com o que a pessoa digitou: quem colou o endereço com barra no fim e quem
+     colou sem precisam chegar no mesmo lugar, e quem colou com `?token=`
+     grudado não pode acabar com o caminho depois da interrogação. */
+  function enderecoDoCaminho(caminho) {
+    const c = config();
+    if (!c.url) return '';
+    const base = c.url.replace(/[?#].*$/, '').replace(/\/+$/, '');
+    const empresa = empresaAtual();
+    const partes = [];
+    if (c.token) partes.push('token=' + encodeURIComponent(c.token));
+    if (empresa) partes.push('e=' + encodeURIComponent(empresa));
+    return base + caminho + (partes.length ? '?' + partes.join('&') : '');
+  }
+
+  function requisitarCaminho(caminho, metodo, corpo) {
+    const c = config();
+    if (!c.url) return Promise.reject(new Error('Configure o endereço da ponte em Configuração → Linked Helper.'));
+    if (!empresaAtual()) {
+      return Promise.reject(new Error('Escolha uma empresa antes. Cada empresa tem o próprio balde na ponte.'));
+    }
+    return fetch(enderecoDoCaminho(caminho), {
+      method: metodo,
+      headers: corpo ? { 'content-type': 'application/json' } : undefined,
+      body: corpo ? JSON.stringify(corpo) : undefined
+    }).then(function (resposta) {
+      if (resposta.status === 401) throw new Error('A ponte recusou a chave de leitura.');
+      if (resposta.status === 404) {
+        throw new Error('Esta ponte ainda não conhece links rastreados. ' +
+          'Publique o ponte/worker.js novo no Cloudflare.');
+      }
+      if (!resposta.ok) throw new Error('A ponte respondeu ' + resposta.status + '.');
+      return resposta.json();
+    });
+  }
+
+  /* Emite o desvio. O documento continua onde está — no Drive, no anexo, onde
+     o vendedor quiser. O que volta daqui é um endereço que passa pela ponte
+     antes de chegar lá, e é essa passagem que vira sinal. */
+  function emitirLink(dados) {
+    const destino = String((dados && dados.destino) || '').trim();
+    if (!/^https?:\/\//i.test(destino)) {
+      return Promise.reject(new Error('O endereço do documento precisa começar com http:// ou https://.'));
+    }
+    return requisitarCaminho('/links', 'POST', {
+      destino: destino,
+      titulo: (dados.titulo || '').slice(0, 200),
+      contatoId: dados.contatoId || '',
+      oportunidadeId: dados.oportunidadeId || ''
+    });
+  }
+
+  function aberturas() {
+    return requisitarCaminho('/aberturas', 'GET').then(function (corpo) {
+      return (corpo && corpo.itens) || [];
+    });
+  }
+
+  function marcarAberturas(ids) {
+    if (!ids || !ids.length) return Promise.resolve();
+    return requisitarCaminho('/aberturas', 'POST', { marcar: ids }).catch(function (e) {
+      console.warn('Não consegui dar baixa nas aberturas:', e);
+    });
+  }
+
+  /* A colheita: abertura vira sinal, e a ponte esquece o que já virou.
+
+     A primeira abertura de um link é `documento_abriu`; da segunda em diante é
+     `documento_reabriu`, que é o sinal mais forte que este app reconhece —
+     ninguém volta a uma proposta por acaso.
+
+     Abertura marcada como robô é descartada aqui e não na ponte: guardá-la lá
+     custa quase nada e, no dia em que a lista de robôs errar, o registro ainda
+     existe para se conferir. Perder na origem seria perder para sempre. */
+  function colherAberturas() {
+    const S = global.IADStore;
+    if (!S || !S.registrarSinalUnico) return Promise.resolve(0);
+
+    return aberturas().then(function (lista) {
+      if (!lista.length) return 0;
+      const antes = (S.sinais() || []).length;
+      const jaVistos = {};
+      (S.sinais() || []).forEach(function (sin) {
+        if (sin.linkId) jaVistos[sin.linkId] = true;
+      });
+
+      /* Ordenar por data antes de classificar, e não confiar na ordem em que
+         a ponte devolve: as chaves do KV são identificadores aleatórios, e a
+         listagem sai na ordem do nome, não na do relógio. Sem isto, a segunda
+         abertura podia chegar primeiro e ganhar o rótulo de "abriu", enquanto
+         a primeira virava "voltou ao documento" — a leitura exatamente ao
+         contrário, no sinal que este app trata como o mais forte de todos. */
+      const emOrdem = lista.filter(function (a) { return !a.robo; }).sort(function (x, y) {
+        return String(x.quando || '').localeCompare(String(y.quando || ''));
+      });
+
+      emOrdem.forEach(function (a) {
+        const repetida = jaVistos[a.linkId];
+        jaVistos[a.linkId] = true;
+        const quando = String(a.quando || '');
+        S.registrarSinalUnico({
+          fonte: 'ponte',
+          externoId: a.id,
+          tipo: repetida ? 'documento_reabriu' : 'documento_abriu',
+          contatoId: a.contatoId || null,
+          oportunidadeId: a.oportunidadeId || null,
+          quando: quando.slice(0, 10),
+          hora: quando.slice(11, 16),
+          titulo: (repetida ? 'Voltou ao documento' : 'Abriu o documento') +
+            (a.titulo ? ': ' + a.titulo : ''),
+          linkId: a.linkId || ''
+        });
+      });
+
+      /* A baixa vem depois de gravar, nunca antes: se a ponte esquecesse
+         primeiro e o app falhasse em seguida, a abertura sumiria dos dois
+         lados.
+
+         E dá baixa só no que VIROU sinal. O que foi marcado como robô fica na
+         ponte até expirar sozinho em 30 dias — era o que o estudo já dizia e o
+         código fazia o contrário: marcava tudo, e uma abertura de gente
+         classificada como robô por engano sumia dos dois lados para sempre,
+         sem deixar como conferir. Custa quase nada guardar; custa caro
+         descobrir que a lista de robôs errou e não ter mais o registro. */
+      return marcarAberturas(emOrdem.map(function (a) { return a.id; })).then(function () {
+        return (S.sinais() || []).length - antes;
+      });
+    });
+  }
+
+  /* O que a ponte tem AGORA, sem filtrar robô e sem dar baixa em nada.
+
+     Existe porque o silêncio é o pior sintoma possível: "cliquei e não
+     apareceu nada" pode ser a ponte não ter registrado, o clique ter sido
+     classificado como robô, ou a colheita nem ter rodado — e as três têm
+     conserto diferente. Isto separa as três em um clique. */
+  function diagnosticoDasAberturas() {
+    return aberturas().then(function (lista) {
+      return {
+        total: lista.length,
+        gente: lista.filter(function (a) { return !a.robo; }).length,
+        robos: lista.filter(function (a) { return a.robo; }).length,
+        itens: lista.slice().sort(function (x, y) {
+          return String(y.quando || '').localeCompare(String(x.quando || ''));
+        })
+      };
+    });
+  }
+
+  function buscar() {
+    return requisitar('GET').then(function (corpo) {
+      const lista = Array.isArray(corpo) ? corpo : (corpo.itens || corpo.items || corpo.data || []);
+      return lista.map(normalizar).filter(function (i) { return i.nome || i.empresa || i.linkedin; });
+    });
+  }
+
+  function marcarProcessados(ids) {
+    if (!ids || !ids.length) return Promise.resolve();
+    return requisitar('POST', { marcar: ids }).catch(function (e) {
+      console.warn('Não foi possível marcar como processado na ponte:', e);
+    });
+  }
+
+  /* Provar o endereço antes de ele ir para o Linked Helper.
+
+     O endereço tem três partes e duas delas são digitadas à mão numa tela
+     que não é esta: a chave de escrita e o identificador da empresa. Errar
+     qualquer uma produz um endereço que PARECE certo — e o erro só aparece
+     semanas depois, quando alguém pergunta por que não chegou lead nenhum.
+     Foi o que aconteceu com a Bio Water Care.
+
+     Aqui o app faz o caminho inteiro, agora: grava um lead de teste com a
+     chave de escrita, lê de volta com a chave de leitura no balde desta
+     empresa, e apaga o que gravou. Se as três partes não estiverem certas,
+     um dos três passos falha e diz qual. O que sobra depois do teste é
+     nada — o lead de teste sai junto. */
+  function testarPonte(chaveDeEscrita, empresaId) {
+    const c = config();
+    if (!c.url) return Promise.reject(new Error('Configure o endereço da ponte em Configuração → Linked Helper.'));
+    if (!chaveDeEscrita) return Promise.reject(new Error('Digite a chave de escrita para testar.'));
+
+    const marca = 'IAD-TESTE-' + Date.now();
+    return fetch(enderecoDeEntrada(chaveDeEscrita, empresaId), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ full_name: marca, company_name: 'Teste da ponte do IAD' })
+    }).then(function (r) {
+      if (r.status === 401) {
+        throw new Error('A ponte recusou a CHAVE DE ESCRITA. Confira o valor de CHAVE_ESCRITA no Cloudflare.');
+      }
+      if (!r.ok) throw new Error('A ponte respondeu ' + r.status + ' ao gravar.');
+      return r.json();
+    }).then(function () {
+      /* Ler de volta usa a OUTRA chave, a de leitura — então este passo prova
+         a segunda metade da ponte, a que o app usa todo dia. */
+      return buscarNoBalde(empresaId);
+    }).then(function (lista) {
+      const achado = (lista || []).filter(function (i) { return i.nome === marca; })[0];
+      if (!achado) {
+        throw new Error('Gravou, mas o lead de teste não apareceu no balde desta empresa. ' +
+          'O identificador da empresa no endereço não é o que o app lê.');
+      }
+      return marcarNoBalde([achado.id], empresaId).then(function () { return { ok: true }; });
+    });
+  }
+
+  global.IADIntegracoes = { config, salvarConfig, configurada, porQueSemPonte, buscar, marcarProcessados, testarPonte,
+    emitirLink, aberturas, marcarAberturas, colherAberturas, diagnosticoDasAberturas,
+    normalizar, empresaAtual, nomeDaEmpresaAtual, enderecoDeEntrada,
+    buscarNoBalde, marcarNoBalde };
+})(window);
