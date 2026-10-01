@@ -5,8 +5,8 @@ Conversa não sobrevive; arquivo commitado sim. **Atualize junto com o que for
 feito** — um mapa desatualizado custa mais caro que mapa nenhum, porque ele é
 obedecido.
 
-Publicado agora: **v225**, em <https://maiaalex2306.github.io/iad/>
-O carimbo da versão fica no alto do **Manual**. Se não disser v225, o aparelho
+Publicado agora: **v226**, em <https://maiaalex2306.github.io/iad/>
+O carimbo da versão fica no alto do **Manual**. Se não disser v226, o aparelho
 está com cache velho: Ctrl+Shift+R no computador, ou fechar e reabrir o app.
 
 ---
@@ -397,6 +397,52 @@ com nada marcado. Marcar 99 e a seleção sobreviver a um refresh seria armadilh
 duas negociações de verdade. Filtrar por campanha, marcar os 51, mover com
 motivo e prazo, conferir que **ninguém foi encerrado**, devolver três, e que a
 passagem ficou no `historicoNutricao`.
+
+## 0-AU. As cores do funil, por CALOR da etapa — v226, 01/10
+
+*“Mas quero cores diferentes no funil… analise o calor de cada etapa.”*
+
+Ele tem razão, e a ideia é melhor do que a rampa roxa que eu tinha feito:
+**temperatura é uma escala ordenada**, não um arco-íris. Frio no topo (o
+cliente mal sabe que tem um problema), fervendo no fundo (falta assinar).
+
+**Quatro zonas, não oito cores — e a conta é que decidiu.** Tentei oito
+matizes ao longo do caminho frio→quente: o pior par vizinho caiu a **ΔE 4,0**
+para protanopia e a **6,9 até para visão normal**. Oito tons de um gradiente
+contínuo são indistinguíveis de vizinho para vizinho. A saída não é inventar
+cor, é **agrupar** — e as quatro zonas existem de verdade na metodologia, duas
+decisões em cada:
+
+| | | |
+|---|---|---|
+| **Frio** | azul | o problema existe? (problema, prioridade) |
+| **Morno** | verde-azulado | quanto vale? (impacto, stakeholders) |
+| **Quente** | âmbar | como se decide? (critérios, processo) |
+| **Fervendo** | vermelho | fecha? (consenso, risco) |
+
+`zonaDeCalor(i, total)` divide em quatro partes iguais — serve para as oito
+decisões e para as nove etapas do CRM sem tabela de-para que alguém teria de
+manter.
+
+**A destravada conceitual:** eu vinha tratando a cor como se tivesse de
+carregar a ORDEM, e por isso exigindo luminosidade monotônica — o que empurrava
+o quente para marrom no claro e para rosa lavado no escuro. **Num funil a
+ordem já está na posição e na largura.** A cor pode carregar o significado. Foi
+isso que liberou cor viva sem virar arco-íris.
+
+**Uma renúncia registrada no CSS:** o âmbar fica em 2,94:1 contra o branco,
+abaixo de 3:1. É aceitável só porque todo rótulo fica FORA da faixa e existe a
+forma Lista com os números em texto. Se um dia o rótulo entrar para dentro da
+faixa, esse âmbar tem de escurecer junto.
+
+Legenda nomeando as quatro zonas, porque cor sozinha nunca é a única pista. Os
+tokens `--fun-*` da v225 saíram: ficaram órfãos e código morto confunde quem
+vem depois.
+
+**19 testes** (`calorf.js`): a cor nunca anda para trás, duas decisões por
+zona, nove etapas se repartem sem sobrar fora, e os dois modos têm tokens
+próprios. Um teste da v225 quebrou porque conferia os tokens antigos — a
+expectativa é que estava velha.
 
 ## 0-AT. O funil desenhado, em trapézios — v225, 01/10
 

@@ -39,20 +39,31 @@
   --cat-5: #c026d3;
   --cat-6: #dc2626;
   --cat-outros: #5d7085;
-  /* ---------- a rampa do funil desenhado ----------
-     SEQUENCIAL, de propósito: as faixas de um funil são passos ORDENADOS de um
-     processo só, não oito coisas diferentes. Uma cor por passo, clareando ou
-     escurecendo, diz "isto continua aquilo"; o arco-íris dos funis que se veem
-     por aí diz "estas são oito coisas sem relação", que é falso.
 
-     Medida, não escolhida: cada degrau tem ao menos 3:1 contra a superfície,
-     senão a faixa de baixo some no fundo. No modo escuro a rampa CLAREIA em
-     vez de escurecer — escurecer até o fim fazia a última faixa desaparecer
-     dentro do #131c2b (1,18:1 medido). Nenhum texto vai dentro da faixa: o
-     rótulo fica fora, com tinta de texto, que é o que mantém a leitura igual
-     nos dois modos. */
-  --fun-1: #8f73de; --fun-2: #8265d4; --fun-3: #7557c9; --fun-4: #684abd;
-  --fun-5: #5b3eb0; --fun-6: #4e33a1; --fun-7: #412890; --fun-8: #341e7c;
+  /* ---------- as QUATRO ZONAS DE CALOR do funil ----------
+     Frio no topo (o cliente mal sabe que tem problema), fervendo no fundo
+     (falta assinar). Temperatura é escala ORDENADA, não arco-íris: o caminho
+     vai do azul ao vermelho e não volta.
+
+     Por que quatro e não oito: oito matizes seguidos ao longo de um caminho
+     frio→quente ficam indistinguíveis de vizinho para vizinho — medido, o pior
+     par caía a ΔE 4,0 para protanopia e a 6,9 até para visão normal. A saída
+     não é inventar cor: é AGRUPAR. E as quatro zonas existem de verdade na
+     metodologia, duas decisões em cada.
+
+     Num funil a ORDEM já está na posição e na largura. Por isso a cor aqui não
+     precisa carregar ordem — carrega significado, que é o calor. É o que
+     libera cor viva sem virar o arco-íris que confunde.
+
+     Uma renúncia, registrada para quem vier depois: o âmbar claro fica em
+     2,94:1 contra o branco, abaixo dos 3:1. É aceitável só porque todo rótulo
+     fica FORA da faixa e existe a forma Lista com os números em texto — as
+     duas condições que a regra exige para dispensar esse ponto. Se um dia o
+     rótulo entrar para dentro da faixa, este âmbar tem de escurecer junto. */
+  --calor-1: #2563eb;   /* frio    — o problema existe? */
+  --calor-2: #0d9488;   /* morno   — quanto vale?       */
+  --calor-3: #ca8a04;   /* quente  — como se decide?    */
+  --calor-4: #dc2626;   /* fervendo— fecha?             */
   --radius: 14px;
   --shadow: 0 1px 2px rgba(16, 32, 47, .06), 0 6px 20px rgba(16, 32, 47, .06);
   --safe-b: env(safe-area-inset-bottom, 0px);
@@ -69,10 +80,10 @@
        passavam, e trocá-los por trocar seria estragar o que estava certo. */
     --cat-1: #6d67ee;
     --cat-outros: #94a6bd;
-    /* Clareia em vez de escurecer: medido, a rampa clara terminava em 1,18:1
-       contra este fundo — a última faixa do funil simplesmente sumia. */
-    --fun-1: #efe9ff; --fun-2: #e2d8fe; --fun-3: #d5c7fc; --fun-4: #c8b6fa;
-    --fun-5: #bba5f8; --fun-6: #ae94f6; --fun-7: #a183f4; --fun-8: #9472f2;
+    /* As mesmas quatro zonas, com passos próprios para o fundo escuro: os
+       tons do claro ficam entre 2,5:1 e 3:1 contra o #131c2b e a faixa some.
+       Aqui todos passam de 6:1, e a separação entre vizinhas também. */
+    --calor-1: #60a5fa; --calor-2: #2dd4bf; --calor-3: #fbbf24; --calor-4: #fb7185;
     --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
   }
 }
@@ -984,6 +995,10 @@ dialog.caixa-ficha { width: min(520px, 94vw); }
 /* Grade recessiva: ela orienta, não compete. */
 .g-grade { stroke: var(--line); stroke-width: 1; }
 .grafico svg { overflow: visible; }
+
+/* A legenda das zonas fica ACIMA do funil, não ao lado: o funil é alto e
+   estreito, e legenda lateral obrigaria o olho a atravessar a figura. */
+.legenda-calor { margin: 6px 0 2px; }
 
 /* O número do funil desenhado: maior que o rótulo, porque é ele que se
    procura. E a queda entre dois degraus, no vão, em cor de alerta — é o número

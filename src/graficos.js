@@ -413,8 +413,35 @@
         o gestor procura — "perdi 40% aqui" — e que nenhum funil desenhado
         costuma mostrar.
 
-     A rampa é sequencial (--fun-1..8): são passos ordenados de um processo só,
-     não oito categorias. Ver o comentário no CSS para a medição. */
+     A cor vem das quatro ZONAS DE CALOR (--calor-1..4): frio no topo, fervendo
+     no fundo. Ver o comentário no CSS para a medição e para por que são quatro
+     zonas e não oito cores. */
+  /* As quatro zonas de calor, e o que cada uma quer dizer. A ordem é a do
+     caminho da decisão: frio onde o cliente mal sabe que tem um problema,
+     fervendo onde só falta assinar. Ver o comentário no CSS para a medição e
+     para por que são quatro, e não oito. */
+  const ZONAS = [
+    { cor: 'var(--calor-1)', nome: 'Frio', diz: 'o cliente mal sabe que tem um problema' },
+    { cor: 'var(--calor-2)', nome: 'Morno', diz: 'reconheceu, e está medindo quanto vale' },
+    { cor: 'var(--calor-3)', nome: 'Quente', diz: 'já discute como e com quem decidir' },
+    { cor: 'var(--calor-4)', nome: 'Fervendo', diz: 'falta fechar' }
+  ];
+
+  /* Em que zona cai o degrau `i` de `total`. Divide em quatro partes iguais,
+     então serve tanto para as oito decisões (duas por zona) quanto para as
+     nove etapas do CRM, sem tabela de-para que alguém teria de manter. */
+  function zonaDeCalor(i, total) {
+    if (total <= 1) return 0;
+    return Math.min(3, Math.floor((i * 4) / total));
+  }
+
+  function legendaDoCalor() {
+    return '<div class="legenda legenda-calor">' + ZONAS.map(function (z) {
+      return '<span class="item-legenda" title="' + esc(z.diz) + '">' +
+        '<i style="background:' + z.cor + '"></i>' + z.nome + '</span>';
+    }).join('') + '</div>';
+  }
+
   function funilDesenhado(dados, o) {
     const op = o || {};
     const L = 620, topo = 16, alturaFaixa = 52, vao = 16;
@@ -433,7 +460,7 @@
       const y = topo + i * (alturaFaixa + vao);
       const a = meiaLargura(d.valor);
       const b = meiaLargura(i + 1 < dados.length ? dados[i + 1].valor : d.valor);
-      const cor = 'var(--fun-' + Math.min(8, i + 1) + ')';
+      const cor = ZONAS[zonaDeCalor(i, dados.length)].cor;
       const antes = i ? (dados[i - 1].valor || 0) : null;
       const queda = antes != null && antes > 0
         ? Math.round((1 - (d.valor || 0) / antes) * 100) : null;
@@ -467,7 +494,8 @@
         '</g>';
     }).join('');
 
-    return svg(L, H, corpo, op.titulo || 'Funil');
+    /* A legenda nomeia as zonas: cor sozinha nunca é a única pista. */
+    return legendaDoCalor() + svg(L, H, corpo, op.titulo || 'Funil');
   }
 
   /* O despachante. `tipo` que não existe cai em barras, que é a forma que
@@ -507,5 +535,6 @@
   }
 
   global.IADGraficos = { colunasPorMes, barrasHorizontais, composicao, matriz, CORES_SAUDE, ROTULOS_SAUDE, legendaSaude,
-    desenhar, seletorDeForma, legenda, dobrarEmOutros, funilDesenhado, CAT, MAX_FATIAS };
+    desenhar, seletorDeForma, legenda, dobrarEmOutros, funilDesenhado,
+    zonaDeCalor, legendaDoCalor, ZONAS, CAT, MAX_FATIAS };
 })(window);
