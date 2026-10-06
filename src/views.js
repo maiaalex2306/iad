@@ -8113,6 +8113,43 @@
       corpo(est);
   }
 
+  /* As duas datas da nuvem, separadas porque são dois fatos.
+
+     A tela mostrava só "última sincronização", que é a completa — a do botão e
+     a da entrada. Mas o que acontece o tempo todo é a SUBIDA: desde a v217
+     cada alteração sobe sozinha. Quem trabalhou a manhã inteira com tudo
+     subindo via "última sincronização: 17/09" e tinha todo motivo para achar
+     que três semanas de trabalho estavam presas aqui.
+
+     A subida vem primeiro porque é a que responde "o meu trabalho está lá?".
+     E vem em linguagem de gente — "há 4 minutos" — porque o que se quer saber
+     é se foi agora, não que horas eram. */
+  /* `haQuanto` e não `quandoFoi`: já existe um `quandoFoi` neste arquivo, nas
+     conversas do WhatsApp, e duas funções com o mesmo nome no mesmo escopo não
+     dão erro em JavaScript — a de baixo simplesmente apaga a de cima. O relógio
+     das conversas teria quebrado em silêncio. */
+  function haQuanto(iso) {
+    if (!iso) return '';
+    const minutos = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+    if (minutos < 1) return 'agora mesmo';
+    if (minutos < 60) return 'há ' + minutos + ' minuto' + (minutos === 1 ? '' : 's');
+    const horas = Math.round(minutos / 60);
+    if (horas < 24) return 'há ' + horas + ' hora' + (horas === 1 ? '' : 's');
+    return 'em ' + U.data(String(iso).slice(0, 10)) + ' às ' + String(iso).slice(11, 16);
+  }
+
+  function duasDatasDaNuvem(e) {
+    const linhas = [];
+    if (e.ultimoEnvio) {
+      linhas.push('A sua última alteração subiu <strong>' + esc(haQuanto(e.ultimoEnvio)) + '</strong>');
+    }
+    if (e.ultima) {
+      linhas.push('sincronização completa (subir e baixar) ' + esc(haQuanto(e.ultima)));
+    }
+    if (!linhas.length) return '';
+    return '<p class="tiny muted" style="margin:0 0 12px">' + linhas.join(' · ') + '.</p>';
+  }
+
   function configNuvem() {
     return blocoNuvem() + blocoDaConferencia() + blocoMinhaConta() + blocoAssistente();
   }
@@ -8635,7 +8672,7 @@
       '<p class="small muted" style="margin:8px 0 4px">' + esc(e.email) +
       (perfil.nome ? ' · ' + esc(perfil.nome) : '') +
       (perfil.papel === 'admin' ? ' · <strong>administrador</strong>' : '') + '</p>' +
-      (e.ultima ? '<p class="tiny muted" style="margin:0 0 12px">Última sincronização: ' + esc(e.ultima.replace('T', ' ').slice(0, 16)) + '</p>' : '') +
+      duasDatasDaNuvem(e) +
       (semEmpresa
         ? '<div class="aviso" style="margin-bottom:12px">Seu usuário não está ligado a nenhuma empresa. ' +
           (perfil.papel === 'admin'

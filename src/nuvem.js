@@ -925,8 +925,31 @@
     });
   }
 
+  /* ---------- quando este aparelho concordou com o servidor ----------
+
+     Duas datas, porque são dois fatos diferentes e misturá-los mente.
+
+     `nuvem-ultima` é a SINCRONIZAÇÃO COMPLETA — subiu e desceu. Ela só
+     acontece no botão "Sincronizar agora" e na entrada.
+
+     `nuvem-ultimo-envio` é a SUBIDA, e é ela que acontece o tempo todo: desde
+     a v217 cada alteração sobe sozinha, e nenhuma delas tocava na data. O
+     efeito era uma tela dizendo "última sincronização: 17/09" para quem tinha
+     acabado de subir a carteira inteira naquela manhã. Data velha numa tela
+     que existe para dizer se está tudo certo é pior do que data nenhuma: ela
+     não erra por acaso, erra para o lado de assustar. */
+  function marcarEnvio() {
+    try { localStorage.setItem('iad-crm:nuvem-ultimo-envio', new Date().toISOString()); }
+    catch (e) { /* aparelho com armazenamento cheio não pode derrubar o envio */ }
+  }
+
+  function ultimoEnvio() { return localStorage.getItem('iad-crm:nuvem-ultimo-envio') || ''; }
+
   function empurrar() {
-    return perfilParaEnviar().then(empurrarComPerfil);
+    return perfilParaEnviar().then(empurrarComPerfil).then(function (r) {
+      marcarEnvio();
+      return r;
+    });
   }
 
   function empurrarComPerfil(perfil) {
@@ -1225,14 +1248,15 @@
       conectado: conectado(),
       email: (sessao() && sessao().user && sessao().user.email) || '',
       perfil: sessaoPerfil(),
-      ultima: ultimaSincronizacao()
+      ultima: ultimaSincronizacao(),
+      ultimoEnvio: ultimoEnvio()
     };
   }
 
   global.IADNuvem = {
     config, salvarConfig, configurada, conectado, mandaNoAcesso, estado, sessao,
     cadastrar, entrar, sair, renovar, precisaRenovar, eu, meuPerfil, salvarPerfil, criarMinhaEmpresa,
-    guardarPerfilNaSessao, empurrar, puxar, sincronizar, ultimaSincronizacao,
+    guardarPerfilNaSessao, empurrar, puxar, sincronizar, ultimaSincronizacao, ultimoEnvio,
     perfisDaNuvem, empresasDaNuvem, souAdminNaNuvem, existeEmpresa,
     definirEmpresaDoPerfil, definirPapelDoPerfil, salvarMeuNome,
     definirBloqueioDoPerfil, definirBloqueioDaEmpresa, definirPonteDaEmpresa,
