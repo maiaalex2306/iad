@@ -8114,7 +8114,134 @@
   }
 
   function configNuvem() {
-    return blocoNuvem() + blocoMinhaConta() + blocoAssistente();
+    return blocoNuvem() + blocoDaConferencia() + blocoMinhaConta() + blocoAssistente();
+  }
+
+  /* ------------------------------------------------------------------
+     "Rodei o SQL — está tudo certo agora?"
+
+     A pergunta voltou quatro vezes, e todas as vezes a resposta foi um
+     palpite: quem olha o banco não vê o aplicativo, quem olha o aplicativo não
+     vê o banco. No meio, uma correção cujo nome prometia cobrir tudo e não
+     cobria — a tabela `notas` passou meses faltando sem ninguém saber.
+
+     Existe `nuvem/conferir.sql`, que responde com exatidão, mas exige abrir o
+     painel do Supabase, achar o SQL Editor, colar e ler setenta e cinco
+     linhas. Quem usa o CRM não tem de fazer isso para saber se o CRM está
+     inteiro. O botão faz a mesma pergunta, daqui, com a sessão de quem está
+     logado — e não muda nada.
+     ------------------------------------------------------------------ */
+  let conferencia = null;      /* null = nunca rodou | {erro} | resultado */
+  let conferindo = false;
+
+  function definirConferencia(r) { conferencia = r; conferindo = false; }
+  function marcarConferindo() { conferindo = true; }
+
+  function linhaDoItem(i) {
+    const nome = i.tipo === 'tabela' ? 'tabela ' + i.alvo
+      : i.tipo === 'coluna' ? i.alvo + '.' + i.coluna
+      : i.alvo + '()';
+    return '<tr><td class="small"><code>' + esc(nome) + '</code></td>' +
+      '<td class="small"><code>' + esc(i.arquivo) + '</code></td></tr>';
+  }
+
+  function blocoDaConferencia() {
+    const C = global.IADConferencia;
+    if (!C) return '';
+    const N = global.IADNuvem;   /* aqui é seguro: views.js carrega depois */
+
+    const cabeca = '<div class="row"><h2 style="margin:0">O banco está em dia?</h2>' +
+      '<span class="espaco"></span>' +
+      '<button class="btn ' + (conferencia ? 'ghost ' : '') + 'mini" onclick="App.conferirOBanco()"' +
+      (conferindo ? ' disabled' : '') +
+      ajudaComLinhas('Conferir agora',
+        'Pergunta ao servidor quais tabelas e colunas ele conhece e compara com o que esta versão do app precisa.',
+        [['Não muda nada', 'É só pergunta. Nenhum registro é lido, nada é criado, nada é apagado.'],
+         ['O que ele responde', 'O que falta, e qual arquivo .sql rodar para cada coisa.'],
+         ['Por que existe', 'O app se atualiza sozinho pelo navegador; o banco não. Quando um campo novo nasce no código, ele só existe do outro lado depois que alguém roda o SQL.']]) +
+      '>' + (conferindo ? 'Conferindo…' : (conferencia ? 'Conferir de novo' : 'Conferir agora')) + '</button></div>';
+
+    if (!N || !N.conectado()) {
+      return '<div class="card">' + cabeca +
+        '<div class="vazio">Entre com a sua conta da nuvem — a conferência fala com o servidor.</div></div>';
+    }
+
+    if (!conferencia) {
+      return '<div class="card">' + cabeca +
+        '<p class="small muted" style="margin:8px 0 0">Compara o que este aplicativo precisa com o que ' +
+        'o seu banco tem: tabelas, colunas, funções de permissão e a versão da função do assistente. ' +
+        'Não muda nada — só pergunta.</p></div>';
+    }
+
+    if (conferencia.erro) {
+      return '<div class="card">' + cabeca +
+        '<div class="aviso" style="margin-top:10px">Não consegui conferir: ' +
+        esc(conferencia.erro) + '</div></div>';
+    }
+
+    const r = conferencia;
+    const ia = r.assistente || {};
+
+    /* O veredito primeiro, numa frase. Quem clica no botão quer saber "está ou
+       não está" — a lista é para quando NÃO está. */
+    let veredito;
+    if (r.tudoEmDia) {
+      veredito = '<div class="aviso" style="border-left-color:var(--ok);background:var(--dia-fundo);margin-top:10px">' +
+        '<strong>Está tudo em dia.</strong> Todas as tabelas, colunas e funções que este aplicativo ' +
+        'usa existem no seu banco, e a função do assistente é a desta versão.</div>';
+    } else if (r.carteiraEmDia) {
+      veredito = '<div class="aviso" style="border-left-color:var(--risk);background:var(--pri-fundo);margin-top:10px">' +
+        '<strong>A carteira está em dia</strong> — nada do seu trabalho está travado. ' +
+        'Falta coisa em recurso que você pode nem usar; está listado abaixo.</div>';
+    } else {
+      veredito = '<div class="aviso erro-grave" style="margin-top:10px">' +
+        '<strong>Falta coisa na carteira.</strong> Enquanto isso, campos novos ficam só neste ' +
+        'aparelho — o resto sobe normalmente desde a v228.</div>';
+    }
+
+    const porGrupo = C.GRUPOS.map(function (g) {
+      const faltam = r.faltam.filter(function (i) { return i.grupo === g.id; });
+      const total = r.itens.filter(function (i) { return i.grupo === g.id; }).length;
+      if (!faltam.length) {
+        return '<tr><td class="small"><strong>' + esc(g.nome) + '</strong></td>' +
+          '<td class="small"><span class="pill ok mini">em dia</span> ' +
+          '<span class="tiny muted">' + total + ' itens conferidos</span></td></tr>';
+      }
+      return '<tr><td class="small"><strong>' + esc(g.nome) + '</strong></td>' +
+        '<td class="small"><span class="pill dead mini">' + faltam.length + ' faltando</span> ' +
+        '<span class="tiny muted">' + esc(g.diz) + '</span></td></tr>';
+    }).join('');
+
+    const detalhe = r.faltam.length
+      ? '<h3 style="margin:14px 0 6px">O que falta, e o que rodar</h3>' +
+        '<p class="small muted" style="margin:0 0 8px">Painel do Supabase → SQL Editor → cole o ' +
+        'arquivo → Run. Todos podem ser repetidos sem estragar nada.</p>' +
+        '<div class="tabela-rolagem"><table><thead><tr><th>Falta</th><th>Rode</th></tr></thead><tbody>' +
+        r.faltam.map(linhaDoItem).join('') +
+        '</tbody></table></div>' +
+        '<p class="small" style="margin-top:8px"><strong>Arquivos a rodar, sem repetir:</strong> ' +
+        r.arquivos.map(function (a) { return '<code>' + esc(a) + '</code>'; }).join(' · ') + '</p>'
+      : '';
+
+    /* O assistente é uma pergunta separada: ele não mora no banco, e publicar
+       a função é outro caminho. Juntar os dois num "tudo ok" esconderia
+       justamente o passo que as pessoas esquecem. */
+    const assistente = ia.situacao === 'ok'
+      ? '<p class="small" style="margin-top:10px"><span class="pill ok mini">em dia</span> ' +
+        'A função do assistente conhece a varredura diária da tela Hoje.</p>'
+      : ia.situacao === 'velha'
+        ? '<p class="small" style="margin-top:10px"><span class="pill warn mini">atrasada</span> ' +
+          'A função do assistente está publicada, mas é de antes da varredura diária. ' +
+          'A tela Hoje funciona inteira — as explicações são cálculo —, só não aparece a leitura ' +
+          'do assistente. Republique <code>nuvem/funcoes/assistente/index.ts</code> ' +
+          'em Edge Functions.</p>'
+        : '<p class="small" style="margin-top:10px"><span class="pill mini">sem resposta</span> ' +
+          'Não consegui falar com a função do assistente' +
+          (ia.recado ? ': ' + esc(ia.recado) : '.') + '</p>';
+
+    return '<div class="card">' + cabeca + veredito +
+      '<div class="tabela-rolagem" style="margin-top:12px"><table><tbody>' + porGrupo +
+      '</tbody></table></div>' + detalhe + assistente + '</div>';
   }
 
   /* ------------------------------------------------------------------
@@ -9291,6 +9418,8 @@
     definirFiltro: function (f) { filtroGrupo = f; },
     definirFiltroHistorico: function (f) { filtroHistorico = f; },
     definirFiltroHoje: function (f) { filtroHoje = f; paginaHoje = 1; },
+    definirConferencia: definirConferencia,
+    marcarConferindo: marcarConferindo,
     definirPorPaginaHoje: definirPorPaginaHoje,
     definirPaginaHoje: definirPaginaHoje,
     POR_PAGINA: POR_PAGINA,

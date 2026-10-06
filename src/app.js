@@ -1453,6 +1453,20 @@
     filtrarHistorico: function (tipo) { V.definirFiltroHistorico(tipo); render(); },
     filtrarHoje: function (chave) { V.definirFiltroHoje(chave); render(); },
     porPaginaHoje: function (n) { V.definirPorPaginaHoje(n); render(); },
+    /* Conferir o banco. Só pergunta — não cria, não apaga, não lê registro. */
+    conferirOBanco: function () {
+      const C = global.IADConferencia;
+      if (!C) return;
+      V.marcarConferindo();
+      render();
+      C.conferir().then(function (r) {
+        V.definirConferencia(r);
+        render();
+      }, function (e) {
+        V.definirConferencia({ erro: (e && e.message) || 'erro desconhecido' });
+        render();
+      });
+    },
     paginaHoje: function (n) { V.definirPaginaHoje(n); window.scrollTo(0, 0); render(); },
     modoPipeline: function (modo) { V.definirModoPipeline(modo); render(); },
     abaCadastro: function (aba) { V.definirAbaCadastro(aba); render(); window.scrollTo(0, 0); },

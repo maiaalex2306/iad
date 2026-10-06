@@ -201,6 +201,23 @@
     return chamar('/functions/v1/' + nome, { metodo: 'POST', corpo: corpo || {} });
   }
 
+  /* O desenho da API, para a tela "O banco está em dia?".
+
+     A raiz do PostgREST descreve a si mesma: cada tabela com as suas colunas e
+     cada função como uma rota /rpc. Uma chamada responde o que, coluna a
+     coluna, seriam setenta e cinco.
+
+     Mora aqui e não no conferencia.js porque é assunto de HTTP, e porque
+     `chamar` não é exportado de propósito — abrir a porta para qualquer
+     caminho seria dar a toda tela do app a chave do servidor. Esta função
+     abre uma fresta: um caminho só, GET, sem corpo.
+
+     Nenhum registro é lido. É o mesmo documento que o navegador de qualquer
+     pessoa com a chave publicável já recebe. */
+  function desenhoDaApi() {
+    return chamar('/rest/v1/', { cabecalhos: { Accept: 'application/openapi+json' } });
+  }
+
   /* ---------- autenticação (GoTrue) ---------- */
   function cadastrar(email, senha, dados) {
     return chamar('/auth/v1/signup', {
@@ -1204,7 +1221,7 @@
     definirEmpresaDoPerfil, definirPapelDoPerfil, salvarMeuNome,
     definirBloqueioDoPerfil, definirBloqueioDaEmpresa, definirPonteDaEmpresa,
     sincronizarNaEntrada, definirDadosDaEmpresa, definirDadosDoPerfil, minhaSituacao, comoOServidorMeVe, primeirasLinhas, ondeEstaoOsRegistros,
-    convitesDaNuvem, convidar, removerConvite, recuperarSenha, criarEmpresa, chamarFuncao,
+    convitesDaNuvem, convidar, removerConvite, recuperarSenha, criarEmpresa, chamarFuncao, desenhoDaApi,
     mensagensWhatsapp, marcarLidasWhatsapp, vincularWhatsapp,
     emailsDaNuvem, vincularEmail, enfileirarEmail, marcarLidosEmail,
     marcarEmailAnalisado, contarTentativaDeAnalise,
