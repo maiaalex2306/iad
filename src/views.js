@@ -8214,6 +8214,25 @@
 
     /* O que a conferência NÃO olha, dito na tela e não só no código. Lacuna
        silenciosa num relatório de "está tudo ok" é a pior espécie delas. */
+    const trancadas = (r.trancadas || []).length
+      ? '<p class="small" style="margin-top:10px"><span class="pill ok mini">protegida</span> ' +
+        (r.trancadas.length === 1 ? 'A tabela ' : 'As tabelas ') +
+        r.trancadas.map(function (t) { return '<code>' + esc(t) + '</code>'; }).join(', ') +
+        ' existe' + (r.trancadas.length === 1 ? '' : 'm') + ', e o navegador não tem permissão ' +
+        'de ler' + (r.trancadas.length === 1 ? '' : '') + ' — <strong>é assim de propósito</strong>. ' +
+        'Ali ficam as senhas das caixas de e-mail; só o servidor lê. ' +
+        'A recusa é a própria prova de que a tabela está lá.</p>'
+      : '';
+
+    const naoDeu = (r.indefinidas || []).length
+      ? '<div class="aviso" style="margin-top:10px"><strong>Não deu para conferir ' +
+        r.indefinidas.length + ' tabela(s):</strong> ' +
+        r.indefinidas.map(function (x) {
+          return '<code>' + esc(x.tabela) + '</code> (' + esc(x.erro) + ')';
+        }).join(' · ') +
+        '. O resto do relatório vale; só estas ficaram sem resposta.</div>'
+      : '';
+
     const oQueNaoOlha = '<p class="tiny muted" style="margin:8px 0 0">' +
       'Conferiu ' + (r.conferidas || 0) + ' tabelas e as colunas de cada uma, sem ler ' +
       'nenhum registro. <strong>As funções de permissão não entram</strong>: a única forma de ' +
@@ -8251,7 +8270,7 @@
 
     return '<div class="card">' + cabeca + veredito +
       '<div class="tabela-rolagem" style="margin-top:12px"><table><tbody>' + porGrupo +
-      '</tbody></table></div>' + detalhe + assistente + oQueNaoOlha + '</div>';
+      '</tbody></table></div>' + naoDeu + detalhe + assistente + trancadas + oQueNaoOlha + '</div>';
   }
 
   /* ------------------------------------------------------------------

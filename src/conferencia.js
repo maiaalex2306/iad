@@ -138,6 +138,16 @@
      formato da tabela, nunca sobre o conteúdo dela. */
 
   const SEM_A_TABELA = /Could not find the table '(?:public\.)?([\w]+)'/i;
+  /* "Permissão negada" é prova de que a tabela EXISTE: o Postgres só nega
+     permissão sobre o que existe; o que não existe dá "relation does not
+     exist". E numa tabela aqui isso não é defeito, é o desenho —
+     `segredos_email` guarda senhas de caixa de e-mail e tem `revoke all ...
+     from authenticated, anon` de propósito: a única coisa no sistema que lê ali
+     é a Edge Function, com a chave secreta, do lado do servidor.
+
+     Tratar isso como falha foi erro meu, e derrubava a conferência inteira
+     por causa da tabela mais bem protegida do banco. */
+  const SEM_PERMISSAO = /permission denied for (?:table|relation) ([\w]+)/i;
   const SEM_A_COLUNA = [
     /column (?:[\w"]+\.)?"?([\w]+)"? does not exist/i,
     /Could not find the '([\w]+)' column/i
@@ -162,6 +172,7 @@
           const msg = (e && e.message) || '';
           const t = SEM_A_TABELA.exec(msg);
           if (t) return { existe: false, faltando: [] };
+          if (SEM_PERMISSAO.test(msg)) return { existe: true, faltando: [], trancada: true };
           const col = colunaDoErro(msg);
           /* Só repete quando aprendeu um nome NOVO que estava na pergunta.
              Sem essa guarda, um erro que cite sempre a mesma coluna gira para
@@ -248,13 +259,25 @@
     const mapa = porTabela();
     const nomes = Object.keys(mapa);
 
+    /* Uma tabela que não dá para conferir não pode levar o relatório inteiro
+       junto — foi o que aconteceu com `segredos_email`. Cada sonda resolve com
+       o que conseguiu, inclusive com o motivo de não ter conseguido, e a tela
+       mostra isso como "não deu para conferir" em vez de não mostrar nada. */
     return Promise.all(nomes.map(function (t) {
-      return sondar(t, mapa[t].colunas).then(function (r) {
-        return { tabela: t, resultado: r };
-      });
+      return sondar(t, mapa[t].colunas).then(
+        function (r) { return { tabela: t, resultado: r }; },
+        function (e) {
+          return { tabela: t, resultado: { indefinido: true, existe: true, faltando: [],
+            erro: (e && e.message) || 'não deu para conferir' } };
+        });
     })).then(function (saidas) {
       const achado = {};
       saidas.forEach(function (s) { achado[s.tabela] = s.resultado; });
+
+      const trancadas = saidas.filter(function (s) { return s.resultado.trancada; })
+        .map(function (s) { return s.tabela; });
+      const indefinidas = saidas.filter(function (s) { return s.resultado.indefinido; })
+        .map(function (s) { return { tabela: s.tabela, erro: s.resultado.erro }; });
 
       const itens = ESPERADO.filter(function (e) { return e[1] !== 'funcao'; }).map(function (e) {
         const grupo = e[0], tipo = e[1], alvo = e[2], coluna = e[3], arquivo = e[4];
@@ -279,11 +302,14 @@
       return conferirAssistente().then(function (ia) {
         return {
           itens: itens, faltam: faltam, arquivos: arquivos, assistente: ia,
-          conferidas: nomes.length,
+          conferidas: nomes.length, trancadas: trancadas, indefinidas: indefinidas,
           /* "Tudo em dia" é só sobre o que trava o trabalho. E-mail e WhatsApp
              que a pessoa não usa não podem pintar a tela de vermelho. */
           carteiraEmDia: !faltam.some(function (i) { return i.grupo === 'carteira'; }),
-          tudoEmDia: !faltam.length && ia.situacao === 'ok'
+          /* "Tudo em dia" não pode ser dito quando alguma coisa não deu para
+             conferir: silêncio apresentado como aprovação é o defeito que esta
+             tela inteira existe para não cometer. */
+          tudoEmDia: !faltam.length && !indefinidas.length && ia.situacao === 'ok'
         };
       });
     });
