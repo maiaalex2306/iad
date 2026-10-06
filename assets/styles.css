@@ -89,6 +89,7 @@
        lilás é só do botão “Todos”, que não é um estado da carteira — é o
        seletor que desliga o filtro, sempre o último da fila e sempre escrito.
        Lilás nenhum entra em cartão de negócio. */
+  --sombra-funil: 0 3px 10px rgba(16, 32, 47, .16);
   --urg-fundo: #fff2e8; --urg-borda: #f6c89a; --urg-tinta: #9a4206;
   --pri-fundo: #eaf2fd; --pri-borda: #b6d4f2; --pri-tinta: #1d4e8c;
   --dia-fundo: #e9f7ee; --dia-borda: #aedcc0; --dia-tinta: #146634;
@@ -118,6 +119,9 @@
        a tinta clareia, que é o movimento inverso e o único que mantém a faixa
        legível — medido, 12,2:1 a 13,8:1 para o texto e 8,2:1 a 8,8:1 para a
        tinta sobre o próprio fundo. */
+    /* A sombra do funil no escuro é preta e mais funda: a sombra azulada do
+       claro desaparece contra o #131c2b e o corpo fica colado no fundo. */
+    --sombra-funil: 0 3px 12px rgba(0, 0, 0, .5);
     --urg-fundo: #3a2112; --urg-borda: #6b3c17; --urg-tinta: #ffb27a;
     --pri-fundo: #13263d; --pri-borda: #27486f; --pri-tinta: #8fc2f5;
     --dia-fundo: #12301f; --dia-borda: #1f5436; --dia-tinta: #7fd9a3;
@@ -1047,10 +1051,23 @@ dialog.caixa-ficha { width: min(520px, 94vw); }
 .legenda-calor { margin: 6px 0 2px; }
 
 /* O número do funil desenhado: maior que o rótulo, porque é ele que se
-   procura. E a queda entre dois degraus, no vão, em cor de alerta — é o número
-   que o gestor caça e que funil desenhado nenhum costuma mostrar. */
+   procura. E a queda de um degrau para o outro, em cor de alerta — é o número
+   que o gestor caça e que funil desenhado nenhum costuma mostrar. Ela ficava
+   no vão entre duas faixas; com a silhueta contínua não há mais vão, e ela
+   desceu para a coluna da direita, onde já estão o valor e a porcentagem. */
 .g-num-funil { font-size: 14px; font-weight: 700; fill: var(--text); font-variant-numeric: tabular-nums; }
 .g-queda { font-size: 11px; font-weight: 600; fill: var(--risk); }
+
+/* ---------- a silhueta do funil ----------
+   A sombra é de propósito baixa e larga: ela separa o corpo do fundo do cartão
+   sem virar relevo de botão. `drop-shadow` e não `box-shadow` porque segue o
+   contorno real do caminho, e o contorno aqui é curvo.
+
+   O fio entre duas faixas é da cor da SUPERFÍCIE, não uma borda: borda
+   contornaria cada faixa e devolveria o aspecto de blocos empilhados que esta
+   versão existe para desfazer. Ele corta, não contorna. */
+.funil-corpo { filter: drop-shadow(var(--sombra-funil)); }
+.g-corte-funil { stroke: var(--surface); stroke-width: 2.5; opacity: .75; }
 
 /* A barrinha dentro da célula da tabela: compara sem precisar de gráfico. */
 .mini-barra {

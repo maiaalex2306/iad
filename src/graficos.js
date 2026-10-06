@@ -394,11 +394,11 @@
   }
 
 
-  /* ---------- O FUNIL DESENHADO (trapézios) ----------
+  /* ---------- O FUNIL DESENHADO ----------
 
-     O funil que todo mundo reconhece: faixas em trapézio que estreitam de cima
-     para baixo. Ele existe porque a FORMA diz a coisa de um golpe — onde a
-     carteira estrangula aparece antes de qualquer número ser lido.
+     O funil que todo mundo reconhece: uma silhueta que estreita de cima para
+     baixo. Ele existe porque a FORMA diz a coisa de um golpe — onde a carteira
+     estrangula aparece antes de qualquer número ser lido.
 
      Três decisões que fazem ele funcionar, e que faltam nos funis que se veem
      por aí:
@@ -409,9 +409,9 @@
      2. Nenhum texto DENTRO da faixa. Rótulo à esquerda, número à direita, em
         tinta de texto. Texto dentro de faixa colorida muda de legibilidade a
         cada degrau da rampa, e no modo escuro vira loteria.
-     3. A QUEDA entre dois degraus é escrita no vão entre eles. É o número que
-        o gestor procura — "perdi 40% aqui" — e que nenhum funil desenhado
-        costuma mostrar.
+     3. A QUEDA de um degrau para o outro é escrita por extenso, na coluna da
+        direita. É o número que o gestor procura — "perdi 40% aqui" — e que
+        nenhum funil desenhado costuma mostrar.
 
      A cor vem das quatro ZONAS DE CALOR (--calor-1..4): frio no topo, fervendo
      no fundo. Ver o comentário no CSS para a medição e para por que são quatro
@@ -442,60 +442,204 @@
     }).join('') + '</div>';
   }
 
+  /* Cada funil precisa de ids próprios: dois na mesma tela — o real e o
+     declarado — compartilhariam o recorte e o brilho, e o segundo herdaria a
+     silhueta do primeiro. */
+  let serieDoFunil = 0;
+
+  /* A borda de uma faixa, de (x0,y0) a (x1,y1), como curva.
+
+     Era reta, e é daí que vinha o aspecto quadrado: dois degraus de mesmo
+     valor viravam um retângulo, e uma queda grande virava uma seta. A cúbica
+     abaixo põe os pontos de controle na vertical, a meia altura — então a
+     curva CHEGA e SAI na vertical, e a borda da faixa seguinte continua a
+     desta sem cotovelo. Empilhadas, as oito faixas formam uma silhueta só,
+     contínua, em vez de uma pilha de blocos. */
+  function bordaCurva(x0, y0, x1, y1) {
+    const k = (y1 - y0) / 2;
+    return 'C' + x0 + ' ' + (y0 + k) + ' ' + x1 + ' ' + (y1 - k) + ' ' + x1 + ' ' + y1;
+  }
+
+  /* O caminho de uma faixa. `r` arredonda os ombros de cima (só a primeira) e
+     o pé de baixo (só a última) — no meio não há canto para arredondar, porque
+     a faixa seguinte continua a curva. */
+  function faixaDoFunil(eixo, y0, y1, a, b, primeira, ultima) {
+    const rc = primeira ? Math.min(18, a) : 0;
+    const rb = ultima ? Math.min(20, b) : 0;
+    const p = [];
+
+    if (rc) {
+      /* A boca do funil é levemente abaulada, não uma régua. São 5px de
+         barriga: o bastante para a figura parecer um recipiente visto de lado
+         e não uma bigorna, e pouco o bastante para ninguém medir nada por ali
+         — o número daquele degrau está escrito ao lado, em algarismo. */
+      const domo = y0 - 5;
+      p.push('M' + (eixo - a) + ' ' + (y0 + rc));
+      p.push('Q' + (eixo - a) + ' ' + y0 + ' ' + (eixo - a + rc) + ' ' + (y0 - 1));
+      p.push('Q' + eixo + ' ' + domo + ' ' + (eixo + a - rc) + ' ' + (y0 - 1));
+      p.push('Q' + (eixo + a) + ' ' + y0 + ' ' + (eixo + a) + ' ' + (y0 + rc));
+    } else {
+      p.push('M' + (eixo - a) + ' ' + y0);
+      p.push('L' + (eixo + a) + ' ' + y0);
+    }
+
+    p.push(bordaCurva(eixo + a, y0 + rc, eixo + b, y1 - rb));
+
+    if (rb) {
+      p.push('Q' + (eixo + b) + ' ' + y1 + ' ' + (eixo + b - rb) + ' ' + y1);
+      p.push('L' + (eixo - b + rb) + ' ' + y1);
+      p.push('Q' + (eixo - b) + ' ' + y1 + ' ' + (eixo - b) + ' ' + (y1 - rb));
+    } else {
+      p.push('L' + (eixo - b) + ' ' + y1);
+    }
+
+    p.push(bordaCurva(eixo - b, y1 - rb, eixo - a, y0 + rc));
+    p.push('Z');
+    return p.join(' ');
+  }
+
+  /* ---------- O FUNIL DESENHADO ----------
+
+     O que mudou e por quê, porque a versão anterior estava feia e o motivo era
+     geométrico, não de gosto:
+
+     · As faixas eram TRAPÉZIOS de lados retos, separadas por 16px de vão. Oito
+       blocos soltos, cada um com quatro cantos vivos. Pior: quando dois
+       degraus têm o mesmo valor — que é o caso normal no topo de um funil de
+       decisão — o trapézio vira um RETÂNGULO, e a tela inteira fica quadrada.
+       E quando a queda é grande (107 → 6), o trapézio vira uma seta apontando
+       para baixo, que ninguém lê como funil.
+
+     · Agora os lados são curvas com tangente vertical nas duas pontas, as
+       faixas se tocam sem vão, e o conjunto forma UMA silhueta contínua. Dois
+       degraus iguais viram um trecho reto de um corpo curvo, não um tijolo.
+
+     · O vão sumiu, e com ele o lugar onde morava o "↓ N%". Ele foi para a
+       coluna de números, à direita, como terceira linha. Ganhou-se o centro do
+       desenho limpo — era ali que a seta cruzava a própria faixa.
+
+     As cores não mudaram: são as mesmas quatro zonas de calor, validadas. O
+     que entra é um brilho de cima para baixo, branco e translúcido, recortado
+     na silhueta — ele não altera matiz nenhum, só dá volume. */
   function funilDesenhado(dados, o) {
     const op = o || {};
-    const L = 620, topo = 16, alturaFaixa = 52, vao = 16;
-    const H = topo + dados.length * (alturaFaixa + vao) + 10;
+    const id = 'fnl' + (++serieDoFunil);
+    const n = dados.length;
+    const L = 620, topo = 20, alturaFaixa = 50;
+    const H = topo + n * alturaFaixa + 20;
     const eixo = L / 2;
-    const larguraMax = 300;           /* meia-largura máxima = 150 de cada lado */
+    const larguraMax = 264;           /* meia-largura máxima = 132 de cada lado */
     const base = Math.max.apply(null, dados.map(function (d) { return d.valor || 0; }).concat([1]));
 
-    /* Largura mínima visível: faixa de valor zero vira uma linha e some, e some
-       justamente onde a notícia é pior. */
-    const meiaLargura = function (v) {
-      return Math.max(14, ((v || 0) / base) * (larguraMax / 2));
+    /* ---------- a largura de cada degrau ----------
+       A largura é PROPORCIONAL ao valor, e é assim que tem de ser: é ela que
+       diz onde a carteira estrangula.
+
+       O piso não é decoração. Sem ele, degrau de valor zero vira uma linha e
+       SOME — some justamente onde a notícia é pior. E um piso fixo tinha um
+       efeito feio e também errado: seis degraus zerados viravam seis tijolos
+       exatamente iguais, um palito reto pendurado no funil. Palito reto diz
+       "daqui para baixo tanto faz", e não é o que acontece: o sexto zero está
+       mais longe do fechamento que o terceiro.
+
+       Então o piso DESCE ao longo do funil, de 17px a 8px. Ele só age onde a
+       proporção já encostou no mínimo — acima disso, quem manda é o valor —, e
+       ali ele devolve o afunilamento que a figura precisa ter. O número de cada
+       degrau fica escrito ao lado, em algarismo, e é ele que se lê. */
+    const piso = function (i) {
+      return n > 1 ? 17 - (i / (n - 1)) * 9 : 17;
+    };
+    const meiaLargura = function (v, i) {
+      return Math.max(piso(i), ((v || 0) / base) * (larguraMax / 2));
     };
 
-    const corpo = dados.map(function (d, i) {
-      const y = topo + i * (alturaFaixa + vao);
-      const a = meiaLargura(d.valor);
-      const b = meiaLargura(i + 1 < dados.length ? dados[i + 1].valor : d.valor);
-      const cor = ZONAS[zonaDeCalor(i, dados.length)].cor;
+    const larguras = dados.map(function (d, i) { return meiaLargura(d.valor, i); });
+
+    /* O pé do funil fecha. A última faixa estreita um pouco e termina
+       arredondada — é o que faz a figura ser um funil e não um tubo cortado.
+       Não carrega informação: o valor do último degrau está na largura de CIMA
+       dela, que é onde a faixa começa, e escrito ao lado.
+
+       Setenta por cento e não metade: com metade, uma carteira em que o último
+       degrau não caiu ganhava um pedestal no pé, e pedestal parece queda. A
+       esta altura é só o arredondamento de quem acaba. */
+    const peDoFunil = Math.max(7, larguras[n - 1] * 0.7);
+
+    /* O corpo primeiro, os textos por cima: assim o brilho e as divisórias
+       passam por baixo de qualquer rótulo. */
+    const caminhos = dados.map(function (d, i) {
+      const y0 = topo + i * alturaFaixa;
+      const a = larguras[i];
+      const b = i + 1 < n ? larguras[i + 1] : peDoFunil;
+      return faixaDoFunil(eixo, y0, y0 + alturaFaixa, a, b, i === 0, i === n - 1);
+    });
+
+    const corpo = caminhos.map(function (caminho, i) {
+      const d = dados[i];
+      const prop = base ? Math.round(((d.valor || 0) / base) * 100) : 0;
       const antes = i ? (dados[i - 1].valor || 0) : null;
       const queda = antes != null && antes > 0
         ? Math.round((1 - (d.valor || 0) / antes) * 100) : null;
-      const prop = base ? Math.round(((d.valor || 0) / base) * 100) : 0;
-
-      /* O trapézio: largo em cima, estreito embaixo — e o de baixo é a largura
-         do PRÓXIMO degrau, para as faixas encaixarem como um funil de verdade
-         em vez de uma pilha de blocos soltos. */
-      const pontos = [
-        (eixo - a) + ',' + y,
-        (eixo + a) + ',' + y,
-        (eixo + b) + ',' + (y + alturaFaixa),
-        (eixo - b) + ',' + (y + alturaFaixa)
-      ].join(' ');
-
-      const meio = y + alturaFaixa / 2 + 4;
-      return '<g>' +
+      /* A classe nomeia a faixa. Sem ela, qualquer busca por `path` dentro do
+         grupo pega também os caminhos do recorte, que são cópias — e contar
+         cópia como faixa é erro que só aparece num teste. */
+      return '<path class="g-faixa-funil" d="' + caminho + '" fill="' +
+        ZONAS[zonaDeCalor(i, dados.length)].cor + '">' +
         '<title>' + esc(d.rotulo) + ': ' + fmt(d.valor, op.moeda) + ' (' + prop + '% da entrada)' +
-        (queda != null ? ' — caiu ' + queda + '% do passo anterior' : '') + '</title>' +
-        '<polygon points="' + pontos + '" fill="' + cor + '"></polygon>' +
-        '<text x="' + (eixo - larguraMax / 2 - 14) + '" y="' + meio + '" text-anchor="end" class="g-rot">' +
-        esc(cortar(d.rotulo, 26)) + '</text>' +
-        '<text x="' + (eixo + larguraMax / 2 + 14) + '" y="' + (meio - 7) + '" class="g-num-funil">' +
+        (queda != null ? ' — caiu ' + queda + '% do passo anterior' : '') + '</title></path>';
+    }).join('');
+
+    /* As divisórias. Um fio da cor da superfície no limite entre duas faixas,
+       só da largura daquele ponto: separa sem recortar a silhueta, que é o que
+       uma linha de contorno faria. */
+    const divisorias = dados.slice(1).map(function (d, k) {
+      const i = k + 1;
+      const y = topo + i * alturaFaixa;
+      const b = larguras[i];
+      return '<line x1="' + (eixo - b) + '" y1="' + y + '" x2="' + (eixo + b) + '" y2="' + y +
+        '" class="g-corte-funil"></line>';
+    }).join('');
+
+    const brilho = '<defs>' +
+      '<clipPath id="' + id + '-c">' + caminhos.map(function (c) {
+        return '<path d="' + c + '"></path>';
+      }).join('') + '</clipPath>' +
+      '<linearGradient id="' + id + '-b" x1="0" y1="0" x2="0" y2="1">' +
+      '<stop offset="0" stop-color="#ffffff" stop-opacity="0.22"></stop>' +
+      '<stop offset="0.45" stop-color="#ffffff" stop-opacity="0.05"></stop>' +
+      '<stop offset="1" stop-color="#ffffff" stop-opacity="0"></stop>' +
+      '</linearGradient></defs>' +
+      '<rect x="0" y="0" width="' + L + '" height="' + H + '" fill="url(#' + id + '-b)"' +
+      ' clip-path="url(#' + id + '-c)" pointer-events="none"></rect>';
+
+    const textos = dados.map(function (d, i) {
+      const y0 = topo + i * alturaFaixa;
+      const meio = y0 + alturaFaixa / 2;
+      const prop = base ? Math.round(((d.valor || 0) / base) * 100) : 0;
+      const antes = i ? (dados[i - 1].valor || 0) : null;
+      const queda = antes != null && antes > 0
+        ? Math.round((1 - (d.valor || 0) / antes) * 100) : null;
+      const temQueda = queda != null && queda > 0;
+      /* Três linhas quando há queda, duas quando não há — e o bloco inteiro
+         centrado na faixa nos dois casos, senão o texto dança de linha para
+         linha ao descer o funil. */
+      const base1 = temQueda ? meio - 6 : meio - 1;
+      return '<text x="' + (eixo - larguraMax / 2 - 16) + '" y="' + (meio + 4) +
+        '" text-anchor="end" class="g-rot">' + esc(cortar(d.rotulo, 26)) + '</text>' +
+        '<text x="' + (eixo + larguraMax / 2 + 16) + '" y="' + base1 + '" class="g-num-funil">' +
         fmt(d.valor, op.moeda) + '</text>' +
-        '<text x="' + (eixo + larguraMax / 2 + 14) + '" y="' + (meio + 9) + '" class="g-eixo">' +
+        '<text x="' + (eixo + larguraMax / 2 + 16) + '" y="' + (base1 + 15) + '" class="g-eixo">' +
         prop + '% da entrada</text>' +
-        (queda != null && queda > 0
-          ? '<text x="' + eixo + '" y="' + (y - 5) + '" text-anchor="middle" class="g-queda">\u2193 ' +
-            queda + '%</text>'
-          : '') +
-        '</g>';
+        (temQueda
+          ? '<text x="' + (eixo + larguraMax / 2 + 16) + '" y="' + (base1 + 29) +
+            '" class="g-queda">↓ ' + queda + '% do anterior</text>'
+          : '');
     }).join('');
 
     /* A legenda nomeia as zonas: cor sozinha nunca é a única pista. */
-    return legendaDoCalor() + svg(L, H, corpo, op.titulo || 'Funil');
+    return legendaDoCalor() +
+      svg(L, H, '<g class="funil-corpo">' + corpo + brilho + divisorias + '</g>' + textos,
+        op.titulo || 'Funil');
   }
 
   /* O despachante. `tipo` que não existe cai em barras, que é a forma que
@@ -520,7 +664,7 @@
   function seletorDeForma(id, atual, formas) {
     const nomes = { funil: 'Funil', lista: 'Lista', barras: 'Barras', linhas: 'Linhas', pizza: 'Pizza' };
     const ajuda = {
-      funil: 'O desenho clássico: faixas em trapézio que estreitam. A forma mostra onde estrangula antes de você ler um número.',
+      funil: 'O desenho clássico: uma silhueta contínua que estreita. A forma mostra onde estrangula antes de você ler um número.',
       lista: 'O mesmo funil em linhas, com o valor, a porcentagem do passo anterior e a marca do gargalo. Cabe mais texto que no desenho.',
       barras: 'Comparar tamanhos. É a forma que menos erra.',
       linhas: 'Para sequência — dia, mês. Em categoria solta, uma reta ligando duas campanhas não quer dizer nada.',
