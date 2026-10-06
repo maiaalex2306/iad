@@ -182,6 +182,11 @@ const FORMATOS: Record<string, Record<string, Regra>> = {
   /* 'desenvolvimento' lê a carteira inteira, não um negócio: a série das
      semanas e o rendimento por tipo de tarefa. Validado à parte. */
   desenvolvimento: {},
+  /* 'orientacao' é a varredura diária da tela Hoje. O aplicativo já CALCULOU
+     por que a conta está urgente, o que está atrasado e o que fazer — e manda
+     esse cálculo junto. O trabalho aqui é só o que a conta não faz: ler o
+     texto do que o cliente disse. Validado à parte. */
+  orientacao: {},
   /* Sem regra de campo: a saída é uma lista, e quem a valida é
      validarContatos. Precisa estar aqui porque esta tabela é também a lista
      do que a função aceita — tipo fora dela volta "tipo desconhecido". */
@@ -701,6 +706,28 @@ Regras desta tarefa:
 - Português do Brasil.`;
   }
 
+  if (tipo === 'orientacao') {
+    const negocio = limparTexto(ctx.tituloDoNegocio, 120);
+    return `${BASE}
+
+Tarefa: você recebe o retrato de UMA oportunidade${negocio ? ` ("${negocio}")` : ''} e, no fim dele, O QUE O APLICATIVO JÁ CALCULOU: as causas da urgência, os atrasos em dias e os passos que ele já recomendou. Esse cálculo já está na tela do vendedor, com números exatos.
+
+Seu trabalho NÃO é repetir o cálculo. É acrescentar o que só se consegue LENDO O TEXTO: o que o cliente disse, com as palavras dele, nas evidências, nas atas e nas notas do retrato.
+
+Devolva {"leitura":"...", "acelerar":[...], "risco":[...]}.
+
+- leitura: UM parágrafo, no máximo 4 frases, falando com o vendedor na segunda pessoa. Diga onde este negócio realmente está na cabeça do cliente e por quê, citando o que ele disse. Se o retrato não tiver texto do cliente — só notas e datas —, diga exatamente isso em uma frase: que não há registro do que o cliente falou, e que é essa a primeira coisa a resolver.
+- acelerar: no máximo 3 jogadas concretas que o cálculo NÃO propôs, cada uma começando por um verbo e cabendo nesta semana. Use as palavras do cliente. Uma jogada que serviria para qualquer negócio não serve para nenhum.
+- risco: no máximo 3 frases curtas sobre o que pode matar este negócio e ainda não está na lista de causas.
+
+Regras desta tarefa:
+- Não repita, nem reescreva com outras palavras, nada que esteja em CAUSAS, ATRASOS ou PASSOS JÁ RECOMENDADOS. Se não tiver nada a acrescentar numa lista, devolva ela vazia — vazio é resposta honesta.
+- Não invente pessoa, número, prazo, valor ou concorrente que não esteja no retrato.
+- Não dê nota, não diga que uma decisão "deveria" valer 2. Quem pontua é o vendedor, com evidência.
+- Sem elogio, sem motivação, sem "é importante alinhar". Frase que não muda o que o vendedor faz amanhã é frase fora.
+- Português do Brasil.`;
+  }
+
   if (tipo === 'segmentos') {
     const papeis = (Array.isArray(ctx.papeis) ? ctx.papeis.map(String) : []);
     const nomes = segmentosDoTenant(ctx);
@@ -1004,6 +1031,10 @@ function tetoDeSaida(tipo: string, quantos = 0): number {
     return Math.min(Math.max(quantos * 500, 2000), 5000);
   }
   if (tipo === 'plano' || tipo === 'desenvolvimento') return 4000;
+  /* Um parágrafo e duas listas curtas. 2000 e não 800 porque o raciocínio dos
+     gpt-oss sai do mesmo orçamento, e teto curto aqui devolve geração vazia —
+     que parece erro de prompt e não é. */
+  if (tipo === 'orientacao') return 2000;
   /* Uma palavra de saída. O teto alto aqui é para o raciocínio dos gpt-oss,
      que sai do mesmo orçamento — não para o texto. */
   if (tipo === 'intencao') return 800;
@@ -1733,6 +1764,22 @@ function validarPlano(bruto: Record<string, unknown>) {
   return { passos: passos, atencao: atencao };
 }
 
+/* A leitura diária da tela Hoje. Tudo cortado no tamanho que o cartão
+   aguenta: parágrafo de 600 e três linhas de 200. Lista vazia passa — é a
+   resposta honesta de quem não tinha nada a acrescentar, e forçar o modelo a
+   escrever algo seria pedir invenção. */
+function validarOrientacao(bruto: Record<string, unknown>) {
+  const lista = (x: unknown, max: number) => (Array.isArray(x) ? x : [])
+    .slice(0, 3)
+    .map((i) => limparTexto(i, max))
+    .filter(Boolean);
+  return {
+    leitura: limparTexto(bruto.leitura, 600),
+    acelerar: lista(bruto.acelerar, 200),
+    risco: lista(bruto.risco, 200)
+  };
+}
+
 /* ---------- o site da empresa ----------
    O modelo não navega. A função navega — ela roda num servidor. Para empresa
    conhecida a descrição do próprio LinkedIn basta; o site resolve a empresa
@@ -2107,7 +2154,7 @@ Deno.serve(async (req: Request) => {
 
   /* Transcrição de reunião é longa por natureza; um lote de empresas também. */
   const limite = (tipo === 'reuniao' || tipo === 'segmentos' || tipo === 'plano' || tipo === 'notas' ||
-                  tipo === 'desenvolvimento')
+                  tipo === 'desenvolvimento' || tipo === 'orientacao')
     ? LIMITE_REUNIAO : LIMITE_TEXTO;
   const texto = String(pedido.texto || '').slice(0, limite).trim();
   if (texto.length < 10) return responder({ campos: {}, frases: {} });
@@ -2204,6 +2251,7 @@ Deno.serve(async (req: Request) => {
       if (tipo === 'plano') return responder({ passos: [], atencao: [] });
       if (tipo === 'notas') return responder({ decisoes: [] });
       if (tipo === 'desenvolvimento') return responder({ leitura: '', indoBem: [], indoMal: [], mudancas: [] });
+      if (tipo === 'orientacao') return responder({ leitura: '', acelerar: [], risco: [] });
       if (tipo === 'pessoas') return responder({ campos: {}, frases: {}, contatos: [] });
       return responder({ campos: {}, frases: {} });
     }
@@ -2212,6 +2260,7 @@ Deno.serve(async (req: Request) => {
     if (tipo === 'plano') return responder(validarPlano(json));
     if (tipo === 'notas') return responder(validarNotas(json, entrada));
     if (tipo === 'desenvolvimento') return responder(validarDesenvolvimento(json));
+    if (tipo === 'orientacao') return responder(validarOrientacao(json));
     /* `campos` vazio de propósito: quem chama é a mesma função de extração do
        app, e ela exige o campo para distinguir resposta da função de página de
        erro do gateway. Aqui o que interessa vai em `contatos`. */

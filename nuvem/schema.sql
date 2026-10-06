@@ -127,6 +127,11 @@ create table if not exists public.oportunidades (
   /* As passagens pela nutrição: entrou quando, por quê, e por que voltou.
      Responde "quantas vezes esta conta já entrou e saiu" seis meses depois. */
   historico_nutricao   jsonb not null default '[]'::jsonb,
+  /* A leitura que o assistente escreve uma vez por dia: o que ele entendeu do
+     texto das conversas, por que a conta está urgente, o que está atrasado e o
+     que fazer. Datada, porque leitura de ontem apresentada como de hoje é pior
+     do que leitura nenhuma. O cálculo da tela Hoje NÃO depende dela. */
+  orientacao           jsonb not null default '{}'::jsonb,
   desfecho             jsonb,
   criado_em            date default current_date,
   atualizado_em        timestamptz default now()

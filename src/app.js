@@ -215,6 +215,44 @@
       marcarQueFalou(logado.id);
       setTimeout(function () { App.conversar(); }, 400);
     }
+
+    if (hash === '#/hoje') varrerOrientacoesDoDia();
+  }
+
+  /* ---------------- a varredura diária, disparada pela tela ----------------
+     Roda ao abrir o Hoje e não no boot, por dois motivos. Primeiro, é a tela
+     que usa o resultado: varrer para quem abre o app no Pipeline e fecha é
+     gastar chamada sem ninguém ler. Segundo, no boot a carteira do servidor
+     ainda não desceu, e varrer a cópia velha produziria leitura de dados que
+     estão a um segundo de serem substituídos.
+
+     Sai do caminho da repintura com `setTimeout`: a tela tem de aparecer
+     primeiro. A leitura chega depois, negócio por negócio, e cada uma repinta
+     só o conteúdo — a pessoa vê o parágrafo nascer em vez de descobrir amanhã
+     que ele existia. */
+  let diaVarrido = '';
+
+  function varrerOrientacoesDoDia() {
+    const IA = global.IADIA;
+    if (!IA || !IA.disponivel || !IA.disponivel()) return;
+    const hoje = Store.hoje();
+    if (diaVarrido === hoje || IA.varrendoAgora()) return;
+
+    const est = Store.dados();
+    if (!est.oportunidades || !est.oportunidades.length) return;
+    const foco = E.fila(est.oportunidades, est.tarefas);
+    if (!foco.itens.length) return;
+    /* Marcado ANTES de começar: `render` roda a cada clique, e duas
+       navegações rápidas dispariam duas varreduras da mesma fila. */
+    diaVarrido = hoje;
+
+    setTimeout(function () {
+      IA.varrerOrientacoes(foco.itens, function () {
+        repintarConteudo('#/hoje', V.hoje);
+      }).then(function (quantas) {
+        if (quantas) repintarConteudo('#/hoje', V.hoje);
+      }, function () { /* leitura é extra: falhar nela não avisa ninguém */ });
+    }, 600);
   }
 
   /* Repintar só o conteúdo, sem sair do lugar.
@@ -1376,7 +1414,16 @@
     __donoDoEmail: function (email, contatos) { return donoDoEmail(email, contatos); },
     __campoLivre: function (contato, valor, ehEmail) { return campoLivre(contato, valor, ehEmail); },
     __propostasDoTexto: function (texto, contaId, contatoId) { return propostasDoTexto(texto, contaId, contatoId); },
-    __aplicarPropostas: function (escolhidas) { return aplicarPropostas(escolhidas); }
+    __aplicarPropostas: function (escolhidas) { return aplicarPropostas(escolhidas); },
+    /* Repintar sob comando. O teste que semeia a carteira direto no Store
+       precisa de uma forma de pedir a tela de novo sem passar por um clique —
+       e passar por um clique significaria testar o clique, não a tela. */
+    __render: function () { return render(); },
+    /* A varredura diária. Exposta porque ela é um relógio e uma chamada de
+       rede: o teste precisa poder dizer "faz de conta que hoje já foi
+       varrido" sem esperar o dia virar nem gastar chamada. */
+    __varrerOrientacoesDoDia: function () { return varrerOrientacoesDoDia(); },
+    __esquecerVarredura: function () { diaVarrido = ''; }
   };
 
   const App = {
@@ -1385,6 +1432,8 @@
     filtrar: function (grupo) { V.definirFiltro(grupo); render(); },
     filtrarHistorico: function (tipo) { V.definirFiltroHistorico(tipo); render(); },
     filtrarHoje: function (chave) { V.definirFiltroHoje(chave); render(); },
+    porPaginaHoje: function (n) { V.definirPorPaginaHoje(n); render(); },
+    paginaHoje: function (n) { V.definirPaginaHoje(n); window.scrollTo(0, 0); render(); },
     modoPipeline: function (modo) { V.definirModoPipeline(modo); render(); },
     abaCadastro: function (aba) { V.definirAbaCadastro(aba); render(); window.scrollTo(0, 0); },
     /* Trocar de aba é trocar de lista: aí sim começa do topo. */
@@ -9550,6 +9599,31 @@
     promptInstalacao = e;
   });
 
+  /* ---------------- quem entra cai no Hoje ----------------
+     Entrar pelo login já levava ao Hoje. Quem NÃO passa pelo login não: a
+     sessão fica guardada no aparelho, e o endereço guarda o hash da última
+     visita. Fechar o app no Pipeline e abrir no dia seguinte reabria o
+     Pipeline — e o Hoje, que é a tela que diz o que precisa ser feito, só
+     aparecia se a pessoa lembrasse de ir até ele.
+
+     Uma exceção, e é importante: link para um registro específico. Clicar em
+     `#/op/<id>` num e-mail, num convite ou no histórico do navegador tem de
+     abrir aquele negócio. Jogar essa pessoa no Hoje seria quebrar o link para
+     cumprir a regra — então endereço que aponta para um registro passa, e
+     endereço de tela qualquer vira Hoje. */
+  function abrirNoHoje() {
+    const h = location.hash || '';
+    if (/^#\/[a-z]+\/.+/.test(h)) return;       /* #/op/123, #/conta/456 */
+    if (h === '#/hoje') return;
+    /* `replace` e não `=`: trocar o hash normalmente empilharia a tela antiga
+       no histórico, e o botão voltar do celular devolveria a pessoa para ela. */
+    if (location.replace) {
+      location.replace(location.pathname + location.search + '#/hoje');
+    } else {
+      location.hash = '#/hoje';
+    }
+  }
+
   window.addEventListener('hashchange', render);
 
   document.addEventListener('DOMContentLoaded', function () {
@@ -9561,6 +9635,7 @@
     global.IADAjuda.ligar();
     ligarOcio();
     montarNav();
+    abrirNoHoje();
 
     /* Antes de tudo: quem chega pelo link do e-mail já vem autenticado, e
        precisa ser reconhecido antes que a tela de login apareça. Só depois

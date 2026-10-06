@@ -951,6 +951,140 @@
     return ctx;
   }
 
+  /* ================= A VARREDURA DIÁRIA DA TELA HOJE =================
+
+     O pedido foi "use a IA para isso uma vez ao dia". Esta é a parte da IA, e
+     ela é a MENOR das duas de propósito.
+
+     A divisão do trabalho, que vale escrever porque é a decisão inteira:
+
+       · O CÁLCULO (src/orientacao.js) diz por que a conta está urgente, o que
+         está atrasado e o que fazer. É instantâneo, de graça, auditável,
+         funciona offline e nunca erra — sai dos mesmos dados que a tela mostra.
+         Isso é 90% do que o vendedor precisa de manhã, e ele tem sempre.
+
+       · A IA acrescenta o que SÓ ela pode: ler o texto. As atas, as notas, o
+         que o cliente escreveu com as palavras dele. Dali sai uma leitura e as
+         próximas jogadas na língua do cliente — coisa que nenhuma conta
+         produz. Uma vez por dia basta: o texto de um negócio não muda de hora
+         em hora, e refazer a cada abertura de tela seria queimar dinheiro para
+         reescrever o mesmo parágrafo.
+
+     Se a IA não estiver no ar, a tela não fica vazia: fica sem o parágrafo.
+
+     UMA DE CADA VEZ, na ordem da fila. Trinta chamadas em paralelo derrubariam
+     o limite da função e devolveriam erro em quase todas; em série, o negócio
+     mais urgente é o primeiro a ter leitura, que é a ordem que importa se a
+     pessoa fechar o app no meio. */
+  const LIMITE_DA_VARREDURA = 60;
+  const PAUSA_ENTRE_LEITURAS = 1200;
+
+  let varrendo = false;
+
+  /* O retrato que vai para a leitura: o mesmo da oportunidade MAIS o que a
+     conta já concluiu. Mandar o cálculo junto é o que impede o modelo de
+     repetir, em prosa pior, o que a tela já diz em cima com números exatos. */
+  function retratoComOrientacao(op, r, x) {
+    const linhas = [retratoDaOportunidade(op, r)];
+    const lista = function (titulo, itens, campo) {
+      if (!itens || !itens.length) return;
+      linhas.push('');
+      linhas.push(titulo);
+      itens.forEach(function (i) { linhas.push('  - ' + (campo ? i[campo] : i)); });
+    };
+    linhas.push('');
+    linhas.push('O QUE O APLICATIVO JÁ CALCULOU E JÁ MOSTRA NA TELA (não repita isto):');
+    lista('CAUSAS:', x.causas, 'texto');
+    lista('ATRASOS:', x.atrasos.map(function (a) { return a.dias + ' dia(s): ' + a.texto; }));
+    lista('PASSOS JÁ RECOMENDADOS:', x.acelerar, 'texto');
+    return linhas.join('\n');
+  }
+
+  /* A leitura de UM negócio. Devolve null quando não deu — e null aqui é
+     normal: assistente desligado, rede fora, resposta fora de formato. Nada
+     disso é motivo para avisar ninguém, porque nada na tela depende dela. */
+  function leituraDaOportunidade(op, r, x) {
+    if (!disponivel()) return Promise.resolve(null);
+
+    const pedido = Nuvem.chamarFuncao('assistente', {
+      tipo: 'orientacao',
+      texto: retratoComOrientacao(op, r, x),
+      contexto: Object.assign(contextoDaOportunidade(op), {
+        hoje: global.IADStore.hoje(),
+        urgencia: x.nivel || '',
+        tituloDoNegocio: op.titulo
+      })
+    });
+    const prazo = new Promise(function (resolve) {
+      setTimeout(function () { resolve(null); }, PRAZO_REUNIAO);
+    });
+
+    return Promise.race([pedido, prazo]).then(function (resp) {
+      if (!resp || resp.erro) return null;
+      const leitura = typeof resp.leitura === 'string' ? resp.leitura.trim() : '';
+      const texto = function (lista) {
+        return (Array.isArray(lista) ? lista : []).slice(0, 3)
+          .map(function (t) { return String(t || '').trim(); }).filter(Boolean);
+      };
+      const acelerar = texto(resp.acelerar);
+      const risco = texto(resp.risco);
+      if (!leitura && !acelerar.length && !risco.length) return null;
+      return { leitura: leitura, acelerar: acelerar, risco: risco };
+    }).catch(function () { return null; });
+  }
+
+  /* A varredura. `itens` é a fila do dia, já na ordem; `aoAndar` é chamado
+     depois de cada leitura gravada, para a tela se repintar sozinha e a pessoa
+     ver o parágrafo aparecer em vez de descobrir amanhã que ele existia.
+
+     O teto de 60 é dinheiro, e está aqui escrito para que a próxima pessoa
+     saiba que é escolha e não limite técnico: uma carteira de trezentos
+     negócios custaria trezentas chamadas por dia, todos os dias. Sessenta na
+     ordem da fila cobre com folga o que alguém consegue trabalhar num dia, e
+     os de baixo entram quando subirem — o que é o comportamento certo, porque
+     negócio que nunca chega perto do topo da fila não precisa de leitura
+     diária. */
+  function varrerOrientacoes(itens, aoAndar) {
+    if (varrendo || !disponivel()) return Promise.resolve(0);
+    const O = global.IADOrientacao;
+    const Store = global.IADStore;
+    if (!O) return Promise.resolve(0);
+
+    const pendentes = O.semLeituraDeHoje(itens).slice(0, LIMITE_DA_VARREDURA);
+    if (!pendentes.length) return Promise.resolve(0);
+
+    varrendo = true;
+    let feitas = 0;
+
+    const proximo = function (n) {
+      if (n >= pendentes.length) return Promise.resolve(feitas);
+      const item = pendentes[n];
+      const op = item.resumo.op;
+      return leituraDaOportunidade(op, item.resumo, O.explicar(item))
+        .then(function (leitura) {
+          /* Grava TAMBÉM quando não veio nada. Sem isso, um negócio cujo
+             retrato o modelo se recusa a ler voltaria para a fila de varredura
+             a cada abertura de tela, para sempre, uma chamada por vez. A data
+             carimbada é o que diz "este foi tentado hoje". */
+          Store.guardarOrientacao(op.id, leitura || { leitura: '', acelerar: [], risco: [] });
+          if (leitura) feitas++;
+          if (aoAndar) { try { aoAndar(n + 1, pendentes.length); } catch (e) { /* a tela não derruba a varredura */ } }
+          return new Promise(function (resolve) { setTimeout(resolve, PAUSA_ENTRE_LEITURAS); });
+        })
+        .then(function () { return proximo(n + 1); });
+    };
+
+    return proximo(0).then(function (n) {
+      varrendo = false;
+      return n;
+    }, function () {
+      varrendo = false;
+      return feitas;
+    });
+  }
+
+  function varrendoAgora() { return varrendo; }
+
   global.IADIA = {
     disponivel: disponivel,
     verificar: verificar,
@@ -963,6 +1097,9 @@
     planoDeDesenvolvimento: planoDeDesenvolvimento,
     retratoDaCarteira: retratoDaCarteira,
     retratoDaOportunidade: retratoDaOportunidade,
+    leituraDaOportunidade: leituraDaOportunidade,
+    varrerOrientacoes: varrerOrientacoes,
+    varrendoAgora: varrendoAgora,
     lerTexto: lerTexto,
     ehTexto: ehTexto,
     fila: fila,

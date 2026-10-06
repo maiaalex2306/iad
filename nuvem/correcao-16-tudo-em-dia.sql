@@ -66,6 +66,11 @@ alter table public.oportunidades add column if not exists nutricao  jsonb;
 -- esta coluna o envio da carteira INTEIRA é recusado, não só o da nutrição.
 alter table public.oportunidades add column if not exists historico_nutricao jsonb not null default '[]'::jsonb;
 
+-- A leitura diária do assistente na tela Hoje. Sem ela a tela funciona inteira
+-- (as explicações são cálculo), mas a leitura não fica guardada — e a coluna
+-- desconhecida faz o PostgREST recusar o envio da carteira toda.
+alter table public.oportunidades add column if not exists orientacao jsonb not null default '{}'::jsonb;
+
 -- Aponta para fontes.id. A coluna origem continua guardando o texto solto do
 -- que foi criado antes de a tabela de fontes existir.
 alter table public.oportunidades add column if not exists fonte_id  text not null default '';
@@ -191,6 +196,10 @@ union all select 'oportunidades.valor_mensal',
 union all select 'oportunidades.historico_nutricao',
   case when exists (select 1 from information_schema.columns
     where table_schema = 'public' and table_name = 'oportunidades' and column_name = 'historico_nutricao')
+    then 'ok' else 'FALTA' end
+union all select 'oportunidades.orientacao',
+  case when exists (select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'oportunidades' and column_name = 'orientacao')
     then 'ok' else 'FALTA' end
 union all select 'tarefas.adiamentos',
   case when exists (select 1 from information_schema.columns

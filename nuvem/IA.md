@@ -217,6 +217,38 @@ proposta continuam sendo calculados em `src/engine.js`, de forma
 determinística. O assistente alimenta a entrada; o motor faz a conta. Se a IA
 passasse a opinar sobre esses números, o IAD deixaria de ser um método.
 
+### A leitura diária da tela Hoje
+
+A partir da v227 a tela **Hoje** explica cada negócio: por que ele está
+urgente ou em prioridade, o que já está atrasado e o que fazer para acelerar.
+
+**Essas três explicações não passam pela IA.** São cálculo, feito no próprio
+aparelho a partir dos dados que já estão lá — instantâneas, de graça,
+auditáveis linha por linha e disponíveis mesmo sem internet. Se o assistente
+nunca for publicado, a tela funciona inteira.
+
+O que a IA acrescenta, uma vez por dia, é o que a conta não sabe fazer: ler o
+texto. As atas, as notas, o que o cliente escreveu com as palavras dele. Dali
+sai um parágrafo e as próximas jogadas. É o tipo `orientacao` da função.
+
+Três decisões que valem conhecer antes de publicar:
+
+- **Uma chamada por negócio, uma de cada vez**, na ordem da fila — o mais
+  urgente ganha leitura primeiro. Em paralelo, trinta chamadas estourariam o
+  limite da função e voltariam quase todas com erro.
+- **Teto de 60 negócios por dia.** É escolha de custo, não limite técnico:
+  uma carteira de trezentos custaria trezentas chamadas por dia, todos os
+  dias. Sessenta na ordem da fila cobre com folga o que alguém trabalha num
+  dia, e quem está no fim entra quando subir. O número está em
+  `LIMITE_DA_VARREDURA`, em `src/ia.js`.
+- **O cálculo vai junto no pedido**, com instrução explícita de não repetir.
+  Sem isso o modelo devolve, em prosa pior, o que a tela já diz com números
+  exatos.
+
+A leitura é guardada em `oportunidades.orientacao` — rode
+`nuvem/correcao-25-orientacao-do-dia.sql` antes, ou o envio da carteira inteira
+passa a ser recusado por causa da coluna que o banco não conhece.
+
 ## Privacidade
 
 A função recebe apenas o texto da tela atual mais as listas de opções do

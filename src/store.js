@@ -1026,6 +1026,31 @@
     return op;
   }
 
+  /* ---------- a leitura do assistente, uma vez por dia ----------
+     Guardada NA oportunidade e não numa tabela à parte, por duas razões: ela
+     só faz sentido ao lado do negócio que descreve, e assim viaja na mesma
+     sincronização de sempre — sem endpoint novo, sem segunda verdade.
+
+     Carrega a data de quando foi escrita porque a tela precisa poder dizer
+     "leitura de ontem". E carrega a versão do app porque o formato vai mudar:
+     leitura gravada por uma versão antiga tem de poder ser reconhecida como
+     tal em vez de ser lida errado.
+
+     Não passa por `atualizarOportunidade` de propósito: aquela função escreve
+     evento no histórico quando certos campos mudam, e a varredura diária
+     tocando trinta negócios encheria o histórico de cada um com ruído que
+     ninguém pediu. */
+  function guardarOrientacao(id, dados) {
+    const op = oportunidade(id);
+    if (!op) return null;
+    op.orientacao = Object.assign({
+      data: hoje(),
+      versao: (global.IADVersao && global.IADVersao.numero) || ''
+    }, dados || {});
+    salvar();
+    return op;
+  }
+
   /* Toda mudança de pontuação vira snapshot e entra no histórico visível. */
   /* "origem" diz o que provocou esta mudança de nota — normalmente a conclusão
      de uma tarefa. Carimbar no snapshot é o que permite responder, semanas
@@ -2044,7 +2069,7 @@
     fonte, origemDaOportunidade,
     totaisDaOportunidade, totalDoItem, itensDaOportunidade,
     adicionarItem, atualizarItem, removerItem, definirPrazoContrato,
-    criarConta, criarContato, criarOportunidade, atualizarOportunidade, vincularStakeholder,
+    criarConta, criarContato, criarOportunidade, atualizarOportunidade, guardarOrientacao, vincularStakeholder,
     pontuar, registrarEvento, removerEvento, definirCompromisso, definirInsight,
     sinal, sinais, criarSinal, registrarSinalUnico, sinalExterno,
     sinaisDoContato, sinaisDaConta, sinaisDaOportunidade, excluirSinal, promoverSinal,

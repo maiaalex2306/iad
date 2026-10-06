@@ -333,6 +333,25 @@
   ];
   let filtroHoje = 'todos';
 
+  /* Quantos negócios por tela, e em qual página. Era `slice(0, 15)` fixo: a
+     carteira de quarenta negócios mostrava quinze e os outros vinte e cinco
+     não existiam em lugar nenhum — nem com aviso. Agora a lista é inteira,
+     paginada, e o número por tela é escolha de quem usa: dez para quem trabalha
+     no celular linha por linha, cem para quem quer varrer tudo de uma vez.
+     Dez é o padrão porque a tela Hoje é a da manhã, e a manhã tem dez
+     negócios, não cem. */
+  const POR_PAGINA = [10, 25, 50, 100];
+  let porPaginaHoje = 10;
+  let paginaHoje = 1;
+
+  function definirPorPaginaHoje(n) {
+    const v = Number(n);
+    if (POR_PAGINA.indexOf(v) === -1) return;
+    porPaginaHoje = v;
+    paginaHoje = 1;
+  }
+  function definirPaginaHoje(n) { paginaHoje = Math.max(1, Number(n) || 1); }
+
   function hoje() {
     renovarPotencial();
     const est = Store.dados();
@@ -378,7 +397,15 @@
       return filtroHoje === 'todos' || String(balde(i)) === String(filtroHoje);
     });
 
-    const itens = visiveis.slice(0, 15).map(cartaoFoco).join('') ||
+    const paginas = Math.max(1, Math.ceil(visiveis.length / porPaginaHoje));
+    /* A página pedida pode não existir mais: o filtro mudou, um negócio foi
+       encerrado, a varredura devolveu uma conta à nutrição. Grudar na última
+       página é melhor do que mostrar vazio — vazio aqui parece carteira vazia. */
+    const pagina = Math.min(paginaHoje, paginas);
+    const comeco = (pagina - 1) * porPaginaHoje;
+    const naPagina = visiveis.slice(comeco, comeco + porPaginaHoje);
+
+    const itens = naPagina.map(cartaoFoco).join('') ||
       '<div class="vazio">Nada neste filtro.</div>';
 
     return '<div class="row"><h1>Hoje</h1><span class="espaco"></span>' +
@@ -401,7 +428,39 @@
         G.composicao(grupos.filter(function (g) { return g.valor > 0; }).map(function (g) {
           return { rotulo: g.rotulo, valor: g.valor, cor: g.cor };
         })) + '</div>' +
-      '<div class="lista-foco">' + itens + '</div>';
+      barraDePaginas(visiveis.length, pagina, paginas, comeco, naPagina.length) +
+      '<div class="lista-foco">' + itens + '</div>' +
+      (paginas > 1 ? barraDePaginas(visiveis.length, pagina, paginas, comeco, naPagina.length, true) : '');
+  }
+
+  /* A barra de páginas. Diz primeiro O QUE está na tela — "11 a 20 de 37" — e
+     só depois oferece os botões: o vendedor que não encontra um negócio precisa
+     saber que ele existe em outra página antes de precisar de um botão. */
+  function barraDePaginas(total, pagina, paginas, comeco, quantos, soBotoes) {
+    const atras = pagina > 1;
+    const frente = pagina < paginas;
+    const seletor = soBotoes ? '' :
+      '<label class="tiny muted">por tela ' +
+      '<select onchange="App.porPaginaHoje(this.value)">' +
+      POR_PAGINA.map(function (n) {
+        return '<option value="' + n + '"' + (n === porPaginaHoje ? ' selected' : '') + '>' + n + '</option>';
+      }).join('') + '</select></label>';
+
+    return '<div class="paginacao">' +
+      '<span class="conta">' + (total
+        ? (quantos === total
+            ? total + ' negócio(s)'
+            : (comeco + 1) + ' a ' + (comeco + quantos) + ' de ' + total)
+        : 'nenhum negócio neste filtro') + '</span>' +
+      '<span class="espaco"></span>' + seletor +
+      (paginas > 1
+        ? '<button class="btn ghost mini" onclick="App.paginaHoje(' + (pagina - 1) + ')"' +
+            (atras ? '' : ' disabled') + ' aria-label="Página anterior">←</button>' +
+          '<span class="tiny muted">' + pagina + '/' + paginas + '</span>' +
+          '<button class="btn ghost mini" onclick="App.paginaHoje(' + (pagina + 1) + ')"' +
+            (frente ? '' : ' disabled') + ' aria-label="Próxima página">→</button>'
+        : '') +
+      '</div>';
   }
 
   /* ---------------- as conversas do WhatsApp ----------------
@@ -704,6 +763,89 @@
       (repetida ? '' : '<br><span class="muted">' + esc(c.texto) + '</span>') + '</div>';
   }
 
+  /* ---------------- a orientação dentro do cartão ----------------
+     O pedido foi explícito: explicar ao vendedor as prioridades e as urgências,
+     os motivos, as causas, e o que fazer. Antes o cartão trazia UMA frase de
+     motivo e UMA de ação, porque era isso que o motor expunha — a primeira
+     condição da cadeia dele. Aqui saem todas, em três blocos, na ordem das
+     perguntas de quem abre o app de manhã.
+
+     Cada bloco tem teto, e o que passa do teto vai para um `details`. Teto
+     existe porque cartão de trinta linhas é cartão que ninguém lê; `details` em
+     vez de corte seco existe porque sumir com uma causa verdadeira é
+     exatamente o defeito que esta tela veio consertar. */
+  function blocosDaOrientacao(i) {
+    const O = global.IADOrientacao;
+    if (!O) return '';
+    const x = O.explicar(i);
+    const partes = [];
+
+    const sobra = function (lista, teto, rotulo, pinta) {
+      if (lista.length <= teto) return '';
+      return '<details><summary class="tiny muted">+' + (lista.length - teto) + ' ' + rotulo +
+        '</summary><ul>' + lista.slice(teto).map(pinta).join('') + '</ul></details>';
+    };
+
+    const umaCausa = function (c) {
+      return '<li' + (c.principal ? ' class="principal"' : '') + '>' + esc(c.texto) +
+        (c.custo ? '<span class="custo">' + esc(c.custo) + '</span>' : '') + '</li>';
+    };
+    if (x.causas.length) {
+      partes.push('<section' + (i.urgencia >= 3 ? ' class="urg"' : '') + '>' +
+        '<h4>Por que está ' + (i.urgencia >= 3 ? 'urgente' : i.urgencia === 2 ? 'em prioridade' : 'nesta posição') + '</h4>' +
+        '<ul>' + x.causas.slice(0, 3).map(umaCausa).join('') + '</ul>' +
+        sobra(x.causas, 3, 'outra(s) causa(s)', umaCausa) + '</section>');
+    }
+
+    const umAtraso = function (a) {
+      return '<li><span class="dias">' + a.dias + 'd</span> ' + esc(a.texto) +
+        (a.oque ? '<span class="oque">' + esc(a.oque) + '</span>' : '') + '</li>';
+    };
+    if (x.atrasos.length) {
+      partes.push('<section class="urg"><h4>Atrasado</h4>' +
+        '<ul>' + x.atrasos.slice(0, 3).map(umAtraso).join('') + '</ul>' +
+        sobra(x.atrasos, 3, 'outro(s) atraso(s)', umAtraso) + '</section>');
+    }
+
+    /* O passo principal não repete “com quem” aqui: logo abaixo vem a linha de
+       `comQuemECanal`, que diz o nome, o papel, o canal e o que falta no
+       cadastro para alcançar a pessoa. Duas vezes a mesma informação no mesmo
+       bloco faz a tela parecer quebrada. */
+    const umPasso = function (a) {
+      return '<li>' + esc(a.texto) +
+        (a.com && a.id !== 'passo' ? ' <span class="com">— ' + esc(a.com) + '</span>' : '') +
+        (a.porque ? '<span class="porque">' + esc(a.porque) + '</span>' : '') + '</li>';
+    };
+    if (x.acelerar.length) {
+      partes.push('<section class="fazer"><h4>Para acelerar</h4>' +
+        '<ul>' + x.acelerar.slice(0, 3).map(umPasso).join('') + '</ul>' +
+        sobra(x.acelerar, 3, 'passo(s) a mais', umPasso) +
+        comQuemECanal(i) + '</section>');
+    }
+
+    /* A leitura da IA entra por último e SEMPRE datada. Ela lê o texto das
+       conversas, que é a parte que nenhuma conta consegue fazer; e por ser de
+       uma varredura, pode ser de ontem. Leitura de ontem apresentada como de
+       hoje é pior do que leitura nenhuma, porque o vendedor age nela. */
+    if (x.ia) {
+      const velha = x.iaDeHoje ? '' :
+        '<span class="velha">Leitura de ' + esc(U.data(x.iaEm)) + ', ainda não refeita hoje.</span>';
+      partes.push('<section class="leitura-ia"><h4>Leitura do assistente</h4>' +
+        (x.ia.leitura ? '<p>' + esc(x.ia.leitura) + '</p>' : '') +
+        ((x.ia.acelerar || []).length
+          ? '<ul>' + x.ia.acelerar.slice(0, 3).map(function (a) {
+              return '<li>' + esc(a) + '</li>';
+            }).join('') + '</ul>'
+          : '') +
+        ((x.ia.risco || []).length
+          ? '<div class="tiny" style="margin-top:4px"><strong>Risco:</strong> ' +
+            x.ia.risco.slice(0, 3).map(esc).join(' · ') + '</div>'
+          : '') + velha + '</section>');
+    }
+
+    return partes.length ? '<div class="orienta">' + partes.join('') + '</div>' : '';
+  }
+
   function cartaoFoco(i) {
     const r = i.resumo;
     const rotulos = ['', 'Atenção', 'Prioridade', 'Urgente'];
@@ -733,9 +875,8 @@
         '<span class="pill">grupo ' + r.coverage.percentual + '%</span>' +
       '</div>' +
 
-      '<div class="motivo"><strong>' + esc(i.motivo) + '</strong><br><span class="muted">' + esc(i.acao) + '</span>' +
-      comQuemECanal(i) + '</div>' +
-      '<div class="tiny muted" style="margin-top:6px">Falta: ' + falta + '</div>' +
+      blocosDaOrientacao(i) +
+      '<div class="tiny muted" style="margin-top:8px">Falta: ' + falta + '</div>' +
       (tarefas ? '<div class="tarefas">' + tarefas + '</div>' : '') +
       '<div class="row" style="margin-top:10px">' +
       '<button class="btn alt mini" onclick="App.novaTarefa(\'' + r.op.id + '\',\'\',{situacao:\'feita\'})" data-ajuda-titulo="Nova tarefa" data-ajuda="O que aconteceu com este cliente nesta semana. Se nada mudou do lado dele, não houve avanço — e é isso que a revisão quer expor.">+ Tarefa</button>' +
@@ -5407,7 +5548,7 @@
     ['m-dia', 'O dia do vendedor: o que alimentar, o que você recebe',
      'O outro corte: o DIA, com trinta negócios ao mesmo tempo. A rotina hora a hora — o que abrir de manhã, o que ler antes de cada conversa, o que registrar logo depois — e o que o sistema devolve em troca.'],
     ['m-fila', 'A Fila: o que fazer primeiro',
-     'A ordem em que a tela Hoje coloca a carteira e o porquê de cada posição; com quem falar para provar a decisão que falta, decisão por decisão; e por que os leads que nunca produziram evidência ficam fora da fila.'],
+     'A ordem em que a tela Hoje coloca a carteira e o porquê de cada posição; os três blocos que cada cartão traz — por que está aqui, o que está atrasado, o que fazer para acelerar; a leitura diária do assistente; as cores das faixas; e por que os leads que nunca produziram evidência ficam fora da fila.'],
     ['m-potencial', 'Potencial: vale a primeira hora?',
      'A pergunta que vem antes do IAD, para quando você tem cem leads e IAD 0 em todos. As quatro faixas, as duas contas que as formam (perfil e interesse), de onde sai cada ponto e por que nada disso mexe no índice.'],
     ['m-nutricao', 'O Processo de Nutrição: triar cem de uma vez',
@@ -6072,6 +6213,49 @@
         'Não está atrasado; está frágil.') +
       degrau('7º', 'Em dia', 'Segue a próxima decisão da escada.') +
       '</tbody></table></div>' +
+
+      '<h3>Cada cartão explica o que vê, e não só o primeiro motivo</h3>' +
+      '<p class="small">A ordem da tabela acima é uma <strong>escada</strong>: a primeira condição que ' +
+      'casa decide a posição, e as outras param de ser consultadas. Isso ordena certo e explica mal — ' +
+      'o cartão dizia “Compromisso vencido há 3 dias” e você não ficava sabendo que, no mesmo negócio, ' +
+      'a evidência tinha quarenta dias, havia uma pessoa só mapeada e a proposta saiu com metade da ' +
+      'prontidão. Uma causa de quatro. Você agia na que viu e o negócio continuava doente.</p>' +
+      '<p class="small">Agora cada cartão traz três blocos, nesta ordem, que são as três perguntas de ' +
+      'quem abre o app de manhã:</p>' +
+      '<div class="tabela-rolagem"><table><tbody>' +
+      '<tr><td class="rotulo-manual"><strong>Por que está aqui</strong></td><td class="small">' +
+      '<strong>Todas</strong> as causas verdadeiras, da mais pesada para a mais leve, com a principal ' +
+      'na frente — e, embaixo de cada uma, o que ela cobra se ficar como está. O que passa de três ' +
+      'fica num “+N outras causas”: nada é escondido, só dobrado.</td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>Atrasado</strong></td><td class="small">A dívida com data: ' +
+      'combinado vencido, tarefa sua vencida, revisão de nutrição, previsão de fechamento que já passou, ' +
+      'evidência além dos quatorze dias, etapa parada. Cada linha com <strong>quantos dias</strong> e o ' +
+      'que fazer com ela.</td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>Para acelerar</strong></td><td class="small">A ordem de ' +
+      'execução: o que fazer primeiro, com quem, e por qual canal. Sai da próxima decisão da escada, dos ' +
+      'papéis críticos que faltam, dos gates da proposta e das notas altas sem prova.</td></tr>' +
+      '</tbody></table></div>' +
+      '<p class="small"><strong>Nada disso depende de internet nem do assistente.</strong> É cálculo ' +
+      'sobre os dados que já estão aqui: instantâneo, de graça, e você pode conferir cada linha.</p>' +
+
+      '<h3>A leitura do assistente, uma vez por dia</h3>' +
+      '<p class="small">Quando o assistente de IA está publicado, ele passa pela fila <strong>uma vez ' +
+      'por dia</strong>, na ordem dela, e acrescenta o que a conta não sabe fazer: ler o texto. As atas, ' +
+      'as notas, o que o cliente escreveu com as palavras dele. Dali sai um parágrafo e as próximas ' +
+      'jogadas.</p>' +
+      '<p class="small">Três coisas que vale saber: ele <strong>não repete</strong> o que os três blocos ' +
+      'já dizem — recebe o cálculo junto e é instruído a acrescentar, não a reescrever; a leitura vem ' +
+      '<strong>sempre datada</strong>, e se for de ontem o cartão avisa, porque leitura velha apresentada ' +
+      'como de hoje é pior do que leitura nenhuma; e se ele não estiver no ar, <strong>a tela não fica ' +
+      'vazia</strong> — fica sem o parágrafo dele.</p>' +
+
+      '<h3>As cores, e a lista inteira</h3>' +
+      '<p class="small">Urgente é laranja claro, prioridade azul claro, em dia verde claro, e o botão ' +
+      '“Todos” lilás. A palavra continua escrita em cada cartão de propósito: quem não distingue os ' +
+      'matizes lê <em>Urgente</em> do mesmo jeito.</p>' +
+      '<p class="small">E a lista é a carteira <strong>inteira</strong>, paginada: dez por tela no ' +
+      'padrão, com opção de vinte e cinco, cinquenta ou cem. Antes ela parava no décimo quinto negócio ' +
+      'sem avisar que havia mais.</p>' +
 
       '<h3>Os leads que nunca começaram ficam fora — de propósito</h3>' +
       '<p class="small">Um lead importado de campanha que nunca produziu evidência do cliente ' +
@@ -9028,6 +9212,7 @@
 
   function zerarFiltros() {
     filtroHoje = 'todos';
+    paginaHoje = 1;
     filtroPeriodo = 'todos';
     filtroSegmento = 'todos';
     filtroGrupo = 'todos';
@@ -9105,7 +9290,10 @@
     oportunidadesDoLHSemTarefa, outrasAbertasDaConta,
     definirFiltro: function (f) { filtroGrupo = f; },
     definirFiltroHistorico: function (f) { filtroHistorico = f; },
-    definirFiltroHoje: function (f) { filtroHoje = f; },
+    definirFiltroHoje: function (f) { filtroHoje = f; paginaHoje = 1; },
+    definirPorPaginaHoje: definirPorPaginaHoje,
+    definirPaginaHoje: definirPaginaHoje,
+    POR_PAGINA: POR_PAGINA,
     definirFiltroTarefas: function (f) { filtroTarefas = f; },
     definirPeriodoTarefas: function (f) { periodoTarefas = f; },
     definirModoPipeline: function (m) { modoPipeline = m; },
