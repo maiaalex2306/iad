@@ -385,9 +385,157 @@
     });
   }
 
+  /* ================= O PANORAMA DA CARTEIRA =================
+
+     As três listas acima olham UM negócio. Isto olha os cento e vinte e dois
+     ao mesmo tempo, e responde uma pergunta que nenhuma delas alcança: o que
+     está acontecendo com a carteira INTEIRA.
+
+     A diferença não é de tamanho, é de natureza. Sessenta e nove cartões
+     urgentes, lidos um a um, são sessenta e nove problemas — e ninguém começa
+     uma manhã com sessenta e nove problemas. Mas quando se conta quantos deles
+     têm a MESMA causa principal, quase sempre não são sessenta e nove: são
+     três ou quatro doenças, cada uma com dezenas de casos. Uma carteira em que
+     cinquenta negócios travam no mesmo degrau não precisa de cinquenta
+     conversas diferentes; precisa de uma mudança no que o vendedor faz na
+     primeira conversa.
+
+     Tudo aqui é contagem sobre o que já está na tela. Nenhuma chamada de rede,
+     nenhuma IA — a IA entra depois, por cima disto, para escrever o que os
+     números significam. */
+  function panorama(itens, triagem) {
+    const lista = itens || [];
+    const hojeStr = hoje();
+
+    const porNivel = { urgente: 0, prioridade: 0, emDia: 0 };
+    lista.forEach(function (i) {
+      if (i.urgencia >= 3) porNivel.urgente++;
+      else if (i.urgencia === 2) porNivel.prioridade++;
+      else porNivel.emDia++;
+    });
+
+    /* A causa PRINCIPAL de cada negócio, contada. É o número que transforma
+       "sessenta e nove urgências" em "quarenta delas são a mesma coisa". */
+    const causas = {};
+    const exemplos = {};
+    lista.forEach(function (i) {
+      const c = causas1(i);
+      if (!c) return;
+      causas[c.id] = (causas[c.id] || 0) + 1;
+      if (!exemplos[c.id]) exemplos[c.id] = [];
+      if (exemplos[c.id].length < 3) exemplos[c.id].push(i.resumo.op.titulo);
+      });
+    const ranking = Object.keys(causas).map(function (id) {
+      return { id: id, quantos: causas[id], exemplos: exemplos[id] || [],
+        texto: TEXTO_DA_CAUSA[id] || id };
+    }).sort(function (a, b) { return b.quantos - a.quantos; });
+
+    /* Travas estruturais: não são "este negócio", são "a carteira toda". */
+    const semMobilizador = lista.filter(function (i) {
+      return i.resumo.coverage.mapeados && !i.resumo.coverage.mobilizadores;
+    }).length;
+    const semNinguem = lista.filter(function (i) {
+      return i.resumo.coverage.mapeados <= 1;
+    }).length;
+    const semFalaDoCliente = lista.filter(function (i) {
+      return (i.resumo.iad || 0) === 0;
+    }).length;
+    const semValor = lista.filter(function (i) {
+      return !(i.resumo.op.valor > 0);
+    }).length;
+
+    /* Compromissos vencidos — e, dentro deles, quantos venceram no MESMO dia.
+       Um punhado de combinados com a mesma data costuma não ser coincidência:
+       é um lote que entrou junto, de importação, e que ninguém negociou um a
+       um. Saber disso muda o que fazer: não são vinte cobranças, é um lote
+       para reagendar. */
+    const vencidos = [];
+    const porData = {};
+    lista.forEach(function (i) {
+      const c = i.resumo.compromisso;
+      if (!c || !c.vencido) return;
+      vencidos.push({ titulo: i.resumo.op.titulo, dias: c.diasAtraso, data: c.data, texto: c.texto });
+      if (c.data) porData[c.data] = (porData[c.data] || 0) + 1;
+    });
+    let loteDeCombinados = null;
+    Object.keys(porData).forEach(function (d) {
+      if (porData[d] >= 5 && (!loteDeCombinados || porData[d] > loteDeCombinados.quantos)) {
+        loteDeCombinados = { data: d, quantos: porData[d] };
+      }
+    });
+
+    const tarefasVencidas = lista.reduce(function (s, i) {
+      return s + (i.tarefas || []).filter(function (t) {
+        return t.vencimento && t.vencimento < hojeStr;
+      }).length;
+    }, 0);
+
+    const previsoesVencidas = lista.filter(function (i) {
+      const op = i.resumo.op;
+      return op.fechamentoPrevisto && op.fechamentoPrevisto < hojeStr;
+    }).length;
+
+    /* Onde está o dinheiro parado, que é diferente de onde está o barulho. */
+    const valorUrgente = lista.filter(function (i) { return i.urgencia >= 3; })
+      .reduce(function (s, i) { return s + (i.resumo.op.valor || 0); }, 0);
+
+    /* Os poucos que valem a primeira hora: urgentes COM valor e COM decisão
+       construída. Uma lista de sessenta e nove não se ataca; uma de três sim. */
+    const primeiros = lista.filter(function (i) { return i.urgencia >= 3; })
+      .slice()
+      .sort(function (a, b) {
+        return (b.resumo.op.valor || 0) - (a.resumo.op.valor || 0) ||
+          b.resumo.iad - a.resumo.iad || b.pontos - a.pontos;
+      })
+      .slice(0, 3)
+      .map(function (i) {
+        return { titulo: i.resumo.op.titulo, valor: i.resumo.op.valor || 0,
+          iad: i.resumo.iad, motivo: i.motivo };
+      });
+
+    return {
+      total: lista.length, triagem: (triagem || []).length,
+      porNivel: porNivel, causas: ranking,
+      semMobilizador: semMobilizador, semNinguem: semNinguem,
+      semFalaDoCliente: semFalaDoCliente, semValor: semValor,
+      vencidos: vencidos.sort(function (a, b) { return b.dias - a.dias; }),
+      loteDeCombinados: loteDeCombinados,
+      tarefasVencidas: tarefasVencidas, previsoesVencidas: previsoesVencidas,
+      valorUrgente: valorUrgente, primeiros: primeiros, data: hojeStr
+    };
+  }
+
+  /* A causa principal de um item, sem recalcular a lista inteira — `causas()`
+     é caro e aqui ele rodaria cento e vinte e duas vezes. */
+  function causas1(item) {
+    const todas = causas(item);
+    return todas.find(function (c) { return c.principal; }) || todas[0] || null;
+  }
+
+  const TEXTO_DA_CAUSA = {
+    combinado: 'combinado com o cliente vencido',
+    revisao: 'revisão de nutrição vencida',
+    agora: 'o cliente se mexeu e o registro não',
+    tarefas: 'tarefa sua vencida',
+    decisor: 'proposta sem o decisor econômico',
+    gates: 'proposta emitida sem prontidão',
+    silencio: 'silêncio do cliente além da régua',
+    parado: 'nenhuma decisão subiu no mês',
+    resistencia: 'resistência em papel crítico',
+    previsao: 'data de fechamento vencida',
+    mobilizador: 'ninguém move a decisão por dentro',
+    single: 'depende de uma pessoa só',
+    papeis: 'papel crítico sem ninguém',
+    bloqueador: 'bloqueador no grupo',
+    comprovacao: 'nota alta sem prova do cliente',
+    triagem: 'lead que nunca produziu evidência',
+    ok: 'nada em atraso'
+  };
+
   global.IADOrientacao = {
     DIAS_DE_FOLGA: DIAS_DE_FOLGA,
     causas: causas, atrasos: atrasos, acelerar: acelerar,
-    explicar: explicar, semLeituraDeHoje: semLeituraDeHoje
+    explicar: explicar, semLeituraDeHoje: semLeituraDeHoje,
+    panorama: panorama, TEXTO_DA_CAUSA: TEXTO_DA_CAUSA
   };
 })(window);

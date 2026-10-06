@@ -1188,6 +1188,20 @@ details.bloco .card + .card { margin-top: 16px; }
 .orienta .leitura-ia p { margin: 0 0 6px; font-size: .83rem; }
 .orienta .velha { color: var(--muted); font-size: .72rem; }
 
+/* ---------- A análise das pendências, no alto do Hoje ----------
+   Lilás, como o botão "Todos" e como a leitura do assistente: é a cor que
+   neste app quer dizer "isto é sobre a carteira inteira", não sobre um
+   negócio. O cartão é largo e tem respiro porque é texto para ler, não lista
+   para varrer. */
+.analise-dia { border-left: 4px solid var(--tod-tinta); background: var(--tod-fundo); }
+.analise-dia .orienta > section { background: var(--surface); }
+.leitura-carteira { font-size: .95rem; line-height: 1.55; margin: 10px 0 4px; }
+.barra-progresso {
+  height: 8px; border-radius: 6px; background: var(--surface);
+  border: 1px solid var(--tod-borda); overflow: hidden; margin-top: 10px;
+}
+.barra-progresso i { display: block; height: 100%; background: var(--tod-tinta); transition: width .25s; }
+
 /* O seletor de quantos por tela e a paginação. */
 .paginacao { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 12px 0 4px; }
 .paginacao .conta { font-size: .78rem; color: var(--muted); }

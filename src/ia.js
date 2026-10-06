@@ -1044,13 +1044,19 @@
      os de baixo entram quando subirem — o que é o comportamento certo, porque
      negócio que nunca chega perto do topo da fila não precisa de leitura
      diária. */
-  function varrerOrientacoes(itens, aoAndar) {
+  function varrerOrientacoes(itens, aoAndar, opcoes) {
     if (varrendo || !disponivel()) return Promise.resolve(0);
     const O = global.IADOrientacao;
     const Store = global.IADStore;
     if (!O) return Promise.resolve(0);
 
-    const pendentes = O.semLeituraDeHoje(itens).slice(0, LIMITE_DA_VARREDURA);
+    /* `forcar` é o botão da tela: quando a pessoa PEDE a análise, ela quer a
+       de agora, não a de hoje de manhã. A varredura automática continua
+       pulando quem já tem leitura do dia — ela roda sozinha e não pode gastar
+       o que já foi gasto. */
+    const o = opcoes || {};
+    const alvo = o.forcar ? (itens || []).slice() : O.semLeituraDeHoje(itens);
+    const pendentes = alvo.slice(0, o.teto || LIMITE_DA_VARREDURA);
     if (!pendentes.length) return Promise.resolve(0);
 
     varrendo = true;
@@ -1099,6 +1105,96 @@
     });
   }
 
+  /* ---------- A LEITURA DA CARTEIRA INTEIRA ----------
+
+     Diferente da leitura de um negócio, e a diferença é o ponto. Lá o modelo
+     lê o texto de um cliente; aqui ele lê o PADRÃO — o que se repete entre
+     sessenta e nove urgências, e portanto o que o vendedor deve mudar no modo
+     de trabalhar, não no modo de falar com um cliente.
+
+     O panorama já vem contado. O trabalho do modelo é dizer o que esses
+     números significam e qual é a ordem da manhã. Mandar os números prontos é
+     o que impede a resposta genérica: sem eles, qualquer modelo escreve
+     "priorize os clientes mais quentes" e ninguém fica sabendo de nada. */
+  function retratoDaCarteiraDoDia(pan, itens) {
+    const n = function (v) { return global.IADUI.numero(v, 0); };
+    const linhas = [];
+    linhas.push('DATA: ' + pan.data);
+    linhas.push('CARTEIRA: ' + pan.total + ' negócios na fila — ' +
+      pan.porNivel.urgente + ' urgentes, ' + pan.porNivel.prioridade + ' em prioridade, ' +
+      pan.porNivel.emDia + ' em dia' +
+      (pan.triagem ? ' · mais ' + pan.triagem + ' leads em triagem, fora da fila' : ''));
+    linhas.push('VALOR PARADO EM URGÊNCIA: ' + global.IADUI.moeda(pan.valorUrgente));
+
+    linhas.push('');
+    linhas.push('A CAUSA PRINCIPAL DE CADA NEGÓCIO, CONTADA (é o número mais importante daqui):');
+    pan.causas.slice(0, 8).forEach(function (c) {
+      linhas.push('  ' + c.quantos + ' negócio(s): ' + c.texto +
+        (c.exemplos.length ? ' — ex.: ' + c.exemplos.join(', ') : ''));
+    });
+
+    linhas.push('');
+    linhas.push('TRAVAS QUE ATRAVESSAM A CARTEIRA:');
+    linhas.push('  ' + pan.semFalaDoCliente + ' de ' + pan.total +
+      ' não têm NENHUMA decisão provada (IAD 0) — o cliente nunca disse nada registrado.');
+    linhas.push('  ' + pan.semMobilizador + ' têm gente mapeada mas ninguém que mova a decisão por dentro.');
+    linhas.push('  ' + pan.semNinguem + ' dependem de uma pessoa só, ou de nenhuma.');
+    linhas.push('  ' + pan.semValor + ' estão sem valor preenchido.');
+    linhas.push('  ' + pan.tarefasVencidas + ' tarefa(s) do próprio vendedor vencidas.');
+    linhas.push('  ' + pan.previsoesVencidas + ' com data de fechamento já passada.');
+
+    if (pan.vencidos.length) {
+      linhas.push('');
+      linhas.push('COMBINADOS COM O CLIENTE VENCIDOS (' + pan.vencidos.length + '), os mais antigos:');
+      pan.vencidos.slice(0, 8).forEach(function (v) {
+        linhas.push('  ' + v.dias + 'd — ' + v.titulo + ': ' + (v.texto || 'sem texto'));
+      });
+      if (pan.loteDeCombinados) {
+        linhas.push('  ATENÇÃO: ' + pan.loteDeCombinados.quantos +
+          ' combinados venceram todos no MESMO dia (' + pan.loteDeCombinados.data +
+          '), o que costuma indicar um lote importado em vez de compromissos negociados um a um.');
+      }
+    }
+
+    if (pan.primeiros.length) {
+      linhas.push('');
+      linhas.push('OS URGENTES DE MAIOR VALOR:');
+      pan.primeiros.forEach(function (p) {
+        linhas.push('  ' + p.titulo + ' — ' + global.IADUI.moeda(p.valor) +
+          ' · IAD ' + p.iad + ' · ' + p.motivo);
+      });
+    }
+
+    return linhas.join('\n');
+  }
+
+  function leituraDaCarteira(pan, itens) {
+    if (!disponivel()) return Promise.resolve(null);
+
+    const pedido = Nuvem.chamarFuncao('assistente', {
+      tipo: 'panorama',
+      texto: retratoDaCarteiraDoDia(pan, itens),
+      contexto: { hoje: global.IADStore.hoje() }
+    });
+    const prazo = new Promise(function (resolve) {
+      setTimeout(function () { resolve(null); }, PRAZO_REUNIAO);
+    });
+
+    return Promise.race([pedido, prazo]).then(function (r) {
+      if (!r || r.erro) return null;
+      const lista = function (x, teto) {
+        return (Array.isArray(x) ? x : []).slice(0, teto)
+          .map(function (t) { return String(t || '').trim(); }).filter(Boolean);
+      };
+      const leitura = typeof r.leitura === 'string' ? r.leitura.trim() : '';
+      const agora = lista(r.agora, 3);
+      const padroes = lista(r.padroes, 3);
+      const riscos = lista(r.riscos, 3);
+      if (!leitura && !agora.length && !padroes.length) return null;
+      return { leitura: leitura, agora: agora, padroes: padroes, riscos: riscos };
+    }).catch(function () { return null; });
+  }
+
   function varrendoAgora() { return varrendo; }
 
   global.IADIA = {
@@ -1116,6 +1212,8 @@
     leituraDaOportunidade: leituraDaOportunidade,
     varrerOrientacoes: varrerOrientacoes,
     varrendoAgora: varrendoAgora,
+    leituraDaCarteira: leituraDaCarteira,
+    retratoDaCarteiraDoDia: retratoDaCarteiraDoDia,
     lerTexto: lerTexto,
     ehTexto: ehTexto,
     fila: fila,

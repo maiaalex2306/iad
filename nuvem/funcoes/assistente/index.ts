@@ -182,6 +182,10 @@ const FORMATOS: Record<string, Record<string, Regra>> = {
   /* 'desenvolvimento' lê a carteira inteira, não um negócio: a série das
      semanas e o rendimento por tipo de tarefa. Validado à parte. */
   desenvolvimento: {},
+  /* 'panorama' lê a CARTEIRA, não um negócio: quantos urgentes, qual causa se
+     repete em quantos, o que atravessa tudo. É a análise que o vendedor pede
+     de manhã, antes de abrir o primeiro cartão. Validado à parte. */
+  panorama: {},
   /* 'orientacao' é a varredura diária da tela Hoje. O aplicativo já CALCULOU
      por que a conta está urgente, o que está atrasado e o que fazer — e manda
      esse cálculo junto. O trabalho aqui é só o que a conta não faz: ler o
@@ -706,6 +710,29 @@ Regras desta tarefa:
 - Português do Brasil.`;
   }
 
+  if (tipo === 'panorama') {
+    return `${BASE}
+
+Tarefa: você recebe o retrato da CARTEIRA INTEIRA de um vendedor num dia — quantos negócios em cada faixa, a causa principal de cada um já CONTADA, as travas que atravessam tudo, os combinados vencidos e os urgentes de maior valor. Escreva a orientação da manhã dele.
+
+A diferença desta tarefa para todas as outras: aqui não se olha um cliente, olha-se o PADRÃO. Sessenta urgências com a mesma causa não são sessenta problemas — são um, com sessenta casos. Encontrar isso é o trabalho.
+
+Devolva {"leitura":"...", "agora":[...], "padroes":[...], "riscos":[...]}.
+
+- leitura: de 3 a 5 frases, falando com o vendedor na segunda pessoa. Diga o que está acontecendo com a carteira dele hoje, usando os NÚMEROS que recebeu. Comece pelo que mais pesa, não pelo que vem primeiro na lista.
+- agora: no máximo 3 coisas para fazer HOJE, na ordem. Cada uma começa por um verbo e é concreta. Se um lote de combinados venceu no mesmo dia, tratar o lote é uma ação só, não vinte.
+- padroes: no máximo 3 frases sobre o que se REPETE na carteira e o que isso diz sobre o jeito de trabalhar — não sobre um cliente. Exemplo do tipo de achado: "quarenta negócios travam no mesmo degrau" quer dizer que a primeira conversa não está produzindo o que deveria.
+- riscos: no máximo 3 frases sobre o que esta carteira pode custar se nada mudar.
+
+Regras desta tarefa:
+- Use os números que recebeu, por extenso. "57% da carteira está urgente" vale; "muitos negócios estão urgentes" não vale nada.
+- Não invente negócio, pessoa, valor ou data que não esteja no retrato.
+- Não repita a lista que já veio contada. Diga o que ela SIGNIFICA e o que fazer com ela.
+- Nada de conselho que serviria para qualquer vendedor do mundo. Se a frase cabe numa carteira qualquer, ela está errada aqui.
+- Sem elogio e sem motivação. Frase que não muda o que ele faz hoje é frase fora.
+- Português do Brasil.`;
+  }
+
   if (tipo === 'orientacao') {
     const negocio = limparTexto(ctx.tituloDoNegocio, 120);
     return `${BASE}
@@ -1035,6 +1062,9 @@ function tetoDeSaida(tipo: string, quantos = 0): number {
      gpt-oss sai do mesmo orçamento, e teto curto aqui devolve geração vazia —
      que parece erro de prompt e não é. */
   if (tipo === 'orientacao') return 2000;
+  /* A carteira inteira pede mais do que um negócio: cinco frases mais três
+     listas, e o raciocínio dos gpt-oss sai do mesmo teto. */
+  if (tipo === 'panorama') return 3000;
   /* Uma palavra de saída. O teto alto aqui é para o raciocínio dos gpt-oss,
      que sai do mesmo orçamento — não para o texto. */
   if (tipo === 'intencao') return 800;
@@ -1780,6 +1810,22 @@ function validarOrientacao(bruto: Record<string, unknown>) {
   };
 }
 
+/* A leitura da carteira do dia. Mais generosa que a de um negócio porque é
+   uma só por manhã, não uma por cartão: o parágrafo cabe em 900 e cada linha
+   em 240. Lista vazia passa — é resposta honesta de quem não achou padrão. */
+function validarPanorama(bruto: Record<string, unknown>) {
+  const lista = (x: unknown, max: number) => (Array.isArray(x) ? x : [])
+    .slice(0, 3)
+    .map((i) => limparTexto(i, max))
+    .filter(Boolean);
+  return {
+    leitura: limparTexto(bruto.leitura, 900),
+    agora: lista(bruto.agora, 240),
+    padroes: lista(bruto.padroes, 240),
+    riscos: lista(bruto.riscos, 240)
+  };
+}
+
 /* ---------- o site da empresa ----------
    O modelo não navega. A função navega — ela roda num servidor. Para empresa
    conhecida a descrição do próprio LinkedIn basta; o site resolve a empresa
@@ -2154,7 +2200,7 @@ Deno.serve(async (req: Request) => {
 
   /* Transcrição de reunião é longa por natureza; um lote de empresas também. */
   const limite = (tipo === 'reuniao' || tipo === 'segmentos' || tipo === 'plano' || tipo === 'notas' ||
-                  tipo === 'desenvolvimento' || tipo === 'orientacao')
+                  tipo === 'desenvolvimento' || tipo === 'orientacao' || tipo === 'panorama')
     ? LIMITE_REUNIAO : LIMITE_TEXTO;
   const texto = String(pedido.texto || '').slice(0, limite).trim();
   if (texto.length < 10) return responder({ campos: {}, frases: {} });
@@ -2252,6 +2298,7 @@ Deno.serve(async (req: Request) => {
       if (tipo === 'notas') return responder({ decisoes: [] });
       if (tipo === 'desenvolvimento') return responder({ leitura: '', indoBem: [], indoMal: [], mudancas: [] });
       if (tipo === 'orientacao') return responder({ leitura: '', acelerar: [], risco: [] });
+      if (tipo === 'panorama') return responder({ leitura: '', agora: [], padroes: [], riscos: [] });
       if (tipo === 'pessoas') return responder({ campos: {}, frases: {}, contatos: [] });
       return responder({ campos: {}, frases: {} });
     }
@@ -2261,6 +2308,7 @@ Deno.serve(async (req: Request) => {
     if (tipo === 'notas') return responder(validarNotas(json, entrada));
     if (tipo === 'desenvolvimento') return responder(validarDesenvolvimento(json));
     if (tipo === 'orientacao') return responder(validarOrientacao(json));
+    if (tipo === 'panorama') return responder(validarPanorama(json));
     /* `campos` vazio de propósito: quem chama é a mesma função de extração do
        app, e ela exige o campo para distinguir resposta da função de página de
        erro do gateway. Aqui o que interessa vai em `contatos`. */

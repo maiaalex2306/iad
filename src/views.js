@@ -409,6 +409,7 @@
       '<div class="vazio">Nada neste filtro.</div>';
 
     return '<div class="row"><h1>Hoje</h1><span class="espaco"></span>' +
+      botaoDaAnalise(foco) +
       '<button class="btn alt mini" onclick="App.capturaRapida()" data-ajuda-titulo="Nova tarefa" data-ajuda="Acabei de falar com um cliente. A tarefa é a evidência: escolha o negócio, o canal, e conte o que aconteceu — o assistente separa o que o CLIENTE fez e relê as oito decisões.">+ Tarefa</button>' +
       '<button class="btn ghost mini" onclick="location.hash=\'#/playbook\'" aria-label="O método"' +
       ' data-ajuda-titulo="O método" data-ajuda="Como uma tarefa vira avanço, o que conta como evidência em cada uma das oito decisões, e o que fazer em cada canal.">?</button></div>' +
@@ -416,6 +417,7 @@
         ? 'Primeiro da fila: <strong>' + esc(foco.itens[0].resumo.op.titulo) + '</strong> — ' +
           esc(foco.itens[0].motivo)
         : 'Nada na fila hoje.') + '</p>' +
+      cartaoDaAnalise() +
       linhaDasNotas() +
       linhaDaTriagem(foco.triagem) +
       responderamNoWhatsapp() +
@@ -461,6 +463,136 @@
             (frente ? '' : ' disabled') + ' aria-label="Próxima página">→</button>'
         : '') +
       '</div>';
+  }
+
+  /* ================= ANÁLISE DAS PENDÊNCIAS E AÇÕES =================
+
+     O botão ao lado de "+ Tarefa", e o cartão que ele produz.
+
+     Por que ele existe, já havendo a varredura diária: a varredura roda
+     sozinha e lê UM negócio de cada vez. Ela responde "o que há neste
+     cartão". Não responde a pergunta da manhã, que é outra: *o que está
+     acontecendo com a minha carteira, e por onde eu começo*. Sessenta e nove
+     cartões urgentes lidos um a um continuam sendo sessenta e nove problemas,
+     e ninguém começa o dia com sessenta e nove problemas.
+
+     O botão faz duas coisas, nesta ordem:
+
+     1. Relê os negócios urgentes — forçando, porque quem clica quer a análise
+        de AGORA, não a de hoje de manhã.
+     2. Conta o panorama da carteira inteira (de graça, no aparelho) e manda
+        essa contagem para o assistente escrever o que ela significa.
+
+     O resultado fica guardado NESTE APARELHO, por dia. Não vai para o banco de
+     propósito: é um retrato que se refaz num clique, e inventar uma coluna
+     nova para ele seria repetir exatamente o problema que travou a carteira
+     duas vezes nesta semana. */
+  let analise = null;        /* null | {erro} | {panorama, ia, em, lidos} */
+  let analisando = null;     /* null | {feitos, total, fase} */
+
+  const CHAVE_ANALISE = 'iad-crm:analise-do-dia';
+
+  function guardarAnalise(a) {
+    analise = a;
+    try { localStorage.setItem(CHAVE_ANALISE, JSON.stringify(a)); } catch (e) { /* aparelho cheio */ }
+  }
+
+  /* Lida do disco uma vez, e só se for de HOJE. Panorama de ontem apresentado
+     como o de hoje é pior do que panorama nenhum — o vendedor age nele. */
+  function analiseDoDia() {
+    if (analise) return analise;
+    try {
+      const g = JSON.parse(localStorage.getItem(CHAVE_ANALISE) || 'null');
+      if (g && g.em && String(g.em).slice(0, 10) === Store.hoje()) analise = g;
+    } catch (e) { analise = null; }
+    return analise;
+  }
+
+  function definirAnalise(a) { guardarAnalise(a); analisando = null; }
+  function definirProgressoDaAnalise(p) { analisando = p; }
+  function esquecerAnalise() {
+    analise = null; analisando = null;
+    try { localStorage.removeItem(CHAVE_ANALISE); } catch (e) { /* nada */ }
+  }
+
+  function botaoDaAnalise(foco) {
+    const urgentes = foco.itens.filter(function (i) { return i.urgencia >= 3; }).length;
+    const a = analiseDoDia();
+    const rodando = !!analisando;
+    return '<button class="btn ' + (a && !a.erro ? 'ghost ' : '') + 'mini" onclick="App.analisarPendencias()"' +
+      (rodando ? ' disabled' : '') +
+      ajudaComLinhas('Análise das pendências e ações',
+        'Lê a carteira INTEIRA e diz o que está acontecendo, por quê, e por onde começar hoje.',
+        [['O que ela faz', 'Relê com o assistente os ' + urgentes + ' negócio(s) urgente(s), conta o padrão que atravessa a carteira toda, e escreve a ordem da manhã.'],
+         ['Por que não é a mesma coisa que os cartões', 'O cartão explica UM negócio. Esta análise encontra o que se repete entre todos — e carteira em que quarenta travam no mesmo degrau não precisa de quarenta conversas, precisa de uma mudança.'],
+         ['Demora', 'Cerca de um segundo por negócio urgente. Pode deixar rodando e continuar trabalhando.'],
+         ['Custa', 'Uma chamada ao assistente por negócio urgente, mais uma da carteira. Por isso ela é um botão, e não algo que acontece sozinho a cada tela.']]) +
+      '>' + (rodando ? 'Analisando…' : 'Análise das pendências e ações') + '</button>';
+  }
+
+  function listinha(titulo, itens, classe) {
+    if (!itens || !itens.length) return '';
+    return '<section' + (classe ? ' class="' + classe + '"' : '') + '><h4>' + esc(titulo) + '</h4><ul>' +
+      itens.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul></section>';
+  }
+
+  function cartaoDaAnalise() {
+    if (analisando) {
+      const p = analisando;
+      const quanto = p.total ? Math.round((p.feitos / p.total) * 100) : 0;
+      return '<div class="card analise-dia"><div class="row"><h2 style="margin:0">Analisando a carteira…</h2>' +
+        '<span class="espaco"></span><span class="tiny muted">' + p.feitos + ' de ' + p.total + '</span></div>' +
+        '<div class="barra-progresso"><i style="width:' + quanto + '%"></i></div>' +
+        '<p class="small muted" style="margin:8px 0 0">' + esc(p.fase || '') + ' ' +
+        'Pode continuar trabalhando — ela avisa quando terminar.</p></div>';
+    }
+
+    const a = analiseDoDia();
+    if (!a) return '';
+    if (a.erro) {
+      return '<div class="card analise-dia"><div class="row"><h2 style="margin:0">Análise das pendências</h2>' +
+        '<span class="espaco"></span><button class="btn ghost mini" onclick="App.fecharAnalise()">Fechar</button></div>' +
+        '<div class="aviso" style="margin-top:8px">Não consegui concluir: ' + esc(a.erro) + '</div></div>';
+    }
+
+    const p = a.panorama || {};
+    const ia = a.ia || null;
+    const hora = String(a.em || '').slice(11, 16);
+
+    /* Os números primeiro, porque são os que não dependem de nada e não
+       erram. A leitura da IA vem depois, marcada como leitura. */
+    const topo = (p.causas || []).slice(0, 3).map(function (c) {
+      return '<tr><td class="small"><strong>' + c.quantos + '</strong></td>' +
+        '<td class="small">' + esc(c.texto) + '</td></tr>';
+    }).join('');
+
+    const numeros = '<div class="tabela-rolagem"><table><tbody>' + topo + '</tbody></table></div>' +
+      '<p class="small muted" style="margin:8px 0 0">' +
+      '<strong>' + (p.semFalaDoCliente || 0) + '</strong> de ' + (p.total || 0) +
+      ' sem nenhuma decisão provada · <strong>' + (p.semMobilizador || 0) +
+      '</strong> sem ninguém que mova por dentro · <strong>' + (p.tarefasVencidas || 0) +
+      '</strong> tarefa(s) sua(s) vencida(s)' +
+      (p.loteDeCombinados
+        ? ' · <strong>' + p.loteDeCombinados.quantos + '</strong> combinados venceram no mesmo dia (' +
+          esc(U.data(p.loteDeCombinados.data)) + ')'
+        : '') + '.</p>';
+
+    const daIa = ia
+      ? (ia.leitura ? '<p class="leitura-carteira">' + esc(ia.leitura) + '</p>' : '') +
+        '<div class="orienta">' +
+        listinha('Comece por aqui, hoje', ia.agora, 'fazer') +
+        listinha('O que se repete', ia.padroes) +
+        listinha('O que isso custa se nada mudar', ia.riscos, 'urg') +
+        '</div>'
+      : '<p class="small muted">O assistente não respondeu desta vez — os números acima são cálculo e valem do mesmo jeito.</p>';
+
+    return '<div class="card analise-dia"><div class="row"><h2 style="margin:0">Análise das pendências e ações</h2>' +
+      '<span class="espaco"></span>' +
+      '<span class="tiny muted">' + (hora ? 'feita às ' + esc(hora) : '') +
+      (a.lidos ? ' · ' + a.lidos + ' negócio(s) relidos' : '') + '</span>' +
+      '<button class="btn ghost mini" onclick="App.analisarPendencias()">Refazer</button>' +
+      '<button class="btn ghost mini" onclick="App.fecharAnalise()" aria-label="Fechar">✕</button></div>' +
+      numeros + daIa + '</div>';
   }
 
   /* ---------------- as conversas do WhatsApp ----------------
@@ -5548,7 +5680,7 @@
     ['m-dia', 'O dia do vendedor: o que alimentar, o que você recebe',
      'O outro corte: o DIA, com trinta negócios ao mesmo tempo. A rotina hora a hora — o que abrir de manhã, o que ler antes de cada conversa, o que registrar logo depois — e o que o sistema devolve em troca.'],
     ['m-fila', 'A Fila: o que fazer primeiro',
-     'A ordem em que a tela Hoje coloca a carteira e o porquê de cada posição; os três blocos que cada cartão traz — por que está aqui, o que está atrasado, o que fazer para acelerar; a leitura diária do assistente; as cores das faixas; e por que os leads que nunca produziram evidência ficam fora da fila.'],
+     'A ordem em que a tela Hoje coloca a carteira e o porquê de cada posição; os três blocos que cada cartão traz; o botão que analisa a carteira inteira e acha o que se repete; a leitura diária do assistente; as cores das faixas; e por que os leads que nunca produziram evidência ficam fora da fila.'],
     ['m-potencial', 'Potencial: vale a primeira hora?',
      'A pergunta que vem antes do IAD, para quando você tem cem leads e IAD 0 em todos. As quatro faixas, as duas contas que as formam (perfil e interesse), de onde sai cada ponto e por que nada disso mexe no índice.'],
     ['m-nutricao', 'O Processo de Nutrição: triar cem de uma vez',
@@ -6237,6 +6369,25 @@
       '</tbody></table></div>' +
       '<p class="small"><strong>Nada disso depende de internet nem do assistente.</strong> É cálculo ' +
       'sobre os dados que já estão aqui: instantâneo, de graça, e você pode conferir cada linha.</p>' +
+
+      '<h3>O botão “Análise das pendências e ações”</h3>' +
+      '<p class="small">Fica no alto da tela Hoje, à esquerda de <strong>+ Tarefa</strong>. Ele responde a ' +
+      'pergunta que os cartões, sozinhos, não respondem: <em>o que está acontecendo com a minha ' +
+      'carteira, e por onde eu começo</em>. Sessenta e nove cartões urgentes lidos um a um continuam ' +
+      'sendo sessenta e nove problemas — e ninguém começa o dia com sessenta e nove problemas.</p>' +
+      '<p class="small">Ao clicar, ele faz duas coisas nesta ordem: <strong>relê com o assistente todos ' +
+      'os negócios urgentes</strong> (forçando, porque quem pede a análise quer a de agora, não a de ' +
+      'hoje de manhã) e depois <strong>conta o padrão da carteira inteira</strong> e manda essa ' +
+      'contagem para o assistente escrever o que ela significa.</p>' +
+      '<p class="small">O que ele procura é o que se <strong>repete</strong>. Quarenta negócios travados ' +
+      'no mesmo degrau não pedem quarenta conversas: pedem uma mudança no que você faz na primeira. ' +
+      'Oito combinados que venceram todos no mesmo dia não são oito cobranças: são um lote que entrou ' +
+      'junto e que ninguém negociou um a um — e tratar o lote é uma ação só.</p>' +
+      '<p class="small">A contagem é <strong>cálculo</strong>, e aparece mesmo sem assistente. O que o ' +
+      'assistente acrescenta é a leitura. O resultado fica guardado <strong>neste aparelho</strong>, ' +
+      'por um dia: é um retrato que se refaz num clique, e não vale uma coluna nova no banco.</p>' +
+      '<p class="small muted">Ele é um botão, e não algo que acontece sozinho a cada tela, por um motivo ' +
+      'só: cada negócio relido é uma chamada paga. Acima de vinte e cinco urgentes, o app pergunta antes.</p>' +
 
       '<h3>A leitura do assistente, uma vez por dia</h3>' +
       '<p class="small">Quando o assistente de IA está publicado, ele passa pela fila <strong>uma vez ' +
@@ -9485,6 +9636,10 @@
     definirFiltroHistorico: function (f) { filtroHistorico = f; },
     definirFiltroHoje: function (f) { filtroHoje = f; paginaHoje = 1; },
     definirConferencia: definirConferencia,
+    definirAnalise: definirAnalise,
+    definirProgressoDaAnalise: definirProgressoDaAnalise,
+    esquecerAnalise: esquecerAnalise,
+    analiseDoDia: analiseDoDia,
     marcarConferindo: marcarConferindo,
     definirPorPaginaHoje: definirPorPaginaHoje,
     definirPaginaHoje: definirPaginaHoje,

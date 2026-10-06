@@ -1453,6 +1453,78 @@
     filtrarHistorico: function (tipo) { V.definirFiltroHistorico(tipo); render(); },
     filtrarHoje: function (chave) { V.definirFiltroHoje(chave); render(); },
     porPaginaHoje: function (n) { V.definirPorPaginaHoje(n); render(); },
+
+    /* ---------------- Análise das pendências e ações ----------------
+       Duas etapas, nesta ordem, e a ordem é o desenho: primeiro relê os
+       urgentes um a um (é onde o texto do cliente está), e só então conta o
+       panorama e pede a leitura da carteira. Ao contrário, a leitura da
+       carteira seria escrita antes das leituras que ela deveria resumir. */
+    analisarPendencias: function () {
+      const IA = global.IADIA;
+      const O = global.IADOrientacao;
+      if (!O) return;
+
+      const est = Store.dados();
+      const foco = E.fila(est.oportunidades, est.tarefas);
+      const urgentes = foco.itens.filter(function (i) { return i.urgencia >= 3; });
+
+      if (!foco.itens.length) {
+        V.definirAnalise({ erro: 'Não há negócios na fila para analisar.', em: new Date().toISOString() });
+        render();
+        return;
+      }
+
+      /* O assistente desligado não impede a análise: o panorama é cálculo. O
+         que falta é o parágrafo, e a tela já diz isso. */
+      const temIA = !!(IA && IA.disponivel && IA.disponivel());
+
+      /* Cada negócio relido é uma chamada paga. Acima de vinte e cinco a
+         pessoa confirma — não para atrapalhar, mas porque um clique sem
+         querer numa carteira grande custa dinheiro de verdade. */
+      if (temIA && urgentes.length > 25) {
+        const vai = confirm('Vou reler ' + urgentes.length + ' negócios urgentes com o assistente, ' +
+          'um por vez, e depois analisar a carteira inteira.\n\n' +
+          'Leva cerca de ' + Math.ceil(urgentes.length * 1.3 / 60) + ' minuto(s) e gasta uma chamada por negócio.\n\n' +
+          'Pode continuar trabalhando enquanto roda. Continuar?');
+        if (!vai) return;
+      }
+
+      V.definirProgressoDaAnalise({ feitos: 0, total: urgentes.length,
+        fase: temIA ? 'Relendo os negócios urgentes…' : 'Contando o panorama…' });
+      render();
+
+      const panoramaEleitura = function (lidos) {
+        V.definirProgressoDaAnalise({ feitos: urgentes.length, total: urgentes.length,
+          fase: 'Lendo a carteira inteira…' });
+        repintarConteudo('#/hoje', V.hoje);
+
+        /* Recalcula a fila: as leituras acabaram de mudar os registros. */
+        const agora = Store.dados();
+        const fila = E.fila(agora.oportunidades, agora.tarefas);
+        const pan = O.panorama(fila.itens, fila.triagem);
+
+        const terminar = function (ia) {
+          V.definirAnalise({ panorama: pan, ia: ia, lidos: lidos, em: new Date().toISOString() });
+          render();
+          window.scrollTo(0, 0);
+        };
+        if (!temIA || !IA.leituraDaCarteira) return terminar(null);
+        IA.leituraDaCarteira(pan, fila.itens).then(terminar, function () { terminar(null); });
+      };
+
+      if (!temIA) { panoramaEleitura(0); return; }
+
+      IA.varrerOrientacoes(urgentes, function (feitos, total) {
+        V.definirProgressoDaAnalise({ feitos: feitos, total: total,
+          fase: 'Relendo os negócios urgentes…' });
+        repintarConteudo('#/hoje', V.hoje);
+      }, { forcar: true, teto: urgentes.length }).then(panoramaEleitura, function (e) {
+        V.definirAnalise({ erro: (e && e.message) || 'erro desconhecido', em: new Date().toISOString() });
+        render();
+      });
+    },
+
+    fecharAnalise: function () { V.esquecerAnalise(); render(); },
     /* Conferir o banco. Só pergunta — não cria, não apaga, não lê registro. */
     conferirOBanco: function () {
       const C = global.IADConferencia;
