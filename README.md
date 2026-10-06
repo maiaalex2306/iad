@@ -98,6 +98,17 @@ src/seed.js             carteira de demonstração
 O núcleo conceitual está isolado em `playbook.js` + `engine.js`: são eles que viram
 serviço no backend quando o produto sair do modo local.
 
+### Os guias de operação, em `nuvem/`
+
+| Arquivo | Para quê |
+| --- | --- |
+| `nuvem/PASSO-A-PASSO.md` | Subir o banco do zero |
+| `nuvem/conferir.sql` | Perguntar ao banco o que falta — não muda nada |
+| `nuvem/IA.md` | Publicar e manter a função do assistente |
+| `nuvem/EMAIL.md` e `CAIXA-DE-EMAIL.md` | A caixa de e-mail |
+| `nuvem/WHATSAPP.md` | O WhatsApp, e o que falta na Meta |
+| `nuvem/DOMINIO.md` | **Pôr a aplicação em www.iadcrm.com.br** |
+
 ## Roadmap para produto
 
 **Fase 1 — validação (este repositório).** PWA local, um vendedor ou um time pequeno,
