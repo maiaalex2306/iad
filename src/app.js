@@ -662,6 +662,26 @@
         ' data-ajuda-titulo="Descartar e recarregar" data-ajuda="Joga fora o que ainda não subiu, inclusive o que está guardado neste aparelho, e recomeça do que o servidor tem. Não tem volta — baixe a cópia antes.">' +
         'Descartar e recarregar</button></div>';
     }
+    /* O banco atrás do aplicativo. Desde a v228 isto NÃO trava mais nada: o
+       envio tira a coluna que o servidor não conhece e sobe o resto. Então
+       aqui não é faixa de erro — é recado. Mas tem de aparecer, porque o
+       campo existe só neste aparelho até alguém rodar o SQL, e app que
+       sincroniza feliz escondendo um campo é a classe de silêncio que custou
+       as dezessete oportunidades. */
+    if (sinc && sinc.atrasadas && sinc.atrasadas.length) {
+      const quantas = sinc.atrasadas.length;
+      return '<div class="aviso faixa-aviso">' +
+        '<strong>O banco está atrás do aplicativo.</strong> ' +
+        'Tudo o que você faz está subindo normalmente — só ' +
+        (quantas === 1 ? 'a coluna ' : 'as colunas ') +
+        '<code>' + U.esc(sinc.atrasadas.join(', ')) + '</code> ' +
+        (quantas === 1 ? 'ainda não existe' : 'ainda não existem') +
+        ' no servidor, e esse campo fica só neste aparelho até lá. ' +
+        'Rode <code>nuvem/correcao-16-tudo-em-dia.sql</code> no SQL Editor do Supabase. ' +
+        'Pode ser repetido quantas vezes quiser, não estraga nada.' +
+        '</div>';
+    }
+
     if (avisoSincronizacao) {
       return '<div class="aviso faixa-aviso">' + U.esc(avisoSincronizacao) +
         '<button class="btn ghost mini" onclick="App.tentarBaixarDeNovo()">Tentar de novo</button></div>';

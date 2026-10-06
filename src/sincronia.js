@@ -58,11 +58,17 @@
   let erradoDesde = 0;
   let falhas = 0;
   let ouvinte = null;
+  /* Colunas que o banco ainda não tem. O envio passou sem elas — ninguém
+     perdeu nada e nada está travado —, mas aquele campo não existe do lado de
+     lá, e isso tem de aparecer. Separado de `recado` de propósito: não é erro,
+     não bloqueia, e tratar as duas coisas como a mesma faria o aviso grave
+     perder o peso. */
+  let atrasadas = [];
 
   function estado() {
     return { situacao: situacao, recado: recado, naFila: naFila,
       tentandoDeNovo: !!relogioDeNovo,
-      falhas: falhas, desde: erradoDesde,
+      falhas: falhas, desde: erradoDesde, atrasadas: atrasadas.slice(),
       segundosParado: erradoDesde ? Math.round((Date.now() - erradoDesde) / 1000) : 0 };
   }
 
@@ -160,9 +166,10 @@
     guardarFila()
       .then(renovarSePreciso)
       .then(function () { return N.empurrar(); })
-      .then(function () {
+      .then(function (r) {
         enviando = false;
         pararDeTentar();
+        atrasadas = (r && r.atrasadas) || [];
         return limparFila();
       })
       .then(function () {

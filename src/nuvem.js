@@ -768,11 +768,25 @@
     return saida;
   }
 
-  /* O app se atualiza sozinho, pelo navegador; o banco não. Quando um campo
+  /* ---------- quando o banco está atrás do aplicativo ----------
+
+     O app se atualiza sozinho, pelo navegador; o banco não. Quando um campo
      novo nasce no código, ele só existe do lado de lá depois que alguém roda o
-     SQL — e até lá o PostgREST recusa a tabela INTEIRA, não a coluna. Uma
-     carteira de trezentos registros para de subir por causa de um campo que
-     ninguém usa ainda.
+     SQL — e o PostgREST recusa a tabela INTEIRA, não a coluna.
+
+     Isso já aconteceu DUAS VEZES, com duas colunas minhas, e as duas vezes o
+     efeito foi o mesmo: a carteira inteira parou de subir por causa de um
+     campo que ninguém tinha pedido. Explicar bem o erro — que é o que esta
+     função fazia — não é o conserto. O conserto é NÃO PARAR.
+
+     `semAColuna` abaixo é isso: o lote recusado volta sem a coluna que o
+     servidor não conhece, e sobe. Como o envio é `upsert` com merge, coluna
+     que não vai no corpo é coluna que o servidor simplesmente não toca —
+     então tirar a desconhecida não apaga nada e não arrisca nada. O que fica
+     para trás é só o campo novo, naquele aparelho, até o SQL rodar.
+
+     A frase abaixo continua existindo para o caso que sobra: coluna que falta
+     numa tabela e o lote ainda assim não passa, ou outro erro qualquer.
 
      O erro cru é `Could not find the 'nutricao' column of 'oportunidades' in
      the schema cache`, e ele manda a pessoa procurar no lugar errado: parece
@@ -795,6 +809,38 @@
         'repetido sem estragar nada.';
     }
     return falhas.map(function (f) { return f.tabela + ': ' + f.erro; }).join(' — ');
+  }
+
+  const SEM_A_COLUNA = /Could not find the '([^']+)' column of '([^']+)'/;
+
+  /* Manda um lote. Se o servidor recusar por causa de uma coluna que ele não
+     conhece, tira ESSA coluna e manda de novo — quantas vezes forem precisas,
+     porque uma versão nova pode ter trazido duas.
+
+     A lista `fora` sobe junto com o resultado para a tela poder dizer o que
+     ficou de fora. Dizer importa: sem isso o app ficaria sincronizando feliz e
+     escondendo que um campo não existe do lado de lá, que é a classe de
+     silêncio que este arquivo inteiro existe para não cometer. */
+  function enviarLote(remota, lote, fora) {
+    const corpo = fora.length
+      ? lote.map(function (l) {
+          const c = {};
+          Object.keys(l).forEach(function (k) { if (fora.indexOf(k) === -1) c[k] = l[k]; });
+          return c;
+        })
+      : lote;
+
+    return chamar('/rest/v1/' + remota, {
+      metodo: 'POST',
+      cabecalhos: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+      corpo: corpo
+    }).then(function () { return fora; }, function (e) {
+      const m = SEM_A_COLUNA.exec((e && e.message) || '');
+      /* Só repete quando aprendeu algo novo. Sem esta guarda, um servidor que
+         devolvesse sempre o mesmo nome faria o envio girar para sempre. */
+      if (m && fora.indexOf(m[1]) === -1) return enviarLote(remota, lote, fora.concat([m[1]]));
+      throw e;
+    });
   }
 
   /* ---------- sincronização ---------- */
@@ -944,13 +990,18 @@
       if (!linhas.length) return Promise.resolve({ tabela: t.remota, enviados: 0 });
 
       return Promise.all(porFormato(linhas).map(function (lote) {
-        return chamar('/rest/v1/' + t.remota, {
-          metodo: 'POST',
-          cabecalhos: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-          corpo: lote
-        });
+        return enviarLote(t.remota, lote, []);
       })).then(
-        function () { return { tabela: t.remota, enviados: linhas.length }; },
+        function (foras) {
+          const atrasadas = [];
+          foras.forEach(function (lista) {
+            lista.forEach(function (coluna) {
+              const nome = t.remota + '.' + coluna;
+              if (atrasadas.indexOf(nome) === -1) atrasadas.push(nome);
+            });
+          });
+          return { tabela: t.remota, enviados: linhas.length, atrasadas: atrasadas };
+        },
         function (e) { return { tabela: t.remota, enviados: 0, erro: e.message }; }
       );
     });
@@ -967,9 +1018,19 @@
         if (falhas.length) {
           throw new Error(explicarFalhas(falhas));
         }
+        /* As colunas que o banco ainda não tem. O envio passou sem elas — e
+           é por isso que elas precisam voltar daqui: um envio que dá certo
+           escondendo um campo é pior do que um que falha dizendo por quê. */
+        const atrasadas = [];
+        resultados.forEach(function (r) {
+          (r.atrasadas || []).forEach(function (nome) {
+            if (atrasadas.indexOf(nome) === -1) atrasadas.push(nome);
+          });
+        });
         return {
           enviados: resultados.reduce(function (s, r) { return s + r.enviados; }, 0),
-          retidos: retidos
+          retidos: retidos,
+          atrasadas: atrasadas
         };
       });
     });

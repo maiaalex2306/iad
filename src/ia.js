@@ -1066,7 +1066,14 @@
              retrato o modelo se recusa a ler voltaria para a fila de varredura
              a cada abertura de tela, para sempre, uma chamada por vez. A data
              carimbada é o que diz "este foi tentado hoje". */
-          Store.guardarOrientacao(op.id, leitura || { leitura: '', acelerar: [], risco: [] });
+          /* Silenciado de propósito. Cada `salvar` do Store dispara um envio,
+             e o envio manda a carteira INTEIRA — sessenta leituras seguidas
+             seriam sessenta uploads completos em um minuto, por um campo que
+             ninguém está esperando. A varredura grava calada e pede UM envio
+             no fim. */
+          Store.semSincronizar(function () {
+            Store.guardarOrientacao(op.id, leitura || { leitura: '', acelerar: [], risco: [] });
+          });
           if (leitura) feitas++;
           if (aoAndar) { try { aoAndar(n + 1, pendentes.length); } catch (e) { /* a tela não derruba a varredura */ } }
           return new Promise(function (resolve) { setTimeout(resolve, PAUSA_ENTRE_LEITURAS); });
@@ -1074,11 +1081,20 @@
         .then(function () { return proximo(n + 1); });
     };
 
+    /* O envio único do fim. `agendar` e não `tentarDeNovo`: ele agrupa com o
+       que mais estiver pendente e não atropela uma repetição em curso. */
+    const mandar = function () {
+      const S = global.IADSincronia;
+      if (S && S.agendar) S.agendar();
+    };
+
     return proximo(0).then(function (n) {
       varrendo = false;
+      mandar();
       return n;
     }, function () {
       varrendo = false;
+      mandar();
       return feitas;
     });
   }
