@@ -17,6 +17,21 @@
 -- `if not exists` ou `create or replace`. Rodar duas vezes não estraga nada,
 -- e rodar quando já está tudo lá não faz nada.
 --
+-- ATENÇÃO AO NOME DESTE ARQUIVO — ele promete mais do que entrega
+--
+-- "Tudo em dia" era verdade no dia em que ele nasceu. Depois dele vieram
+-- tabelas novas que moram em arquivos próprios e NÃO estão aqui:
+--
+--   nuvem/correcao-17-sinais.sql          → a tabela `sinais`
+--   nuvem/correcao-23-notas-rapidas.sql   → a tabela `notas`
+--   nuvem/correcao-18-emails.sql e seguintes → a caixa de e-mail
+--   nuvem/whatsapp.sql                    → o WhatsApp
+--
+-- Rodar só este arquivo destrava a carteira e deixa a pessoa achando que
+-- acabou. Para saber o que de fato falta, rode **nuvem/conferir.sql**: ele
+-- não muda nada, lista toda tabela, coluna e função que o aplicativo usa, e
+-- diz qual arquivo rodar para cada uma que estiver faltando.
+--
 -- COMO RODAR
 --   Supabase → SQL Editor → New query → cole este arquivo inteiro → Run.
 --   Depois, no app: Configuração → Nuvem → Sincronizar, a partir do

@@ -792,21 +792,44 @@
      the schema cache`, e ele manda a pessoa procurar no lugar errado: parece
      defeito do app, e é banco desatualizado. Aqui ele vira a frase que diz o
      que fazer. */
+  const SEM_A_TABELA = /Could not find the table '([^']+)' in the schema cache/;
+
   function explicarFalhas(falhas) {
-    const faltando = [];
+    const colunas = [];
+    const tabelas = [];
     falhas.forEach(function (f) {
-      const m = /Could not find the '([^']+)' column of '([^']+)'/.exec(f.erro || '');
-      if (m) faltando.push(m[2] + '.' + m[1]);
+      const c = /Could not find the '([^']+)' column of '([^']+)'/.exec(f.erro || '');
+      if (c) { colunas.push(c[2] + '.' + c[1]); return; }
+      const t = SEM_A_TABELA.exec(f.erro || '');
+      if (t) tabelas.push(String(t[1]).replace(/^public\./, ''));
     });
 
-    if (faltando.length) {
+    /* A instrução mudou, e a antiga estava ERRADA — mandava sempre rodar
+       `correcao-16-tudo-em-dia.sql`, que apesar do nome não põe tudo em dia:
+       ele cobre as correções 10 a 16, e tabelas que nasceram depois (`sinais`,
+       `notas`) moram em arquivos próprios. Quem seguia a instrução via a
+       carteira voltar a subir, achava que tinha acabado, e continuava sem a
+       tabela que faltava — sem nada na tela dizendo isso.
+
+       Agora a instrução aponta para `conferir.sql`, que não conserta nada: ele
+       PERGUNTA. Lista toda tabela, coluna e função que o app usa, diz quais
+       existem e, para cada uma que falta, qual arquivo rodar. Uma resposta
+       certa em vez de um palpite que costumava acertar. */
+    const comoResolver = 'Rode nuvem/conferir.sql no SQL Editor do Supabase: ' +
+      'ele não muda nada, só lista o que falta e diz qual arquivo rodar para cada coisa. ' +
+      'Depois sincronize de novo.';
+
+    if (tabelas.length) {
       return 'O banco está atrás do aplicativo: ' +
-        (faltando.length === 1 ? 'falta a coluna ' : 'faltam as colunas ') +
-        faltando.join(', ') + '.\n\n' +
-        'Nada foi perdido — os registros continuam neste aparelho. ' +
-        'Rode nuvem/correcao-16-tudo-em-dia.sql no SQL Editor do Supabase ' +
-        'e sincronize de novo. Ele junta tudo o que está pendente e pode ser ' +
-        'repetido sem estragar nada.';
+        (tabelas.length === 1 ? 'falta a tabela ' : 'faltam as tabelas ') +
+        tabelas.join(', ') + '.\n\n' +
+        'Nada foi perdido — os registros continuam neste aparelho. ' + comoResolver;
+    }
+    if (colunas.length) {
+      return 'O banco está atrás do aplicativo: ' +
+        (colunas.length === 1 ? 'falta a coluna ' : 'faltam as colunas ') +
+        colunas.join(', ') + '.\n\n' +
+        'Nada foi perdido — os registros continuam neste aparelho. ' + comoResolver;
     }
     return falhas.map(function (f) { return f.tabela + ': ' + f.erro; }).join(' — ');
   }

@@ -677,8 +677,8 @@
         '<code>' + U.esc(sinc.atrasadas.join(', ')) + '</code> ' +
         (quantas === 1 ? 'ainda não existe' : 'ainda não existem') +
         ' no servidor, e esse campo fica só neste aparelho até lá. ' +
-        'Rode <code>nuvem/correcao-16-tudo-em-dia.sql</code> no SQL Editor do Supabase. ' +
-        'Pode ser repetido quantas vezes quiser, não estraga nada.' +
+        'Rode <code>nuvem/conferir.sql</code> no SQL Editor do Supabase: ele não muda nada, ' +
+        'só lista o que falta e diz qual arquivo rodar para cada coisa.' +
         '</div>';
     }
 
