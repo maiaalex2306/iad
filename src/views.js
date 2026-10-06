@@ -8187,8 +8187,8 @@
     let veredito;
     if (r.tudoEmDia) {
       veredito = '<div class="aviso" style="border-left-color:var(--ok);background:var(--dia-fundo);margin-top:10px">' +
-        '<strong>Está tudo em dia.</strong> Todas as tabelas, colunas e funções que este aplicativo ' +
-        'usa existem no seu banco, e a função do assistente é a desta versão.</div>';
+        '<strong>Está tudo em dia.</strong> Todas as tabelas e colunas que este aplicativo usa ' +
+        'existem no seu banco, e a função do assistente é a desta versão.</div>';
     } else if (r.carteiraEmDia) {
       veredito = '<div class="aviso" style="border-left-color:var(--risk);background:var(--pri-fundo);margin-top:10px">' +
         '<strong>A carteira está em dia</strong> — nada do seu trabalho está travado. ' +
@@ -8211,6 +8211,16 @@
         '<td class="small"><span class="pill dead mini">' + faltam.length + ' faltando</span> ' +
         '<span class="tiny muted">' + esc(g.diz) + '</span></td></tr>';
     }).join('');
+
+    /* O que a conferência NÃO olha, dito na tela e não só no código. Lacuna
+       silenciosa num relatório de "está tudo ok" é a pior espécie delas. */
+    const oQueNaoOlha = '<p class="tiny muted" style="margin:8px 0 0">' +
+      'Conferiu ' + (r.conferidas || 0) + ' tabelas e as colunas de cada uma, sem ler ' +
+      'nenhum registro. <strong>As funções de permissão não entram</strong>: a única forma de ' +
+      'perguntar se elas existem seria executá-las, e conferência que executa deixa de ser ' +
+      'conferência. Elas não precisam: as regras do banco chamam <code>meu_tenant()</code> ' +
+      'em toda leitura, então você estar vendo a sua carteira já prova que estão lá. ' +
+      'A lista completa, com funções, está em <code>nuvem/conferir.sql</code>.</p>';
 
     const detalhe = r.faltam.length
       ? '<h3 style="margin:14px 0 6px">O que falta, e o que rodar</h3>' +
@@ -8241,7 +8251,7 @@
 
     return '<div class="card">' + cabeca + veredito +
       '<div class="tabela-rolagem" style="margin-top:12px"><table><tbody>' + porGrupo +
-      '</tbody></table></div>' + detalhe + assistente + '</div>';
+      '</tbody></table></div>' + detalhe + assistente + oQueNaoOlha + '</div>';
   }
 
   /* ------------------------------------------------------------------

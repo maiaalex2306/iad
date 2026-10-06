@@ -122,29 +122,75 @@
 
   /* ---------- o que o servidor conhece ----------
 
-     Uma chamada só. A raiz do PostgREST devolve o desenho inteiro da API: cada
-     tabela com as suas colunas, e cada função como uma rota /rpc. Perguntar
-     coluna por coluna seriam setenta e cinco requisições para responder uma
-     pergunta — e setenta e cinco maneiras de a conferência falhar pela metade.
+     Uma pergunta por tabela: "me devolva estas colunas, zero linhas". Três
+     respostas possíveis, e as três são informação:
 
-     Nada de dado passa por aqui: é o desenho da API, o mesmo que o navegador
-     de qualquer pessoa já recebe. Nenhum registro é lido. */
-  function desenhoDoServidor() {
-    return nuvem().desenhoDaApi().then(function (r) {
-      if (!r || typeof r !== 'object') throw new Error('O servidor não descreveu as tabelas.');
-      const tabelas = {};
-      const defs = r.definitions || (r.components && r.components.schemas) || {};
-      Object.keys(defs).forEach(function (nome) {
-        const props = (defs[nome] && defs[nome].properties) || {};
-        tabelas[nome] = Object.keys(props);
-      });
-      const rpc = {};
-      Object.keys(r.paths || {}).forEach(function (p) {
-        const m = /^\/rpc\/(\w+)$/.exec(p);
-        if (m) rpc[m[1]] = true;
-      });
-      return { tabelas: tabelas, rpc: rpc };
+       · lista vazia       → a tabela existe e todas aquelas colunas também.
+       · "não achei a tabela" → a tabela não existe.
+       · "a coluna X não existe" → tira X da lista e pergunta de novo.
+
+     A terceira é uma escada, como a do envio: cada recusa ensina um nome, e a
+     volta seguinte vai sem ele. Na prática são zero ou uma voltas; o teto
+     existe para que um servidor que responda sempre a mesma coisa não ponha a
+     tela num laço.
+
+     NENHUM registro é lido — `limit=0` garante isso. A pergunta é sobre o
+     formato da tabela, nunca sobre o conteúdo dela. */
+
+  const SEM_A_TABELA = /Could not find the table '(?:public\.)?([\w]+)'/i;
+  const SEM_A_COLUNA = [
+    /column (?:[\w"]+\.)?"?([\w]+)"? does not exist/i,
+    /Could not find the '([\w]+)' column/i
+  ];
+
+  function colunaDoErro(msg) {
+    for (let i = 0; i < SEM_A_COLUNA.length; i++) {
+      const m = SEM_A_COLUNA[i].exec(msg || '');
+      if (m) return m[1];
+    }
+    return null;
+  }
+
+  const VOLTAS_MAXIMAS = 12;
+
+  function sondar(tabela, colunas) {
+    const N = nuvem();
+    function tentar(restantes, faltando, volta) {
+      return N.sondarTabela(tabela, restantes).then(
+        function () { return { existe: true, faltando: faltando }; },
+        function (e) {
+          const msg = (e && e.message) || '';
+          const t = SEM_A_TABELA.exec(msg);
+          if (t) return { existe: false, faltando: [] };
+          const col = colunaDoErro(msg);
+          /* Só repete quando aprendeu um nome NOVO que estava na pergunta.
+             Sem essa guarda, um erro que cite sempre a mesma coluna gira para
+             sempre. */
+          if (col && restantes.indexOf(col) !== -1 && volta < VOLTAS_MAXIMAS) {
+            return tentar(restantes.filter(function (c) { return c !== col; }),
+              faltando.concat([col]), volta + 1);
+          }
+          /* Qualquer outra recusa é do servidor, não do formato da tabela:
+             permissão, rede, chave. Ela sobe, para a tela dizer o que foi em
+             vez de inventar que falta alguma coisa. */
+          throw e;
+        });
+    }
+    return tentar((colunas || []).slice(), [], 0);
+  }
+
+  /* As tabelas e as colunas que cada uma precisa ter, tiradas da lista
+     esperada. Funções não entram: ver `conferir()`. */
+  function porTabela() {
+    const mapa = {};
+    ESPERADO.forEach(function (e) {
+      const grupo = e[0], tipo = e[1], alvo = e[2], coluna = e[3], arquivo = e[4];
+      if (tipo === 'funcao') return;
+      const t = mapa[alvo] || (mapa[alvo] = { grupo: grupo, colunas: [], arquivos: {}, arquivo: '' });
+      if (tipo === 'tabela') { t.arquivo = arquivo; t.grupo = grupo; }
+      else { t.colunas.push(coluna); t.arquivos[coluna] = arquivo; }
     });
+    return mapa;
   }
 
   /* ---------- a função do assistente ----------
@@ -175,28 +221,52 @@
     );
   }
 
-  /* ---------- a conferência inteira ---------- */
+  /* ---------- a conferência inteira ----------
+
+     AS FUNÇÕES NÃO SÃO CONFERIDAS, e isso é decisão, não esquecimento.
+
+     A única forma de perguntar ao PostgREST se `sou_admin()` existe é CHAMAR a
+     função. Chamar `sou_admin()` seria inofensivo; chamar
+     `definir_papel_do_perfil()` não é — ela muda o papel de alguém. Uma
+     conferência que escreve no banco deixa de ser conferência, e uma lista de
+     "quais podem ser chamadas e quais não" é exatamente o tipo de lista que
+     envelhece e um dia chama a errada.
+
+     E não falta nada por isso: as políticas de linha do banco chamam
+     `meu_tenant()` e `sou_admin()` em TODA leitura. Se elas não existissem,
+     nada carregaria — a tela estaria vazia em vez de estar perguntando. Quem
+     está logado e vendo a carteira já provou as duas.
+
+     Quem quiser a lista completa, com funções, tem o `nuvem/conferir.sql`: lá
+     a pergunta é feita pelo catálogo do Postgres, sem chamar nada. */
   function conferir() {
     const N = nuvem();
     if (!N || !N.conectado()) {
       return Promise.reject(new Error('Entre no servidor antes de conferir — a conferência fala com ele.'));
     }
-    return desenhoDoServidor().then(function (servidor) {
-      const itens = ESPERADO.map(function (e) {
+
+    const mapa = porTabela();
+    const nomes = Object.keys(mapa);
+
+    return Promise.all(nomes.map(function (t) {
+      return sondar(t, mapa[t].colunas).then(function (r) {
+        return { tabela: t, resultado: r };
+      });
+    })).then(function (saidas) {
+      const achado = {};
+      saidas.forEach(function (s) { achado[s.tabela] = s.resultado; });
+
+      const itens = ESPERADO.filter(function (e) { return e[1] !== 'funcao'; }).map(function (e) {
         const grupo = e[0], tipo = e[1], alvo = e[2], coluna = e[3], arquivo = e[4];
-        let existe;
-        if (tipo === 'tabela') existe = !!servidor.tabelas[alvo];
-        else if (tipo === 'coluna') {
-          existe = !!servidor.tabelas[alvo] && servidor.tabelas[alvo].indexOf(coluna) !== -1;
-        } else existe = !!servidor.rpc[alvo];
+        const a = achado[alvo] || { existe: false, faltando: [] };
         return {
           grupo: grupo, tipo: tipo, alvo: alvo, coluna: coluna, arquivo: arquivo,
-          existe: existe,
+          existe: tipo === 'tabela' ? a.existe : (a.existe && a.faltando.indexOf(coluna) === -1),
           /* Coluna de tabela que nem existe não é um segundo problema: é o
              mesmo. Marcada assim, a lista mostra "falta a tabela notas" em vez
              de despejar quinze linhas de colunas que ninguém vai consertar
              uma a uma. */
-          daTabelaQueFalta: tipo === 'coluna' && !servidor.tabelas[alvo]
+          daTabelaQueFalta: tipo === 'coluna' && !a.existe
         };
       });
 
@@ -209,6 +279,7 @@
       return conferirAssistente().then(function (ia) {
         return {
           itens: itens, faltam: faltam, arquivos: arquivos, assistente: ia,
+          conferidas: nomes.length,
           /* "Tudo em dia" é só sobre o que trava o trabalho. E-mail e WhatsApp
              que a pessoa não usa não podem pintar a tela de vermelho. */
           carteiraEmDia: !faltam.some(function (i) { return i.grupo === 'carteira'; }),
@@ -221,6 +292,6 @@
   global.IADConferencia = {
     ESPERADO: ESPERADO, GRUPOS: GRUPOS, TIPO_NOVO: TIPO_NOVO,
     conferir: conferir, conferirAssistente: conferirAssistente,
-    desenhoDoServidor: desenhoDoServidor
+    sondar: sondar, porTabela: porTabela, colunaDoErro: colunaDoErro
   };
 })(window);

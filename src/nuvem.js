@@ -201,21 +201,37 @@
     return chamar('/functions/v1/' + nome, { metodo: 'POST', corpo: corpo || {} });
   }
 
-  /* O desenho da API, para a tela "O banco está em dia?".
+  /* A sonda da tela "O banco está em dia?".
 
-     A raiz do PostgREST descreve a si mesma: cada tabela com as suas colunas e
-     cada função como uma rota /rpc. Uma chamada responde o que, coluna a
-     coluna, seriam setenta e cinco.
+     A PRIMEIRA tentativa foi pedir a raiz do PostgREST, que descreve a si
+     mesma — tabelas, colunas e funções num documento só. O Supabase recusou:
+     `Secret API key required`. Aquele documento é privilégio da chave
+     SECRETA, e a chave secreta não pode existir dentro deste aplicativo, nem
+     aqui nem em lugar nenhum — ela ignora as políticas de linha e quem a tem
+     lê a base inteira de todo mundo.
+
+     Então a pergunta mudou de forma. Em vez de pedir o mapa, pergunta-se tabela
+     por tabela: "me devolva estas colunas, zero linhas". O servidor responde
+     uma lista vazia quando tudo existe, e recusa nomeando o que não existe
+     quando falta. É a mesma porta que o aplicativo já usa o dia inteiro, com a
+     mesma chave publicável e a mesma sessão.
+
+     `limit=0` não é detalhe: NENHUM registro é lido. A pergunta é sobre o
+     formato da tabela, nunca sobre o conteúdo dela.
 
      Mora aqui e não no conferencia.js porque é assunto de HTTP, e porque
      `chamar` não é exportado de propósito — abrir a porta para qualquer
-     caminho seria dar a toda tela do app a chave do servidor. Esta função
-     abre uma fresta: um caminho só, GET, sem corpo.
-
-     Nenhum registro é lido. É o mesmo documento que o navegador de qualquer
-     pessoa com a chave publicável já recebe. */
-  function desenhoDaApi() {
-    return chamar('/rest/v1/', { cabecalhos: { Accept: 'application/openapi+json' } });
+     caminho seria dar a toda tela do app a chave do servidor. Esta função abre
+     uma fresta do tamanho exato: GET, uma tabela, sem corpo, zero linhas. */
+  function sondarTabela(tabela, colunas) {
+    /* `*` e não `id` quando não há coluna a conferir: três tabelas não têm
+       coluna chamada `id` — `convites` se identifica pelo e-mail,
+       `segredos_email` pela caixa, `whatsapp_numeros` pelo número da Meta. Com
+       `id` a sonda acusaria coluna faltando em tabela perfeitamente sã. Com
+       `*`, a pergunta é só "você existe?", que é o que se queria. */
+    const sel = (colunas && colunas.length) ? colunas.join(',') : '*';
+    return chamar('/rest/v1/' + encodeURIComponent(tabela) +
+      '?select=' + encodeURIComponent(sel) + '&limit=0');
   }
 
   /* ---------- autenticação (GoTrue) ---------- */
@@ -1221,7 +1237,7 @@
     definirEmpresaDoPerfil, definirPapelDoPerfil, salvarMeuNome,
     definirBloqueioDoPerfil, definirBloqueioDaEmpresa, definirPonteDaEmpresa,
     sincronizarNaEntrada, definirDadosDaEmpresa, definirDadosDoPerfil, minhaSituacao, comoOServidorMeVe, primeirasLinhas, ondeEstaoOsRegistros,
-    convitesDaNuvem, convidar, removerConvite, recuperarSenha, criarEmpresa, chamarFuncao, desenhoDaApi,
+    convitesDaNuvem, convidar, removerConvite, recuperarSenha, criarEmpresa, chamarFuncao, sondarTabela,
     mensagensWhatsapp, marcarLidasWhatsapp, vincularWhatsapp,
     emailsDaNuvem, vincularEmail, enfileirarEmail, marcarLidosEmail,
     marcarEmailAnalisado, contarTentativaDeAnalise,
