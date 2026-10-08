@@ -7401,14 +7401,24 @@
       Mail.esquecer();
       return pintarEmails(true).then(function () {
         if (comAviso) {
-          alert(transporte.recebidos + ' e-mail(s) novo(s) e ' + transporte.enviados +
-            ' enviado(s).' +
+          /* "enviadas" aqui é a fila de SAÍDA — respostas escritas dentro do IAD
+             que acabaram de partir. Não tem nada a ver com a pasta de enviados
+             que a leitura varre, e escrever "0 enviados" logo acima de "achei a
+             sua pasta de ENVIADOS" fazia parecer que a pasta veio vazia. */
+          alert(transporte.recebidos + ' e-mail(s) novo(s) guardado(s).' +
+            '\n' + transporte.enviados + ' resposta(s) sua(s) saíram da fila de envio.' +
             (transporte.pastas ? '\n\nLi de: ' + transporte.pastas : '') +
             (transporte.achouEnviados
               ? '\n\nAchei a sua pasta de ENVIADOS — ' + transporte.achouEnviados +
                 '.\nAgora as suas próprias respostas entram na conversa.'
               : '') +
             (transporte.erro ? '\n\n' + transporte.erro : ''));
+          /* E repinta DEPOIS do aviso. O `alert` é síncrono e trava o navegador
+             no mesmo ciclo em que a tela foi remontada: o usuário lia o aviso
+             dizendo "achei a sua pasta de enviados" por cima de uma tela que
+             ainda mostrava "sem os enviados" e o botão em "Buscando…". Dado
+             certo, tela velha — que é indistinguível de defeito. */
+          render();
         }
         return transporte;
       });
