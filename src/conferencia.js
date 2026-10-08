@@ -47,6 +47,7 @@
     ["carteira", "tabela", "tipos_tarefa", "", "nuvem/schema.sql"],
     ["whatsapp", "tabela", "whatsapp_numeros", "", "nuvem/whatsapp.sql"],
     ["e-mail", "coluna", "caixas_email", "envia", "nuvem/correcao-20-caixa-que-envia.sql"],
+    ["e-mail", "coluna", "caixas_email", "marcas", "nuvem/correcao-26-a-minha-resposta.sql"],
     ["e-mail", "coluna", "caixas_email", "pastas", "nuvem/correcao-19-analise-do-email.sql"],
     ["e-mail", "coluna", "caixas_email", "senha_em", "nuvem/correcao-21-senha-da-caixa.sql"],
     ["e-mail", "coluna", "caixas_email", "ultimo_uid", "nuvem/correcao-19-analise-do-email.sql"],

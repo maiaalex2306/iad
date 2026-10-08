@@ -67,6 +67,7 @@ with esperado(grupo, tipo, alvo, coluna, arquivo) as (
     ('1 carteira', 'tabela', 'tipos_tarefa', '', 'nuvem/schema.sql'),
     ('4 whatsapp', 'tabela', 'whatsapp_numeros', '', 'nuvem/whatsapp.sql'),
     ('3 e-mail', 'coluna', 'caixas_email', 'envia', 'nuvem/correcao-20-caixa-que-envia.sql'),
+    ('3 e-mail', 'coluna', 'caixas_email', 'marcas', 'nuvem/correcao-26-a-minha-resposta.sql'),
     ('3 e-mail', 'coluna', 'caixas_email', 'pastas', 'nuvem/correcao-19-analise-do-email.sql'),
     ('3 e-mail', 'coluna', 'caixas_email', 'senha_em', 'nuvem/correcao-21-senha-da-caixa.sql'),
     ('3 e-mail', 'coluna', 'caixas_email', 'ultimo_uid', 'nuvem/correcao-19-analise-do-email.sql'),

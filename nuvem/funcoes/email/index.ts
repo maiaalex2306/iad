@@ -64,7 +64,7 @@ const CHAVE_MESTRA = Deno.env.get('EMAIL_CHAVE_MESTRA') || '';
    correção ou a versão de antes — e eu passei a tarde inteira sem saber, o
    que é pior do que o defeito. O carimbo volta em toda resposta e aparece na
    tela, e aí a pergunta "você republicou?" tem resposta em vez de palpite. */
-const VERSAO_DA_FUNCAO = '2026-09-19-c';
+const VERSAO_DA_FUNCAO = '2026-10-08-d';
 
 /* A lista tem de conter TODO cabeçalho que o app manda. O navegador pede
    permissão para eles antes de enviar o pedido de verdade (o "preflight"), e
@@ -145,10 +145,16 @@ const SERVIDORES: Record<string, { imap: string; smtp: string }> = {
   outlook: { imap: 'outlook.office365.com', smtp: 'smtp.office365.com' }
 };
 
+import {
+  type Marca, pastasDaCaixa, ehDeEnviados, pastasDaResposta, enviadosEntre,
+  marcasDaCaixa, recomecarDe
+} from './pastas.ts';
+
 interface Caixa {
   id: string; tenant_id: string; dono_id: string; endereco: string; nome_exibicao: string;
   provedor: string; imap_servidor: string; imap_porta: number;
   smtp_servidor: string; smtp_porta: number; ultimo_uid: number; pastas: string;
+  marcas: Record<string, { uid: number; validade: number }> | null;
   ativo: boolean; envia: boolean;
 }
 
@@ -369,9 +375,8 @@ async function naCaixa<T>(
        caracteres especiais, mas caixa de servidor próprio tem. */
     await comando('1', 'LOGIN "' + caixa.endereco.replace(/"/g, '') + '" "' + senha.replace(/"/g, '\\"') + '"');
 
-    const pasta = (caixa.pastas || 'INBOX').split(',')[0].trim() || 'INBOX';
-    await comando('2', 'SELECT "' + pasta.replace(/"/g, '') + '"');
-
+    /* Quem escolhe a pasta é quem chamou, porque agora é mais de uma: entrar
+       na caixa e escolher onde ler deixaram de ser a mesma coisa. */
     const saida = await fazer(comando);
     await c.escrever(sorteio + '9 LOGOUT\r\n');
     return saida;
@@ -380,7 +385,147 @@ async function naCaixa<T>(
   }
 }
 
-/* Só provar que a senha abre a caixa. Entra, escolhe a pasta, sai.
+/* Perguntar ao servidor onde ficam os enviados. Devolve '' quando ele não
+   sabe dizer — e aí a caixa segue lendo o que já lia, que é melhor do que
+   chutar uma pasta e acabar lendo a Lixeira de alguém. */
+async function acharEnviados(
+  comando: (passo: string, linha: string) => Promise<string>, passo: () => string
+): Promise<string> {
+  let resposta = '';
+  try {
+    resposta = await comando(passo(), 'LIST (SPECIAL-USE) "" "*"');
+  } catch { resposta = ''; }
+
+  let pastas = pastasDaResposta(resposta);
+  if (!pastas.length) {
+    /* Servidor antigo não entende SPECIAL-USE e recusa a linha inteira. O
+       LIST sem adorno todo servidor entende, desde sempre. */
+    try {
+      resposta = await comando(passo(), 'LIST "" "*"');
+    } catch { return ''; }
+    pastas = pastasDaResposta(resposta);
+  }
+  return enviadosEntre(pastas);
+}
+
+/* Escolher a pasta e trazer o UIDVALIDITY dela.
+
+   UIDVALIDITY é o servidor dizendo "os UIDs desta pasta foram renumerados".
+   Quando ele muda, continuar do número guardado lê mensagem errada ou pula
+   tudo em silêncio — que é o pior dos dois. */
+async function selecionar(
+  comando: (passo: string, linha: string) => Promise<string>, passo: string, pasta: string
+): Promise<number> {
+  const r = await comando(passo, 'SELECT "' + String(pasta).replace(/"/g, '') + '"');
+  return parseInt((/\[UIDVALIDITY (\d+)\]/i.exec(r) || ['', '0'])[1] || '0', 10) || 0;
+}
+
+/* Quantas mensagens uma rodada traz, e quanto de cada uma.
+
+   Os dois limites existem pelo mesmo motivo, e ele custou caro: a primeira
+   leitura de uma caixa tem marca zero, então o comando era "me dê TUDO". Numa
+   caixa de verdade isso é a correspondência de anos inteira chegando de uma
+   vez, e a função morria com "Function failed due to not having enough
+   compute resources" — que não diz nada sobre e-mail e manda procurar no
+   lugar errado.
+
+   25 por rodada, com o agendador de 5 em 5 minutos, drena uma caixa antiga
+   sozinho: cada rodada avança a marca, e a seguinte continua de onde parou.
+   E 64 KB por mensagem é de sobra para o que o IAD guarda — só o texto, sem
+   anexo e sem imagem. Anexo de 30 MB não entra na memória por acidente.
+
+   As 25 agora são da RODADA, não da pasta: duas pastas não podem dobrar o
+   peso de uma leitura, senão a conta de compute que já estourou uma vez
+   estoura de novo. Elas se dividem o orçamento, e o que uma não gasta sobra
+   para a seguinte. */
+const POR_RODADA = 25;
+const BYTES_POR_MENSAGEM = 65536;
+
+/* Uma pasta: escolhe, pergunta o que há de novo, baixa até a cota. */
+async function lerPasta(
+  comando: (passo: string, linha: string) => Promise<string>, passo: () => string,
+  pasta: string, marca: Marca, cota: number
+): Promise<{ mensagens: any[]; marca: Marca; restantes: number }> {
+  const mensagens: any[] = [];
+  const validade = await selecionar(comando, passo(), pasta);
+
+  /* Renumerou: a pasta recomeça como se fosse a primeira vez — as mais
+     recentes, e o arquivo antigo fica no servidor, onde sempre esteve. */
+  const desdeUid = recomecarDe(marca, validade);
+  let maiorUid = desdeUid;
+  let restantes = 0;
+
+  /* Primeiro PERGUNTAR quais existem, e só depois buscar as escolhidas.
+
+     SEARCH devolve só números — uma caixa com dez mil mensagens responde uns
+     70 KB. É o que torna possível limitar: com `UID FETCH n:*` não há como
+     pedir "as 25 primeiras", porque quem decide quantas vêm é o servidor.
+
+     O teto é o que cabe num UID: 32 bits. Acima disso o servidor não recusa a
+     busca, recusa a LINHA — e a mensagem que volta não fala de UID nenhum. */
+  const desde = Math.min(desdeUid + 1, 4294967295);
+  const achados = await comando(passo(), 'UID SEARCH UID ' + desde + ':*');
+
+  const todos = ((/^\* SEARCH([ \d]*)/m.exec(achados) || [])[1] || '')
+    .trim().split(/\s+/).map(Number)
+    .filter((u) => u > desdeUid)
+    .sort((a, b) => a - b);
+
+  /* A PRIMEIRA leitura de uma pasta é diferente das outras, e essa diferença
+     é uma decisão de produto, não um detalhe:
+
+       primeira vez  → as mais RECENTES, e o resto do arquivo fica para trás
+                       de propósito.
+       daí em diante → as mais antigas primeiro, para a marca avançar sempre e
+                       um atraso ser drenado em ordem.
+
+     Trazer dez anos de caixa de 25 em 25 levaria meses, e ninguém precisa
+     disso: o que move uma negociação é o que foi escrito nas últimas semanas.
+     O histórico continua no Gmail, onde sempre esteve. */
+  const primeiraVez = !desdeUid;
+  const desta = primeiraVez ? todos.slice(-cota) : todos.slice(0, cota);
+  restantes = primeiraVez ? 0 : todos.length - desta.length;
+  if (!desta.length) return { mensagens, marca: { uid: maiorUid, validade }, restantes };
+
+  /* `<0.65536>` é o pedaço que se quer de cada mensagem: do byte zero em
+     diante, no máximo isso. O servidor manda só esse pedaço. */
+  const bruto = await comando(passo(), 'UID FETCH ' + desta.join(',') +
+    ' (UID INTERNALDATE BODY.PEEK[]<0.' + BYTES_POR_MENSAGEM + '>)');
+
+  /* Cada item vem como `* N FETCH (UID u INTERNALDATE "..." BODY[]<0> {n}`
+     seguido de exatamente `n` bytes. É o tamanho que manda: procurar o fim
+     por texto quebraria em qualquer mensagem que contivesse `)` — ou seja, em
+     quase todas. O `<0>` só aparece quando se pede um pedaço. */
+  const re = /\* \d+ FETCH \(([^)]*?)BODY\[\](?:<\d+>)? \{(\d+)\}\r?\n/g;
+  let achado: RegExpExecArray | null;
+  while ((achado = re.exec(bruto)) !== null) {
+    const meta = achado[1] || '';
+    const tamanho = parseInt(achado[2] || '0', 10);
+    const inicio = achado.index + achado[0].length;
+    /* Pular o corpo ANTES de qualquer decisão sobre a mensagem. Se a busca
+       continuasse de onde o cabeçalho acabou, o texto do e-mail entraria na
+       varredura e um `* 2 FETCH (` escrito dentro dele seria lido como
+       mensagem — o que acontece sozinho em qualquer conversa sobre e-mail. */
+    re.lastIndex = inicio + tamanho;
+    const cru = bruto.slice(inicio, inicio + tamanho);
+
+    const uid = parseInt((/UID (\d+)/.exec(meta) || ['', '0'])[1] || '0', 10) || 0;
+    if (uid <= desdeUid) continue;
+    if (uid > maiorUid) maiorUid = uid;
+
+    const bytes = new Uint8Array(cru.length);
+    for (let i = 0; i < cru.length; i++) bytes[i] = cru.charCodeAt(i) & 0xff;
+    const texto = new TextDecoder('latin1').decode(bytes);
+
+    const m = lerMensagem(texto, dataDoServidor((/INTERNALDATE "([^"]+)"/.exec(meta) || [])[1]));
+    if (!m.id) continue;   /* sem Message-ID não há chave e não há dedução */
+    mensagens.push({ ...m, uid });
+  }
+
+  return { mensagens, marca: { uid: maiorUid, validade }, restantes };
+}
+
+/* Só provar que a senha abre a caixa. Entra, escolhe a primeira pasta, sai.
 
    Antes isto chamava a leitura com `ultimo_uid` no máximo que um número
    seguro comporta, para não baixar nada — e aí o comando saía como
@@ -388,102 +533,66 @@ async function naCaixa<T>(
    respondia "Could not parse command": a senha estava certa e o app dizia que
    não. Testar não é ler com um truque; é um comando a menos. */
 async function testarCaixa(caixa: Caixa, senha: string): Promise<void> {
-  await naCaixa(caixa, senha, 30, async () => undefined);
+  await naCaixa(caixa, senha, 30, async (comando) => {
+    await selecionar(comando, '2', pastasDaCaixa(caixa)[0]);
+  });
 }
 
-/* Quantas mensagens uma rodada traz, e quanto de cada uma.
-
-   Os dois limites existem pelo mesmo motivo, e ele custou caro: a primeira
-   leitura de uma caixa tem `ultimo_uid` em zero, então o comando era "me dê
-   TUDO". Numa caixa de verdade isso é a correspondência de anos inteira
-   chegando de uma vez, e a função morria com
-   "Function failed due to not having enough compute resources" — que não diz
-   nada sobre e-mail e manda procurar no lugar errado.
-
-   25 por rodada, com o agendador de 5 em 5 minutos, drena uma caixa antiga
-   sozinho: cada rodada avança a marca, e a seguinte continua de onde parou.
-   E 64 KB por mensagem é de sobra para o que o IAD guarda — só o texto, sem
-   anexo e sem imagem. Anexo de 30 MB não entra na memória por acidente. */
-const POR_RODADA = 25;
-const BYTES_POR_MENSAGEM = 65536;
-
-async function lerCaixa(caixa: Caixa, senha: string):
-    Promise<{ mensagens: any[]; maiorUid: number; restantes: number }> {
+async function lerCaixa(caixa: Caixa, senha: string): Promise<{
+  mensagens: any[]; marcas: Record<string, Marca>; restantes: number;
+  enviados: string; lidas: string[];
+}> {
   const mensagens: any[] = [];
-  let maiorUid = Number(caixa.ultimo_uid) || 0;
+  const marcas = marcasDaCaixa(caixa);
   let restantes = 0;
+  let enviados = '';
+  const lidas: string[] = [];
 
-  await naCaixa(caixa, senha, 40, async (comando) => {
-    /* Primeiro PERGUNTAR quais existem, e só depois buscar as escolhidas.
+  await naCaixa(caixa, senha, 50, async (comando) => {
+    /* A marca de cada comando precisa ser NOVA a cada comando. Com um número
+       fixo por etapa, duas pastas mandariam dois `SELECT` com a mesma marca
+       na mesma conexão, e a resposta da primeira serviria de resposta para a
+       segunda: a leitura continuaria achando que deu certo. */
+    let n = 10;
+    const passo = () => String(n++);
 
-       SEARCH devolve só números — uma caixa com dez mil mensagens responde uns
-       70 KB. É o que torna possível limitar: com `UID FETCH n:*` não há como
-       pedir "as 25 primeiras", porque quem decide quantas vêm é o servidor.
+    const pedidas = pastasDaCaixa(caixa);
 
-       O teto é o que cabe num UID: 32 bits. Acima disso o servidor não recusa
-       a busca, recusa a LINHA — e a mensagem que volta não fala de UID
-       nenhum. */
-    const desde = Math.min(maiorUid + 1, 4294967295);
-    const achados = await comando('3', 'UID SEARCH UID ' + desde + ':*');
+    /* Se a caixa ainda não sabe onde ficam os enviados, pergunta — uma vez.
+       Depois o nome fica gravado em `pastas` e esta volta não se repete. */
+    if (!pedidas.filter(ehDeEnviados).length) {
+      enviados = await acharEnviados(comando, passo);
+      if (enviados) pedidas.push(enviados);
+    }
 
-    const todos = ((/^\* SEARCH([ \d]*)/m.exec(achados) || [])[1] || '')
-      .trim().split(/\s+/).map(Number)
-      .filter((u) => u > (Number(caixa.ultimo_uid) || 0))
-      .sort((a, b) => a - b);
+    let orcamento = POR_RODADA;
+    let faltam = pedidas.length;
 
-    /* A PRIMEIRA leitura é diferente das outras, e essa diferença é uma
-       decisão de produto, não um detalhe:
-
-         primeira vez  → as mais RECENTES, e o resto do arquivo fica para trás
-                         de propósito.
-         daí em diante → as mais antigas primeiro, para a marca avançar sempre
-                         e um atraso ser drenado em ordem.
-
-       Trazer dez anos de caixa de 25 em 25 levaria meses, e ninguém precisa
-       disso: o que move uma negociação é o que foi escrito nas últimas
-       semanas. O histórico continua no Gmail, onde sempre esteve. */
-    const primeiraVez = !(Number(caixa.ultimo_uid) || 0);
-    const desta = primeiraVez ? todos.slice(-POR_RODADA) : todos.slice(0, POR_RODADA);
-    restantes = primeiraVez ? 0 : todos.length - desta.length;
-    if (!desta.length) return;
-
-    /* `<0.65536>` é o pedaço que se quer de cada mensagem: do byte zero em
-       diante, no máximo isso. O servidor manda só esse pedaço. */
-    const bruto = await comando('4', 'UID FETCH ' + desta.join(',') +
-      ' (UID INTERNALDATE BODY.PEEK[]<0.' + BYTES_POR_MENSAGEM + '>)');
-
-    /* Cada item vem como `* N FETCH (UID u INTERNALDATE "..." BODY[]<0> {n}`
-       seguido de exatamente `n` bytes. É o tamanho que manda: procurar o fim
-       por texto quebraria em qualquer mensagem que contivesse `)` — ou seja,
-       em quase todas. O `<0>` só aparece quando se pede um pedaço. */
-    const re = /\* \d+ FETCH \(([^)]*?)BODY\[\](?:<\d+>)? \{(\d+)\}\r?\n/g;
-    let achado: RegExpExecArray | null;
-    while ((achado = re.exec(bruto)) !== null) {
-      const meta = achado[1] || '';
-      const tamanho = parseInt(achado[2] || '0', 10);
-      const inicio = achado.index + achado[0].length;
-      /* Pular o corpo ANTES de qualquer decisão sobre a mensagem. Se a busca
-         continuasse de onde o cabeçalho acabou, o texto do e-mail entraria na
-         varredura e um `* 2 FETCH (` escrito dentro dele seria lido como
-         mensagem — o que acontece sozinho em qualquer conversa sobre e-mail. */
-      re.lastIndex = inicio + tamanho;
-      const cru = bruto.slice(inicio, inicio + tamanho);
-
-      const uid = parseInt((/UID (\d+)/.exec(meta) || ['', '0'])[1] || '0', 10) || 0;
-      if (uid <= (Number(caixa.ultimo_uid) || 0)) continue;
-      if (uid > maiorUid) maiorUid = uid;
-
-      const bytes = new Uint8Array(cru.length);
-      for (let i = 0; i < cru.length; i++) bytes[i] = cru.charCodeAt(i) & 0xff;
-      const texto = new TextDecoder('latin1').decode(bytes);
-
-      const m = lerMensagem(texto, dataDoServidor((/INTERNALDATE "([^"]+)"/.exec(meta) || [])[1]));
-      if (!m.id) continue;   /* sem Message-ID não há chave e não há dedução */
-      mensagens.push({ ...m, uid });
+    for (const pasta of pedidas) {
+      /* A cota se divide pelas pastas que ainda faltam, e o que uma não gasta
+         sobra para a seguinte. Dar 25 a cada uma dobraria o peso da rodada; dar
+         12 fixos deixaria metade do orçamento no chão quando a INBOX está
+         vazia. */
+      const cota = Math.max(1, Math.ceil(orcamento / Math.max(1, faltam)));
+      faltam--;
+      try {
+        const r = await lerPasta(comando, passo, pasta, marcas[pasta] || { uid: 0, validade: 0 }, cota);
+        marcas[pasta] = r.marca;
+        restantes += r.restantes;
+        orcamento -= r.mensagens.length;
+        for (const m of r.mensagens) mensagens.push(m);
+        lidas.push(pasta);
+      } catch (e) {
+        /* Uma pasta que não abre não derruba as outras. Quem renomeou a pasta
+           de enviados no Gmail continua recebendo a INBOX inteira, e o motivo
+           fica no log em vez de virar "a caixa falhou". */
+        console.error('pasta não lida:', pasta, String((e as Error).message || ''));
+      }
+      if (orcamento <= 0) break;
     }
   });
 
-  return { mensagens, maiorUid, restantes };
+  return { mensagens, marcas, restantes, enviados, lidas };
 }
 
 /* ---------------- SMTP ----------------
@@ -604,8 +713,10 @@ async function rodar(donoId?: string): Promise<Record<string, unknown>> {
     /* Receber e enviar são independentes de propósito: IMAP fora do ar não
        pode impedir a resposta que o vendedor já escreveu de sair. */
     try {
-      const { mensagens, maiorUid, restantes } = await lerCaixa(caixa, senha);
+      const { mensagens, marcas, restantes, enviados, lidas } = await lerCaixa(caixa, senha);
       if (restantes) linha.faltam = restantes;
+      if (lidas.length) linha.pastas = lidas.join(', ');
+      if (enviados) linha.achouEnviados = enviados;
       if (mensagens.length) {
         linha.recebidos = await gravarEmails(mensagens.map((m) => ({
           id: m.id, tenant_id: caixa.tenant_id, dono_id: caixa.dono_id, caixa: caixa.endereco,
@@ -615,13 +726,33 @@ async function rodar(donoId?: string): Promise<Record<string, unknown>> {
           enviada_em: m.quando || new Date().toISOString(), estado: 'recebida'
         })));
       }
-      if (maiorUid > (Number(caixa.ultimo_uid) || 0)) {
-        await alterar('caixas_email?id=eq.' + caixa.id,
-          { ultimo_uid: maiorUid, estado: 'ok', erro: '', ultima_leitura: new Date().toISOString() });
-      } else {
-        await alterar('caixas_email?id=eq.' + caixa.id,
-          { estado: 'ok', erro: '', ultima_leitura: new Date().toISOString() });
+      const campos: Record<string, unknown> = {
+        estado: 'ok', erro: '', ultima_leitura: new Date().toISOString(), marcas
+      };
+      /* `ultimo_uid` continua sendo o da primeira pasta. Ele não manda mais em
+         nada — quem manda são as marcas — mas é dele que uma caixa migrada
+         recomeça, e zerá-lo aqui faria qualquer volta atrás rebaixar a leitura
+         para "primeira vez" e repetir as 25 últimas. */
+      const daPrimeira = marcas[pastasDaCaixa(caixa)[0]];
+      if (daPrimeira && daPrimeira.uid > (Number(caixa.ultimo_uid) || 0)) {
+        campos.ultimo_uid = daPrimeira.uid;
       }
+      /* A pasta descoberta fica GRAVADA, e isso é metade do valor da
+         descoberta: na próxima rodada não há LIST nenhum, e a pessoa vê na
+         tela de que pastas o IAD lê — e pode corrigir se o servidor dela
+         chamar a pasta de outra coisa.
+
+         Só que ela só é gravada se tiver sido LIDA de verdade. Gravar o nome
+         de uma pasta que o SELECT recusou trancaria o defeito para sempre: o
+         nome passaria a contar como "já tem enviados", a descoberta nunca mais
+         rodaria, e o erro ficaria só no log — a pessoa veria a pasta escrita na
+         tela e nenhuma mensagem chegando dela. Sem gravar, a descoberta se
+         repete na rodada seguinte e a tela continua dizendo
+         "sem os enviados", que é a verdade. */
+      if (enviados && lidas.indexOf(enviados) !== -1) {
+        campos.pastas = pastasDaCaixa(caixa).concat([enviados]).join(',');
+      }
+      await alterar('caixas_email?id=eq.' + caixa.id, campos);
     } catch (e) {
       const motivo = String((e as Error).message || 'falhou').slice(0, 300);
       linha.erroAoReceber = motivo;

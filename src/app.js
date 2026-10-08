@@ -2381,6 +2381,13 @@
         { id: 'imap_servidor', rotulo: 'Servidor de entrada (IMAP)', tipo: 'text', largura: 'metade',
           dica: 'Só para "Outro". Gmail e Outlook o app já sabe.' },
         { id: 'smtp_servidor', rotulo: 'Servidor de saída (SMTP)', tipo: 'text', largura: 'metade' },
+        /* A saída de emergência da descoberta automática. O IAD pergunta ao
+           servidor onde ficam os enviados e grava o nome aqui sozinho; este
+           campo existe para o servidor que não responde essa pergunta — e para
+           quem quiser incluir uma subpasta de regra. */
+        { id: 'pastas', rotulo: 'Pastas que o IAD lê', tipo: 'text',
+          dica: 'Separadas por vírgula. Deixe como está: o IAD acha a pasta de enviados sozinho e ' +
+            'escreve o nome dela aqui. Sem os enviados, a sua própria resposta não entra na conversa.' },
         /* Receber é de todas as caixas; mandar é de uma. Quem recebe cliente
            em dois endereços quase sempre responde por um só. */
         { id: 'envia', rotulo: 'Esta caixa também ENVIA?', tipo: 'select',
@@ -2402,6 +2409,7 @@
         provedor: (minha && minha.provedor) || 'gmail',
         imap_servidor: (minha && minha.imap_servidor) || '',
         smtp_servidor: (minha && minha.smtp_servidor) || '',
+        pastas: (minha && minha.pastas) || 'INBOX',
         envia: (minha && minha.envia === false) ? 'nao' : 'sim',
         senha: ''
       }, function (d) {
@@ -2418,6 +2426,7 @@
           provedor: d.provedor || 'gmail',
           imap_servidor: (d.imap_servidor || '').trim(),
           smtp_servidor: (d.smtp_servidor || '').trim(),
+          pastas: String(d.pastas || '').trim() || 'INBOX',
           envia: d.envia !== 'nao'
         }).then(function () {
           /* Uma que envia, e só uma. Marcar a segunda desmarca a primeira
@@ -7376,6 +7385,13 @@
            mão no painel e não sobe com o app: sem este carimbo, "você
            republicou?" só tem palpite por resposta. */
         versao: (r && r.versao) || '',
+        /* De que pastas cada caixa leu, e qual pasta de enviados o servidor
+           acabou de revelar. A descoberta é automática, e descoberta que
+           ninguém vê é descoberta em que ninguém confia — ainda mais esta, que
+           é a diferença entre a conversa ter os dois lados ou só um. */
+        pastas: linhas.map(function (l) { return l.pastas || ''; }).filter(Boolean).join(' · '),
+        achouEnviados: linhas.filter(function (l) { return l.achouEnviados; })
+          .map(function (l) { return l.caixa + ': ' + l.achouEnviados; }).join(' · '),
         /* O erro da caixa é o da caixa, e aparece com o endereço junto: com
            duas caixas ligadas, "falhou" sem dizer qual manda a pessoa mexer na
            configuração certa por sorte. */
@@ -7386,7 +7402,13 @@
       return pintarEmails(true).then(function () {
         if (comAviso) {
           alert(transporte.recebidos + ' e-mail(s) novo(s) e ' + transporte.enviados +
-            ' enviado(s).' + (transporte.erro ? '\n\n' + transporte.erro : ''));
+            ' enviado(s).' +
+            (transporte.pastas ? '\n\nLi de: ' + transporte.pastas : '') +
+            (transporte.achouEnviados
+              ? '\n\nAchei a sua pasta de ENVIADOS — ' + transporte.achouEnviados +
+                '.\nAgora as suas próprias respostas entram na conversa.'
+              : '') +
+            (transporte.erro ? '\n\n' + transporte.erro : ''));
         }
         return transporte;
       });
@@ -7583,6 +7605,60 @@
     });
   }
 
+  /* A CONVERSA ATÉ AQUI, e por que ela custa uma linha a mais no pedido.
+
+     O assistente lia o e-mail do cliente SOZINHO, sem nada antes dele. Numa
+     troca de verdade isso é ler o meio de um diálogo: "preciso da ajuda dos
+     demais desse grupo de e-mail" não quer dizer a mesma coisa quando a
+     mensagem anterior, nossa, propôs uma visita presencial para levantar
+     justamente aqueles itens.
+
+     Faltando a nossa resposta, o assistente tirava duas conclusões erradas, e
+     as duas custam caro: abria tarefa para marcar uma reunião que já tinha
+     sido proposta, e lia como pedido em aberto o que já estava respondido.
+
+     A nossa fala entra como CONTEXTO, nunca como evidência — quem pontua é só
+     o cliente, e o servidor já recebe essa regra com os nomes dos dois lados.
+     Aqui ela é repetida em cima do bloco porque o texto que chega junto é a
+     última coisa que o modelo lê antes de decidir.
+
+     Quatro mensagens, e um pedaço de cada: a conversa inteira de uma thread
+     de vinte respostas seria o rodapé de vinte assinaturas empurrando a frase
+     que importa para fora do que o modelo olha — e paga por isso. */
+  const MENSAGENS_DE_CONTEXTO = 4;
+  const LETRAS_POR_CONTEXTO = 1200;
+
+  function conversaAntes(m) {
+    if (!Mail || !Mail.carregadas()) return '';
+    const chave = String(m.thread || m.id || '');
+    if (!chave) return '';
+
+    const antes = Mail.todas().filter(function (x) {
+      if (String(x.thread || x.id || '') !== chave) return false;
+      if (x.id === m.id) return false;
+      return String(x.enviada_em || '') <= String(m.enviada_em || '');
+    }).sort(function (a, b) {
+      return String(a.enviada_em || '').localeCompare(String(b.enviada_em || ''));
+    }).slice(-MENSAGENS_DE_CONTEXTO);
+
+    if (!antes.length) return '';
+
+    const linhas = antes.map(function (x) {
+      const meu = x.direcao === 'saida';
+      const quem = meu ? 'NÓS' : ((x.de_nome || x.de || 'o cliente') + ' (cliente)');
+      const corpo = Mail.limpo(x.corpo || '');
+      return '[' + String(x.enviada_em || '').slice(0, 10) + '] ' + quem + ':\n' +
+        (corpo.length > LETRAS_POR_CONTEXTO
+          ? corpo.slice(0, LETRAS_POR_CONTEXTO) + ' […]'
+          : corpo);
+    });
+
+    return 'A CONVERSA ATÉ AQUI — contexto, não é o material a analisar.\n' +
+      'O que está marcado como NÓS é fala nossa: serve para você entender o que já foi ' +
+      'perguntado, proposto e combinado, e NUNCA sobe nota nem vira evidência.\n\n' +
+      linhas.join('\n\n') + '\n\n----------\n\n';
+  }
+
   function analisarUm(item) {
     const m = item.m, op = item.op;
     const N = global.IADNuvem;
@@ -7605,7 +7681,9 @@
     /* Sem o aviso jurídico, a assinatura e as marcas de imagem: é texto pago
        para ler o mesmo rodapé cem vezes, e ele empurra a frase que importa
        para o fim do que o assistente olha. */
-    const texto = 'E-MAIL RECEBIDO\nDe: ' + (m.de_nome || '') + ' <' + (m.de || '') + '>\n' +
+    const texto = conversaAntes(m) +
+      'E-MAIL RECEBIDO — É ESTE QUE VOCÊ ESTÁ ANALISANDO\n' +
+      'De: ' + (m.de_nome || '') + ' <' + (m.de || '') + '>\n' +
       'Assunto: ' + (m.assunto || '') + '\n\n' + Mail.limpo(m.corpo);
 
     return N.contarTentativaDeAnalise(m.id, (m.analise_tentativas || 0) + 1)

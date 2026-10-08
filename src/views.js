@@ -7249,6 +7249,30 @@
       'senha dela é ela, na tela dela.</td></tr>' +
       '</tbody></table></div>' +
 
+      '<h3>As duas pastas: a entrada <em>e</em> os enviados</h3>' +
+      '<p class="small">Até a v236 o IAD lia só a caixa de <strong>entrada</strong>. Parece o óbvio, e ' +
+      'é meia conversa — a metade errada. A resposta que você escreve pelo Gmail, do celular, antes de ' +
+      'abrir o app, <strong>nunca passa pela entrada</strong>: ela nasce direto na pasta de enviados. ' +
+      'Então a conversa aparecia com o cliente falando sozinho.</p>' +
+      '<p class="small">O estrago não era de aparência. Quem lê depois — você, o histórico da conta e ' +
+      'o assistente que avalia a negociação — via um pedido do cliente <strong>sem resposta</strong>. ' +
+      'Era mentira, e era mentira que <strong>piorava a nota de um negócio bem tocado</strong>: você ' +
+      'tinha proposto uma visita presencial e o sistema registrava silêncio.</p>' +
+      '<p class="small">Agora o IAD lê as duas. E não pede que você configure nada: a pasta de ' +
+      'enviados <strong>não tem nome fixo</strong> — é “[Gmail]/E-mails enviados” numa conta em ' +
+      'português, “[Gmail]/Sent Mail” em inglês, “Sent Items” no Outlook, “INBOX.Sent” em servidor ' +
+      'próprio. Adivinhar pelo nome erra em metade das caixas do mundo, então o IAD ' +
+      '<strong>pergunta ao servidor</strong> qual é, grava o nome e não pergunta mais. Ele fica à ' +
+      'vista em Configuração → Minha caixa, e você pode corrigi-lo em Editar.</p>' +
+      '<p class="small">A sua fala também entra no que o assistente lê, mas <strong>marcada como ' +
+      'nossa</strong>: serve para ele saber o que já foi perguntado, proposto e combinado — e ' +
+      '<strong>nunca sobe nota</strong>. A régua não mudou: quem pontua é só o cliente. O que mudou é ' +
+      'que o assistente parou de abrir tarefa para marcar uma reunião que você já tinha proposto na ' +
+      'mensagem anterior.</p>' +
+      '<p class="small muted">Nada é duplicado: a chave de cada mensagem é o Message-ID, então a ' +
+      'resposta que você mandou <em>de dentro do IAD</em> e que volta pela pasta de enviados é a mesma ' +
+      'linha, não duas.</p>' +
+
       '<h3>Quando dá errado</h3>' +
       '<div class="tabela-rolagem"><table><tbody>' +
       '<tr><td><strong>A caixa recusou a senha</strong></td>' +
@@ -7264,6 +7288,11 @@
       '<tr><td><strong>Liguei e não chega nada</strong></td>' +
       '<td class="small">Clique em <strong>Buscar agora</strong>, em Configuração → Minha caixa ' +
       'de e-mail. Ele diz na hora quantos vieram — ou o que a caixa respondeu.</td></tr>' +
+      '<tr><td><strong>Minhas respostas não aparecem</strong></td>' +
+      '<td class="small">Veja em Configuração → Minha caixa se a linha do seu endereço mostra uma ' +
+      'pasta de enviados. Se disser <em>sem os enviados</em>, o seu servidor não respondeu qual é: ' +
+      'clique em Editar e escreva o nome dela à mão em <strong>Pastas que o IAD lê</strong>, depois ' +
+      'da vírgula.</td></tr>' +
       '<tr><td><strong>Quero desligar</strong></td>' +
       '<td class="small">Apague a senha de aplicativo na sua conta de e-mail. O acesso morre na ' +
       'hora, sem depender de ninguém aqui.</td></tr>' +
@@ -8587,8 +8616,26 @@
       const papel = c.envia !== false
         ? '<span class="pill">envia e recebe</span>'
         : '<span class="pill">só recebe</span>';
+      /* De que pastas o IAD lê. Isto fica à vista porque a pasta de ENVIADOS é
+         descoberta sozinha, e descoberta que ninguém vê é descoberta em que
+         ninguém confia — além de ser o lugar de corrigir quando o servidor
+         chama a pasta de outra coisa. */
+      const pastas = String(c.pastas || 'INBOX').split(',')
+        .map(function (x) { return x.trim(); }).filter(Boolean);
+      const temEnviados = pastas.filter(function (x) {
+        return /\bsent\b|enviad/.test(x.toLowerCase());
+      }).length > 0;
+
       return '<tr><td><strong>' + esc(c.endereco) + '</strong>' +
         (c.nome_exibicao ? '<br><span class="tiny muted">' + esc(c.nome_exibicao) + '</span>' : '') +
+        '<br><span class="tiny muted"' +
+        ajudaComLinhas('De onde o IAD lê',
+          'As pastas desta caixa que o IAD abre a cada rodada.',
+          [['Enviados', 'A sua resposta escrita pelo Gmail nasce lá, não na entrada. Sem ela a conversa aparece com o cliente falando sozinho — e a avaliação lê silêncio onde houve resposta.'],
+           ['Quem achou', 'O IAD pergunta ao servidor onde fica a pasta de enviados e grava o nome. Você pode corrigir em Editar se o seu servidor a chamar de outra coisa.']]) +
+        '>' + esc(pastas.join(' · ')) +
+        (temEnviados ? '' : ' <span class="pill risk mini">sem os enviados</span>') +
+        '</span>' +
         '</td><td>' + estado + '</td><td>' + papel + '</td>' +
         '<td class="tiny muted">' + (c.senha_em ? 'senha guardada em ' + U.data(c.senha_em) : '—') +
         (c.erro ? '<br>' + esc(String(c.erro).slice(0, 120)) : '') + '</td>' +
