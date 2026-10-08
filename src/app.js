@@ -2264,19 +2264,31 @@
       if (!op || op.desfecho) return;
       if (!Mail || !Mail.disponivel()) { alert('Entre com a sua conta da nuvem antes.'); return; }
 
-      /* A caixa que ENVIA, não a primeira que existir.
+      /* DE QUAL ENDEREÇO a resposta sai.
 
-         Vendedor recebe cliente em mais de um endereço e manda por um só — o
-         Alexandre recebe no biosolvit e no biopartners, e a saída é sempre
-         pelo biopartners. Pegar a primeira da lista faria a resposta ao
-         cliente sair do endereço errado, que é o tipo de erro que só se
-         descobre quando o cliente estranha. */
+         Antes o IAD obrigava a marcar UMA caixa como a que envia, e desmarcava
+         a outra sozinho. O motivo era real: com duas marcadas, a escolha do
+         remetente dependia da ordem em que o servidor devolvia as linhas, que é
+         o mesmo que sortear — e responder do endereço errado é o erro que só se
+         descobre quando o cliente estranha.
+
+         Só que a regra resolvia o sorteio proibindo o caso legítimo. Quem
+         atende por dois endereços precisa responder pelos dois: o cliente que
+         escreveu para o biosolvit tem de receber a resposta DO biosolvit. Pelo
+         outro, a conversa se parte em duas na caixa dele e quem respondeu
+         parece outra pessoa.
+
+         A regra nova mata o sorteio sem proibir nada: numa RESPOSTA, quem
+         manda é a caixa que RECEBEU. Não é preferência, é a única resposta
+         certa — está gravada em cada mensagem, não é adivinhada. Em mensagem
+         nova, a escolha aparece no formulário, e só quando há mais de uma
+         caixa que envia. */
       const ativas = (Mail.minhasCaixas() || []).filter(function (c) { return c.ativo !== false; });
-      const caixa = ativas.filter(function (c) { return c.envia !== false; })[0];
-      if (!caixa) {
+      const enviadoras = ativas.filter(function (c) { return c.envia !== false; });
+      if (!enviadoras.length) {
         alert(ativas.length
           ? 'Nenhuma das suas caixas está marcada para enviar.\n\n' +
-            'Abra "Minha caixa" e marque qual delas manda os e-mails.'
+            'Abra "Minha caixa" e marque "Sim" em pelo menos uma.'
           : 'Ligue a sua caixa de e-mail antes, em "Minha caixa".\n\n' +
             'Sem ela o IAD não tem de onde mandar.');
         return;
@@ -2301,7 +2313,33 @@
         : op.titulo;
       const paraPadrao = (conversa && conversa.contato) ? conversa.contato.id : comEmail[0].id;
 
-      U.formulario(conversa ? 'Responder' : 'Escrever para o cliente', [
+      /* Numa resposta, o padrão é a caixa que recebeu — e só vale se ela
+         estiver marcada para enviar. Marcada como "só recebe", o IAD não
+         inventa: cai na primeira que envia e diz na tela de onde vai sair,
+         porque trocar o remetente sem avisar é como a conversa se parte na
+         caixa do cliente sem ninguém entender. */
+      const recebeu = ultima && ultima.caixa ? String(ultima.caixa).toLowerCase() : '';
+      const daThread = recebeu
+        ? enviadoras.filter(function (c) { return String(c.endereco).toLowerCase() === recebeu; })[0]
+        : null;
+      const dePadrao = (daThread || enviadoras[0]).endereco;
+      const trocou = !!(recebeu && !daThread);
+
+      const campoDe = enviadoras.length > 1
+        ? [{ id: 'de', rotulo: 'De', tipo: 'select',
+             opcoes: enviadoras.map(function (c) {
+               return { valor: c.endereco,
+                        rotulo: c.endereco + (c.nome_exibicao ? ' · ' + c.nome_exibicao : '') };
+             }),
+             dica: conversa
+               ? (trocou
+                   ? 'O cliente escreveu para ' + recebeu + ', mas essa caixa está como "só recebe". ' +
+                     'Confira o remetente antes de mandar.'
+                   : 'Já vem a caixa em que o cliente escreveu — responder por outra parte a conversa na caixa dele.')
+               : 'Por qual dos seus endereços esta mensagem sai.' }]
+        : [];
+
+      U.formulario(conversa ? 'Responder' : 'Escrever para o cliente', campoDe.concat([
         { id: 'contatoId', rotulo: 'Para', tipo: 'select',
           opcoes: comEmail.map(function (c) {
             return { valor: c.id, rotulo: c.nome + ' · ' + (c.email || c.emailPessoal) };
@@ -2309,12 +2347,21 @@
         { id: 'assunto', rotulo: 'Assunto', tipo: 'text' },
         { id: 'corpo', rotulo: 'Mensagem', tipo: 'textarea', voz: true,
           dica: 'Sai do seu endereço, com a sua assinatura de sempre no cliente de e-mail dele.' }
-      ], { contatoId: paraPadrao, assunto: assunto, corpo: '' }, function (d) {
+      ]), { de: dePadrao, contatoId: paraPadrao, assunto: assunto, corpo: '' }, function (d) {
         const quem = Store.contato(d.contatoId);
         if (!quem) return;
         const para = String(quem.email || quem.emailPessoal || '').trim();
         if (!para) { alert('Este contato não tem e-mail.'); return; }
         if (!String(d.corpo || '').trim()) { alert('A mensagem está vazia.'); return; }
+
+        /* O endereço escolhido tem de ser uma caixa que existe e que envia.
+           Sem esta linha, um valor inesperado no campo viraria um remetente
+           que não existe e a mensagem morreria na fila sem motivo legível. */
+        const escolhida = enviadoras.filter(function (c) {
+          return c.endereco === (d.de || dePadrao);
+        })[0] || enviadoras.filter(function (c) { return c.endereco === dePadrao; })[0];
+        if (!escolhida) { alert('Não achei a caixa que manda esta mensagem.'); return; }
+        const caixa = escolhida;
 
         const dominio = String(caixa.endereco || '').split('@')[1] || 'iad';
         const id = '<iad-' + Store.uid('msg').replace(/[^a-z0-9]/gi, '') + '@' + dominio + '>';
@@ -2393,7 +2440,8 @@
         { id: 'envia', rotulo: 'Esta caixa também ENVIA?', tipo: 'select',
           opcoes: [{ valor: 'sim', rotulo: 'Sim — a saída sai por ela' },
                    { valor: 'nao', rotulo: 'Não — só recebe' }],
-          dica: 'Marque "Sim" em uma só. As outras continuam recebendo normalmente.' },
+          dica: 'Pode marcar "Sim" em quantas quiser. Ao responder, o IAD usa a caixa em que o ' +
+            'cliente escreveu; em mensagem nova ele pergunta de qual sai.' },
         /* O campo da senha fica por ÚLTIMO de propósito: é o passo que exige
            sair do app, ir à conta de e-mail e voltar. Vindo antes, ele pararia
            o preenchimento do resto no meio. */
@@ -2429,19 +2477,20 @@
           pastas: String(d.pastas || '').trim() || 'INBOX',
           envia: d.envia !== 'nao'
         }).then(function () {
-          /* Uma que envia, e só uma. Marcar a segunda desmarca a primeira
-             sozinho — deixar duas marcadas faria a escolha do remetente
-             depender da ordem em que o servidor devolveu as linhas, que é o
-             mesmo que sortear. */
-          if (d.envia !== 'nao') {
-            (Mail.minhasCaixas() || []).forEach(function (c) {
-              if (c.endereco !== endereco && c.envia !== false) {
-                global.IADNuvem.salvarCaixaDeEmail({
-                  tenant_id: c.tenant_id, dono_id: c.dono_id, endereco: c.endereco, envia: false
-                }).catch(function () {});
-              }
-            });
-          }
+          /* Marcar esta NÃO desmarca mais a outra.
+
+             Desmarcava, e o motivo era bom: com duas caixas marcadas, a
+             escolha do remetente dependia da ordem em que o servidor devolvia
+             as linhas — sorteio. Só que a regra matava o sorteio proibindo o
+             caso legítimo: quem atende por dois endereços precisa responder
+             pelos dois, e o cliente que escreveu para um tem de receber a
+             resposta DAQUELE. Pelo outro, a conversa se parte em duas na caixa
+             dele e quem respondeu parece outra pessoa.
+
+             O sorteio foi morto onde ele nascia, não aqui: numa resposta, quem
+             manda é a caixa que RECEBEU — está gravada em cada mensagem, não é
+             adivinhada. Em mensagem nova, com mais de uma caixa que envia, o
+             formulário pergunta. */
           /* Espaços colados junto: o Google mostra as 16 letras em quatro
              grupos, e quem copia leva os espaços. Recusar por causa disso
              seria culpar a pessoa pelo formato da tela do Google. */

@@ -7215,10 +7215,12 @@
         'cliente vê, e o provedor. No último campo, cole as 16 letras — com ou sem os espaços, ' +
         'tanto faz. Os campos de servidor ficam <strong>vazios</strong>: eles só valem para ' +
         '"Outro (servidor próprio)".') +
-      passo(5, 'Escolha qual caixa ENVIA',
-        'Se você tem só uma, ela envia. Se tem duas, marque <strong>Sim</strong> na que deve ' +
-        'assinar as respostas e <strong>Não</strong> na outra — o IAD desmarca a anterior ' +
-        'sozinho, porque duas marcadas fariam o remetente virar sorteio.') +
+      passo(5, 'Marque quais caixas ENVIAM',
+        'Pode ser mais de uma. Ao <strong>responder</strong>, o IAD manda pela caixa em que o ' +
+        'cliente escreveu — responder por outro endereço parte a conversa em duas na caixa dele e ' +
+        'faz você parecer outra pessoa. Em mensagem <strong>nova</strong>, com mais de uma caixa ' +
+        'marcada, ele pergunta de qual sai. Marque <strong>Não</strong> só no endereço que você ' +
+        'não quer que assine nada.') +
       passo(6, 'Confira',
         'Na mesma tela, cada endereço aparece com o estado dele. <em>Funcionando</em> está pronto; ' +
         '<strong>falta a senha</strong> quer dizer cadastrado e sem funcionar — clique em Editar e ' +
@@ -7237,10 +7239,11 @@
       '<tr><td style="vertical-align:top"><strong>Alexandre</strong><br>' +
       '<span class="small muted">Bio Water Care</span></td>' +
       '<td class="small">Recebe cliente em <strong>@biosolvit.com</strong> e em ' +
-      '<strong>@biopartners.com.br</strong>, e responde sempre pelo segundo. Ele liga ' +
-      '<strong>as duas</strong> caixas — uma senha de aplicativo para cada, gerada em cada conta ' +
-      '— e marca <em>Envia: Sim</em> só na do biopartners. As duas trazem e-mail; só uma ' +
-      'assina.</td></tr>' +
+      '<strong>@biopartners.com.br</strong>. Ele liga <strong>as duas</strong> caixas — uma senha ' +
+      'de aplicativo para cada, gerada em cada conta — e marca <em>Envia: Sim</em> nas duas. Quem ' +
+      'escreveu para o biosolvit recebe a resposta <strong>do biosolvit</strong>, e quem escreveu ' +
+      'para o biopartners, do biopartners: o IAD responde pela caixa que recebeu, sem ele ter de ' +
+      'lembrar.</td></tr>' +
       '<tr><td style="vertical-align:top"><strong>Rosa</strong><br>' +
       '<span class="small muted">AcP</span></td>' +
       '<td class="small">Recebe tudo em <strong>rosa.oliveira@acp.tec.br</strong>. Ela liga ' +
@@ -8663,8 +8666,9 @@
         ? '<div class="aviso" style="margin-top:12px">Nenhum endereço está marcado para <strong>enviar</strong>. ' +
           'Você recebe, mas não consegue responder de dentro do IAD.</div>'
         : '') +
-      '<p class="tiny muted" style="margin:12px 0 0">Recebe de todos; manda por um só. ' +
-      'Para trocar qual envia, edite o endereço e marque "Sim" — o IAD desmarca o anterior sozinho.</p>'
+      '<p class="tiny muted" style="margin:12px 0 0">Pode marcar <strong>mais de um</strong> para enviar. ' +
+      'Ao <em>responder</em>, o IAD usa a caixa em que o cliente escreveu — responder por outra parte a ' +
+      'conversa em duas na caixa dele. Em mensagem nova, ele pergunta de qual sai.</p>'
     ) + blocoTransporte();
   }
 
