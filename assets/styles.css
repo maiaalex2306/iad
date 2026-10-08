@@ -94,6 +94,12 @@
   --pri-fundo: #eaf2fd; --pri-borda: #b6d4f2; --pri-tinta: #1d4e8c;
   --dia-fundo: #e9f7ee; --dia-borda: #aedcc0; --dia-tinta: #146634;
   --tod-fundo: #f2edfb; --tod-borda: #ddd0f2; --tod-tinta: #4a2f80;
+  /* A quinta faixa: AGUARDANDO. Cinza-azulado neutro, de propósito — é a única
+     que não é um estado de alerta. Ela quer dizer "parado por boa razão": o
+     próximo passo já está marcado e a bola está do outro lado. Cor quente aqui
+     cobraria uma ação que já foi tomada, que é o defeito que ela veio
+     consertar. Medidos: 14,6:1 para o texto e 6,5:1 para a tinta. */
+  --esp-fundo: #eef1f5; --esp-borda: #cfd8e3; --esp-tinta: #44576e;
   --radius: 14px;
   --shadow: 0 1px 2px rgba(16, 32, 47, .06), 0 6px 20px rgba(16, 32, 47, .06);
   --safe-b: env(safe-area-inset-bottom, 0px);
@@ -126,6 +132,7 @@
     --pri-fundo: #13263d; --pri-borda: #27486f; --pri-tinta: #8fc2f5;
     --dia-fundo: #12301f; --dia-borda: #1f5436; --dia-tinta: #7fd9a3;
     --tod-fundo: #241c3a; --tod-borda: #3d3060; --tod-tinta: #c9b6f5;
+    --esp-fundo: #1c2534; --esp-borda: #334256; --esp-tinta: #a9bcd4;
     --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
   }
 }
@@ -782,6 +789,8 @@ td .tiny { display: block; }
 .tile.ok .qtd { color: var(--dia-tinta); }
 .tile.todos { background: var(--tod-fundo); border-color: var(--tod-borda); border-left: 4px solid var(--tod-tinta); }
 .tile.todos .qtd { color: var(--tod-tinta); }
+.tile.espera { background: var(--esp-fundo); border-color: var(--esp-borda); border-left: 4px solid var(--esp-tinta); }
+.tile.espera .qtd { color: var(--esp-tinta); }
 .tile .val { color: var(--muted); }
 .tile.ativo { outline: 2px solid var(--navy-2); outline-offset: 1px; }
 
@@ -1149,6 +1158,16 @@ details.bloco .card + .card { margin-top: 16px; }
    quem precisa do contorno. */
 .foco.u0, .foco.u1 { background: var(--dia-fundo); border-color: var(--dia-borda); border-left-color: var(--dia-tinta); }
 .foco.u2 { background: var(--pri-fundo); border-color: var(--pri-borda); border-left-color: var(--pri-tinta); }
+/* Aguardando vence as faixas de urgência na pintura do cartão: ele pode ter
+   urgência 0 e mil causas verdadeiras escritas dentro, mas o que a cor tem de
+   dizer de longe é "este aqui não é para hoje". */
+.foco.esperando { background: var(--esp-fundo); border-color: var(--esp-borda); border-left-color: var(--esp-tinta); }
+.linha-espera {
+  margin-top: 8px; padding: 7px 10px; border-radius: 9px;
+  background: var(--surface); border: 1px solid var(--esp-borda);
+  font-size: .84rem;
+}
+.linha-espera strong { color: var(--esp-tinta); }
 .foco.u3 { background: var(--urg-fundo); border-color: var(--urg-borda); border-left-color: var(--urg-tinta); }
 
 /* ---------- a orientação dentro do cartão ----------

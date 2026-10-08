@@ -69,6 +69,19 @@
       lista.push({ id: id, peso: peso, texto: texto, custo: custo });
     };
 
+    /* A espera vem primeiro na lista, e é a única causa que NÃO é um problema.
+       As outras continuam todas escritas abaixo dela — o combinado vencido há
+       28 dias é verdade e tem de aparecer. O que muda é a leitura: elas viram
+       o retrato da conta, não a cobrança de hoje. */
+    if (item.aguardando) {
+      const a = item.aguardando;
+      por('aguardando', 5,
+        'Você já agiu: o próximo passo está marcado para ' + dataBr(a.ate) +
+          (a.titulo ? ' — ' + a.titulo : '') + '.',
+        'A bola está do outro lado. O que vem abaixo é o retrato da conta, não o que ' +
+        'fazer hoje; se o cliente não voltar até lá, a tarefa vence e tudo isto sobe de novo.');
+    }
+
     if (op.nutricao && E.nutricaoVencida(op)) {
       por('revisao', 72,
         'A revisão da nutrição venceu' +
@@ -210,6 +223,21 @@
     if (tipo === 'resgate') return 'silencio';
     if (tipo === 'avanco') return 'parado';
     return tipo;
+  }
+
+  /* Quando o negócio está aguardando, o primeiro passo não é nenhum dos que a
+     metodologia sugere: é não fazer nada até a data. Dizer isso por extenso
+     evita a tela recomendar uma ligação que acabou de acontecer. */
+  function esperaNaFrente(item) {
+    const a = item.aguardando;
+    if (!a) return null;
+    return {
+      id: 'esperar',
+      texto: 'Nada hoje: espere o retorno até ' + dataBr(a.ate) + '.',
+      com: '',
+      porque: 'O próximo passo já está marcado' + (a.titulo ? ' (' + a.titulo + ')' : '') +
+        '. Os passos abaixo valem para quando a espera acabar.'
+    };
   }
 
   /* ---------------- o que está atrasado ----------------
@@ -354,7 +382,8 @@
         '', 'As oito decisões estão provadas. Falta só formalizar.');
     }
 
-    return lista.slice(0, 5);
+    const espera = esperaNaFrente(item);
+    return (espera ? [espera].concat(lista) : lista).slice(0, 5);
   }
 
   /* ---------------- a orientação inteira ----------------
@@ -513,6 +542,7 @@
   }
 
   const TEXTO_DA_CAUSA = {
+    aguardando: 'próximo passo já marcado, aguardando o cliente',
     combinado: 'combinado com o cliente vencido',
     revisao: 'revisão de nutrição vencida',
     agora: 'o cliente se mexeu e o registro não',

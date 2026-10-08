@@ -329,7 +329,11 @@
   const URGENCIAS = [
     { chave: 3, rotulo: 'Urgente', classe: 'dead', cor: 'var(--dead)' },
     { chave: 2, rotulo: 'Prioridade', classe: 'warn', cor: 'var(--risk)' },
-    { chave: 'resto', rotulo: 'Em dia', classe: 'ok', cor: 'var(--ok)' }
+    { chave: 'resto', rotulo: 'Em dia', classe: 'ok', cor: 'var(--ok)' },
+    /* A quinta faixa, e a única que não é um estado de alerta: o próximo passo
+       já está marcado e ainda no prazo. Ela fica POR ÚLTIMO na linha, depois do
+       "Em dia", porque é a que menos pede a primeira hora da manhã. */
+    { chave: 'espera', rotulo: 'Aguardando', classe: 'espera', cor: 'var(--esp-tinta)' }
   ];
   let filtroHoje = 'todos';
 
@@ -376,7 +380,13 @@
         '</div></div>';
     }
 
-    const balde = function (i) { return i.urgencia >= 3 ? 3 : (i.urgencia === 2 ? 2 : 'resto'); };
+    /* Aguardando vem primeiro na pergunta: um negócio com o próximo passo
+       marcado não é "em dia" nem "urgente" — é outra coisa, e misturá-lo com
+       qualquer uma das duas é o que fazia a fila cobrar ação já tomada. */
+    const balde = function (i) {
+      if (i.aguardando) return 'espera';
+      return i.urgencia >= 3 ? 3 : (i.urgencia === 2 ? 2 : 'resto');
+    };
     const grupos = URGENCIAS.map(function (u) {
       const itens = foco.itens.filter(function (i) { return balde(i) === u.chave; });
       return Object.assign({}, u, {
@@ -413,10 +423,7 @@
       '<button class="btn alt mini" onclick="App.capturaRapida()" data-ajuda-titulo="Nova tarefa" data-ajuda="Acabei de falar com um cliente. A tarefa é a evidência: escolha o negócio, o canal, e conte o que aconteceu — o assistente separa o que o CLIENTE fez e relê as oito decisões.">+ Tarefa</button>' +
       '<button class="btn ghost mini" onclick="location.hash=\'#/playbook\'" aria-label="O método"' +
       ' data-ajuda-titulo="O método" data-ajuda="Como uma tarefa vira avanço, o que conta como evidência em cada uma das oito decisões, e o que fazer em cada canal.">?</button></div>' +
-      '<p class="muted small">' + (foco.itens.length
-        ? 'Primeiro da fila: <strong>' + esc(foco.itens[0].resumo.op.titulo) + '</strong> — ' +
-          esc(foco.itens[0].motivo)
-        : 'Nada na fila hoje.') + '</p>' +
+      linhaDoPrimeiro(foco) +
       cartaoDaAnalise() +
       linhaDasNotas() +
       linhaDaTriagem(foco.triagem) +
@@ -463,6 +470,21 @@
             (frente ? '' : ' disabled') + ' aria-label="Próxima página">→</button>'
         : '') +
       '</div>';
+  }
+
+  /* A frase do topo. Ela diz o que abrir PRIMEIRO, então não pode apontar um
+     negócio que está aguardando retorno — era isso que fazia a tela abrir
+     cobrando uma conversa que já tinha acontecido. */
+  function linhaDoPrimeiro(foco) {
+    const agir = foco.itens.filter(function (i) { return !i.aguardando; });
+    if (!agir.length) {
+      const esperando = foco.itens.length;
+      return '<p class="muted small">' + (esperando
+        ? 'Nada para fazer agora: os ' + esperando + ' negócio(s) da fila já têm o próximo passo marcado.'
+        : 'Nada na fila hoje.') + '</p>';
+    }
+    return '<p class="muted small">Primeiro da fila: <strong>' +
+      esc(agir[0].resumo.op.titulo) + '</strong> — ' + esc(agir[0].motivo) + '</p>';
   }
 
   /* ================= ANÁLISE DAS PENDÊNCIAS E AÇÕES =================
@@ -923,8 +945,14 @@
         (c.custo ? '<span class="custo">' + esc(c.custo) + '</span>' : '') + '</li>';
     };
     if (x.causas.length) {
-      partes.push('<section' + (i.urgencia >= 3 ? ' class="urg"' : '') + '>' +
-        '<h4>Por que está ' + (i.urgencia >= 3 ? 'urgente' : i.urgencia === 2 ? 'em prioridade' : 'nesta posição') + '</h4>' +
+      /* Aguardando não ganha a borda laranja nem o título de urgência: o bloco
+         continua listando tudo o que está errado na conta, mas como RETRATO, e
+         não como cobrança do dia. */
+      partes.push('<section' + (i.urgencia >= 3 && !i.aguardando ? ' class="urg"' : '') + '>' +
+        '<h4>' + (i.aguardando
+          ? 'A situação desta conta'
+          : 'Por que está ' + (i.urgencia >= 3 ? 'urgente' : i.urgencia === 2 ? 'em prioridade' : 'nesta posição')) +
+        '</h4>' +
         '<ul>' + x.causas.slice(0, 3).map(umaCausa).join('') + '</ul>' +
         sobra(x.causas, 3, 'outra(s) causa(s)', umaCausa) + '</section>');
     }
@@ -934,7 +962,7 @@
         (a.oque ? '<span class="oque">' + esc(a.oque) + '</span>' : '') + '</li>';
     };
     if (x.atrasos.length) {
-      partes.push('<section class="urg"><h4>Atrasado</h4>' +
+      partes.push('<section' + (i.aguardando ? '' : ' class="urg"') + '><h4>Atrasado</h4>' +
         '<ul>' + x.atrasos.slice(0, 3).map(umAtraso).join('') + '</ul>' +
         sobra(x.atrasos, 3, 'outro(s) atraso(s)', umAtraso) + '</section>');
     }
@@ -994,9 +1022,13 @@
         (r.lacunas.length > 3 ? ' · +' + (r.lacunas.length - 3) : '')
       : 'nada — resta formalizar';
 
-    return '<div class="foco u' + i.urgencia + '">' +
+    const esperando = i.aguardando || null;
+
+    return '<div class="foco u' + i.urgencia + (esperando ? ' esperando' : '') + '">' +
       '<div class="row"><strong>' + esc(r.op.titulo) + '</strong><span class="espaco"></span>' +
-      (i.urgencia ? '<span class="pill ' + classes[i.urgencia] + '">' + rotulos[i.urgencia] + '</span>' : '') +
+      (esperando
+        ? '<span class="pill">Aguardando</span>'
+        : (i.urgencia ? '<span class="pill ' + classes[i.urgencia] + '">' + rotulos[i.urgencia] + '</span>' : '')) +
       '<span class="pill navy">' + U.compacto(r.op.valor) + '</span></div>' +
       '<div class="small muted">' + esc((r.conta && r.conta.nome) || '') + ' · ' + esc(r.op.etapa) + '</div>' +
 
@@ -1007,6 +1039,15 @@
         '<span class="pill">grupo ' + r.coverage.percentual + '%</span>' +
       '</div>' +
 
+      (esperando
+        ? '<div class="linha-espera">Você já agiu. O próximo passo está marcado para ' +
+          '<strong>' + esc(U.data(esperando.ate)) + '</strong>' +
+          (esperando.dias > 0 ? ' <span class="muted">(em ' + esperando.dias + ' dia' +
+            (esperando.dias === 1 ? '' : 's') + ')</span>' : ' <span class="muted">(hoje)</span>') +
+          (esperando.titulo ? ': ' + esc(esperando.titulo) : '') + '.' +
+          '<br><span class="tiny muted">Nada a fazer aqui hoje — a bola está do outro lado. ' +
+          'Se o cliente não voltar até lá, a tarefa vence e o negócio sobe de novo.</span></div>'
+        : '') +
       blocosDaOrientacao(i) +
       '<div class="tiny muted" style="margin-top:8px">Falta: ' + falta + '</div>' +
       (tarefas ? '<div class="tarefas">' + tarefas + '</div>' : '') +
@@ -6400,10 +6441,38 @@
       'como de hoje é pior do que leitura nenhuma; e se ele não estiver no ar, <strong>a tela não fica ' +
       'vazia</strong> — fica sem o parágrafo dele.</p>' +
 
+      '<h3>Quando você já agiu: a faixa <em>Aguardando</em></h3>' +
+      '<p class="small">Você ligou, combinou o próximo passo e marcou a tarefa para o dia 15. A ação ' +
+      'está tomada; o que falta é o cliente voltar. Até a v235 a conta continuava na faixa ' +
+      '<strong>Urgente</strong> com o combinado vencido na frente — e o app cobrava de manhã um ' +
+      'trabalho que você tinha feito na véspera. <strong>Cobrança de serviço já prestado é o jeito ' +
+      'mais rápido de uma lista perder a autoridade.</strong></p>' +
+      '<p class="small">Agora, quando existe uma tarefa sua <strong>marcada e ainda no prazo</strong>, ' +
+      'o negócio sai da fila do dia e vai para uma quinta faixa, <strong>Aguardando</strong>: a única ' +
+      'que não é um estado de alerta. O cartão diz a data e o título do próximo passo, e o restante — ' +
+      'o combinado vencido, os dias sem evidência, a pessoa só — continua escrito, mas como ' +
+      '<strong>retrato da conta</strong>, não como o que fazer hoje. Nada é escondido; é reclassificado.</p>' +
+      '<p class="small">Se o cliente não voltar até a data, a tarefa vence e <strong>tudo isto sobe de ' +
+      'novo</strong> — agora como tarefa sua vencida, que é mais pesada do que era antes.</p>' +
+      '<p class="small">Três coisas <strong>furam a espera</strong> e vêm antes dela, porque marcar uma ' +
+      'tarefa não pode comprar silêncio:</p>' +
+      '<div class="tabela-rolagem"><table><tbody>' +
+      '<tr><td class="rotulo-manual"><strong>Revisão de nutrição vencida</strong></td><td class="small">' +
+      'É outra conversa, com outra data, e não foi ela que você marcou.</td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>Tarefa sua vencida</strong></td><td class="small">' +
+      'Marcar o próximo passo e não cumprir é o contrário de agir. É o que impede alguém de esconder a ' +
+      'carteira inteira marcando tarefas para o mês que vem.</td></tr>' +
+      '<tr><td class="rotulo-manual"><strong>O cliente se mexeu agora</strong></td><td class="small">' +
+      'Sinal novo dele vale mais que qualquer coisa que você tenha agendado antes — inclusive a espera.' +
+      '</td></tr>' +
+      '</tbody></table></div>' +
+      '<p class="small muted">Vale a tarefa <strong>mais próxima</strong> que ainda não venceu. Marcar ' +
+      'dez tarefas para a mesma conta não compra dez esperas: compra uma, até a primeira data.</p>' +
+
       '<h3>As cores, e a lista inteira</h3>' +
-      '<p class="small">Urgente é laranja claro, prioridade azul claro, em dia verde claro, e o botão ' +
-      '“Todos” lilás. A palavra continua escrita em cada cartão de propósito: quem não distingue os ' +
-      'matizes lê <em>Urgente</em> do mesmo jeito.</p>' +
+      '<p class="small">Urgente é laranja claro, prioridade azul claro, em dia verde claro, ' +
+      '<em>Aguardando</em> cinza-azulado, e o botão “Todos” lilás. A palavra continua escrita em cada ' +
+      'cartão de propósito: quem não distingue os matizes lê <em>Urgente</em> do mesmo jeito.</p>' +
       '<p class="small">E a lista é a carteira <strong>inteira</strong>, paginada: dez por tela no ' +
       'padrão, com opção de vinte e cinco, cinquenta ou cem. Antes ela parava no décimo quinto negócio ' +
       'sem avisar que havia mais.</p>' +

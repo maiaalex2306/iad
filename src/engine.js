@@ -1169,6 +1169,23 @@
       const r = resumo(op);
       const mom = momento(op);
       const vencidas = (porOp[op.id] || []).filter(function (t) { return t.vencimento && t.vencimento < hoje; });
+
+      /* ---------- O PRÓXIMO PASSO JÁ MARCADO ----------
+
+         A tarefa aberta mais próxima que AINDA NÃO VENCEU.
+
+         Ela existe porque a fila estava cobrando ação que já tinha sido
+         tomada. O caso real: um combinado de 10/09 venceu, o vendedor
+         conversou com o cliente hoje e marcou o retorno para 15/10. A conta
+         continuava gritando "urgente, combinado vencido há 28 dias" — e não
+         estava: o combinado velho foi endereçado, e agora a bola está com o
+         cliente até o dia 15.
+
+         Fila que cobra o que já foi feito é fila que ensina a ignorar a fila. */
+      const marcadas = (porOp[op.id] || []).filter(function (t) {
+        return t.vencimento && t.vencimento >= hoje;
+      }).sort(function (a, b) { return a.vencimento < b.vencimento ? -1 : 1; });
+      const marcado = marcadas[0] || null;
       const dim = r.nbd.dimensao;
       const quem = dim ? quemProva(op, dim.id) : { pessoa: null, papel: '', presente: false, porta: null };
       const canal = dim ? canalDaFila(dim, quem.pessoa || quem.porta, op.dims[dim.id] || 0) : null;
@@ -1189,23 +1206,55 @@
       const comp = r.compromisso;
       const passo = r.nbd.acao;
 
+      /* A ORDEM DESTA CADEIA É A REGRA, e o lugar de 'aguardando' nela foi
+         escolhido com cuidado.
+
+         Fura a espera, e vem ANTES dela:
+           · revisão de nutrição vencida — é outra conversa, sobre a conta
+             continuar ou não na previsão;
+           · tarefa SUA vencida — marcar o próximo passo e não cumprir não pode
+             comprar silêncio. É o que impede alguém de esconder a carteira
+             inteira marcando tarefas para o mês que vem;
+           · o cliente se mexeu agora — sinal novo dele vale mais que qualquer
+             coisa que você tenha agendado antes.
+
+         Tudo o mais espera, e vem DEPOIS: combinado vencido, silêncio,
+         decisões paradas, grupo incompleto. São verdadeiros, continuam
+         escritos no cartão, e voltam a gritar no dia em que a tarefa vencer. */
       if (op.nutricao && nutricaoVencida(op)) {
         marcar(72, 'revisao', 'A revisão da nutrição venceu' +
           (op.nutricao.revisarEm ? ' em ' + op.nutricao.revisarEm.split('-').reverse().join('/') : '') + '.',
           'Olhe se o motivo que segurava a conta ainda vale. Se não vale mais, devolva à carteira.');
+      } else if (vencidas.length) {
+        marcar(80, 'combinado', vencidas.length + ' tarefa(s) sua(s) vencida(s)', vencidas[0].titulo);
+      } else if (mom) {
+        marcar(92 + Math.min(mom.atraso, 8), 'agora',
+          'O cliente se mexeu há ' + mom.idadeSinal + ' dia(s) — ' + rotuloDoSinal(mom.principal).toLowerCase() +
+          ' — e o registro está parado há ' + mom.idadeEvidencia + '.',
+          passo);
+      } else if (marcado) {
+        /* Pontos baixos de propósito: o negócio continua na fila, continua
+           contado, continua com todas as causas escritas no cartão — só deixa
+           de disputar a primeira hora da manhã com quem não tem ninguém
+           cuidando. */
+        item.aguardando = {
+          ate: marcado.vencimento,
+          titulo: marcado.titulo,
+          tipo: marcado.tipo || '',
+          tarefaId: marcado.id,
+          dias: diasEntre(hoje, marcado.vencimento)
+        };
+        marcar(8, 'aguardando',
+          'Próximo passo já marcado para ' + marcado.vencimento.split('-').reverse().join('/') +
+          (marcado.titulo ? ': ' + marcado.titulo : '') + '.',
+          'Nada a fazer aqui hoje — a bola está do outro lado. Se o cliente não voltar até lá, ' +
+          'a tarefa vence e o negócio sobe de novo.');
       } else if (comp && comp.vencido) {
         marcar(100 + Math.min(comp.diasAtraso, 20), 'combinado',
           'Compromisso vencido há ' + comp.diasAtraso + ' dia(s): ' + comp.texto,
           comp.dono === 'cliente'
             ? 'Cobre o retorno combinado e reagende com data nova.'
             : 'A bola está com você: entregue o que foi combinado hoje.');
-      } else if (mom) {
-        marcar(92 + Math.min(mom.atraso, 8), 'agora',
-          'O cliente se mexeu há ' + mom.idadeSinal + ' dia(s) — ' + rotuloDoSinal(mom.principal).toLowerCase() +
-          ' — e o registro está parado há ' + mom.idadeEvidencia + '.',
-          passo);
-      } else if (vencidas.length) {
-        marcar(80, 'combinado', vencidas.length + ' tarefa(s) vencida(s)', vencidas[0].titulo);
       } else if (depoisDaProposta(op) && !r.coverage.temEconomicBuyer) {
         marcar(76, 'trava', 'Em ' + String(op.etapa).toLowerCase() + ' sem acesso ao decisor econômico',
           r.nbd.acao);
