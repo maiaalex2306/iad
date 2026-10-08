@@ -27,10 +27,29 @@
 
    Rode com:  bun nuvem/testes/pastas.test.ts
 */
-import {
+/* O `Deno` de mentira, e por que ele vem antes do import.
+
+   A função roda em Deno e lê os segredos no topo do arquivo — `Deno.env.get`
+   acontece na hora em que o módulo é carregado, não na hora da chamada. Sem um
+   `Deno` no lugar, importar o arquivo aqui morre antes da primeira linha de
+   teste.
+
+   Isto existe para o teste testar O CÓDIGO QUE É PUBLICADO, e não uma cópia
+   dele. As funções já moraram num arquivo separado, só para serem importadas
+   daqui; voltaram para dentro do index porque a função é colada à mão no
+   painel do Supabase e um arquivo a mais é um passo a mais para errar ao
+   publicar. O `Deno` falso é o preço disso, e é barato: ele não finge
+   comportamento nenhum — qualquer função que toque a rede estoura na hora. */
+(globalThis as unknown as { Deno: unknown }).Deno = {
+  env: { get: () => '' },
+  serve: () => undefined,
+  connectTls: () => { throw new Error('este teste não abre conexão'); }
+};
+
+const {
   pastasDaCaixa, ehDeEnviados, pastasDaResposta, enviadosEntre,
   marcasDaCaixa, recomecarDe, NOMES_DE_ENVIADOS
-} from '../funcoes/email/pastas.ts';
+} = await import('../funcoes/email/index.ts');
 
 let ok = 0, falhas = 0;
 function conferir(nome: string, condicao: boolean, detalhe = '') {
