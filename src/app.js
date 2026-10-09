@@ -1545,6 +1545,41 @@
     /* Trocar de aba é trocar de lista: aí sim começa do topo. */
     abaNutricao: function (aba) { V.definirAbaNutricao(aba); render(); window.scrollTo(0, 0); },
     abaConfig: function (aba) { V.definirAbaConfig(aba); render(); window.scrollTo(0, 0); },
+
+    /* ---------------- a lista que sai para uma campanha ----------------
+
+       Gerar é uma ação deliberada, com botão próprio, e não um efeito de mexer
+       no filtro. Numa carteira de centenas de contatos, recalcular a cada
+       mudança de select faria o número dançar na frente de quem está
+       decidindo o recorte — e o número é justamente o que ele está olhando
+       para decidir. */
+    lhFiltro: function (campo, valor) { V.definirFiltroLH(campo, valor); render(); },
+
+    lhGerar: function () {
+      V.gerarListaLH();
+      render();
+      const r = V.listaDeCampanha();
+      if (r && !r.servem.length && !r.faltam.length) {
+        alert('Nenhuma pessoa com esses filtros.\n\nAfrouxe um deles — em geral é a cidade, ' +
+          'que só bate quando está escrita igualzinha no cadastro da empresa.');
+      }
+    },
+
+    /* O nome do arquivo carrega o recorte. Baixar três listas numa manhã e
+       ficar com "lista.csv", "lista (1).csv" e "lista (2).csv" na pasta de
+       downloads é perder as três: na hora de subir, ninguém sabe qual é qual. */
+    lhBaixarCsv: function () {
+      const r = V.listaDeCampanha();
+      if (!r || !r.servem.length) { alert('Gere a lista primeiro.'); return; }
+      baixar(global.IADIntegracoes.csvDaCampanha(r.servem), nomeDaListaLH('csv'), 'text/csv;charset=utf-8');
+    },
+
+    lhBaixarTxt: function () {
+      const r = V.listaDeCampanha();
+      if (!r || !r.servem.length) { alert('Gere a lista primeiro.'); return; }
+      baixar(global.IADIntegracoes.txtDaCampanha(r.servem), nomeDaListaLH('txt'), 'text/plain;charset=utf-8');
+    },
+
     /* Abrir a aba de Sinais busca as aberturas.
 
        Antes a colheita só rodava no boot, e isso produziu o sintoma que o
@@ -9823,6 +9858,23 @@
       { id: 'sdr', rotulo: 'SDR / quem prospectou', largura: 'metade' },
       { id: 'concorrentes', rotulo: 'Concorrentes (inclusive “não fazer nada”)' }
     ]);
+  }
+
+  /* "lista.csv", "lista (1).csv", "lista (2).csv" numa manhã é perder as três:
+     na hora de subir no Linked Helper ninguém sabe qual é qual. O nome leva o
+     recorte e a data. */
+  function nomeDaListaLH(ext) {
+    const f = V.filtroDeCampanha();
+    const limpo = function (v) {
+      return String(v || '').toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    };
+    const partes = ['lh', f.origem || 'todos'];
+    if (f.segmento) partes.push(limpo(f.segmento));
+    if (f.cidade) partes.push(limpo(f.cidade));
+    partes.push(Store.hoje());
+    return partes.join('-') + '.' + ext;
   }
 
   function baixar(conteudo, nome, mime) {

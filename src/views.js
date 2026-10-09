@@ -6329,6 +6329,56 @@
       'muda o resultado da próxima. E os que você excluiu à mão ficam em ' +
       '<strong>Leads descartados</strong>, com um botão para voltar a mostrar.</p>' +
 
+      '<h3>O caminho de volta: a lista que SAI para uma campanha</h3>' +
+      '<p class="small">Tudo acima é o que o Linked Helper <em>responde</em>. O painel ' +
+      '<strong>Lista para uma campanha</strong>, no fim de Configuração → Linked Helper, é o contrário: ' +
+      'escolher, dentro da carteira que já existe, <strong>para quem a próxima campanha vai falar</strong> — ' +
+      'e baixar o arquivo pronto para subir lá.</p>' +
+      '<p class="small">Por que montar a lista aqui e não numa busca do LinkedIn: a carteira já sabe o ' +
+      'segmento, a cidade e, principalmente, <strong>quem já está em conversa</strong>. Lista montada por ' +
+      'busca repete convite com quem respondeu na semana passada; montada daqui, ela sai recortada por ' +
+      'onde o negócio está.</p>' +
+      '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' +
+      caso('De onde', 'O recorte que mais muda a campanha. <strong>Pipeline</strong> é conta com negócio ' +
+        'aberto e fora da nutrição — ali a campanha serve para ampliar o grupo comprador, não para se ' +
+        'apresentar. <strong>Nutrição</strong> é conta que esfriou, e ali a campanha é de reaquecimento. ' +
+        'São duas conversas que não têm nada a ver uma com a outra.') +
+      caso('Segmento e cidade', 'Saem das empresas que existem na carteira, não de uma lista fixa: ' +
+        'segmento que ninguém usa não aparece, cidade nova aparece sozinha.') +
+      caso('Quem não tem negócio aberto', 'Fica de fora sempre, inclusive em “Os dois”. Para esses a tela ' +
+        'é Cadastros, não campanha.') +
+      caso('Uma pessoa, uma linha', 'Quem está cadastrado em duas empresas entra uma vez só. Perfil ' +
+        'repetido faz o Linked Helper convidar duas vezes, e <strong>convite repetido queima a conta de ' +
+        'quem envia</strong> — é o erro mais caro que uma lista mal montada causa.') +
+      caso('Quem fica de fora aparece', 'Com o motivo, embaixo da lista: sem LinkedIn no cadastro, link ' +
+        'do Sales Navigator, link da empresa em vez da pessoa. Cada linha dessas é um cadastro a ' +
+        'preencher — preenchido, entra na próxima lista sozinho. Um número como “47 de 112” sem dizer o ' +
+        'que houve com os outros 65 é o tipo de número que faz a pessoa desconfiar do app inteiro.') +
+      '</tbody></table></div>' +
+      '<p class="small">O endereço de cada perfil é <strong>normalizado</strong> antes de entrar no ' +
+      'arquivo. O que está gravado na carteira veio de planilha, de digitação e da própria ponte, então ' +
+      'aparece de quatro jeitos — <code>linkedin.com/in/fulano</code>, com <code>https://</code>, com ' +
+      'subdomínio de país, ou só o apelido. Todos viram ' +
+      '<code>https://www.linkedin.com/in/fulano</code>: mandar o endereço cru é mandar linha que o ' +
+      'importador descarta em silêncio.</p>' +
+
+      '<h3>Os dois arquivos, e por que são dois</h3>' +
+      '<div class="tabela-rolagem"><table class="tabela-manual"><tbody>' +
+      caso('CSV', 'A URL do perfil na <strong>primeira coluna</strong>, chamada <code>profileUrl</code> — ' +
+        'é a primeira porque é onde todo importador procura primeiro. Depois dela vêm ' +
+        '<code>firstName</code>, <code>fullName</code>, <code>position</code>, ' +
+        '<code>companyName</code>, <code>segment</code>, <code>city</code> e <code>state</code>. ' +
+        'Cabeçalho em inglês porque é o que as telas de mapeamento de coluna esperam ver. Vírgula, aspas ' +
+        'em tudo e UTF-8 sem BOM — o CSV internacional. O importador <em>deste</em> app usa ponto e ' +
+        'vírgula, mas ele é brasileiro e o Linked Helper não é.') +
+      caso('TXT', 'Uma URL por linha e mais nada. Não tem cabeçalho para errar, e é o que funciona em toda ' +
+        'versão de toda ferramenta. <strong>Use este se o CSV for recusado.</strong>') +
+      '</tbody></table></div>' +
+      '<p class="small muted">O nome do arquivo carrega o recorte e a data — ' +
+      '<code>lh-pipeline-bebidas-jacarei-sp-2026-10-09.csv</code>. Baixar três listas numa manhã e ficar ' +
+      'com “lista.csv”, “lista (1).csv” e “lista (2).csv” é perder as três: na hora de subir, ninguém ' +
+      'sabe qual é qual.</p>' +
+
       '<h3>O que esta integração ainda não faz</h3>' +
       '<ul class="small">' +
       '<li><strong>Nome parecido demais continua não casando.</strong> "Alfa" não encontra "Alfa Seguros", ' +
@@ -6339,6 +6389,11 @@
       'fundiu errado é reescrever histórico.</li>' +
       '<li><strong>Duas negociações abertas na mesma conta.</strong> Aí o app não sabe qual delas a ' +
       'resposta continua, e abre uma nova em vez de anexar à errada.</li>' +
+      '<li><strong>O formato exato que o importador do Linked Helper prefere.</strong> O arquivo é feito ' +
+      'do jeito que o importador de qualquer ferramenta aceita — URL na primeira coluna, cabeçalho em ' +
+      'inglês, CSV internacional — e não do jeito que uma versão específica talvez prefira. Se a tela de ' +
+      'importação pedir outros nomes de coluna, o TXT resolve na hora, e os nomes das colunas do CSV são ' +
+      'uma linha de código para mudar.</li>' +
       '</ul>' +
       '<p class="small">A ponte guarda cada entrega por <strong>trinta dias</strong>. O que ninguém importar ' +
       'nesse prazo se apaga sozinho.</p>' +
@@ -8637,7 +8692,7 @@
           [['Enviados', 'A sua resposta escrita pelo Gmail nasce lá, não na entrada. Sem ela a conversa aparece com o cliente falando sozinho — e a avaliação lê silêncio onde houve resposta.'],
            ['Quem achou', 'O IAD pergunta ao servidor onde fica a pasta de enviados e grava o nome. Você pode corrigir em Editar se o seu servidor a chamar de outra coisa.']]) +
         '>' + esc(pastas.join(' · ')) +
-        (temEnviados ? '' : ' <span class="pill risk mini">sem os enviados</span>') +
+        (temEnviados ? '' : ' <span class="pill risk">sem os enviados</span>') +
         '</span>' +
         '</td><td>' + estado + '</td><td>' + papel + '</td>' +
         '<td class="tiny muted">' + (c.senha_em ? 'senha guardada em ' + U.data(c.senha_em) : '—') +
@@ -8715,7 +8770,153 @@
   }
 
   function configLinkedHelper() {
-    return blocoLinkedHelper() + listaDeDescartados() + auditoriaDasCampanhas();
+    return blocoLinkedHelper() + listaDeDescartados() + auditoriaDasCampanhas() +
+      blocoListaDeCampanha();
+  }
+
+  /* ---------------- a lista que SAI para uma campanha ----------------
+
+     A ponte traz o que o Linked Helper respondeu. Isto é o caminho de volta:
+     escolher, a partir da carteira, para quem a próxima campanha vai falar.
+
+     O estado do filtro mora aqui, no módulo, e não no DOM: a tela inteira é
+     redesenhada a cada ação deste app, e filtro guardado no input some junto
+     com o input. O resultado também fica guardado, por um motivo diferente —
+     gerar é uma ação deliberada, e uma lista que se refizesse sozinha a cada
+     render faria o número dançar na frente de quem está decidindo. */
+  let filtroLH = { origem: 'pipeline', segmento: '', cidade: '' };
+  let listaLH = null;
+
+  function definirFiltroLH(campo, valor) {
+    filtroLH[campo] = valor;
+    /* Mexeu no filtro, a lista anterior deixa de valer. Mantê-la na tela com
+       o filtro novo em cima é mostrar um número que não corresponde a nada. */
+    listaLH = null;
+  }
+  function gerarListaLH() { listaLH = global.IADIntegracoes.listaParaCampanha(filtroLH); }
+  function listaDeCampanha() { return listaLH; }
+  function filtroDeCampanha() { return filtroLH; }
+
+  function blocoListaDeCampanha() {
+    const I = global.IADIntegracoes;
+    const o = I.opcoesDaLista();
+
+    const sel = function (campo, rotulo, valor, opcoes, vazio, ajuda) {
+      return '<div class="campo mini"><span>' + esc(rotulo) + '</span>' +
+        '<select onchange="App.lhFiltro(\'' + campo + '\', this.value)"' +
+        (ajuda ? ' data-ajuda="' + esc(ajuda) + '"' : '') + '>' +
+        '<option value=""' + (valor ? '' : ' selected') + '>' + esc(vazio) + '</option>' +
+        opcoes.map(function (x) {
+          const v = typeof x === 'string' ? x : x[0];
+          const r = typeof x === 'string' ? x : x[1];
+          return '<option value="' + esc(v) + '"' + (valor === v ? ' selected' : '') + '>' + esc(r) + '</option>';
+        }).join('') +
+        '</select></div>';
+    };
+
+    const filtros =
+      '<div class="row" style="gap:10px;flex-wrap:wrap;align-items:flex-end">' +
+      '<div class="campo mini"><span>De onde</span>' +
+      '<select onchange="App.lhFiltro(\'origem\', this.value)"' +
+      ajudaComLinhas('De onde vêm as pessoas',
+        'O recorte mais importante dos três: é ele que separa duas campanhas que não têm nada a ver uma com a outra.',
+        [['Pipeline', 'Contas com negócio aberto e fora da nutrição. Conversa em andamento — a campanha aqui é para ampliar o grupo comprador, não para apresentar a empresa.'],
+         ['Nutrição', 'Contas que esfriaram e estão em espera. Aqui a campanha é de reaquecimento.'],
+         ['Os dois', 'Tudo que tem negócio aberto. Quem não tem negócio nenhum fica de fora: para esses a tela é Cadastros, não campanha.']]) + '>' +
+      '<option value="pipeline"' + (filtroLH.origem === 'pipeline' ? ' selected' : '') + '>Pipeline</option>' +
+      '<option value="nutricao"' + (filtroLH.origem === 'nutricao' ? ' selected' : '') + '>Nutrição</option>' +
+      '<option value="todos"' + (filtroLH.origem === 'todos' ? ' selected' : '') + '>Os dois</option>' +
+      '</select></div>' +
+      sel('segmento', 'Segmento', filtroLH.segmento, o.segmentos, 'Todos',
+        'Sai das empresas que existem na carteira. Segmento que ninguém usa não aparece aqui.') +
+      sel('cidade', 'Cidade', filtroLH.cidade, o.cidades, 'Todas',
+        'Cidade e estado da empresa, como estão no cadastro dela.') +
+      '<button class="btn" onclick="App.lhGerar()"' +
+      ajudaComLinhas('Gerar a lista',
+        'Monta a lista de pessoas na tela, com o perfil do LinkedIn de cada uma.',
+        [['Uma pessoa, uma linha', 'Quem está cadastrado em duas empresas entra uma vez só: perfil repetido faz o Linked Helper convidar duas vezes, e convite repetido queima a conta de quem envia.'],
+         ['Quem fica de fora', 'Aparece embaixo, com o motivo. Nada some calado.']]) +
+      '>Gerar lista</button>' +
+      '</div>';
+
+    const topo = '<div class="card"><div class="row"><h2 style="margin:0">Lista para uma campanha</h2>' +
+      '<span class="espaco"></span></div>' +
+      '<p class="small muted" style="margin:8px 0 12px">A ponte acima traz o que o Linked Helper ' +
+      '<em>respondeu</em>. Isto é o caminho de volta: escolher, dentro da carteira que já existe, ' +
+      '<strong>para quem a próxima campanha vai falar</strong> — e baixar o arquivo pronto para subir lá.</p>' +
+      filtros;
+
+    if (!listaLH) {
+      return topo +
+        '<p class="small muted" style="margin-top:12px">Escolha os filtros e clique em ' +
+        '<strong>Gerar lista</strong>.</p></div>';
+    }
+
+    const servem = listaLH.servem, faltam = listaLH.faltam;
+
+    if (!servem.length && !faltam.length) {
+      return topo + '<div class="vazio" style="margin-top:12px">Nenhuma pessoa com esses filtros. ' +
+        'Afrouxe um deles — em geral é a cidade.</div></div>';
+    }
+
+    const linhas = servem.map(function (l) {
+      return '<tr><td><a href="' + esc(l.url) + '" target="_blank" rel="noopener">' +
+        esc(l.url.replace('https://www.linkedin.com/in/', '')) + '</a></td>' +
+        '<td><strong>' + esc(l.nome) + '</strong></td>' +
+        '<td class="small">' + esc(l.cargo || '—') + '</td>' +
+        '<td class="small">' + esc(l.empresa) + '</td>' +
+        '<td class="tiny muted">' + esc(l.cidade || '—') + (l.uf ? ' · ' + esc(l.uf) : '') + '</td>' +
+        '<td><span class="pill' + (l.origem === 'nutricao' ? '' : ' ok') + '">' +
+        (l.origem === 'nutricao' ? 'nutrição' : 'pipeline') + '</span></td></tr>';
+    }).join('');
+
+    const tabela = servem.length
+      ? '<div class="tabela-rolagem" style="margin-top:14px"><table><thead><tr>' +
+        '<th>Perfil</th><th>Nome</th><th>Cargo</th><th>Empresa</th><th>Cidade</th><th>De onde</th>' +
+        '</tr></thead><tbody>' + linhas + '</tbody></table></div>'
+      : '<div class="aviso" style="margin-top:12px">Nenhuma das ' + faltam.length + ' pessoas desse ' +
+        'recorte tem um perfil do LinkedIn utilizável. A lista abaixo diz o que falta em cada uma.</div>';
+
+    /* O que ficou de fora, com o motivo. "47 de 112" sem dizer o que houve com
+       os outros 65 é o número que faz a pessoa desconfiar do app inteiro — e,
+       pior, é trabalho perdido: cada linha dessas é um cadastro que falta
+       preencher, e preenchido entra na próxima campanha. */
+    const deFora = faltam.length
+      ? '<details style="margin-top:12px"><summary class="small"><strong>' + faltam.length +
+        '</strong> pessoa(s) ficaram de fora — e por quê</summary>' +
+        '<div class="tabela-rolagem" style="margin-top:8px"><table><tbody>' +
+        faltam.map(function (l) {
+          return '<tr><td><strong>' + esc(l.nome) + '</strong><br>' +
+            '<span class="tiny muted">' + esc(l.empresa) + '</span></td>' +
+            '<td class="small">' + esc(l.motivo) + '</td>' +
+            '<td class="tiny muted">' + esc(String(l.cru || '').slice(0, 60)) + '</td></tr>';
+        }).join('') +
+        '</tbody></table></div>' +
+        '<p class="tiny muted" style="margin-top:8px">Cada linha dessas é um cadastro a preencher. ' +
+        'Preenchido, entra na próxima lista sozinho.</p></details>'
+      : '';
+
+    const botoes = servem.length
+      ? '<div class="row" style="margin-top:14px">' +
+        '<button class="btn" onclick="App.lhBaixarCsv()"' +
+        ajudaComLinhas('Baixar o CSV',
+          'O arquivo para subir no Linked Helper, com a URL do perfil na primeira coluna.',
+          [['As colunas', 'profileUrl, firstName, fullName, position, companyName, segment, city, state.'],
+           ['O formato', 'Vírgula, aspas em tudo, UTF-8 sem BOM — o CSV internacional. O importador deste app usa ponto e vírgula, mas o Linked Helper não é brasileiro.'],
+           ['Se ele recusar', 'Use o TXT ao lado: uma URL por linha, sem cabeçalho para dar errado.']]) +
+        '>Baixar CSV (' + servem.length + ')</button>' +
+        '<button class="btn ghost" onclick="App.lhBaixarTxt()"' +
+        ajudaComLinhas('Baixar o TXT',
+          'Uma URL por linha e mais nada. É o formato que toda versão de toda ferramenta aceita.',
+          [['Quando usar', 'Quando o CSV for recusado, ou quando você só quer os perfis, sem nome nem cargo.']]) +
+        '>Baixar TXT</button>' +
+        '<span class="espaco"></span>' +
+        '<span class="tiny muted">' + servem.length + ' perfil(s) único(s)' +
+        (faltam.length ? ' · ' + faltam.length + ' fora' : '') + '</span>' +
+        '</div>'
+      : '';
+
+    return topo + tabela + botoes + deFora + '</div>';
   }
 
   function configApp() {
@@ -9834,6 +10035,8 @@
         .map(function (r) { return r.op; });
     },
     definirAbaConfig: definirAbaConfig,
+    definirFiltroLH: definirFiltroLH, gerarListaLH: gerarListaLH,
+    listaDeCampanha: listaDeCampanha, filtroDeCampanha: filtroDeCampanha,
     definirAbaCockpit: definirAbaCockpit,
     definirBuscaCadastro: function (b) { buscaCadastro = b; },
     definirPeriodo: function (f) { filtroPeriodo = f; },

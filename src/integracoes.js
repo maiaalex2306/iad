@@ -655,8 +655,216 @@
     });
   }
 
+  /* ================= A LISTA QUE SAI PARA UMA CAMPANHA =================
+
+     O caminho de volta da ponte. A ponte traz o que o Linked Helper respondeu;
+     isto escolhe PARA QUEM a próxima campanha vai falar, a partir da carteira
+     que já está aqui.
+
+     Por que nasce no CRM e não numa busca do LinkedIn: a carteira já sabe o
+     segmento, a cidade e, principalmente, QUEM JÁ ESTÁ EM CONVERSA. Uma
+     campanha montada por busca repete contato com quem já respondeu na semana
+     passada; montada daqui, ela sai recortada por onde o negócio está.
+
+     O CORTE É SÓ DE PESSOA, NUNCA DE EMPRESA. A unidade do Linked Helper é o
+     perfil, então a conta entra na conta de filtrar e sai da lista: quem vai
+     no arquivo é o contato, com a empresa junto só para você reconhecer.
+
+     SOBRE O FORMATO DO ARQUIVO — e isto está escrito porque é a única parte
+     disto que eu não pude conferir: a página do Linked Helper que explica o
+     upload não abre do ambiente em que este código foi escrito. Então o
+     arquivo é feito do jeito que o importador de qualquer ferramenta aceita, e
+     não do jeito que uma versão específica talvez prefira:
+
+       · a URL do perfil é a PRIMEIRA coluna, que é onde todo importador
+         procura primeiro;
+       · os cabeçalhos são em inglês e sem acento, porque é o que as telas de
+         mapeamento de coluna esperam ver;
+       · separador vírgula e aspas em tudo, que é o CSV do resto do mundo — o
+         importador deste app usa ponto e vírgula, mas ele é brasileiro e o
+         Linked Helper não é;
+       · UTF-8 sem BOM: o BOM agrada o Excel e atrapalha parser estrito, e este
+         arquivo é para a máquina, não para a planilha.
+
+     E, ao lado do CSV, um .txt com UMA URL POR LINHA. Esse formato não tem
+     cabeçalho para errar: é o que funciona em toda versão de toda ferramenta,
+     e é a rede de segurança para o dia em que o CSV não for aceito. */
+
+  /* A URL canônica do perfil, ou '' quando não dá para confiar.
+
+     O que está gravado na carteira veio de importação de planilha, de digitação
+     e da própria ponte, então aparece de quatro jeitos:
+     "linkedin.com/in/fulano", "https://www.linkedin.com/in/fulano/",
+     "https://br.linkedin.com/in/fulano?originalSubdomain=br" e, às vezes, só
+     "fulano". Mandar isso cru para o importador é mandar linha que ele
+     descarta em silêncio. */
+  function perfilDoLinkedin(cru) {
+    let v = String(cru == null ? '' : cru).trim();
+    if (!v) return '';
+
+    /* Só o apelido, sem domínio nenhum: vira perfil. É o caso de quem digitou
+       o que viu na barra de endereço depois do /in/. */
+    if (!/[./]/.test(v) && /^[A-Za-z0-9_-]{3,}$/.test(v)) {
+      return 'https://www.linkedin.com/in/' + v;
+    }
+
+    if (!/^https?:\/\//i.test(v)) v = 'https://' + v;
+    let u;
+    try { u = new URL(v); } catch (e) { return ''; }
+    if (!/(^|\.)linkedin\.com$/i.test(u.hostname)) return '';
+
+    /* O caminho do perfil é /in/<apelido>. Subdomínio de país (br.linkedin.com)
+       é o mesmo perfil; a query (?originalSubdomain=br, ?trk=...) é rastreio de
+       quem copiou o link e não identifica ninguém. */
+    const m = /\/in\/([^/?#]+)/i.exec(u.pathname);
+    if (!m) return '';
+    const apelido = decodeURIComponent(m[1]).trim();
+    if (!apelido) return '';
+    return 'https://www.linkedin.com/in/' + apelido;
+  }
+
+  /* O que NÃO é um perfil, mas parece. Vale separado porque o conserto é
+     diferente: perfil errado se corrige no cadastro; link de Sales Navigator ou
+     de empresa foi colado no campo errado. */
+  function porQueNaoServe(cru) {
+    const v = String(cru == null ? '' : cru).trim();
+    if (!v) return 'sem LinkedIn no cadastro';
+    if (/\/sales\//i.test(v)) return 'link do Sales Navigator, não do perfil';
+    if (/linkedin\.com\/(company|school|showcase)\//i.test(v)) return 'link da empresa, não da pessoa';
+    if (/linkedin\.com/i.test(v)) return 'link do LinkedIn que não é um perfil /in/';
+    return 'não parece um endereço do LinkedIn';
+  }
+
+  /* De onde o contato vem, do ponto de vista do funil. É isto que separa
+     "quem está em negociação" de "quem está esfriando na nutrição" — e as duas
+     campanhas que se fazem para eles não têm nada a ver uma com a outra. */
+  function origemDaConta(contaId, oportunidades) {
+    let temPipeline = false, temNutricao = false;
+    (oportunidades || []).forEach(function (o) {
+      if (o.contaId !== contaId || o.desfecho) return;
+      if (o.nutricao) temNutricao = true; else temPipeline = true;
+    });
+    if (temPipeline) return 'pipeline';
+    if (temNutricao) return 'nutricao';
+    return 'sem';
+  }
+
+  /* As opções que a tela oferece saem dos DADOS, não de uma lista fixa:
+     segmento que ninguém usa não aparece, e cidade nova aparece sozinha. */
+  function opcoesDaLista() {
+    const Store = global.IADStore;
+    const d = Store.dados();
+    const segmentos = {}, cidades = {};
+    (d.contas || []).forEach(function (c) {
+      if (c.segmento) segmentos[c.segmento] = true;
+      if (c.cidade) {
+        const rotulo = c.cidade + (c.uf ? ' — ' + String(c.uf).toUpperCase() : '');
+        cidades[rotulo] = true;
+      }
+    });
+    const ordenar = function (o) { return Object.keys(o).sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); }); };
+    return { segmentos: ordenar(segmentos), cidades: ordenar(cidades) };
+  }
+
+  /* A lista. Devolve os que SERVEM e os que não servem, com o motivo — porque
+     "47 de 112" sem dizer o que houve com os outros 65 é o tipo de número que
+     faz a pessoa desconfiar do app inteiro. */
+  function listaParaCampanha(filtro) {
+    const Store = global.IADStore;
+    const d = Store.dados();
+    const f = filtro || {};
+    const ops = d.oportunidades || [];
+
+    const porConta = {};
+    (d.contas || []).forEach(function (c) { porConta[c.id] = c; });
+
+    const servem = [], faltam = [];
+    const vistos = {};
+
+    (d.contatos || []).forEach(function (ct) {
+      const conta = porConta[ct.contaId];
+      if (!conta) return;
+
+      const origem = origemDaConta(conta.id, ops);
+      if (f.origem === 'pipeline' && origem !== 'pipeline') return;
+      if (f.origem === 'nutricao' && origem !== 'nutricao') return;
+      /* 'todos' ainda exclui quem não tem negócio aberto nenhum: campanha é
+         para conta viva, e a carteira inteira sem filtro nenhum já é a tela de
+         Cadastros. */
+      if (!f.origem || f.origem === 'todos') { if (origem === 'sem') return; }
+
+      if (f.segmento && conta.segmento !== f.segmento) return;
+      if (f.cidade) {
+        const rotulo = (conta.cidade || '') + (conta.uf ? ' — ' + String(conta.uf).toUpperCase() : '');
+        if (rotulo !== f.cidade) return;
+      }
+
+      const linha = {
+        id: ct.id, nome: ct.nome || '', cargo: ct.cargo || '',
+        empresa: conta.nome || '', segmento: conta.segmento || '',
+        cidade: conta.cidade || '', uf: String(conta.uf || '').toUpperCase(),
+        origem: origem, cru: ct.linkedin || ''
+      };
+
+      const url = perfilDoLinkedin(ct.linkedin);
+      if (!url) {
+        linha.motivo = porQueNaoServe(ct.linkedin);
+        faltam.push(linha);
+        return;
+      }
+      /* A mesma pessoa cadastrada em duas contas vira UMA linha. Mandar o
+         perfil duas vezes faz o Linked Helper convidar duas vezes, e convite
+         repetido é a forma mais rápida de queimar a conta de quem envia. */
+      if (vistos[url]) return;
+      vistos[url] = true;
+      linha.url = url;
+      servem.push(linha);
+    });
+
+    const porNome = function (a, b) {
+      return (a.empresa || '').localeCompare(b.empresa || '', 'pt-BR') ||
+        (a.nome || '').localeCompare(b.nome || '', 'pt-BR');
+    };
+    return { servem: servem.sort(porNome), faltam: faltam.sort(porNome) };
+  }
+
+  /* Aspas em TODO campo, e aspas dobradas dentro. Cargo com vírgula —
+     "Gerente de Operações, Utilidades" — é o normal, não a exceção, e um campo
+     desses sem aspas empurra o resto da linha uma coluna para o lado em
+     silêncio: a empresa de um vira o cargo do outro. */
+  function aspas(v) {
+    return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  }
+
+  const COLUNAS = [
+    ['profileUrl', function (l) { return l.url; }],
+    ['firstName', function (l) { return String(l.nome || '').trim().split(/\s+/)[0] || ''; }],
+    ['fullName', function (l) { return l.nome; }],
+    ['position', function (l) { return l.cargo; }],
+    ['companyName', function (l) { return l.empresa; }],
+    ['segment', function (l) { return l.segmento; }],
+    ['city', function (l) { return l.cidade; }],
+    ['state', function (l) { return l.uf; }]
+  ];
+
+  function csvDaCampanha(lista) {
+    const linhas = [COLUNAS.map(function (c) { return aspas(c[0]); }).join(',')];
+    (lista || []).forEach(function (l) {
+      linhas.push(COLUNAS.map(function (c) { return aspas(c[1](l)); }).join(','));
+    });
+    /* \r\n porque é o fim de linha que o CSV especifica e o que o Windows
+       espera; parser que aceita \n aceita os dois. */
+    return linhas.join('\r\n') + '\r\n';
+  }
+
+  function txtDaCampanha(lista) {
+    return (lista || []).map(function (l) { return l.url; }).join('\r\n') + '\r\n';
+  }
+
   global.IADIntegracoes = { config, salvarConfig, configurada, porQueSemPonte, buscar, marcarProcessados, testarPonte,
     emitirLink, aberturas, marcarAberturas, colherAberturas, diagnosticoDasAberturas,
     normalizar, empresaAtual, nomeDaEmpresaAtual, enderecoDeEntrada,
-    buscarNoBalde, marcarNoBalde };
+    buscarNoBalde, marcarNoBalde,
+    perfilDoLinkedin, porQueNaoServe, opcoesDaLista, listaParaCampanha,
+    csvDaCampanha, txtDaCampanha, COLUNAS_DA_CAMPANHA: COLUNAS };
 })(window);
