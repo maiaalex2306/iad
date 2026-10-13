@@ -122,14 +122,7 @@ function montarProvedores(): Provedor[] {
    servido pelo Deno.serve lá embaixo. */
 export const PROVEDORES = montarProvedores();
 
-/* O primeiro da fila ainda é o "provedor" para quem lê isto de fora. Os usos
-   que restaram destas três constantes são de mensagem e de padrão, nunca de
-   chamada — quem chama recebe o provedor por parâmetro. */
-const PROVEDOR = PROVEDORES.length ? PROVEDORES[0].id : 'groq';
-const CHAVE = PROVEDORES.length ? PROVEDORES[0].chave : '';
-const MODELO = PROVEDORES.length ? PROVEDORES[0].modelo : '';
-
-/* ---------- por que existem dois modelos ----------
+/* ---------- por que cada provedor tem DOIS modelos ----------
 
    Os pedidos desta função não são do mesmo tipo de trabalho, e tratá-los como
    se fossem obriga a escolher errado num dos dois lados.
@@ -145,17 +138,15 @@ const MODELO = PROVEDORES.length ? PROVEDORES[0].modelo : '';
    erro na tela, aparece como IAD baixo, que o vendedor lê como "o cliente não
    avançou". É o pior tipo de defeito que este sistema pode ter.
 
-   Então: IA_MODELO é o modelo bom, usado para ler reunião, notas, o plano
-   pedido no cockpit e desenvolvimento. IA_MODELO_RAPIDO serve à classificação
-   de segmentos e ao plano que nasce de uma mudança de etapa — os dois casos em
-   que a espera custa mais do que a última gota de qualidade. Sem o segredo,
-   esses dois usam PADRAO_RAPIDO, logo abaixo. */
-const MODELO_RAPIDO = Deno.env.get('IA_MODELO_RAPIDO') || '';
-/* Sem o segredo, o rápido tem um padrão em vez de virar o modelo bom. Era o
-   que esvaziava a escolha: quem não sabia do segredo pedia rápido e recebia
-   lento, sem nada dizendo isso. Vale só para a Groq — na Anthropic o modelo é
-   o que estiver em IA_MODELO. */
-const PADRAO_RAPIDO = 'openai/gpt-oss-20b';
+   Por isso `modelo` e `modeloRapido` são de CADA provedor, e não globais: o
+   rápido da OpenAI não é o rápido da Groq, e um par de constantes únicas
+   obrigaria a escolher o par de um provedor só.
+
+   As três constantes que moravam aqui — PROVEDOR, CHAVE, MODELO — morreram com
+   a fila: quem chama o modelo recebe o provedor por parâmetro. Deixá-las como
+   atalho para "o primeiro da fila" era convidar o próximo trecho de código a
+   usar a chave do primeiro para falar com o segundo. */
+
 const URL_SUPABASE = Deno.env.get('SUPABASE_URL') || '';
 /* Formatos de chave novo e antigo, na mesma ordem do convite: o projeto pode
    estar em qualquer um dos dois, e IAD_CHAVE_PUBLICA é a única saída manual —

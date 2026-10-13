@@ -178,6 +178,45 @@ válido no projeto: qualquer pessoa logada passa. A função verifica quem é a
 pessoa e o que ela pode fazer, lendo o papel dela no banco. A tranca que fica é
 a mais forte das duas.
 
+### Se aparecer `BOOT_ERROR: Function failed to start`
+
+A função foi publicada e **morre ao carregar**. Não é chave, não é modelo, não
+é CORS: o código não chega a rodar, e por isso o navegador não recebe resposta
+nenhuma — o app mostra "o navegador não chegou na função", que parece problema
+de rede e não é.
+
+Onde está o motivo, escrito por extenso:
+
+**Edge Functions → assistente → Logs.** A linha do boot traz a exceção com o
+número da linha. É o único lugar que diz a verdade; tudo o mais é palpite.
+
+As três causas, em ordem de frequência:
+
+1. **A colagem veio incompleta.** O arquivo tem mais de 2.500 linhas, e o
+   editor do painel às vezes corta. Role até o fim: a última linha tem de ser
+   `});`. Se não for, cole de novo.
+2. **A plataforma estava degradada na hora.** Confira <https://status.supabase.com>
+   por *Edge Function Degradation*. Publicação feita durante o incidente pode
+   gerar artefato quebrado — republique depois que fechar.
+3. **O código tem erro de verdade.** Veja abaixo como pegar isso ANTES.
+
+### Antes de publicar, confira com o Deno
+
+`bun build` empacota e **não confere tipos**: ele diz que o arquivo é válido e
+deixa passar erro que só aparece no boot. O Deno é quem roda esta função, e é
+ele quem tem de aprovar:
+
+    deno check nuvem/funcoes/assistente/index.ts
+
+E, para provar que o módulo SOBE — que é coisa diferente de compilar:
+
+    IA_CHAVE_OPENAI=sk-teste deno run --allow-net --allow-env \
+      nuvem/funcoes/assistente/index.ts
+
+Ele fica rodando e servindo; `Ctrl+C` encerra. Se o módulo estivesse quebrado,
+ele morreria na hora com a exceção na tela — que é exatamente a mensagem que
+você teria de ir caçar nos logs depois de publicar.
+
 ### Se aparecer "IA respondeu 404" ou "o modelo não existe mais"
 
 O provedor aposentou o nome do modelo. Isso acontece sem aviso, e o nome fica
