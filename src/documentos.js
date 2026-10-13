@@ -228,23 +228,58 @@
     return mapasDeFonte(bytes, bruto).then(function (mapas) {
       const fluxos = localizarFluxos(bytes, bruto);
       return Promise.all(fluxos.map(function (f) {
-        if (!f.comprimido) return Promise.resolve(decodificarLatin(f.dado));
-        /* Alguns geradores escrevem o fluxo cru mesmo dizendo FlateDecode.
-           Tentamos zlib e, se recusar, deflate cru — custa uma tentativa e
-           evita perder o documento inteiro por causa do cabeçalho. */
-        return inflar(f.dado, 'deflate')
-          .catch(function () { return inflar(f.dado, 'deflate-raw'); })
+        if (!f.filtros.length) return Promise.resolve(decodificarLatin(f.dado));
+        /* A cadeia inteira, na ordem escrita. Alguns geradores escrevem o
+           fluxo cru mesmo dizendo FlateDecode — por isso o inflar tenta zlib e
+           depois deflate cru lá dentro: custa uma tentativa e evita perder o
+           documento por causa de um cabeçalho. */
+        return passarPelosFiltros(f.dado, f.filtros)
+          .then(function (d) { return d ? decodificarLatin(d) : ''; })
           .catch(function () { return ''; });
       })).then(function (partes) {
         const texto = partes.map(function (t) { return textoDoFluxo(t, mapas); })
           .filter(Boolean).join('\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
-        if (!texto) {
-          throw new Error('Este PDF não tem texto que eu consiga ler — provavelmente é digitalizado (foto do papel). ' +
-            'Salve como Word, ou copie o conteúdo e cole na caixa.');
-        }
+        if (!texto) throw new Error(porQueNaoSaiuTexto(bruto, fluxos));
         return texto;
       });
     });
+  }
+
+  /* POR QUE NÃO SAIU TEXTO — e esta é a parte que mais custou credibilidade.
+
+     Havia uma frase só para quatro causas diferentes: "provavelmente é
+     digitalizado (foto do papel). Salve como Word". Em três das quatro isso é
+     mentira, e é mentira cara — manda a pessoa converter um arquivo que não
+     tem problema de conversão nenhum, e ela volta com o mesmo erro.
+
+     Cada causa tem um conserto diferente, e dizer qual é vale mais do que
+     qualquer sugestão genérica. */
+  function porQueNaoSaiuTexto(bruto, fluxos) {
+    /* Protegido por senha. Os fluxos existem, estão cifrados, e o inflate
+       devolve vazio — que por fora é idêntico a "não tem texto". */
+    if (/\/Encrypt\s/.test(bruto)) {
+      return 'Este PDF está PROTEGIDO: o conteúdo dele é cifrado, e nem o texto nem as ' +
+        'imagens podem ser lidos sem a senha. Abra no leitor de PDF, use Imprimir → ' +
+        '"Salvar como PDF" para gerar uma cópia sem proteção, e anexe essa cópia.';
+    }
+
+    /* Tem instrução de desenhar texto, mas nada saiu: o texto está lá e a
+       tradução falhou. É um defeito nosso, e dizer "é foto de papel" faria a
+       pessoa procurar para sempre no lugar errado. */
+    const temTexto = fluxos.some(function (f) { return f && !f.filtros.length; }) ||
+      /\bTj\b|\bTJ\b/.test(bruto);
+    if (temTexto) {
+      return 'Este PDF tem texto, mas eu não consegui traduzi-lo — a fonte dele usa uma ' +
+        'codificação que eu ainda não sei ler. Copie o conteúdo e cole na caixa, ou salve ' +
+        'como Word. E me avise: isto é defeito meu, não do seu arquivo.';
+    }
+
+    /* Só desenho. Infográfico com o texto convertido em contorno cai aqui, e é
+       o único caso em que "não há texto" é literalmente verdade. */
+    return 'Este PDF não tem texto nenhum — só desenho. É o caso do infográfico com as ' +
+      'letras convertidas em curvas, e o da página que é foto de papel. Nenhum truque ' +
+      'resolve sem OCR: copie o conteúdo e cole na caixa, ou anexe a versão em Word, ' +
+      'PowerPoint ou Excel de onde esse PDF saiu.';
   }
 
   function decodificarLatin(u8) {
@@ -263,55 +298,181 @@
      achamos quais são fontes com /ToUnicode, inflamos esses CMaps e ligamos
      cada nome de recurso ao mapa pelo /Font << /F5 12 0 R >> das páginas.
      É pouco código e cobre o arquivo gerado por editor, que é o caso real. */
-  function mapasDeFonte(bytes, bruto) {
+  /* Um NOME de PDF é a barra seguida de tudo o que não for espaço nem
+     delimitador. `\w+` dava conta de /F1 e /F5 e parava no primeiro PDF de
+     editor gráfico que aparecesse: o Inkscape e o Illustrator geram /F2+0,
+     /F3+0, e o `+` não é letra. O nome saía cortado em "F2", o mapa ficava
+     guardado em "F2+0", e os dois nunca se encontravam — o texto vinha inteiro
+     como índice de glifo, ou seja, lixo. */
+  const NOME_PDF = '[^\\s/<>\\[\\]{}()%]+';
+
+  /* Todos os objetos do arquivo, inclusive os que não aparecem na varredura.
+
+     Desde o PDF 1.5 os objetos podem vir DENTRO de um fluxo comprimido
+     (/ObjStm): o arquivo não tem "9 0 obj" escrito em lugar nenhum, tem um
+     fluxo que, descomprimido, contém nove objetos emendados com uma tabela de
+     deslocamentos na frente. Todo gerador moderno faz isso.
+
+     Sem abrir esses fluxos, as fontes do documento são invisíveis — e sem
+     fonte não há /ToUnicode, e sem /ToUnicode o texto sai como índice de
+     glifo. O app chamava isso de "PDF digitalizado", que é a resposta errada:
+     o texto está lá, inteiro, e só faltava procurar no lugar certo. */
+  function tabelaDeObjetos(bruto) {
     const objetos = {};
     const reObj = /(\d+)\s+0\s+obj\b/g;
     let m;
     while ((m = reObj.exec(bruto)) !== null) {
       const fim = bruto.indexOf('endobj', m.index);
-      objetos[m[1]] = { ini: m.index + m[0].length, fim: fim < 0 ? bruto.length : fim };
+      const ini = m.index + m[0].length;
+      objetos[m[1]] = { ini: ini, fim: fim < 0 ? bruto.length : fim };
     }
+    return objetos;
+  }
 
+  function corpoDoObjeto(objetos, bruto, num) {
+    const o = objetos[num];
+    if (!o) return '';
+    return o.corpo != null ? o.corpo : bruto.slice(o.ini, o.fim);
+  }
+
+  /* O pedaço de bytes do fluxo de um objeto clássico. */
+  function bytesDoFluxo(bytes, bruto, o) {
+    const corpo = bruto.slice(o.ini, o.fim);
+    const marca = /stream\r?\n?/.exec(corpo);
+    if (!marca) return null;
+    const ini = o.ini + marca.index + marca[0].length;
+    let ate = bruto.indexOf('endstream', ini);
+    if (ate < 0) return null;
+    while (ate > ini && (bytes[ate - 1] === 10 || bytes[ate - 1] === 13)) ate--;
+    return bytes.subarray(ini, ate);
+  }
+
+  /* Abre os /ObjStm e devolve os objetos de dentro, por número.
+
+     O formato é simples: o cabeçalho tem /N pares "numero deslocamento" e
+     /First diz onde o primeiro objeto começa. Nenhum deles tem fluxo próprio —
+     fluxo não cabe dentro de fluxo —, então basta o texto. */
+  function objetosDeFluxo(bytes, bruto, objetos) {
+    const alvos = Object.keys(objetos).filter(function (n) {
+      return /\/Type\s*\/ObjStm/.test(bruto.slice(objetos[n].ini, objetos[n].fim));
+    });
+    if (!alvos.length) return Promise.resolve({});
+
+    return Promise.all(alvos.map(function (n) {
+      const o = objetos[n];
+      const dado = bytesDoFluxo(bytes, bruto, o);
+      if (!dado) return Promise.resolve(null);
+      const cab = bruto.slice(o.ini, o.fim);
+      const quantos = parseInt((/\/N\s+(\d+)/.exec(cab) || [])[1] || '0', 10);
+      const primeiro = parseInt((/\/First\s+(\d+)/.exec(cab) || [])[1] || '0', 10);
+      if (!quantos) return Promise.resolve(null);
+      const filtros = filtrosDoCabecalho(cab);
+      return passarPelosFiltros(dado, filtros.length ? filtros : ['FlateDecode'])
+        .then(function (d) {
+          return d ? { texto: decodificarLatin(d), quantos: quantos, primeiro: primeiro } : null;
+        })
+        .catch(function () { return null; });
+    })).then(function (abertos) {
+      const saida = {};
+      abertos.forEach(function (x) {
+        if (!x) return;
+        const pares = x.texto.slice(0, x.primeiro).trim().split(/\s+/);
+        for (let i = 0; i + 1 < pares.length && i / 2 < x.quantos; i += 2) {
+          const num = pares[i];
+          const desloca = parseInt(pares[i + 1], 10);
+          const fim = (i + 3 < pares.length)
+            ? x.primeiro + parseInt(pares[i + 3], 10)
+            : x.texto.length;
+          if (!num || isNaN(desloca)) continue;
+          saida[num] = x.texto.slice(x.primeiro + desloca, fim);
+        }
+      });
+      return saida;
+    });
+  }
+
+  /* O dicionário de fontes de um recurso, venha ele escrito ou por referência.
+
+     `/Font << /F1 5 0 R >>` é o caso fácil. `/Font 1 0 R` é o caso do
+     Inkscape, do Illustrator e de metade dos PDFs de material de marketing: o
+     mapa de fontes é um objeto à parte. O app só conhecia o primeiro, e no
+     segundo não achava fonte nenhuma — logo, nenhum /ToUnicode, logo texto
+     ilegível anunciado como "PDF digitalizado". */
+  function dicionariosDeFonte(bruto, objetos) {
+    const saida = [];
+    const re = /\/Font\s*(?:<<([\s\S]*?)>>|(\d+)\s+0\s+R)/g;
+    let m;
+    while ((m = re.exec(bruto)) !== null) {
+      if (m[1] != null) { saida.push(m[1]); continue; }
+      const corpo = corpoDoObjeto(objetos, bruto, m[2]);
+      const dentro = /<<([\s\S]*)>>/.exec(corpo);
+      if (dentro) saida.push(dentro[1]);
+    }
+    /* E os que moram dentro de um /ObjStm: lá o `/Font` da página já foi lido
+       acima quando o texto do objeto entrou na tabela, mas o dicionário
+       referenciado pode ser outro objeto do mesmo fluxo. */
+    Object.keys(objetos).forEach(function (n) {
+      if (objetos[n].corpo == null) return;
+      const r = /\/Font\s*(?:<<([\s\S]*?)>>|(\d+)\s+0\s+R)/g;
+      let x;
+      while ((x = r.exec(objetos[n].corpo)) !== null) {
+        if (x[1] != null) { saida.push(x[1]); continue; }
+        const dentro = /<<([\s\S]*)>>/.exec(corpoDoObjeto(objetos, bruto, x[2]));
+        if (dentro) saida.push(dentro[1]);
+      }
+    });
+    return saida;
+  }
+
+  function mapasDeFonte(bytes, bruto) {
+    const objetos = tabelaDeObjetos(bruto);
+
+    return objetosDeFluxo(bytes, bruto, objetos).then(function (extras) {
+      Object.keys(extras).forEach(function (n) {
+        if (!objetos[n]) objetos[n] = { corpo: extras[n] };
+      });
+      return mapasComObjetos(bytes, bruto, objetos);
+    });
+  }
+
+  function mapasComObjetos(bytes, bruto, objetos) {
     /* recurso (/F5) → número do objeto do /ToUnicode */
     const doRecurso = {};
-    const reFonte = /\/Font\s*<<([^>]*)>>/g;
-    while ((m = reFonte.exec(bruto)) !== null) {
-      const dentro = m[1];
-      const reRef = /\/(\w+)\s+(\d+)\s+0\s+R/g;
+    const reRefFonte = new RegExp('\\/(' + NOME_PDF + ')\\s+(\\d+)\\s+0\\s+R', 'g');
+
+    dicionariosDeFonte(bruto, objetos).forEach(function (dentro) {
       let r;
-      while ((r = reRef.exec(dentro)) !== null) {
-        const obj = objetos[r[2]];
-        if (!obj) continue;
-        const corpo = bruto.slice(obj.ini, obj.fim);
+      reRefFonte.lastIndex = 0;
+      while ((r = reRefFonte.exec(dentro)) !== null) {
+        const corpo = corpoDoObjeto(objetos, bruto, r[2]);
+        if (!corpo) continue;
         const uni = /\/ToUnicode\s+(\d+)\s+0\s+R/.exec(corpo);
         /* Fonte tipo 0 aponta para a descendente; o /ToUnicode fica na pai,
            então basta procurar aqui e, se faltar, seguir o /DescendantFonts. */
         if (uni) { doRecurso[r[1]] = uni[1]; continue; }
         const desc = /\/DescendantFonts\s*\[\s*(\d+)\s+0\s+R/.exec(corpo);
         if (!desc) continue;
-        const filho = objetos[desc[1]];
-        if (!filho) continue;
-        const u2 = /\/ToUnicode\s+(\d+)\s+0\s+R/.exec(bruto.slice(filho.ini, filho.fim));
+        const u2 = /\/ToUnicode\s+(\d+)\s+0\s+R/.exec(corpoDoObjeto(objetos, bruto, desc[1]));
         if (u2) doRecurso[r[1]] = u2[1];
       }
-    }
+    });
 
     const numeros = {};
     Object.keys(doRecurso).forEach(function (nome) { numeros[doRecurso[nome]] = true; });
 
     const leituras = Object.keys(numeros).map(function (num) {
       const obj = objetos[num];
-      if (!obj) return Promise.resolve(null);
-      const corpo = bruto.slice(obj.ini, obj.fim);
-      const marca = /stream\r?\n?/.exec(corpo);
-      if (!marca) return Promise.resolve(null);
-      const ini = obj.ini + marca.index + marca[0].length;
-      let ate = bruto.indexOf('endstream', ini);
-      if (ate < 0) return Promise.resolve(null);
-      while (ate > ini && (bytes[ate - 1] === 10 || bytes[ate - 1] === 13)) ate--;
-      return inflar(bytes.subarray(ini, ate), 'deflate')
-        .catch(function () { return inflar(bytes.subarray(ini, ate), 'deflate-raw'); })
-        .then(function (t) { return { num: num, mapa: lerCMap(t) }; })
+      /* O CMap é sempre um objeto clássico: ele TEM fluxo, e fluxo não cabe
+         dentro de /ObjStm. Por isso basta o caminho de offsets aqui. */
+      if (!obj || obj.ini == null) return Promise.resolve(null);
+      const dado = bytesDoFluxo(bytes, bruto, obj);
+      if (!dado) return Promise.resolve(null);
+      /* O CMap passa pela MESMA cadeia do conteúdo: quem escreve ASCII85 no
+         fluxo da página escreve no CMap também, e um lido sem o outro dá o
+         pior resultado possível — texto que sai, e sai errado. */
+      const filtros = filtrosDoCabecalho(bruto.slice(Math.max(0, obj.ini - 400), obj.ini + 300));
+      return passarPelosFiltros(dado, filtros.length ? filtros : ['FlateDecode'])
+        .then(function (d) { return { num: num, mapa: lerCMap(d ? decodificarLatin(d) : '') }; })
         .catch(function () { return null; });
     });
 
@@ -373,6 +534,108 @@
     return mapa;
   }
 
+  /* ---------- a CADEIA de filtros ----------
+
+     Um fluxo de PDF pode passar por mais de um filtro, em ordem, e o
+     cabeçalho diz quais:
+
+         /Filter /FlateDecode                        — um só
+         /Filter [ /ASCII85Decode /FlateDecode ]     — dois, nesta ordem
+
+     O app só sabia do primeiro caso. No segundo ele mandava os bytes crus
+     direto para o descompressor, que recusava — e o PDF inteiro voltava vazio,
+     anunciado como "digitalizado". O arquivo do GELITA é exatamente esse: o
+     Inkscape e o Cairo, que geram quase todo material de marketing em PDF,
+     escrevem ASCII85 antes do Flate por padrão.
+
+     ASCII85 existe por um motivo antigo e ainda vivo: cabe num e-mail de
+     texto puro. Cinco letras ASCII carregam quatro bytes; "z" sozinho são
+     quatro zeros; "~>" encerra. Decodificar é menos código do que explicar. */
+  function filtrosDoCabecalho(cabecalho) {
+    const m = /\/Filter\s*(\[[^\]]*\]|\/[A-Za-z0-9]+)/.exec(cabecalho);
+    if (!m) return [];
+    const achados = m[1].match(/\/[A-Za-z0-9]+/g) || [];
+    return achados.map(function (x) { return x.slice(1); });
+  }
+
+  function deAscii85(u8) {
+    let texto = '';
+    for (let i = 0; i < u8.length; i += 8192) {
+      texto += String.fromCharCode.apply(null, u8.subarray(i, i + 8192));
+    }
+    /* O "<~" inicial é opcional e o "~>" final encerra. Tudo o que não for do
+       alfabeto — quebra de linha, espaço — se ignora: o formato foi feito para
+       atravessar e-mail, e e-mail reembrulha linha. */
+    texto = texto.replace(/^\s*<~/, '');
+    const fim = texto.indexOf('~>');
+    if (fim >= 0) texto = texto.slice(0, fim);
+    texto = texto.replace(/\s+/g, '');
+
+    const saida = [];
+    let grupo = [], i = 0;
+    const despejar = function (quantos) {
+      /* Grupo incompleto no fim: completa com 'u' (o maior dígito) e descarta
+         os bytes que sobram. É o que a especificação manda, e errar aqui
+         acrescenta lixo no fim de todo fluxo. */
+      const faltam = 5 - grupo.length;
+      for (let k = 0; k < faltam; k++) grupo.push(84);
+      let n = 0;
+      for (let k = 0; k < 5; k++) n = n * 85 + grupo[k];
+      const quatro = [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
+      for (let k = 0; k < quantos; k++) saida.push(quatro[k]);
+      grupo = [];
+    };
+
+    for (i = 0; i < texto.length; i++) {
+      const c = texto.charCodeAt(i);
+      if (c === 122 && !grupo.length) {           /* z = quatro zeros */
+        saida.push(0, 0, 0, 0);
+        continue;
+      }
+      if (c < 33 || c > 117) continue;            /* fora do alfabeto: ignora */
+      grupo.push(c - 33);
+      if (grupo.length === 5) despejar(4);
+    }
+    if (grupo.length) despejar(grupo.length - 1);
+    return new Uint8Array(saida);
+  }
+
+  function deAsciiHex(u8) {
+    let texto = '';
+    for (let i = 0; i < u8.length; i += 8192) {
+      texto += String.fromCharCode.apply(null, u8.subarray(i, i + 8192));
+    }
+    const fim = texto.indexOf('>');
+    if (fim >= 0) texto = texto.slice(0, fim);
+    texto = texto.replace(/[^0-9A-Fa-f]/g, '');
+    if (texto.length % 2) texto += '0';          /* dígito ímpar: a spec completa com zero */
+    const saida = new Uint8Array(texto.length / 2);
+    for (let i = 0; i < saida.length; i++) saida[i] = parseInt(texto.substr(i * 2, 2), 16);
+    return saida;
+  }
+
+  /* Aplica a cadeia na ordem escrita. O que não souber ler encerra a cadeia e
+     devolve o que deu — melhor meio fluxo lido do que o arquivo inteiro
+     recusado por causa de um filtro que ninguém usa para texto. */
+  function passarPelosFiltros(dado, filtros) {
+    let atual = Promise.resolve(dado);
+    (filtros || []).forEach(function (f) {
+      atual = atual.then(function (d) {
+        if (!d) return d;
+        if (f === 'ASCII85Decode' || f === 'A85') return deAscii85(d);
+        if (f === 'ASCIIHexDecode' || f === 'AHx') return deAsciiHex(d);
+        if (f === 'FlateDecode' || f === 'Fl') {
+          return inflarBytes(d, 'deflate').catch(function () { return inflarBytes(d, 'deflate-raw'); });
+        }
+        /* DCTDecode é JPEG, CCITTFaxDecode é fax: são imagem, e imagem não tem
+           texto. Parar aqui é o certo — seguir adiante entregaria bytes de
+           foto ao leitor de texto. */
+        return null;
+      });
+    });
+    return atual.catch(function () { return null; });
+  }
+
   function localizarFluxos(bytes, bruto) {
     const achados = [];
     /* \b antes de "stream" é o que impede casar dentro de "endstream" — sem
@@ -393,6 +656,7 @@
       while (ate > inicio && (bytes[ate - 1] === 10 || bytes[ate - 1] === 13)) ate--;
       achados.push({
         dado: bytes.subarray(inicio, ate),
+        filtros: filtrosDoCabecalho(cabecalho),
         comprimido: /FlateDecode/.test(cabecalho)
       });
       re.lastIndex = fim;
@@ -410,7 +674,14 @@
   function textoDoFluxo(fluxo, mapas) {
     if (!/\b(Tj|TJ)\b/.test(fluxo)) return '';
     const saida = [];
-    const re = /\/([A-Za-z0-9]+)\s+[\d.]+\s+Tf|<([0-9A-Fa-f\s]*)>|\((?:\\.|[^\\()])*\)|\bTJ\b|\bTj\b|\bTD\b|\bTm\b|\bT\*\b|\bET\b/g;
+    /* O mesmo NOME_PDF de lá de cima, e pelo mesmo motivo: `/F2+0 12 Tf`
+       casava só até o "F2", e a fonte escolhida nunca batia com a chave do
+       mapa. Os dois lados têm de ler o nome igual, senão a tradução existe e
+       não é usada — que é o defeito mais caro deste arquivo, porque o texto
+       sai e sai errado. */
+    const re = new RegExp('\\/(' + NOME_PDF + ')\\s+[\\d.]+\\s+Tf' +
+      '|<([0-9A-Fa-f\\s]*)>|\\((?:\\\\.|[^\\\\()])*\\)' +
+      '|\\bTJ\\b|\\bTj\\b|\\bTD\\b|\\bTm\\b|\\bT\\*\\b|\\bET\\b', 'g');
     let m, linha = [], fonte = null;
 
     const quebrar = function () {
