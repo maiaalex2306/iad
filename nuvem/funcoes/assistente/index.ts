@@ -540,6 +540,7 @@ precisa, não para o que ela é no papel.
 - cnpj e telefone: formatados no padrão brasileiro, só se estiverem no texto.
 - segmento: escolha ${segmentos ? `um destes, exatamente: ${segmentos}` : 'nada — não há segmentos cadastrados, omita'}. Nunca crie um segmento novo.
 - cidade e uf: se o texto citar a cidade, devolva também a sigla da UF correspondente.
+- A UNIDADE de que o material trata, nunca a matriz no exterior. Um dossiê sobre a operação brasileira de uma multinacional traz o endereço da fábrica ou do escritório daqui — é esse que vale. A sede global entra só quando o material fala DELA. Se o texto só der o endereço estrangeiro, devolva cidade e uf vazios: ficha em branco se corrige em dez segundos; "Eberbach" gravado como município do cliente vira fato para quem abrir a conta amanhã, e ninguém mais desconfia.
 - porte: faturamento ou número de funcionários, como o texto disser.
 
 Não devolva a relação atual (prospect, cliente, ex-cliente): isso é fato comercial, não leitura de texto.`;
@@ -1304,6 +1305,41 @@ export function ajustarForma(
   return false;
 }
 
+/* O maior espaço de resposta que pedimos a um provedor. Vale como teto da
+   conta do raciocínio: quatro vezes o `teto` do tipo de pedido, até aqui. */
+export const TETO_DE_RESPOSTA = 32000;
+
+/* Quanto espaço de resposta um pedido LEVA, que não é o mesmo que o `teto`.
+
+   `max_tokens` limita o que o modelo ESCREVE. `max_completion_tokens` limita o
+   que ele escreve MAIS o que ele pensa — e modelo de raciocínio pensa muito
+   antes da primeira letra. Mandar o mesmo número nos dois é pedir resposta
+   vazia de quem precisa de espaço para raciocinar, que foi exatamente o que
+   aconteceu com o dossiê da GELITA. */
+export function espacoDeResposta(teto: number, maxChave: string): number {
+  return maxChave === 'max_completion_tokens'
+    ? Math.min(teto * 4, TETO_DE_RESPOSTA)
+    : teto;
+}
+
+/* Vale remandar o pedido com mais espaço? Só quando há mais espaço de fato.
+
+   Esta pergunta existe porque a resposta óbvia estava errada. Com
+   `max_completion_tokens` o pedido JÁ sai com `teto * 4`: num material de
+   reunião, 8000 que viram 32000 na primeira tentativa. A conta antiga
+   comparava o teto novo (32000) com o teto velho (8000), concluía que havia
+   espaço novo, e remandava um pedido IDÊNTICO — mesmo prompt, mesmo limite,
+   mesma resposta vazia. Uma chamada inteira de modelo de raciocínio, cobrada,
+   e de trinta a sessenta segundos a mais para chegar ao mesmo lugar. Era isso
+   que estourava o prazo de quem mandava um dossiê grande.
+
+   Com `max_tokens` a segunda tentativa continua valendo: ali o pedido sai com
+   o teto cru, e quadruplicar muda o número de verdade. */
+export function valeTentarMaior(teto: number, maxChave: string): boolean {
+  const maior = Math.min(teto * 4, TETO_DE_RESPOSTA);
+  return espacoDeResposta(maior, maxChave) > espacoDeResposta(teto, maxChave);
+}
+
 async function chamarProvedor(
   prov: Provedor, sistema: string, usuario: string, teto: number, rapido: boolean
 ): Promise<string> {
@@ -1372,6 +1408,8 @@ async function chamarProvedor(
      repositório descrevendo exatamente o defeito que estava acontecendo. */
   const forma = { maxChave: 'max_tokens', comTemperatura: true, comJson: true };
 
+  const espacoDoPedido = () => espacoDeResposta(teto, forma.maxChave);
+
   const pedir = () => {
     const corpo: Record<string, unknown> = {
       model: modelo,
@@ -1380,14 +1418,7 @@ async function chamarProvedor(
         { role: 'user', content: usuario }
       ]
     };
-    /* `max_tokens` limita o que o modelo ESCREVE. `max_completion_tokens`
-       limita o que ele escreve MAIS o que ele pensa — e modelo de raciocínio
-       pensa muito antes da primeira letra. Mandar o mesmo número nos dois é
-       pedir resposta vazia de quem precisa de espaço para raciocinar, que foi
-       exatamente o que aconteceu com o dossiê da GELITA. */
-    corpo[forma.maxChave] = forma.maxChave === 'max_completion_tokens'
-      ? Math.min(teto * 4, 32000)
-      : teto;
+    corpo[forma.maxChave] = espacoDoPedido();
     if (forma.comTemperatura) corpo.temperature = 0.1;
     if (forma.comJson) corpo.response_format = { type: 'json_object' };
     return fetch(base + '/chat/completions', {
@@ -1462,23 +1493,22 @@ async function chamarProvedor(
   let conteudo = String(escolha?.message?.content || '');
   const acabouOEspaco = /length|max_tokens/i.test(String(escolha?.finish_reason || ''));
 
-  if (!conteudo.trim() && acabouOEspaco) {
-    const maior = Math.min(teto * 4, 32000);
-    if (maior > teto) {
-      teto = maior;
-      r = await pedir();
-      if (r.ok) {
-        const j2 = await r.json();
-        conteudo = String((j2?.choices || [])[0]?.message?.content || '');
-      }
+  /* Sem espaço novo a oferecer, o erro honesto vem na hora, em vez de depois
+     de uma segunda chamada idêntica. Ver `valeTentarMaior`. */
+  if (!conteudo.trim() && acabouOEspaco && valeTentarMaior(teto, forma.maxChave)) {
+    teto = Math.min(teto * 4, TETO_DE_RESPOSTA);
+    r = await pedir();
+    if (r.ok) {
+      const j2 = await r.json();
+      conteudo = String((j2?.choices || [])[0]?.message?.content || '');
     }
   }
 
   if (!conteudo.trim()) {
     throw new RecusaDaIA(
       acabouOEspaco
-        ? 'O modelo "' + modelo + '" da ' + prov.nome + ' gastou todo o espaço de resposta ' +
-          'raciocinando e não escreveu nada — nem com o espaço quadruplicado. ' +
+        ? 'O modelo "' + modelo + '" da ' + prov.nome + ' gastou os ' + espacoDoPedido() +
+          ' tokens de resposta raciocinando e não escreveu nada. ' +
           'Isto NÃO quer dizer que o seu material está vazio. Troque o segredo IA_MODELO_' +
           prov.id.toUpperCase() + ' por um modelo que raciocine menos, ou mande menos material de uma vez.'
         : 'A ' + prov.nome + ' respondeu sem conteúdo nenhum.',

@@ -12,11 +12,21 @@
 
   const Nuvem = global.IADNuvem;
   const PRAZO = 12000;
-  /* 90s: a resposta de reunião passou a caber até 8000 tokens — as oito
-     decisões vinham sendo cortadas fora por falta de espaço —, e escrever
-     mais leva mais tempo. Desistir aos 60 agora seria desistir de respostas
-     que estão chegando. */
-  const PRAZO_REUNIAO = 90000;
+  /* 150s, que é onde o PRÓPRIO Supabase desiste.
+
+     O limite de resposta de uma Edge Function é 150 segundos: passou disso, o
+     servidor devolve 504 sozinho. Desistir aos 90 era desistir ANTES do
+     servidor — a chamada continuava correndo lá, o modelo terminava de
+     escrever, o provedor cobrava, e a resposta chegava num navegador que já
+     tinha jogado o pedido fora. O vendedor, que mandou um dossiê de vinte
+     páginas, pagava a leitura inteira e recebia "eu parei de esperar".
+
+     Noventa segundos era um número prudente de quando a espera era cega. Com
+     o balão do v245 ela deixou de ser: a pessoa vê o passo, o relógio e o
+     teto, e sabe que existe um fim. Prudência ali virou desperdício.
+
+     Mais do que 150 não adianta: o 504 vem do servidor, não daqui. */
+  const PRAZO_REUNIAO = 150000;
 
   /* ---------------- o que está acontecendo, enquanto acontece ----------------
 
@@ -380,9 +390,18 @@
 
     return Promise.race([pedido, prazo]).then(function (r) {
       if (r && r.estourou) {
+        /* O prazo aqui é o do servidor. Estourar os 150s quer dizer que nem
+           o Supabase respondeu, e aí as causas são duas — e são duas saídas
+           diferentes. Mandar "tire um documento" para quem está com um modelo
+           de raciocínio lento é mandar a pessoa cortar o material certo pelo
+           motivo errado. */
         return { erro: 'O assistente demorou mais de ' + Math.round(PRAZO_REUNIAO / 1000) +
-          ' segundos e eu parei de esperar. Material muito grande costuma ser a causa: ' +
-          'tire um documento e tente de novo.' };
+          ' segundos e eu parei de esperar — que é o mesmo ponto em que o servidor desiste.\n\n' +
+          'Duas causas, e duas saídas:\n' +
+          '· material grande demais para uma leitura só — tire um documento e mande em duas;\n' +
+          '· modelo que raciocina muito antes de escrever — troque o segredo IA_MODELO_ ' +
+          'do provedor da frente por um mais rápido.\n\n' +
+          'O que você já tinha gravado continua gravado.' };
       }
       if (!r) return { erro: 'O servidor respondeu vazio.' };
       /* A explicação vem do servidor e é mostrada como veio. Jogá-la fora e

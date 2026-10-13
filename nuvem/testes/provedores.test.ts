@@ -276,6 +276,38 @@ conferir('a OpenAI e a Groq falam o mesmo protocolo, em endereços diferentes',
   m.CATALOGO.openai.base !== m.CATALOGO.groq.base &&
   /openai\.com/.test(m.CATALOGO.openai.base) && /groq\.com/.test(m.CATALOGO.groq.base));
 
+/* ---------- o espaço de resposta, e a segunda tentativa que não valia ----------
+
+   O caso real: dossiê de vinte páginas da GELITA. O pedido saía com 32000
+   (8000 do tipo "reuniao", quadruplicados porque modelo de raciocínio pensa
+   dentro do mesmo orçamento). Voltava vazio por falta de espaço, e a função
+   "tentava de novo com quatro vezes o espaço" — só que quatro vezes 8000 já
+   estava limitado a 32000, exatamente o que acabara de ser mandado.
+
+   Pedido idêntico, resposta idêntica, trinta a sessenta segundos a mais e uma
+   chamada de modelo de raciocínio cobrada à toa. Era isso que fazia o prazo
+   estourar em vez de devolver o erro honesto. */
+const esp = await comAmbiente({ IA_CHAVE_OPENAI: 'sk-teste' });
+
+conferir('max_tokens leva o teto cru',
+  esp.espacoDeResposta(8000, 'max_tokens') === 8000,
+  String(esp.espacoDeResposta(8000, 'max_tokens')));
+conferir('max_completion_tokens leva quatro vezes, porque o raciocínio sai dali',
+  esp.espacoDeResposta(8000, 'max_completion_tokens') === 32000,
+  String(esp.espacoDeResposta(8000, 'max_completion_tokens')));
+conferir('e nunca passa do teto absoluto',
+  esp.espacoDeResposta(20000, 'max_completion_tokens') === esp.TETO_DE_RESPOSTA,
+  String(esp.espacoDeResposta(20000, 'max_completion_tokens')));
+
+conferir('a reunião NÃO remanda o mesmo pedido — era o defeito',
+  esp.valeTentarMaior(8000, 'max_completion_tokens') === false);
+conferir('com max_tokens a segunda tentativa continua valendo',
+  esp.valeTentarMaior(8000, 'max_tokens') === true);
+conferir('e com teto pequeno ela vale também no raciocínio',
+  esp.valeTentarMaior(2000, 'max_completion_tokens') === true);
+conferir('quem já está no teto absoluto não tenta de novo',
+  esp.valeTentarMaior(esp.TETO_DE_RESPOSTA, 'max_tokens') === false);
+
 /* ---------- a chave nunca sai ---------- */
 const fonte = await Bun.file(new URL('../funcoes/assistente/index.ts', import.meta.url).pathname).text();
 const blocoDiag = fonte.slice(fonte.indexOf("if (tipo === 'diagnostico')"), fonte.indexOf("if (!FORMATOS[tipo])"));
