@@ -4180,8 +4180,10 @@
 
   function blocoArquivos(op) {
     return '<div class="card"><div class="row"><h2 style="margin:0">Arquivos</h2><span class="espaco"></span>' +
-      '<button class="btn ghost mini" onclick="App.anexar(\'' + op.id + '\')">+ Anexar</button></div>' +
-      '<p class="tiny muted" style="margin:6px 0 10px">Organizados pela decisão que destravam. Documento enviado pelo cliente vira evidência.</p>' +
+      '<button class="btn ghost mini" onclick="App.anexar(\'' + op.id + '\')"' +
+      ' data-ajuda-titulo="Anexar documentos" data-ajuda="Pode escolher vários de uma vez: segure Ctrl (ou Shift) na janela do Windows e marque quantos quiser. O IAD pergunta uma vez só, com uma linha por arquivo, e já vem com a categoria sugerida pelo nome.">+ Anexar</button></div>' +
+      '<p class="tiny muted" style="margin:6px 0 10px">Organizados pela decisão que destravam. Documento enviado pelo cliente vira evidência. ' +
+      'Pode escolher vários arquivos de uma vez.</p>' +
       '<div id="lista-arquivos" class="lista-arquivos"><div class="tiny muted">Carregando anexos…</div></div></div>';
   }
 

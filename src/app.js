@@ -4109,47 +4109,27 @@
     },
 
     /* ---------- Arquivos ---------- */
+    /* Um arquivo por vez era o que a tela permitia, e a pasta de um negócio
+       real tem dez: o dossiê, a proposta, a planilha de precificação, o
+       questionário de diagnóstico, a ata, o levantamento de dados. Anexar dez
+       documentos exigia abrir o seletor dez vezes e responder três perguntas
+       dez vezes — trinta e três gestos para uma coisa só. É assim que anexo
+       deixa de ser feito, e o negócio fica sem a prova que já existe no disco
+       de quem vende.
+
+       Agora o seletor aceita vários e o formulário vem uma vez, com uma linha
+       por arquivo. A categoria vem sugerida pelo nome: "REUNIÃO HEINEKEN ITU -
+       18 09 2026" é ata, "Propostas Heineken (2)" é proposta. Sugerida, não
+       decidida — o nome do arquivo é pista, não fato, e quem confirma é quem
+       sabe o que tem dentro. */
     anexar: function (opId) {
       if (!Arq.disponivel()) { alert('Este navegador não guarda anexos.'); return; }
-      const op = Store.oportunidade(opId);
       const entrada = document.createElement('input');
       entrada.type = 'file';
+      entrada.multiple = true;
       entrada.onchange = function () {
-        const arquivo = entrada.files[0];
-        if (!arquivo) return;
-        U.formulario('Anexar “' + arquivo.name + '”', [
-          { id: 'categoria', rotulo: 'Qual decisão este documento destrava', tipo: 'select', opcoes: P.CATEGORIAS_ARQUIVO },
-          { id: 'enviadoPor', rotulo: 'Quem enviou', tipo: 'select', opcoes: [{ valor: 'nos', rotulo: 'Nós' }, { valor: 'cliente', rotulo: 'O cliente' }] },
-          { id: 'dimensao', rotulo: 'Dimensão (se virar evidência)', tipo: 'select', opcoes: P.DIMENSOES.map(function (d) { return { valor: d.id, rotulo: d.nome }; }) }
-        ], {}, function (d) {
-          Arq.salvar(arquivo, {
-            oportunidadeId: opId, contaId: op ? op.contaId : null,
-            categoria: d.categoria, enviadoPor: d.enviadoPor
-          }).then(function () {
-            /* Documento que o cliente enviou é evidência documentada — a mais forte que existe. */
-            if (d.enviadoPor === 'cliente') {
-              Store.registrarEvento(opId, {
-                tipo: 'decision', titulo: 'Cliente enviou o documento: ' + arquivo.name,
-                dimensao: d.dimensao, forca: 'documentado', canal: 'Documento',
-                origemTitulo: arquivo.name
-              });
-            }
-            render();
-            /* Anexo de texto guarda muito mais do que "chegou um documento":
-               guarda o que o cliente disse. Em vez de exigir que a pessoa
-               lembre de analisar depois, o convite aparece na hora. */
-            if (IA.disponivel() && global.IADDocumentos.aceito(arquivo)) {
-              if (U.confirmar('Quer que eu leia “' + arquivo.name + '” e separe as evidências desta reunião?')) {
-                global.IADDocumentos.ler(arquivo)
-                  .then(function (t) {
-                    if (!t || t.length < 60) { alert('Não consegui tirar texto legível deste arquivo.'); return; }
-                    App.processarReuniao(opId, t);
-                  })
-                  .catch(function (e) { alert(e.message); });
-              }
-            }
-          }).catch(function (e) { alert(e.message); });
-        });
+        const escolhidos = Array.prototype.slice.call(entrada.files || []);
+        if (escolhidos.length) perguntarSobreOsAnexos(opId, escolhidos);
       };
       entrada.click();
     },
@@ -9267,6 +9247,131 @@
     };
     ligar('concluir', function () { App.concluirComRelato(op.id, id); });
     ligar('editar', function () { App.editarTarefa(id); });
+  }
+
+  /* A categoria sugerida pelo NOME do arquivo.
+
+     É pista, não fato: ninguém sabe o que tem dentro de um .docx pelo nome
+     dele. Por isso o que sai daqui aparece escolhido num campo editável, e
+     não gravado. O que não bate com nada vira "Outro" — chutar "Proposta"
+     porque o arquivo tem a palavra "projeto" seria piorar a organização que
+     esta tela existe para dar.
+
+     A ordem importa: "Checklist_Precificacao" tem as duas palavras, e
+     precificação diz mais sobre o documento do que checklist. */
+  const PISTAS_DE_CATEGORIA = [
+    [/\b(ata|reuni[aã]o|meeting|memoria\s*de\s*reuni)/i, 'Ata de reunião'],
+    [/(proposta|proposal|or[çc]amento|precifica|pricing|cota[çc][aã]o)/i, 'Proposta'],
+    [/(contrato|contract|aditivo|minuta|acordo)/i, 'Contrato'],
+    [/(crit[ée]rio|checklist|escopo|requisito|edital|especifica|question[áa]rio|diagn[óo]stico|rfp|rfq)/i, 'Critérios de avaliação'],
+    [/(business\s*case|payback|\broi\b|viabilidade|retorno)/i, 'Business case'],
+    [/(refer[êe]ncia|depoimento|success\s*case|\bcase\b)/i, 'Referência / case'],
+    [/(levantamento|consumo|medi[çc][aã]o|laudo|an[áa]lise\s*laborat|invent[áa]rio)/i, 'Dados do cliente']
+  ];
+
+  function categoriaPeloNome(nome) {
+    const n = String(nome || '');
+    for (let i = 0; i < PISTAS_DE_CATEGORIA.length; i++) {
+      if (PISTAS_DE_CATEGORIA[i][0].test(n)) return PISTAS_DE_CATEGORIA[i][1];
+    }
+    return 'Outro';
+  }
+
+  /* Uma pergunta por arquivo, num formulário só. A dimensão fica no fim e
+     vale para todos os que vieram do cliente: perguntar a dimensão de cada um
+     seria um terceiro campo por linha, e com dez arquivos ninguém responde
+     trinta campos — responde o primeiro e aceita o resto como veio, que é
+     pior do que uma resposta só, consciente. */
+  function perguntarSobreOsAnexos(opId, arquivos) {
+    const op = Store.oportunidade(opId);
+    const campos = [];
+    const valores = {};
+
+    arquivos.forEach(function (a, i) {
+      const kb = Math.max(1, Math.round(a.size / 1024));
+      campos.push({ tipo: 'secao', rotulo: a.name + '  ·  ' + kb + ' kB' });
+      campos.push({ id: 'cat' + i, rotulo: 'Qual decisão destrava', tipo: 'select',
+        largura: 'metade', opcoes: P.CATEGORIAS_ARQUIVO });
+      campos.push({ id: 'de' + i, rotulo: 'Quem enviou', tipo: 'select', largura: 'metade',
+        opcoes: [{ valor: 'nos', rotulo: 'Nós' }, { valor: 'cliente', rotulo: 'O cliente' }] });
+      valores['cat' + i] = categoriaPeloNome(a.name);
+      valores['de' + i] = 'nos';
+    });
+
+    campos.push({ tipo: 'secao', rotulo: 'Para os que vieram do cliente',
+      ajuda: 'Documento enviado pelo cliente vira evidência documentada — a mais forte que existe. ' +
+        'A dimensão abaixo vale para todos eles, e cada evidência pode ser corrigida depois no histórico.' });
+    campos.push({ id: 'dimensao', rotulo: 'Dimensão', tipo: 'select',
+      opcoes: P.DIMENSOES.map(function (d) { return { valor: d.id, rotulo: d.nome }; }) });
+
+    const titulo = arquivos.length === 1
+      ? 'Anexar “' + arquivos[0].name + '”'
+      : 'Anexar ' + arquivos.length + ' documentos';
+
+    U.formulario(titulo, campos, valores, function (d) {
+      const falhas = [];
+      Promise.all(arquivos.map(function (a, i) {
+        return Arq.salvar(a, {
+          oportunidadeId: opId, contaId: op ? op.contaId : null,
+          categoria: d['cat' + i] || 'Outro', enviadoPor: d['de' + i] || 'nos'
+        }).then(function () {
+          if (d['de' + i] === 'cliente') {
+            Store.registrarEvento(opId, {
+              tipo: 'decision', titulo: 'Cliente enviou o documento: ' + a.name,
+              dimensao: d.dimensao, forca: 'documentado', canal: 'Documento',
+              origemTitulo: a.name
+            });
+          }
+        }, function (e) {
+          /* Um arquivo grande demais não pode derrubar os outros nove. O que
+             falhou é dito pelo nome, no fim, uma vez só. */
+          falhas.push(a.name + ' — ' + ((e && e.message) || 'não consegui guardar'));
+        });
+      })).then(function () {
+        render();
+        if (falhas.length) {
+          alert('Guardei o que deu. Estes ficaram de fora:\n\n· ' + falhas.join('\n· '));
+        }
+        convidarALer(opId, arquivos);
+      });
+    });
+  }
+
+  /* O convite para ler vem UMA vez, com todos os legíveis juntos. Perguntar
+     arquivo por arquivo seria dez perguntas — e, pior, dez leituras separadas:
+     a ata e o levantamento que ela cita só fazem sentido lidos lado a lado,
+     que é como o assistente separa as evidências. */
+  function convidarALer(opId, arquivos) {
+    const D = global.IADDocumentos;
+    if (!IA.disponivel() || !D) return;
+    const legiveis = arquivos.filter(function (a) { return D.aceito(a); });
+    if (!legiveis.length) return;
+
+    const quantos = legiveis.length === 1
+      ? '“' + legiveis[0].name + '”'
+      : 'os ' + legiveis.length + ' documentos legíveis';
+    if (!U.confirmar('Quer que eu leia ' + quantos + ' e separe as evidências?')) return;
+
+    Promise.all(legiveis.map(function (a) {
+      return D.ler(a).then(function (t) { return { nome: a.name, texto: String(t || '') }; },
+        function () { return { nome: a.name, texto: '' }; });
+    })).then(function (lidos) {
+      const comTexto = lidos.filter(function (x) { return x.texto.length >= 60; });
+      if (!comTexto.length) {
+        alert('Não consegui tirar texto legível de nenhum deles.');
+        return;
+      }
+      const mudos = lidos.length - comTexto.length;
+      if (mudos) {
+        alert('Li ' + comTexto.length + ' de ' + lidos.length + '. ' +
+          (mudos === 1 ? 'Um arquivo não tinha' : mudos + ' arquivos não tinham') +
+          ' texto que eu conseguisse ler — veja o aviso de cada um na aba Arquivos.');
+      }
+      const junto = comTexto.map(function (x) {
+        return '=== ' + x.nome + ' ===\n' + x.texto;
+      }).join('\n\n');
+      App.processarReuniao(opId, junto, true, [], null);
+    });
   }
 
   function anexarAoRegistro(docs, alvo, aoTerminar) {
