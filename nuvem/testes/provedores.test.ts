@@ -148,8 +148,85 @@ conferir('529 (sobrecarregado) cai para o próximo', m.valeOutroProvedor(529));
 conferir('500 (queda do provedor) cai para o próximo', m.valeOutroProvedor(500));
 conferir('413 (material grande) cai para o próximo — o outro pode ter janela maior',
   m.valeOutroProvedor(413));
-conferir('400 NÃO cai: é o nosso pedido, e o próximo recusaria igual',
-  !m.valeOutroProvedor(400));
+/* Esta linha já disse o contrário, e a mudança custou um dia de assistente
+   mudo. A OpenAI recusou `max_tokens` pedindo `max_completion_tokens` — um 400
+   sobre o NOME de um parâmetro, que a Anthropic teria aceitado sem piscar. A
+   regra antiga tratava todo 400 como "culpa do nosso pedido", e o nosso pedido
+   é montado POR PROVEDOR: a premissa era falsa. */
+conferir('400 TAMBÉM cai: o pedido é montado por provedor, e o outro pode aceitá-lo',
+  m.valeOutroProvedor(400));
+
+/* ---------- a forma do pedido, corrigida pelo provedor ----------
+
+   Falar o mesmo protocolo não é falar a mesma língua: o mesmo endpoint aceita
+   parâmetros diferentes conforme o modelo, e cada diferença chega como um 400
+   seco. As mensagens abaixo são as REAIS, copiadas do que cada provedor
+   respondeu — inventar a mensagem e testar contra ela própria é o jeito mais
+   fácil de um teste passar sem provar nada. */
+const RECUSA_MAX_TOKENS = JSON.stringify({ error: {
+  message: "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.",
+  type: 'invalid_request_error', param: 'max_tokens', code: 'unsupported_parameter' } });
+
+const RECUSA_TEMPERATURA = JSON.stringify({ error: {
+  message: "Unsupported value: 'temperature' does not support 0.1 with this model. Only the default (1) value is supported.",
+  type: 'invalid_request_error', param: 'temperature', code: 'unsupported_value' } });
+
+const RECUSA_JSON = JSON.stringify({ error: {
+  message: "response_format of type json_object is not supported with this model." } });
+
+const RECUSA_GERACAO_VAZIA = JSON.stringify({ error: {
+  code: 'json_validate_failed', failed_generation: '' } });
+
+const RECUSA_DESCONHECIDA = JSON.stringify({ error: { message: 'something nobody predicted' } });
+
+const formaNova = () => ({ maxChave: 'max_tokens', comTemperatura: true, comJson: true });
+
+let f = formaNova();
+conferir('o 400 do max_tokens troca o nome do teto, e só ele',
+  m.ajustarForma(f, RECUSA_MAX_TOKENS) === true &&
+  f.maxChave === 'max_completion_tokens' && f.comTemperatura && f.comJson,
+  JSON.stringify(f));
+conferir('e não se repete: a segunda vez não tem o que trocar',
+  m.ajustarForma(f, RECUSA_MAX_TOKENS) === false);
+
+f = formaNova();
+conferir('o 400 da temperatura tira a temperatura, e mantém o resto',
+  m.ajustarForma(f, RECUSA_TEMPERATURA) === true &&
+  !f.comTemperatura && f.maxChave === 'max_tokens' && f.comJson,
+  JSON.stringify(f));
+
+f = formaNova();
+conferir('o 400 do modo JSON abre mão do modo JSON',
+  m.ajustarForma(f, RECUSA_JSON) === true && !f.comJson && f.comTemperatura);
+
+f = formaNova();
+conferir('geração vazia pede a mesma saída que o modo recusado',
+  m.ajustarForma(f, RECUSA_GERACAO_VAZIA) === true && !f.comJson);
+
+f = formaNova();
+conferir('400 que ninguém reconhece devolve false — e aí o erro sobe de verdade',
+  m.ajustarForma(f, RECUSA_DESCONHECIDA) === false &&
+  f.maxChave === 'max_tokens' && f.comTemperatura && f.comJson);
+
+/* O caso do GELITA, inteiro: o modelo recusa o teto E a temperatura, um de
+   cada vez, porque o provedor só reclama do primeiro que encontra. */
+f = formaNova();
+const passos: string[] = [];
+if (m.ajustarForma(f, RECUSA_MAX_TOKENS)) passos.push('teto');
+if (m.ajustarForma(f, RECUSA_TEMPERATURA)) passos.push('temperatura');
+conferir('duas queixas seguidas são corrigidas em duas voltas',
+  passos.join(',') === 'teto,temperatura' &&
+  f.maxChave === 'max_completion_tokens' && !f.comTemperatura,
+  JSON.stringify(f) + ' via ' + passos.join(','));
+
+/* E a correção tem fim: três voltas no máximo lá no código, e aqui a garantia
+   de que cada queixa só rende UMA mudança — sem isso, um 400 que mencionasse
+   as três palavras giraria o laço até o teto a cada pedido. */
+f = formaNova();
+let voltas = 0;
+while (m.ajustarForma(f, RECUSA_MAX_TOKENS + RECUSA_TEMPERATURA + RECUSA_JSON) && voltas < 10) voltas++;
+conferir('um aviso com as três queixas se esgota em três voltas, não gira para sempre',
+  voltas === 3, String(voltas));
 
 /* ---------- o catálogo ---------- */
 conferir('todo provedor do catálogo tem prefixo, base e modelos',

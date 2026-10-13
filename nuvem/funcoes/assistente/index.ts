@@ -1200,16 +1200,27 @@ class RecusaDaIA extends Error {
   }
 }
 
-/* Vale pedir ao próximo da fila?
+/* Vale pedir ao próximo da fila? SEMPRE, e isto mudou por um caso real.
 
-   SIM quando o motivo é DAQUELE provedor: chave recusada, cota estourada,
-   modelo que não existe, servidor fora do ar, material maior do que o modelo
-   aguenta (o próximo pode ter janela maior).
+   A regra anterior era: 400 NÃO cai para o próximo, porque "é culpa do nosso
+   pedido e o segundo recusaria igual". Parecia economia e era uma aposta —
+   a aposta de que eu soubesse, de antemão, todo 400 que um provedor pode
+   inventar.
 
-   NÃO quando o motivo é o nosso pedido — um 400 que não é de tamanho. O
-   segundo recusaria igual, e insistir gastaria chamada e esconderia a causa. */
-export function valeOutroProvedor(status: number): boolean {
-  if (status === 400) return false;
+   Perdi essa aposta no primeiro dia de uso. A OpenAI recusou `max_tokens`
+   pedindo `max_completion_tokens`: um 400 sobre o NOME de um parâmetro, que a
+   Anthropic — outra API, outro corpo de pedido — teria aceitado sem piscar. O
+   assistente ficou mudo com uma segunda chave saudável esperando atrás.
+
+   "Nosso pedido" não é uma coisa só: ele é montado POR PROVEDOR. Logo, "o
+   segundo recusaria igual" não se sustenta. A correção de forma, logo acima, é
+   a primeira linha de defesa — ela conserta o que o provedor souber explicar.
+   Esta é a segunda: quando nem isso resolve, outro provedor tenta.
+
+   O custo de cair quando não adiantaria é uma chamada. O custo de não cair
+   quando adiantaria é o dia inteiro sem assistente, que foi o que aconteceu.
+   E nada se esconde: a mensagem final traz o que CADA provedor respondeu. */
+export function valeOutroProvedor(_status: number): boolean {
   return true;
 }
 
@@ -1246,6 +1257,44 @@ async function chamarIA(sistema: string, usuario: string, teto: number, rapido =
   throw new Error('Nenhum provedor de IA respondeu.\n\n' + falhas.join('\n\n'));
 }
 
+/* Lê o 400 e corrige UMA coisa na forma do pedido. Devolve false quando não
+   reconhece a queixa — e aí o erro sobe de verdade, em vez de virar um laço
+   que tenta para sempre.
+
+   A ordem importa: o nome do teto primeiro, porque é o que a OpenAI recusa
+   antes de olhar o resto, e o modo JSON por último, porque abrir mão dele é a
+   única correção que piora a resposta (o modelo ainda devolve JSON, porque a
+   instrução pede, mas sem a garantia do provedor). */
+export function ajustarForma(
+  forma: { maxChave: string; comTemperatura: boolean; comJson: boolean },
+  aviso: string
+): boolean {
+  /* "Use 'max_completion_tokens' instead" — mesmo número, outro nome. */
+  if (forma.maxChave === 'max_tokens' && /max_completion_tokens/i.test(aviso)) {
+    forma.maxChave = 'max_completion_tokens';
+    return true;
+  }
+  /* Modelo que só aceita a temperatura padrão. Tirar é seguro: a instrução
+     já pede resposta determinística, e o que vier torto o validador descarta. */
+  if (forma.comTemperatura &&
+      (/"param"\s*:\s*"temperature"/i.test(aviso) ||
+       /temperature[^"]{0,40}(not supported|unsupported|does not support)/i.test(aviso))) {
+    forma.comTemperatura = false;
+    return true;
+  }
+  /* Dois 400 diferentes pedem a mesma saída. Um é o modelo que não aceita o
+     parâmetro de modo JSON — os agênticos da Groq, entre outros. O outro é
+     json_validate_failed com geração vazia: o modelo aceitou o modo, gastou o
+     teto raciocinando e não escreveu nada, e o provedor chama isso de "ajuste
+     o seu prompt", que manda procurar no lugar errado. */
+  if (forma.comJson &&
+      (/response_format|json_object|json mode/i.test(aviso) || /json_validate_failed/i.test(aviso))) {
+    forma.comJson = false;
+    return true;
+  }
+  return false;
+}
+
 async function chamarProvedor(
   prov: Provedor, sistema: string, usuario: string, teto: number, rapido: boolean
 ): Promise<string> {
@@ -1274,21 +1323,46 @@ async function chamarProvedor(
   /* OpenAI e Groq falam o MESMO protocolo — /chat/completions — e por isso
      dividem este caminho. O que muda é o endereço e a chave, e é só isso que
      vem do `prov`. Duplicar o caminho por provedor seria duplicar também cada
-     uma das quedas abaixo, que custaram caro para existir. */
+     uma das correções abaixo, que custaram caro para existir. */
   let modelo = escolhido;
   const base = CATALOGO[prov.id] ? CATALOGO[prov.id].base : CATALOGO.groq.base;
 
-  const pedir = (comJson: boolean) => {
+  /* A FORMA do pedido, corrigida pelo que o PROVEDOR responder.
+
+     Falar o mesmo protocolo não é falar a mesma língua. O mesmo endpoint
+     aceita parâmetros diferentes conforme o modelo, e cada diferença chega
+     como um 400 seco que derruba o pedido inteiro:
+
+       · os modelos de raciocínio da OpenAI recusam `max_tokens` e exigem
+         `max_completion_tokens` — mesmo número, outro nome;
+       · alguns recusam `temperature` diferente do padrão;
+       · vários, em qualquer provedor, recusam o modo JSON.
+
+     Adivinhar isso por nome de modelo é perder: a lista muda, e quem publicou
+     há seis meses fica com o palpite velho escrito no código. Então não se
+     adivinha — pergunta-se, e quem responde é o provedor. O pedido sai na
+     forma padrão, o 400 diz o que ele não aceita, a forma é corrigida e o
+     pedido é refeito. Três correções no máximo: passou disso, o problema não é
+     a forma e insistir esconderia a causa.
+
+     Isto já tinha sido PREVISTO em comentário e não escrito em código. O
+     comentário dizia que o 400 da OpenAI chegava por outro motivo e que a
+     saída era a mesma — e a condição de refazer só olhava o modo JSON. O
+     resultado: `max_tokens` recusado, assistente mudo, e um comentário no
+     repositório descrevendo exatamente o defeito que estava acontecendo. */
+  const forma = { maxChave: 'max_tokens', comTemperatura: true, comJson: true };
+
+  const pedir = () => {
     const corpo: Record<string, unknown> = {
       model: modelo,
-      temperature: 0.1,
-      max_tokens: teto,
       messages: [
         { role: 'system', content: sistema },
         { role: 'user', content: usuario }
       ]
     };
-    if (comJson) corpo.response_format = { type: 'json_object' };
+    corpo[forma.maxChave] = teto;
+    if (forma.comTemperatura) corpo.temperature = 0.1;
+    if (forma.comJson) corpo.response_format = { type: 'json_object' };
     return fetch(base + '/chat/completions', {
       method: 'POST',
       headers: { authorization: 'Bearer ' + prov.chave, 'content-type': 'application/json' },
@@ -1296,35 +1370,11 @@ async function chamarProvedor(
     });
   };
 
-  let r = await pedir(true);
-  /* Nem todo modelo aceita o modo JSON — os agênticos da Groq (compound) e
-     alguns outros recusam o parâmetro com 400. Recusar por causa disso seria
-     tirar do usuário justamente os modelos com limite de tokens mais folgado,
-     que são a saída de quem estoura o limite. Sem o parâmetro o modelo ainda
-     responde JSON, porque a instrução pede — e o que vem torto já era
-     descartado antes deste commit.
-
-     Na OpenAI o mesmo 400 chega por outro motivo: modelo novo que não aceita
-     `max_tokens` nem `temperature` do jeito antigo. A saída é a mesma —
-     refazer sem o que ele recusou — e por isso o teste é por palavra do aviso,
-     não por provedor. */
-  let comJson = true;
-  if (r.status === 400) {
+  let r = await pedir();
+  for (let tentativa = 0; tentativa < 3 && r.status === 400; tentativa++) {
     const aviso = await r.clone().text().catch(() => '');
-
-    /* Dois 400 diferentes chegam pelo mesmo caminho e pedem a mesma saída.
-       Um é o modelo que não aceita o parâmetro de modo JSON. O outro é
-       json_validate_failed com failed_generation vazio: o modelo aceitou o
-       modo, gastou o teto raciocinando e não escreveu nada — e o provedor
-       chama isso de "ajuste o seu prompt", que manda procurar no lugar
-       errado. Nos dois casos, refazer sem o modo JSON resolve: a instrução
-       já pede JSON, e o que vem torto o validador descarta. */
-    const modoRecusado = /response_format|json_object|json mode/i.test(aviso);
-    const geracaoVazia = /json_validate_failed/i.test(aviso);
-    if (modoRecusado || geracaoVazia) {
-      comJson = false;
-      r = await pedir(false);
-    }
+    if (!ajustarForma(forma, aviso)) break;
+    r = await pedir();
   }
 
   /* 404 no endpoint de chat quer dizer uma coisa só: o modelo pedido não
@@ -1335,10 +1385,12 @@ async function chamarProvedor(
     const outro = await modeloSubstituto(rapido, modelo, prov);
     if (outro) {
       modelo = outro;
-      r = await pedir(comJson);
-      if (r.status === 400) {
+      r = await pedir();
+      /* Modelo novo, forma possivelmente nova: as mesmas correções valem. */
+      for (let tentativa = 0; tentativa < 3 && r.status === 400; tentativa++) {
         const aviso = await r.clone().text().catch(() => '');
-        if (/response_format|json_object|json mode/i.test(aviso)) { comJson = false; r = await pedir(false); }
+        if (!ajustarForma(forma, aviso)) break;
+        r = await pedir();
       }
     }
   }
@@ -1356,7 +1408,7 @@ async function chamarProvedor(
     const menor = encurtar(usuario, fator);
     if (menor === usuario) break;
     usuario = menor;
-    r = await pedir(comJson);
+    r = await pedir();
   }
 
   if (!r.ok) throw new RecusaDaIA(await explicarRecusa(r, modelo, prov), r.status, prov.id);
