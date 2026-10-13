@@ -540,6 +540,7 @@ precisa, não para o que ela é no papel.
 - cnpj e telefone: formatados no padrão brasileiro, só se estiverem no texto.
 - segmento: escolha ${segmentos ? `um destes, exatamente: ${segmentos}` : 'nada — não há segmentos cadastrados, omita'}. Nunca crie um segmento novo.
 - cidade e uf: se o texto citar a cidade, devolva também a sigla da UF correspondente.
+- Quando o material trouxer um bloco "[Receita Federal, consulta pública]", ele MANDA em razão social, CNPJ, cidade, UF e telefone — é cadastro oficial, e vence o site e o documento em qualquer divergência. O resto da ficha (descrição, necessidades, porte, segmento) continua saindo do material, que é quem conhece o negócio.
 - A UNIDADE de que o material trata, nunca a matriz no exterior. Um dossiê sobre a operação brasileira de uma multinacional traz o endereço da fábrica ou do escritório daqui — é esse que vale. A sede global entra só quando o material fala DELA. Se o texto só der o endereço estrangeiro, devolva cidade e uf vazios: ficha em branco se corrige em dez segundos; "Eberbach" gravado como município do cliente vira fato para quem abrir a conta amanhã, e ninguém mais desconfia.
 - porte: faturamento ou número de funcionários, como o texto disser.
 
@@ -2248,7 +2249,7 @@ function semAcento(t: string): string {
    fornecedor e o do parceiro. Ganha o domínio que se parece com o nome da
    empresa — de todos os e-mails de um documento da Marilan, marilan.com é o
    único que é dela. */
-function dominiosNoTexto(texto: string, nomeEmpresa = ''): string[] {
+export function dominiosNoTexto(texto: string, nomeEmpresa = ''): string[] {
   const bruto = String(texto || '');
   const deEmail = (bruto.match(/[\w.+-]+@([a-z0-9][a-z0-9.-]*\.[a-z]{2,})/gi) || [])
     .map((e) => e.split('@')[1]);
@@ -2370,9 +2371,68 @@ async function dadosDaReceita(cnpj: string): Promise<string> {
   }
 }
 
-/* Junta ao material o que dá para buscar. Nunca substitui o documento: soma,
-   com a origem escrita em cada bloco. */
-async function enriquecerConta(texto: string, siteConhecido: string, nome: string): Promise<string> {
+/* O CNPJ procurado na internet, e CONFERIDO antes de valer.
+
+   Existe por causa da GELITA. O dossiê trazia gelita.com — o site GLOBAL —, e
+   dele saem o endereço e o telefone de Eberbach, na Alemanha. A ficha do
+   cliente nascia com a matriz alemã como município, o que é um fato errado
+   gravado com cara de fato certo.
+
+   O endereço brasileiro de uma empresa não está num site institucional
+   traduzido: está na Receita. Então, quando nem o material nem as páginas
+   trouxerem o CNPJ, ele é procurado — e aqui está a parte que importa: o
+   número achado NÃO vale por ter sido achado. Ele é consultado, e a razão
+   social que volta tem de conter o nome da empresa. Sem essa conferência,
+   buscar "GELITA CNPJ" e pegar o primeiro número de um site de raspagem seria
+   gravar a ficha de outra empresa qualquer — pior do que não achar nada. */
+export async function cnpjPelaBusca(nome: string, chave: string): Promise<string> {
+  if (chave.length < 4) return '';
+  const controle = new AbortController();
+  const corta = setTimeout(() => controle.abort(), 5000);
+  let html = '';
+  try {
+    const r = await fetch('https://html.duckduckgo.com/html/?q=' +
+      encodeURIComponent('"' + nome + '" CNPJ matriz Brasil'), {
+      signal: controle.signal,
+      headers: {
+        'user-agent': 'Mozilla/5.0 (compatible; IAD-CRM/1.0)',
+        'accept-language': 'pt-BR,pt;q=0.9'
+      }
+    });
+    if (r.ok) html = await r.text();
+  } catch {
+    return '';
+  } finally {
+    clearTimeout(corta);
+  }
+  if (!html) return '';
+
+  const candidatos: string[] = [];
+  for (const a of html.match(/\d{2}[.\s]?\d{3}[.\s]?\d{3}[\/\s]?\d{4}[-\s]?\d{2}/g) || []) {
+    const limpo = a.replace(/\D/g, '');
+    if (cnpjValido(a) && candidatos.indexOf(limpo) === -1) candidatos.push(limpo);
+    if (candidatos.length >= 3) break;
+  }
+  return candidatos.length ? candidatos.join(',') : '';
+}
+
+/* O bloco da Receita, só se a razão social falar o nome da empresa. */
+export async function receitaConferida(cnpjs: string, chave: string): Promise<string> {
+  for (const c of cnpjs.split(',').filter(Boolean)) {
+    const bloco = await dadosDaReceita(c);
+    if (!bloco) continue;
+    if (!chave || semAcento(bloco).indexOf(chave) !== -1) return bloco;
+  }
+  return '';
+}
+
+/* O que a internet acrescenta ao material, com a origem escrita em cada
+   bloco. Devolve só os blocos novos — quem chama decide o que fazer com
+   eles. Separado de `enriquecerConta` porque a leitura de um negócio precisa
+   dos blocos SEM o dossiê de vinte páginas junto: relê-lo inteiro só para
+   completar a ficha da empresa custa uma segunda chamada do tamanho da
+   primeira, e é assim que o prazo estoura. */
+export async function blocosDaWeb(texto: string, siteConhecido: string, nome: string): Promise<string> {
   const dominios = dominiosNoTexto(siteConhecido + ' ' + texto, nome);
   const paginas: string[] = [];
   const chave = semAcento(nome).replace(/[^a-z0-9 ]/g, ' ').trim().split(/\s+/)[0] || '';
@@ -2380,13 +2440,20 @@ async function enriquecerConta(texto: string, siteConhecido: string, nome: strin
   for (const d of dominios) {
     if (paginas.length >= 2) break;
     /* Rodapé é onde mora o CNPJ, e ele está no fim do HTML: por isso o limite
-       aqui é grande, e as páginas institucionais entram junto. */
-    const [inicio, contato, sobre] = await Promise.all([
+       aqui é grande, e as páginas institucionais entram junto.
+
+       `/pt-br` e `/br` entram porque multinacional não traduz a home: ela
+       serve a global em inglês e guarda a operação daqui numa rota separada —
+       e é lá que está o endereço da fábrica brasileira, que é o que o vendedor
+       precisa. Custa duas buscas em paralelo, no mesmo tempo das outras. */
+    const [inicio, contato, sobre, ptbr, br] = await Promise.all([
       textoDoSite(d, '/', 6000),
       textoDoSite(d, '/contato', 6000),
-      textoDoSite(d, '/institucional', 4000)
+      textoDoSite(d, '/institucional', 4000),
+      textoDoSite(d, '/pt-br', 4000),
+      textoDoSite(d, '/br', 4000)
     ]);
-    const junto = (inicio + ' ' + contato + ' ' + sobre).trim();
+    const junto = (inicio + ' ' + contato + ' ' + sobre + ' ' + ptbr + ' ' + br).trim();
     if (!junto) continue;
 
     /* A prova de que é o site certo: a página fala o nome da empresa. É ela
@@ -2420,11 +2487,23 @@ async function enriquecerConta(texto: string, siteConhecido: string, nome: strin
     }
   }
 
-  const cnpj = acharCnpj(texto + ' ' + paginas.join(' '));
-  const receita = cnpj ? await dadosDaReceita(cnpj) : '';
+  /* A Receita é a única fonte que diz, com autoridade, ONDE a empresa fica no
+     Brasil. O CNPJ escrito no material ou no rodapé do site vale na hora; só
+     quando não há nenhum é que vale sair procurando — e aí com conferência. */
+  const doTexto = acharCnpj(texto + ' ' + paginas.join(' '));
+  const receita = doTexto
+    ? await dadosDaReceita(doTexto)
+    : await receitaConferida(await cnpjPelaBusca(nome, chave), chave);
 
   const extras = paginas.concat(receita ? [receita] : []);
-  return extras.length ? texto + '\n\n' + extras.join('\n\n') : texto;
+  return extras.join('\n\n');
+}
+
+/* Junta ao material o que dá para buscar. Nunca substitui o documento: soma,
+   com a origem escrita em cada bloco. */
+async function enriquecerConta(texto: string, siteConhecido: string, nome: string): Promise<string> {
+  const extras = await blocosDaWeb(texto, siteConhecido, nome);
+  return extras ? texto + '\n\n' + extras : texto;
 }
 
 /* ---------- quem pode chamar ---------- */
@@ -2673,6 +2752,40 @@ Deno.serve(async (req: Request) => {
         }
       }
     }
+    /* A ficha da empresa dentro de uma OPORTUNIDADE também vai à internet.
+
+       Faltava, e era o buraco inteiro. O vendedor que cadastra uma empresa
+       pela tela de empresa ganhava a busca; o que cadastra a MESMA empresa
+       junto com o negócio — que é como ele de fato trabalha, com o dossiê na
+       mão — não ganhava nada. A ficha saía só do documento, e documento de
+       multinacional fala da matriz: foi assim que "Eberbach" virou o município
+       de um cliente de Cotia.
+
+       A diferença para o caminho da conta é o que se remanda ao modelo. Lá,
+       documento e blocos novos vão juntos. Aqui o documento é um dossiê de
+       vinte páginas que o modelo ACABOU de ler: relê-lo custaria uma segunda
+       chamada do tamanho da primeira, que é como o prazo estoura. Então sobe
+       só o que é novo — o nome, a ficha que já saiu dele, e as páginas e a
+       Receita. O pedido fica pequeno e a pergunta fica melhor: não é "leia
+       tudo de novo", é "complete e corrija esta ficha com estas fontes". */
+    if (tipo === 'oportunidade' && json && !pedido.semBusca) {
+      const alvo = json as Record<string, unknown>;
+      const ficha = (alvo.empresa && typeof alvo.empresa === 'object')
+        ? alvo.empresa as Record<string, unknown> : {};
+      const nomeDela = String(ficha.nome || alvo.empresaNova || '').trim();
+      if (nomeDela) {
+        const extras = await blocosDaWeb(entrada, String(ficha.site || ''), nomeDela);
+        if (extras) {
+          const material = 'EMPRESA: ' + nomeDela + '\n\n' +
+            'O QUE O DOCUMENTO DO VENDEDOR JÁ DIZIA DELA:\n' +
+            JSON.stringify(ficha) + '\n\n' + extras;
+          const segunda = lerJSON(
+            await chamarIA(promptDe('conta', ctx), material, tetoDeSaida('conta'), usaRapido, quem));
+          if (segunda) alvo.empresa = juntarPassadas(ficha, segunda);
+        }
+      }
+    }
+
     /* JSON torto devolve vazio. Nunca dado inventado no formulário do vendedor. */
     if (!json) {
       if (tipo === 'reuniao') return responderIA({ evidencias: [], contatos: [], negocio: {}, decisoes: [] });

@@ -6104,7 +6104,7 @@
      coisa der errado é esse nome que vai aparecer no diagnóstico. */
   const TAREFAS_DA_IA = [
     ['conta', '✨ no formulário de empresa',
-     'Extrai a ficha de um texto colado. O segmento sai da sua lista fechada, escolhido por julgamento do que a empresa faz — não por achar a palavra no texto.'],
+     'Extrai a ficha de um texto colado e depois vai ao site da empresa e à Receita Federal completar o que faltou. O segmento sai da sua lista fechada, escolhido por julgamento do que a empresa faz — não por achar a palavra no texto.'],
     ['contato', '✨ no formulário de contato',
      'Deduz o papel na compra a partir do cargo (Suprimentos → Compras; CFO → Decisor econômico). Perfil Challenger só se o texto mostrar como a pessoa age.'],
     ['oportunidade', '✨ no formulário de negócio',
@@ -6136,6 +6136,12 @@
     return '<div class="card" id="m-ia"><h2>As tarefas da IA</h2>' +
       '<p class="small">Não existe "a IA do sistema" em geral. Existem pedidos de escopo fechado, cada um com regras ' +
       'próprias e um lugar onde aparece. Esta é a lista inteira.</p>' +
+      '<p class="small">Dois deles — a ficha de empresa e a de negócio — não param no que você colou: ' +
+      'eles leem o site da empresa (inclusive as páginas brasileiras de multinacional, que é onde está ' +
+      'a fábrica daqui) e consultam o CNPJ na Receita Federal. O bloco da Receita manda em razão social, ' +
+      'CNPJ, cidade e UF, porque é cadastro oficial. Quando o CNPJ não está em lugar nenhum, ele é ' +
+      'procurado — e o número achado só vale depois de a Receita confirmar que a razão social é mesmo ' +
+      'a daquela empresa. Achar não é conferir.</p>' +
       '<p class="small">Enquanto um deles roda, um balão no rodapé diz em que passo está, há quantos segundos, ' +
       'até quando o app espera antes de desistir e quem responde primeiro. Sem barra de porcentagem: ' +
       'uma chamada ao modelo é opaca, ninguém sabe se ela está em 20% ou em 80%, e número inventado ' +
