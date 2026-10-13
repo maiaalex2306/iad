@@ -922,7 +922,9 @@ Por que "resposta" importa mais do que parece: quem responde NÃO vira, do outro
 
 Um aviso sobre a pessoa física: quando o lead for alguém abordado como PESSOA e não como empresa — morador de condomínio, consultor autônomo, mentor, coach, investidor —, "Outros" é a resposta certa e não é derrota. Diga isso no "porque". O que não pode é uma empresa industrial com nome autoexplicativo cair em "Outros" por falta de descrição.
 
-A entrada traz, para cada lead: nome, cargo e perfil da pessoa, nome da empresa, site, cidade, o que a pessoa faz lá, a descrição da empresa quando disponível, o texto do site quando disponível, e a troca de mensagens entre a SDR e a pessoa.${blocoContas}${nomes.length ? '' : '\n\nAtenção: a lista de segmentos veio vazia. Devolva "Outros" para todos.'}${detalhados ? '' : '\n\nOs segmentos desta equipe vieram SÓ COM O NOME, sem subsegmentos nem exemplos. Então trabalhe pelo significado do nome de cada um no mercado brasileiro, e seja mais generoso na aproximação: com a lista assim, exigir correspondência exata é o mesmo que mandar tudo para "Outros".'}`;
+A entrada traz, para cada lead: nome, cargo e perfil da pessoa, nome da empresa, site, cidade, o que a pessoa faz lá, a descrição da empresa quando disponível, o texto do site quando disponível, e a troca de mensagens entre a SDR e a pessoa.
+
+Quando um lead chegar sem site e sem descrição, nós fomos PROCURAR: o bloco "[site do lead N — dominio, encontrado por busca]" é a página que achamos pelo nome da empresa e que comprovadamente cita esse nome. Leia-a como se fosse a descrição dela — foi buscada exatamente para esse lead, que não tinha nenhuma. Com esse bloco na mão, "Outros" por falta de informação deixa de ser resposta.${blocoContas}${nomes.length ? '' : '\n\nAtenção: a lista de segmentos veio vazia. Devolva "Outros" para todos.'}${detalhados ? '' : '\n\nOs segmentos desta equipe vieram SÓ COM O NOME, sem subsegmentos nem exemplos. Então trabalhe pelo significado do nome de cada um no mercado brasileiro, e seja mais generoso na aproximação: com a lista assim, exigir correspondência exata é o mesmo que mandar tudo para "Outros".'}`;
   }
 
   if (tipo === 'desenvolvimento') {
@@ -2499,6 +2501,28 @@ export async function blocosDaWeb(texto: string, siteConhecido: string, nome: st
   return extras.join('\n\n');
 }
 
+/* O site de um lead que chegou só com o nome.
+
+   O Linked Helper entrega a empresa muito mais vezes do que o site dela. Sem
+   site e sem descrição, o modelo recebia uma linha com o nome e mais nada — e
+   um nome sozinho, quando não é autoexplicativo, acaba em "Outros". Não por
+   falta de segmento na lista: por falta de alguém ter ido olhar.
+
+   Procura, lê e CONFERE, na mesma regra do resto: a página só entra se falar o
+   nome da empresa. Duas tentativas por lead, não quatro — a terceira raramente
+   acerta e o lote inteiro espera por ela. */
+export async function siteDoLead(nome: string): Promise<string> {
+  const chave = semAcento(nome).replace(/[^a-z0-9 ]/g, ' ').trim().split(/\s+/)[0] || '';
+  if (chave.length < 4) return '';
+  const candidatos = (await dominiosPelaBusca(nome)).slice(0, 2);
+  for (const d of candidatos) {
+    const t = await textoDoSite(d, '/', 700);
+    if (!t || semAcento(t).indexOf(chave) === -1) continue;
+    return '[' + d + ', encontrado por busca] ' + t;
+  }
+  return '';
+}
+
 /* Junta ao material o que dá para buscar. Nunca substitui o documento: soma,
    com a origem escrita em cada bloco. */
 async function enriquecerConta(texto: string, siteConhecido: string, nome: string): Promise<string> {
@@ -2683,12 +2707,38 @@ Deno.serve(async (req: Request) => {
          nome. Quem já veio descrito não paga por uma segunda fonte. */
       const semDescricao = Array.isArray(ctx.semDescricao) ? ctx.semDescricao : [];
       const dominios = (Array.isArray(ctx.dominios) ? ctx.dominios : []).slice(0, 12);
-      const sites = await Promise.all(dominios.map(async (d, i) => {
-        if (!d) return '';
-        if (semDescricao.length && !semDescricao[i]) return '';
-        const t = await textoDoSite(String(d), '/', 700);
-        return t ? `\n[site do lead ${i + 1} — ${d}] ${t}` : '';
-      }));
+      const nomes = (Array.isArray(ctx.nomes) ? ctx.nomes : []).map(String).slice(0, 12);
+
+      /* Quem precisa de ajuda: o lead sem descrição, ou com uma curta demais
+         para dizer o setor. Quem já veio descrito não paga por uma segunda
+         fonte. */
+      const carente = (i: number) => !semDescricao.length || !!semDescricao[i];
+
+      /* E entre os carentes, os que não têm nem domínio vão para a BUSCA.
+         Limitado a seis por bloco: cada um custa uma consulta ao buscador mais
+         até duas leituras de página, e um lote inteiro de leads anônimos não
+         pode fazer a importação toda esperar. Os que sobrarem continuam com o
+         nome e o cargo, que é o que havia antes — ninguém fica pior. */
+      const paraBuscar = nomes
+        .map((n, i) => ({ n, i }))
+        .filter((x) => x.n && carente(x.i) && !dominios[x.i])
+        .slice(0, 6)
+        .map((x) => x.i);
+
+      const quantos = Math.max(dominios.length, nomes.length);
+      const sites = await Promise.all(
+        Array.from({ length: quantos }, (_, i) => i).map(async (i) => {
+          if (!carente(i)) return '';
+          const d = dominios[i];
+          if (d) {
+            const t = await textoDoSite(String(d), '/', 700);
+            return t ? `\n[site do lead ${i + 1} — ${d}] ${t}` : '';
+          }
+          if (paraBuscar.indexOf(i) === -1) return '';
+          const achado = await siteDoLead(nomes[i]);
+          return achado ? `\n[site do lead ${i + 1} — ${achado}` : '';
+        })
+      );
       entrada = texto + sites.join('');
     }
 

@@ -6122,7 +6122,7 @@
     ['plano', 'cartão Próximos passos',
      'Até 4 passos na ordem de execução, cada um com dimensão-alvo, ação, uma pergunta pronta e o porquê citando o cliente. Proibida de sugerir nota e de passo genérico.'],
     ['segmentos', 'importação do Linked Helper',
-     'Todos os leads de uma vez: segmento da lista da equipe, papel provável na compra e o insight comercial.'],
+     'Todos os leads de uma vez: segmento da lista da equipe, papel provável na compra e o insight comercial. O lead que chega sem site e sem descrição — que é a maioria — tem o site procurado pelo nome da empresa antes de a classificação acontecer: "Outros" é para quem não tem relação com nenhum segmento, não para quem ninguém foi conferir.'],
     ['desenvolvimento', 'Plano de desenvolvimento, no Painel',
      'Lê a série semanal e o rendimento por tipo de tarefa e escreve o que melhorou, o que piorou e até três mudanças. Proibida de estimar, projetar ou comparar com "mercado".'],
     ['insight', 'campo de insight do negócio',

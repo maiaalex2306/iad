@@ -625,9 +625,23 @@
              reserva: o Linked Helper entrega organization_website_1 muito
              mais vezes do que organization_domain_1. */
           dominios: bloco.itens.map(function (e) { return e.dominio || e.site || ''; }),
+          /* O NOME da empresa, alinhado por posição. Serve para o servidor
+             PROCURAR o site de quem veio sem nenhum: o Linked Helper entrega
+             a empresa muito mais vezes do que o site dela, e um lead só com o
+             nome era um lead que ninguém ia conferir — caía em "Outros" por
+             falta de busca, não por falta de segmento. */
+          nomes: bloco.itens.map(function (e) { return e.nome || ''; }),
           /* Quem já veio com descrição do LinkedIn não precisa que o servidor
-             vá ao site: é a parte mais cara da entrada e diria o mesmo. */
-          semDescricao: bloco.itens.map(function (e) { return !e.descricao; })
+             vá ao site: é a parte mais cara da entrada e diria o mesmo.
+
+             "Descrição" de 40 caracteres, porém, não é descrição: é um slogan.
+             "Transformando o futuro com paixão" não diz o que a empresa faz, e
+             tratá-la como suficiente era desistir da busca justamente onde ela
+             mais valia. 120 é o tamanho em que uma frase começa a dizer o
+             setor. */
+          semDescricao: bloco.itens.map(function (e) {
+            return String(e.descricao || '').trim().length < 120;
+          })
         }
       });
       const prazo = new Promise(function (resolve) {

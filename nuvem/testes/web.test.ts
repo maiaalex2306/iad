@@ -162,7 +162,36 @@ conferir('e a busca pede a matriz brasileira',
   /CNPJ/.test(decodeURIComponent(consulta)) && /Brasil/i.test(decodeURIComponent(consulta)),
   decodeURIComponent(consulta));
 
-/* ---------- 7. nome curto demais não vale chute ---------- */
+/* ---------- 7. o lead do Linked Helper que chegou só com o nome ----------
+
+   É o caso que mandava empresa industrial para "Outros": o Linked Helper
+   entrega a empresa muito mais vezes do que o site dela, e sem site nem
+   descrição o modelo recebia uma linha com o nome e mais nada. */
+rotas = {
+  'duckduckgo.com/html': { ok: true, texto:
+    'uddg=https%3A%2F%2Fvitaambiental.com.br%2F uddg=https%3A%2F%2Foutracoisa.com%2F' },
+  'vitaambiental.com.br/': { ok: true, texto:
+    '<html>Vita Ambiental Engenharia — tratamento de efluentes industriais e reúso de água.</html>' }
+};
+pedidos = [];
+let doLead = await m.siteDoLead('Vita Ambiental Engenharia');
+conferir('procura o site pelo nome da empresa',
+  pedidos.some((u) => /duckduckgo/.test(u)));
+conferir('e traz o que a página diz', /tratamento de efluentes/.test(doLead), doLead);
+conferir('com a origem escrita — foi busca, não veio do lead',
+  /encontrado por busca/.test(doLead), doLead);
+
+/* A página que NÃO fala o nome da empresa não entra: seria descrever o lead
+   com o texto de outra empresa qualquer, e aí o segmento sai errado com cara
+   de certo — pior do que "Outros". */
+rotas = {
+  'duckduckgo.com/html': { ok: true, texto: 'uddg=https%3A%2F%2Fqualquercoisa.com%2F' },
+  'qualquercoisa.com/': { ok: true, texto: '<html>Bem-vindo ao nosso site institucional.</html>' }
+};
+doLead = await m.siteDoLead('Vita Ambiental Engenharia');
+conferir('página que não cita a empresa é descartada', doLead === '', doLead);
+
+/* ---------- 8. nome curto demais não vale chute ---------- */
 conferir('nome de três letras não sai procurando CNPJ',
   (await m.cnpjPelaBusca('ACP', 'acp')) === '');
 
