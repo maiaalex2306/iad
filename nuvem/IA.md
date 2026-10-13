@@ -46,10 +46,43 @@ Ainda em **Edge Functions**, abra **Secrets** e adicione:
 
 | Nome | Valor |
 | --- | --- |
-| `IA_CHAVE` | a chave que você copiou do Groq |
+| `IA_CHAVE_OPENAI` | a chave da OpenAI (começa com `sk-`) |
+| `IA_CHAVE_ANTHROPIC` | a chave da Anthropic (começa com `sk-ant-`) |
+| `IA_CHAVE_GROQ` | a chave da Groq (começa com `gsk_`) |
 
-Opcionais: `IA_PROVEDOR` (`groq` ou `anthropic`), `IA_MODELO` e
-`IA_MODELO_RAPIDO`.
+**Ponha quantas quiser — uma basta, duas é melhor.** São tentadas em ordem: o
+primeiro que responder, responde. Se ele recusar por um motivo que o próximo
+não teria — chave errada, cota do mês estourada, modelo que não existe,
+provedor fora do ar — o pedido segue para o seguinte em vez de voltar vazio.
+
+Um 400 que é culpa do nosso pedido NÃO cai para o próximo: o segundo recusaria
+igual, e insistir gastaria chamada e esconderia a causa.
+
+| Nome | Valor | Para quê |
+| --- | --- | --- |
+| `IA_ORDEM` | `openai,anthropic` | quem vem primeiro |
+| `IA_MODELO_OPENAI` | `gpt-5` | o modelo bom daquele provedor |
+| `IA_MODELO_RAPIDO_OPENAI` | `gpt-5-mini` | o modelo de volume |
+| `IA_MODELO_ANTHROPIC` | `claude-opus-5` | |
+| `IA_MODELO_RAPIDO_ANTHROPIC` | `claude-haiku-5-5` | |
+| `IA_MODELO_GROQ` | `openai/gpt-oss-120b` | |
+| `IA_MODELO_RAPIDO_GROQ` | `openai/gpt-oss-20b` | |
+
+Sem `IA_ORDEM`, a ordem é **openai, anthropic, groq**, pulando quem não tem
+chave. Sem `IA_MODELO_*`, cada provedor usa um padrão do código — e padrão
+envelhece, então prefira escrever o nome.
+
+**Confira na tela, não no palpite.** Em Configuração → O aplicativo, o cartão
+*Assistente de IA* lista quem responde, em que ordem e com que modelo. A chave
+nunca sai do servidor: de lá vêm só os nomes e se o formato da chave bate com
+o do provedor.
+
+### A configuração antiga continua valendo
+
+`IA_CHAVE` + `IA_PROVEDOR` + `IA_MODELO` viram um provedor como os outros, e
+entram na fila se aquele provedor ainda não tiver chave própria. Isso não é
+gentileza: é o que impede a mudança de desligar o assistente de quem já o tinha
+no ar. Quando você puser `IA_CHAVE_<PROVEDOR>`, ela ganha de `IA_CHAVE`.
 
 **Sobre os dois modelos.** Os pedidos não são do mesmo tipo de trabalho.
 
@@ -80,14 +113,16 @@ para classificar vinte leads com conversa, catálogo de segmentos e contas
 candidatas — e foi a causa de todas as importações que voltaram pela metade.
 Passado esse ponto, o conserto deixa de ser código.
 
-Quatro segredos, nenhuma mudança de código:
+Três segredos, nenhuma mudança de código:
 
 | Nome | Valor |
 | --- | --- |
-| `IA_PROVEDOR` | `anthropic` |
-| `IA_CHAVE` | a chave da Anthropic (começa com `sk-ant-`) |
-| `IA_MODELO` | `claude-sonnet-5` |
-| `IA_MODELO_RAPIDO` | `claude-haiku-4-5` |
+| `IA_CHAVE_ANTHROPIC` | a chave da Anthropic (começa com `sk-ant-`) |
+| `IA_MODELO_ANTHROPIC` | `claude-sonnet-5-5` |
+| `IA_MODELO_RAPIDO_ANTHROPIC` | `claude-haiku-5-5` |
+
+Vale como **reserva** mesmo quando não é a principal: com a OpenAI na frente e
+a Anthropic atrás, a cota estourada de uma deixa de ser um dia sem assistente.
 
 Ordem de grandeza do custo, medida nos pedidos que este app faz — uma
 importação de vinte leads gasta cerca de 30 mil tokens de entrada e 5 mil de
@@ -152,7 +187,11 @@ sua, e não adianta mexer em chave nem republicar sem trocar o nome.
 A própria função resolve: ao levar 404 ela pergunta ao provedor quais modelos
 existem agora e devolve a lista na mensagem. Escolha um e crie o segredo:
 
-    IA_MODELO = <o nome que apareceu na mensagem>
+    IA_MODELO_<PROVEDOR> = <o nome que apareceu na mensagem>
+
+(por exemplo `IA_MODELO_OPENAI`. A mensagem de erro já diz o nome do segredo
+certo — com mais de um provedor, mandar conferir só "IA_MODELO" manda conferir
+o lugar errado.)
 
 Depois publique a função de novo — segredo novo só vale na próxima publicação.
 
@@ -172,7 +211,7 @@ Supabase, antes da função:
   protegida. É o que se espera: o app manda o token, a barra de endereço não.
 - **404** → o deploy não foi, ou o nome ficou diferente de `assistente`.
 - **405** → também está no ar; o pedido chegou à função, que só aceita POST.
-- **503** → está no ar, mas falta o segredo `IA_CHAVE`.
+- **503** → está no ar, mas não há chave de IA nenhuma nos Secrets.
 
 ## 5. Pronto
 
@@ -186,14 +225,14 @@ existem — o app continua exatamente como era.
 
 Duas variáveis, sem tocar em uma linha de código do aplicativo:
 
-No painel, em **Edge Functions → Secrets**, mude `IA_CHAVE` para a chave da
-Anthropic e adicione `IA_PROVEDOR` com o valor `anthropic`. Depois publique a
+No painel, em **Edge Functions → Secrets**, acrescente `IA_CHAVE_ANTHROPIC`.
+Não precisa tirar a que já está lá: as duas convivem, e a ordem decide. Depois publique a
 função de novo.
 
 Pela CLI, se preferir:
 
 ```bash
-supabase secrets set IA_PROVEDOR=anthropic IA_CHAVE=sk-ant-...
+supabase secrets set IA_CHAVE_ANTHROPIC=sk-ant-... IA_ORDEM=openai,anthropic
 supabase functions deploy assistente
 ```
 

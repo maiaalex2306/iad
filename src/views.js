@@ -8236,11 +8236,48 @@
     if (!global.IADIA || !global.IADIA.diagnostico) return '';
     const d = global.IADIA.diagnostico();
     const cor = d.situacao === 'ok' ? 'ok' : (d.situacao === 'desconhecido' ? '' : 'warn');
+  /* QUEM responde, e em que ordem.
+
+     Com um provedor só, "a IA falhou" tinha um lugar para procurar. Com dois,
+     tem dois — e sem esta linha a pessoa confere o errado. Ela também responde
+     a pergunta que não tinha resposta nenhuma: "coloquei a chave da OpenAI nos
+     Secrets; ela entrou?".
+
+     Nada aqui é a chave. O que o servidor manda é o nome do provedor, o nome
+     do modelo e se o formato da chave bate com o daquele provedor — o valor
+     nunca sai de lá. */
+  function filaDeProvedores(d) {
+    const lista = d.provedores;
+    if (!lista || !lista.length) return '';
+
+    const linhas = lista.map(function (p, i) {
+      const estranho = p.formatoDaChave === 'estranho';
+      return '<tr><td class="tiny muted">' + (i === 0 ? '1º — tenta primeiro' : (i + 1) + 'º') + '</td>' +
+        '<td><strong>' + esc(p.nome) + '</strong>' +
+        (estranho ? ' <span class="pill risk">chave com formato estranho</span>' : '') + '</td>' +
+        '<td class="tiny muted"><code>' + esc(p.modelo) + '</code>' +
+        (p.modeloRapido && p.modeloRapido !== p.modelo
+          ? '<br>rápido: <code>' + esc(p.modeloRapido) + '</code>' : '') +
+        '</td></tr>';
+    }).join('');
+
+    return '<div class="tabela-rolagem" style="margin-top:10px"><table><tbody>' + linhas +
+      '</tbody></table></div>' +
+      '<p class="tiny muted" style="margin:6px 0 0">' +
+      (lista.length > 1
+        ? 'O primeiro responde. Se ele recusar por chave, cota, modelo inexistente ou queda, ' +
+          'o pedido passa para o seguinte em vez de voltar vazio.'
+        : 'Um provedor só: se ele cair, o assistente cai junto. Para ter reserva, ponha uma ' +
+          'segunda chave nos Secrets da função.') +
+      ' A chave nunca sai do servidor — daqui só vêm os nomes.</p>';
+  }
+
     return '<div class="card"><div class="row"><h2 style="margin:0">Assistente de IA</h2>' +
       '<span class="espaco"></span><span class="pill ' + cor + '">' + esc(d.titulo) + '</span></div>' +
       /* pre-line porque os diagnósticos separam sintoma de correção com uma
          linha em branco, e um parágrafo corrido junta as duas coisas. */
       '<p class="small" style="margin:8px 0 0;white-space:pre-line">' + esc(d.texto) + '</p>' +
+      filaDeProvedores(d) +
       (d.situacao === 'ok'
         ? '<p class="tiny muted" style="margin:8px 0 0">Onde ele aparece: o cartão ' +
           '<strong>Próximos passos</strong> no cockpit, a tarefa marcada como ' +

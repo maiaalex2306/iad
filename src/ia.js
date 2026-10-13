@@ -25,6 +25,11 @@
      nenhum. Enquanto não houver resposta do servidor, o assistente não existe. */
   let situacao = 'desconhecido';   /* desconhecido | ok | ausente */
   let ultimaFalha = null;          /* {status, mensagem} da última recusa */
+  /* Quem responde, em que ordem. Vem do servidor e NUNCA traz chave nenhuma —
+     nome do provedor, nome do modelo, e se o formato da chave bate. Existe
+     porque, com dois provedores configurados, "a IA falhou" manda procurar nos
+     dois lugares ao mesmo tempo. */
+  let provedores = null;
 
   function disponivel() {
     return !!(Nuvem && Nuvem.conectado()) && situacao === 'ok';
@@ -41,7 +46,16 @@
     }
     const antes = situacao;
     return Nuvem.chamarFuncao('assistente', { tipo: 'classificar', texto: '' })
-      .then(function () { situacao = 'ok'; ultimaFalha = null; })
+      .then(function () {
+        situacao = 'ok'; ultimaFalha = null;
+        /* Só depois de a função responder: perguntar a fila de provedores a uma
+           função que não está no ar devolveria o mesmo erro duas vezes. E a
+           falha aqui não derruba nada — a fila é informação, o assistente já
+           está de pé. */
+        return Nuvem.chamarFuncao('assistente', { tipo: 'diagnostico' })
+          .then(function (r) { provedores = (r && r.provedores) || null; })
+          .catch(function () { provedores = null; });
+      })
       .catch(function (e) {
         /* 503 é "publicada, sem chave" — para o vendedor dá no mesmo. */
         situacao = (e && e.status === 401) ? 'desconhecido' : 'ausente';
@@ -62,7 +76,8 @@
     }
     if (situacao === 'ok') {
       return { situacao: 'ok', titulo: 'No ar',
-        texto: 'A função respondeu. As caixas ✨ e os botões de análise aparecem.' };
+        texto: 'A função respondeu. As caixas ✨ e os botões de análise aparecem.',
+        provedores: provedores };
     }
     /* 401 vinha rotulado como "ainda não sei" e mandava sair e entrar de novo.
        Errado nos dois: a função respondeu — logo está publicada e alcançável —

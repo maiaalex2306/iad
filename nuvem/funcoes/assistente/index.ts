@@ -16,9 +16,118 @@
    4. Recebe apenas o texto da tela atual. Nunca a base, nunca outro tenant.
 */
 
-const PROVEDOR = (Deno.env.get('IA_PROVEDOR') || 'groq').toLowerCase();
-const CHAVE = Deno.env.get('IA_CHAVE') || '';
-const MODELO = Deno.env.get('IA_MODELO') || '';
+/* ---------- mais de um provedor, em ordem ----------
+
+   Havia um provedor só: uma chave, um modelo, e a função morria junto com ele.
+   Chave recusada, cota do mês estourada, provedor fora do ar — e o assistente
+   inteiro sumia da tela, no meio do dia, sem nada a fazer além de esperar.
+
+   Agora são vários, tentados EM ORDEM. O primeiro que responder, responde. Se
+   ele recusar por um motivo que o próximo não teria — chave errada, cota
+   estourada, modelo que não existe, provedor sobrecarregado — o pedido segue
+   para o seguinte em vez de voltar vazio.
+
+   O que NÃO faz cair para o próximo: um 400 que é culpa do nosso pedido. Aí o
+   segundo provedor recusaria igual, e insistir só gastaria chamada e
+   esconderia a causa.
+
+   OS SEGREDOS, um conjunto por provedor:
+
+     IA_CHAVE_OPENAI     IA_MODELO_OPENAI     IA_MODELO_RAPIDO_OPENAI
+     IA_CHAVE_ANTHROPIC  IA_MODELO_ANTHROPIC  IA_MODELO_RAPIDO_ANTHROPIC
+     IA_CHAVE_GROQ       IA_MODELO_GROQ       IA_MODELO_RAPIDO_GROQ
+
+   E IA_ORDEM diz quem vem primeiro: "openai,anthropic". Sem ela, a ordem
+   padrão é openai, anthropic, groq, pulando quem não tem chave.
+
+   A CONFIGURAÇÃO ANTIGA CONTINUA VALENDO, e isto não é gentileza: é o que
+   impede esta mudança de desligar o assistente de quem já o tinha no ar.
+   IA_CHAVE + IA_PROVEDOR + IA_MODELO viram um provedor como os outros, e
+   entram na lista se aquele provedor ainda não tiver chave própria.
+
+   A chave NUNCA sai daqui. Não vai para o navegador, não entra em mensagem de
+   erro, não aparece no diagnóstico — de lá sai o nome do provedor e o do
+   modelo, que não abrem porta nenhuma. */
+
+interface Provedor {
+  id: string;
+  nome: string;
+  chave: string;
+  modelo: string;
+  modeloRapido: string;
+}
+
+export const CATALOGO: Record<string, {
+  nome: string; prefixo: string; base: string; modelo: string; rapido: string;
+}> = {
+  openai: {
+    nome: 'OpenAI', prefixo: 'sk-', base: 'https://api.openai.com/v1',
+    modelo: 'gpt-5', rapido: 'gpt-5-mini'
+  },
+  anthropic: {
+    nome: 'Anthropic', prefixo: 'sk-ant-', base: 'https://api.anthropic.com/v1',
+    modelo: 'claude-opus-5', rapido: 'claude-haiku-5-5'
+  },
+  groq: {
+    nome: 'Groq', prefixo: 'gsk_', base: 'https://api.groq.com/openai/v1',
+    modelo: 'openai/gpt-oss-120b', rapido: 'openai/gpt-oss-20b'
+  }
+};
+
+function segredo(nome: string): string { return (Deno.env.get(nome) || '').trim(); }
+
+function montarProvedores(): Provedor[] {
+  const porId: Record<string, Provedor> = {};
+
+  Object.keys(CATALOGO).forEach((id) => {
+    const sufixo = id.toUpperCase();
+    const chave = segredo('IA_CHAVE_' + sufixo);
+    if (!chave) return;
+    porId[id] = {
+      id, nome: CATALOGO[id].nome, chave,
+      modelo: segredo('IA_MODELO_' + sufixo) || CATALOGO[id].modelo,
+      modeloRapido: segredo('IA_MODELO_RAPIDO_' + sufixo) || CATALOGO[id].rapido
+    };
+  });
+
+  /* A configuração antiga, de um provedor só. Entra apenas se aquele provedor
+     ainda não tiver chave própria: quem configurou o novo mandou, e o velho
+     não sobrescreve. */
+  const velhoId = (segredo('IA_PROVEDOR') || 'groq').toLowerCase();
+  const velhaChave = segredo('IA_CHAVE');
+  if (velhaChave && CATALOGO[velhoId] && !porId[velhoId]) {
+    porId[velhoId] = {
+      id: velhoId, nome: CATALOGO[velhoId].nome, chave: velhaChave,
+      modelo: segredo('IA_MODELO') || CATALOGO[velhoId].modelo,
+      modeloRapido: segredo('IA_MODELO_RAPIDO') || CATALOGO[velhoId].rapido
+    };
+  }
+
+  const pedida = segredo('IA_ORDEM').toLowerCase().split(',')
+    .map((x) => x.trim()).filter(Boolean);
+  const ordem = pedida.length ? pedida : ['openai', 'anthropic', 'groq'];
+
+  const lista = ordem.map((id) => porId[id]).filter(Boolean) as Provedor[];
+  /* Quem tem chave e ficou fora da ordem escrita entra no fim: configurar uma
+     chave e ela não ser usada, sem nada dizendo isso, é o pior silêncio
+     possível aqui. */
+  Object.keys(porId).forEach((id) => {
+    if (!lista.some((p) => p.id === id)) lista.push(porId[id]);
+  });
+  return lista;
+}
+
+/* Exportados para o teste poder ler a fila e a regra de queda sem tocar em
+   provedor nenhum. Em Deno isto não muda nada: o arquivo continua sendo
+   servido pelo Deno.serve lá embaixo. */
+export const PROVEDORES = montarProvedores();
+
+/* O primeiro da fila ainda é o "provedor" para quem lê isto de fora. Os usos
+   que restaram destas três constantes são de mensagem e de padrão, nunca de
+   chamada — quem chama recebe o provedor por parâmetro. */
+const PROVEDOR = PROVEDORES.length ? PROVEDORES[0].id : 'groq';
+const CHAVE = PROVEDORES.length ? PROVEDORES[0].chave : '';
+const MODELO = PROVEDORES.length ? PROVEDORES[0].modelo : '';
 
 /* ---------- por que existem dois modelos ----------
 
@@ -880,10 +989,18 @@ function listaCurta(v: unknown): string {
    Como não dá para adivinhar quais nomes valem hoje, a função pergunta: ela
    tem a chave, e o provedor tem uma lista. Melhor do que eu chutar um nome que
    talvez também já tenha morrido. */
-async function modelosDoGroq(): Promise<string[]> {
+/* Quais modelos a chave DESTE provedor consegue usar agora.
+
+   Vale para OpenAI e Groq, que publicam a lista no mesmo endereço do protocolo
+   que compartilham. A Anthropic não tem equivalente útil aqui, e por isso a
+   troca automática de modelo não existe lá — o nome vem do segredo e, se
+   estiver errado, a mensagem diz quais servem. */
+async function modelosVivos(prov: Provedor): Promise<string[]> {
+  if (prov.id === 'anthropic') return [];
   try {
-    const r = await fetch('https://api.groq.com/openai/v1/models', {
-      headers: { authorization: 'Bearer ' + CHAVE }
+    const base = CATALOGO[prov.id] ? CATALOGO[prov.id].base : CATALOGO.groq.base;
+    const r = await fetch(base + '/models', {
+      headers: { authorization: 'Bearer ' + prov.chave }
     });
     if (!r.ok) return [];
     const j = await r.json();
@@ -893,7 +1010,7 @@ async function modelosDoGroq(): Promise<string[]> {
        preenche formulário, e oferecê-los a quem está escolhendo é oferecer o
        erro. Sobra o que conversa. */
     const conversa = todos.filter((id: string) =>
-      !/whisper|orpheus|playai|tts|guard|embed|rerank|moderation/i.test(id));
+      !/whisper|orpheus|playai|tts|guard|embed|rerank|moderation|dall-e|sora|image|audio|realtime|transcribe/i.test(id));
     return conversa.length ? conversa : todos;
   } catch {
     return [];
@@ -924,38 +1041,45 @@ const PREFERIDOS_RAPIDOS = [
   'qwen/qwen3.8-27b', 'openai/gpt-oss-120b'
 ];
 
-async function modeloSubstituto(rapido: boolean, recusado: string): Promise<string> {
-  if (PROVEDOR === 'anthropic') return '';
-  const vivos = await modelosDoGroq();
+async function modeloSubstituto(rapido: boolean, recusado: string, prov: Provedor): Promise<string> {
+  const vivos = await modelosVivos(prov);
   if (!vivos.length) return '';
+  /* A lista de preferidos é da Groq. Noutro provedor ela não casa com nada, e
+     aí o que vale é o primeiro modelo vivo que não seja o recusado — chute
+     melhor do que desistir, e o erro seguinte diz o nome certo. */
   const ordem = rapido ? PREFERIDOS_RAPIDOS : PREFERIDOS_BONS;
   const achado = ordem.find((m) => vivos.includes(m) && m !== recusado);
   if (achado) return achado;
   return vivos.find((m) => m !== recusado) || '';
 }
 
-async function explicarRecusa(r: Response, modelo: string): Promise<string> {
+async function explicarRecusa(r: Response, modelo: string, prov: Provedor): Promise<string> {
   const corpo = await r.text().catch(() => '');
   const curto = corpo.replace(/\s+/g, ' ').slice(0, 200);
+  /* O nome do segredo entra na mensagem montado a partir do provedor. Com três
+     provedores possíveis, mandar conferir "IA_CHAVE" manda conferir o lugar
+     errado em dois casos de três — e quem está lendo isso já está perdido. */
+  const sufixo = prov.id.toUpperCase();
+  const segredoChave = 'IA_CHAVE_' + sufixo;
+  const segredoModelo = 'IA_MODELO_' + sufixo;
 
   if (r.status === 404) {
-    if (PROVEDOR === 'anthropic') {
+    const nomes = await modelosVivos(prov);
+    if (prov.id === 'anthropic') {
       return 'O modelo "' + modelo + '" não existe na Anthropic. ' +
-        'Use claude-opus-5, claude-sonnet-5 ou claude-haiku-4-5 no segredo IA_MODELO ' +
-        'e publique a função de novo.';
+        'Use claude-opus-5, claude-sonnet-5-5 ou claude-haiku-5-5 no segredo ' +
+        segredoModelo + ' e publique a função de novo.';
     }
-    const nomes = await modelosDoGroq();
-    return 'O modelo "' + modelo + '" não existe mais no provedor. ' +
+    return 'O modelo "' + modelo + '" não existe na ' + prov.nome + '. ' +
       (nomes.length
         ? 'Os que conversam agora: ' + nomes.slice(0, 20).join(', ') + '. ' +
-          'Ponha um deles no segredo IA_MODELO e publique a função de novo.'
-        : 'Veja a lista no painel do provedor e ponha um nome válido no segredo IA_MODELO.');
+          'Ponha um deles no segredo ' + segredoModelo + ' e publique a função de novo.'
+        : 'Veja a lista no painel do provedor e ponha um nome válido no segredo ' + segredoModelo + '.');
   }
   if (r.status === 401 || r.status === 403) {
-    return 'O provedor recusou a chave da IA (' + r.status + '). Confira o segredo IA_CHAVE.' +
-      (PROVEDOR === 'anthropic'
-        ? ' Chave da Anthropic começa com "sk-ant-".'
-        : ' Chave da Groq começa com "gsk_".');
+    return 'A ' + prov.nome + ' recusou a chave (' + r.status + '). Confira o segredo ' +
+      segredoChave + '. Chave da ' + prov.nome + ' começa com "' +
+      (CATALOGO[prov.id] ? CATALOGO[prov.id].prefixo : '') + '".';
   }
 
   /* 529 é "sobrecarregado" na Anthropic: não é limite da sua conta, é o
@@ -963,7 +1087,7 @@ async function explicarRecusa(r: Response, modelo: string): Promise<string> {
      a mesma coisa que o 429 — e o app já sabe esperar e tentar de novo, desde
      que a mensagem venha no formato que ele lê. */
   if (r.status === 529) {
-    return 'O provedor está sobrecarregado no momento. [esperar:20]' +
+    return 'A ' + prov.nome + ' está sobrecarregada no momento. [esperar:20]' +
       (curto ? '\n\n' + curto : '');
   }
   if (r.status === 429) {
@@ -981,16 +1105,16 @@ async function explicarRecusa(r: Response, modelo: string): Promise<string> {
     const daMensagem = Number((curto.match(/try again in ([\d.]+)s/i) || [])[1] || 0);
     const segundos = Math.ceil(Math.max(doCabecalho, daMensagem)) || 0;
 
-    return 'Limite de uso do provedor atingido no modelo "' + modelo + '".' +
+    return 'Limite de uso da ' + prov.nome + ' atingido no modelo "' + modelo + '".' +
       (segundos ? ' [esperar:' + segundos + ']' : '') +
       (detalhe ? '\n\n' + detalhe : '') +
       '\n\nSe o limite for por minuto, espere e tente de novo. Se for por dia, ' +
-      'troque o modelo no segredo IA_MODELO ou mude de plano no provedor.';
+      'troque o modelo no segredo ' + segredoModelo + ' ou mude de plano no provedor.';
   }
   if (r.status === 413 || /context|too large|maximum/i.test(curto)) {
     return 'Material grande demais para o modelo. Analise menos documentos de uma vez.';
   }
-  return 'A IA respondeu ' + r.status + (curto ? ': ' + curto : '.');
+  return 'A ' + prov.nome + ' respondeu ' + r.status + (curto ? ': ' + curto : '.');
 }
 
 /* A fronteira que o app escreve entre o retrato da oportunidade e o material
@@ -1071,38 +1195,97 @@ function tetoDeSaida(tipo: string, quantos = 0): number {
   return 2500;
 }
 
-async function chamarIA(sistema: string, usuario: string, teto: number, rapido = false): Promise<string> {
-  const escolhido = rapido
-    ? (MODELO_RAPIDO || (PROVEDOR === 'anthropic' ? MODELO : PADRAO_RAPIDO))
-    : MODELO;
+/* O erro que sabe de quem veio e com que número — é isso que decide se vale
+   tentar o próximo provedor. Sem o status anexado, a decisão teria de sair de
+   expressão regular em texto humano, que é como se transforma uma mensagem
+   melhor num defeito. */
+class RecusaDaIA extends Error {
+  status: number;
+  provedor: string;
+  constructor(mensagem: string, status: number, provedor: string) {
+    super(mensagem);
+    this.status = status;
+    this.provedor = provedor;
+  }
+}
 
-  if (PROVEDOR === 'anthropic') {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
+/* Vale pedir ao próximo da fila?
+
+   SIM quando o motivo é DAQUELE provedor: chave recusada, cota estourada,
+   modelo que não existe, servidor fora do ar, material maior do que o modelo
+   aguenta (o próximo pode ter janela maior).
+
+   NÃO quando o motivo é o nosso pedido — um 400 que não é de tamanho. O
+   segundo recusaria igual, e insistir gastaria chamada e esconderia a causa. */
+export function valeOutroProvedor(status: number): boolean {
+  if (status === 400) return false;
+  return true;
+}
+
+async function chamarIA(sistema: string, usuario: string, teto: number, rapido = false): Promise<string> {
+  if (!PROVEDORES.length) {
+    throw new Error('Nenhum provedor de IA configurado. Ponha IA_CHAVE_OPENAI (ou ' +
+      'IA_CHAVE_ANTHROPIC) nos Secrets da função e publique de novo.');
+  }
+
+  const falhas: string[] = [];
+  for (let i = 0; i < PROVEDORES.length; i++) {
+    const prov = PROVEDORES[i];
+    try {
+      return await chamarProvedor(prov, sistema, usuario, teto, rapido);
+    } catch (e) {
+      const erro = e as RecusaDaIA;
+      const status = Number(erro.status) || 0;
+      falhas.push(prov.nome + ' — ' + String(erro.message || 'falhou'));
+      const ultimo = i === PROVEDORES.length - 1;
+      if (ultimo || !valeOutroProvedor(status)) break;
+      /* Fica no log do servidor, não na tela: a pessoa pediu uma análise, não
+         um relatório de infraestrutura. O que ela precisa saber — que o
+         primeiro provedor está fora — aparece no diagnóstico da Configuração,
+         onde há o que fazer a respeito. */
+      console.warn('IA: ' + prov.nome + ' recusou (' + status + '), tentando o próximo');
+    }
+  }
+
+  /* Todos recusaram. A mensagem leva o que CADA UM disse: com dois provedores
+     configurados, "a IA falhou" manda procurar nos dois lugares ao mesmo
+     tempo. O primeiro da lista vai na frente porque é o que normalmente
+     responde — e por isso é o mais provável de estar quebrado. */
+  if (falhas.length === 1) throw new Error(falhas[0].replace(/^[^—]+— /, ''));
+  throw new Error('Nenhum provedor de IA respondeu.\n\n' + falhas.join('\n\n'));
+}
+
+async function chamarProvedor(
+  prov: Provedor, sistema: string, usuario: string, teto: number, rapido: boolean
+): Promise<string> {
+  const escolhido = rapido ? prov.modeloRapido : prov.modelo;
+
+  if (prov.id === 'anthropic') {
+    const r = await fetch(CATALOGO.anthropic.base + '/messages', {
       method: 'POST',
       headers: {
-        'x-api-key': CHAVE,
+        'x-api-key': prov.chave,
         'anthropic-version': '2023-06-01',
         'content-type': 'application/json'
       },
       body: JSON.stringify({
-        /* Haiku porque a tarefa é extração curta e o custo por preenchimento
-           fica na casa de um centavo. Trocável por IA_MODELO. */
-        model: escolhido || 'claude-haiku-4-5',
+        model: escolhido,
         max_tokens: teto,
         system: sistema,
         messages: [{ role: 'user', content: usuario }]
       })
     });
-    if (!r.ok) throw new Error(await explicarRecusa(r, escolhido || 'claude-haiku-4-5'));
+    if (!r.ok) throw new RecusaDaIA(await explicarRecusa(r, escolhido, prov), r.status, prov.id);
     const j = await r.json();
     return (j?.content || []).map((b: { text?: string }) => b.text || '').join('');
   }
 
-  /* Groq — API compatível com o formato OpenAI. */
-  /* Sem segredo definido, o padrão do código. Ele também envelhece — este
-     mesmo lugar já teve um nome que morreu —, e é por isso que a troca
-     automática abaixo existe: o padrão é um palpite, não uma garantia. */
-  let modelo = escolhido || 'openai/gpt-oss-120b';
+  /* OpenAI e Groq falam o MESMO protocolo — /chat/completions — e por isso
+     dividem este caminho. O que muda é o endereço e a chave, e é só isso que
+     vem do `prov`. Duplicar o caminho por provedor seria duplicar também cada
+     uma das quedas abaixo, que custaram caro para existir. */
+  let modelo = escolhido;
+  const base = CATALOGO[prov.id] ? CATALOGO[prov.id].base : CATALOGO.groq.base;
 
   const pedir = (comJson: boolean) => {
     const corpo: Record<string, unknown> = {
@@ -1115,9 +1298,9 @@ async function chamarIA(sistema: string, usuario: string, teto: number, rapido =
       ]
     };
     if (comJson) corpo.response_format = { type: 'json_object' };
-    return fetch('https://api.groq.com/openai/v1/chat/completions', {
+    return fetch(base + '/chat/completions', {
       method: 'POST',
-      headers: { authorization: 'Bearer ' + CHAVE, 'content-type': 'application/json' },
+      headers: { authorization: 'Bearer ' + prov.chave, 'content-type': 'application/json' },
       body: JSON.stringify(corpo)
     });
   };
@@ -1128,7 +1311,12 @@ async function chamarIA(sistema: string, usuario: string, teto: number, rapido =
      tirar do usuário justamente os modelos com limite de tokens mais folgado,
      que são a saída de quem estoura o limite. Sem o parâmetro o modelo ainda
      responde JSON, porque a instrução pede — e o que vem torto já era
-     descartado antes deste commit. */
+     descartado antes deste commit.
+
+     Na OpenAI o mesmo 400 chega por outro motivo: modelo novo que não aceita
+     `max_tokens` nem `temperature` do jeito antigo. A saída é a mesma —
+     refazer sem o que ele recusou — e por isso o teste é por palavra do aviso,
+     não por provedor. */
   let comJson = true;
   if (r.status === 400) {
     const aviso = await r.clone().text().catch(() => '');
@@ -1153,7 +1341,7 @@ async function chamarIA(sistema: string, usuario: string, teto: number, rapido =
      refaz. Uma vez só — se o substituto também falhar, o problema não é o
      nome do modelo e insistir esconderia a causa de verdade. */
   if (r.status === 404) {
-    const outro = await modeloSubstituto(rapido, modelo);
+    const outro = await modeloSubstituto(rapido, modelo, prov);
     if (outro) {
       modelo = outro;
       r = await pedir(comJson);
@@ -1180,7 +1368,7 @@ async function chamarIA(sistema: string, usuario: string, teto: number, rapido =
     r = await pedir(comJson);
   }
 
-  if (!r.ok) throw new Error(await explicarRecusa(r, modelo));
+  if (!r.ok) throw new RecusaDaIA(await explicarRecusa(r, modelo, prov), r.status, prov.id);
   const j = await r.json();
   return j?.choices?.[0]?.message?.content || '';
 }
@@ -2176,7 +2364,10 @@ Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method !== 'POST') return responder({ erro: 'metodo' }, 405);
 
-  if (!CHAVE) return responder({ erro: 'A função está no ar, mas sem chave de IA configurada.' }, 503);
+  if (!PROVEDORES.length) {
+    return responder({ erro: 'A função está no ar, mas sem nenhuma chave de IA configurada. ' +
+      'Ponha IA_CHAVE_OPENAI (ou IA_CHAVE_ANTHROPIC) em Edge Functions → assistente → Secrets.' }, 503);
+  }
   /* Um 401 daqui tem quatro causas que não se parecem: falta o endereço do
      projeto, falta a chave pública, a chave é de formato ou de projeto errado,
      ou a sessão de quem está usando venceu. Dizer sempre a mesma coisa manda
@@ -2196,6 +2387,32 @@ Deno.serve(async (req: Request) => {
   }
 
   const tipo = String(pedido.tipo || '');
+
+  /* Quem responde, em que ordem, com que modelo — e NUNCA a chave.
+
+     Existe porque "a IA falhou" com dois provedores configurados manda
+     procurar nos dois lugares ao mesmo tempo. E porque configurar uma chave e
+     não ter como saber se ela entrou na fila é o tipo de silêncio que faz
+     alguém publicar a função quatro vezes achando que não pegou.
+
+     O que sai daqui não abre porta nenhuma: nome do provedor, nome do modelo,
+     e se a chave tem o formato que aquele provedor usa. O valor da chave não
+     é lido, não é cortado, não é devolvido de forma nenhuma. */
+  if (tipo === 'diagnostico') {
+    return responder({
+      provedores: PROVEDORES.map((p, i) => ({
+        ordem: i + 1,
+        id: p.id,
+        nome: p.nome,
+        modelo: p.modelo,
+        modeloRapido: p.modeloRapido,
+        formatoDaChave: CATALOGO[p.id]
+          ? (p.chave.indexOf(CATALOGO[p.id].prefixo) === 0 ? 'ok' : 'estranho')
+          : 'desconhecido'
+      }))
+    });
+  }
+
   if (!FORMATOS[tipo]) return responder({ erro: 'tipo desconhecido' }, 400);
 
   /* Transcrição de reunião é longa por natureza; um lote de empresas também. */
