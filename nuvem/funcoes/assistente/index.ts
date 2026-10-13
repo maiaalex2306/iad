@@ -1317,7 +1317,18 @@ async function chamarProvedor(
     });
     if (!r.ok) throw new RecusaDaIA(await explicarRecusa(r, escolhido, prov), r.status, prov.id);
     const j = await r.json();
-    return (j?.content || []).map((b: { text?: string }) => b.text || '').join('');
+    const texto = (j?.content || []).map((b: { text?: string }) => b.text || '').join('');
+    /* O mesmo cuidado do outro caminho: 200 com texto vazio e stop_reason
+       "max_tokens" é o teto acabando, não material vazio. */
+    if (!texto.trim()) {
+      throw new RecusaDaIA(
+        /max_tokens/i.test(String(j?.stop_reason || ''))
+          ? 'O modelo "' + escolhido + '" da Anthropic esgotou o espaço de resposta e não ' +
+            'escreveu nada. Isto NÃO quer dizer que o seu material está vazio.'
+          : 'A Anthropic respondeu sem conteúdo nenhum.',
+        0, prov.id);
+    }
+    return texto;
   }
 
   /* OpenAI e Groq falam o MESMO protocolo — /chat/completions — e por isso
@@ -1360,7 +1371,14 @@ async function chamarProvedor(
         { role: 'user', content: usuario }
       ]
     };
-    corpo[forma.maxChave] = teto;
+    /* `max_tokens` limita o que o modelo ESCREVE. `max_completion_tokens`
+       limita o que ele escreve MAIS o que ele pensa — e modelo de raciocínio
+       pensa muito antes da primeira letra. Mandar o mesmo número nos dois é
+       pedir resposta vazia de quem precisa de espaço para raciocinar, que foi
+       exatamente o que aconteceu com o dossiê da GELITA. */
+    corpo[forma.maxChave] = forma.maxChave === 'max_completion_tokens'
+      ? Math.min(teto * 4, 32000)
+      : teto;
     if (forma.comTemperatura) corpo.temperature = 0.1;
     if (forma.comJson) corpo.response_format = { type: 'json_object' };
     return fetch(base + '/chat/completions', {
@@ -1412,8 +1430,54 @@ async function chamarProvedor(
   }
 
   if (!r.ok) throw new RecusaDaIA(await explicarRecusa(r, modelo, prov), r.status, prov.id);
+
+  /* RESPOSTA VAZIA COM 200 — e esta é a mentira mais cara que esta função
+     sabia contar.
+
+     Nos modelos de raciocínio, o que o modelo PENSA sai do mesmo orçamento do
+     que ele ESCREVE. `max_completion_tokens` cobre os dois. Com teto apertado,
+     ele gasta tudo pensando, devolve 200 com conteúdo vazio e
+     finish_reason "length" — e nada no caminho até a tela diz que houve
+     problema.
+
+     O app lia vazio e escrevia "Não achei nada para preencher neste material".
+     Sobre um dossiê de vinte páginas com nome, site, telefone, três fábricas e
+     quatro pessoas. Dizer "não achei nada" quando o que houve foi "não coube"
+     faz a pessoa procurar o defeito no material dela, que está perfeito.
+
+     Então: uma segunda tentativa com quatro vezes o espaço, e se ainda assim
+     vier vazio, um erro que diz exatamente o que aconteceu. Erro visível é
+     muito melhor do que um "não achei nada" que mente com cara de resposta. */
   const j = await r.json();
-  return j?.choices?.[0]?.message?.content || '';
+  const escolha = (j?.choices || [])[0] || {};
+  let conteudo = String(escolha?.message?.content || '');
+  const acabouOEspaco = /length|max_tokens/i.test(String(escolha?.finish_reason || ''));
+
+  if (!conteudo.trim() && acabouOEspaco) {
+    const maior = Math.min(teto * 4, 32000);
+    if (maior > teto) {
+      teto = maior;
+      r = await pedir();
+      if (r.ok) {
+        const j2 = await r.json();
+        conteudo = String((j2?.choices || [])[0]?.message?.content || '');
+      }
+    }
+  }
+
+  if (!conteudo.trim()) {
+    throw new RecusaDaIA(
+      acabouOEspaco
+        ? 'O modelo "' + modelo + '" da ' + prov.nome + ' gastou todo o espaço de resposta ' +
+          'raciocinando e não escreveu nada — nem com o espaço quadruplicado. ' +
+          'Isto NÃO quer dizer que o seu material está vazio. Troque o segredo IA_MODELO_' +
+          prov.id.toUpperCase() + ' por um modelo que raciocine menos, ou mande menos material de uma vez.'
+        : 'A ' + prov.nome + ' respondeu sem conteúdo nenhum.',
+      /* Status 0: não foi recusa do provedor, foi resposta vazia. Cai para o
+         próximo da fila, que é exatamente o que salva o pedido. */
+      0, prov.id);
+  }
+  return conteudo;
 }
 
 /* Comparação exata derrubava respostas certas. A lista tem "Alimentos"; o
@@ -2458,9 +2522,18 @@ Deno.serve(async (req: Request) => {
 
   if (!FORMATOS[tipo]) return responder({ erro: 'tipo desconhecido' }, 400);
 
-  /* Transcrição de reunião é longa por natureza; um lote de empresas também. */
+  /* Transcrição de reunião é longa por natureza; um lote de empresas também.
+
+     E `conta` e `oportunidade` entraram nesta lista pelo mesmo motivo que o
+     limite já tinha subido de 8000 para 16000: o que chega na caixa ✨ deixou
+     de ser um parágrafo. Hoje é a página do LinkedIn inteira, mais o dossiê de
+     pesquisa, mais a troca de e-mails, mais o PDF — vinte mil caracteres de
+     material real, com nome, site, telefone, três fábricas e quatro pessoas
+     dentro. Cortar em 16000 joga fora justamente o fim, que é onde moram os
+     contatos e a conversa recente. */
   const limite = (tipo === 'reuniao' || tipo === 'segmentos' || tipo === 'plano' || tipo === 'notas' ||
-                  tipo === 'desenvolvimento' || tipo === 'orientacao' || tipo === 'panorama')
+                  tipo === 'desenvolvimento' || tipo === 'orientacao' || tipo === 'panorama' ||
+                  tipo === 'conta' || tipo === 'oportunidade')
     ? LIMITE_REUNIAO : LIMITE_TEXTO;
   const texto = String(pedido.texto || '').slice(0, limite).trim();
   if (texto.length < 10) return responder({ campos: {}, frases: {} });

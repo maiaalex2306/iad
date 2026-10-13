@@ -228,6 +228,42 @@ while (m.ajustarForma(f, RECUSA_MAX_TOKENS + RECUSA_TEMPERATURA + RECUSA_JSON) &
 conferir('um aviso com as três queixas se esgota em três voltas, não gira para sempre',
   voltas === 3, String(voltas));
 
+/* ---------- a resposta vazia que vinha com 200 ----------
+
+   A mentira mais cara que esta função sabia contar. Modelo de raciocínio gasta
+   o orçamento PENSANDO e devolve 200 com conteúdo vazio e finish_reason
+   "length". O app lia vazio e escrevia "Não achei nada para preencher neste
+   material" — sobre um dossiê de vinte páginas com nome, site, telefone, três
+   fábricas e quatro pessoas dentro.
+
+   Lido do código-fonte, porque exercitar isto de verdade exigiria um provedor
+   do outro lado. O que se prova aqui é que as três decisões existem e estão
+   escritas: o teto maior para quem compartilha orçamento com o raciocínio, a
+   segunda tentativa, e o erro que diz o que houve em vez de fingir vazio. */
+const corpoDaFuncao = await Bun.file(
+  new URL('../funcoes/assistente/index.ts', import.meta.url).pathname).text();
+
+conferir('max_completion_tokens recebe teto maior que max_tokens — raciocínio sai do mesmo pote',
+  /max_completion_tokens'\s*\n?\s*\?\s*Math\.min\(teto \* 4/.test(corpoDaFuncao) ||
+  /forma\.maxChave === 'max_completion_tokens'[\s\S]{0,120}teto \* 4/.test(corpoDaFuncao));
+
+conferir('resposta vazia com finish_reason length rende uma segunda tentativa',
+  /acabouOEspaco/.test(corpoDaFuncao) &&
+  /!conteudo\.trim\(\) && acabouOEspaco/.test(corpoDaFuncao));
+
+conferir('e se ainda vier vazia, vira ERRO em vez de "não achei nada"',
+  /NÃO quer dizer que o seu material está vazio/.test(corpoDaFuncao));
+
+conferir('o erro de resposta vazia cai para o próximo provedor (status 0, não 400)',
+  /0, prov\.id\)/.test(corpoDaFuncao) && m.valeOutroProvedor(0));
+
+conferir('a Anthropic tem o mesmo cuidado, pelo stop_reason dela',
+  /stop_reason/.test(corpoDaFuncao) &&
+  /esgotou o espaço de resposta/.test(corpoDaFuncao));
+
+conferir('ficha de empresa e de negócio recebem material de dossiê, não de parágrafo',
+  /tipo === 'conta' \|\| tipo === 'oportunidade'\)\s*\n?\s*\? LIMITE_REUNIAO/.test(corpoDaFuncao));
+
 /* ---------- o catálogo ---------- */
 conferir('todo provedor do catálogo tem prefixo, base e modelos',
   Object.keys(m.CATALOGO).every((id: string) => {
