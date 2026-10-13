@@ -664,7 +664,14 @@
            decide o que fazer com o texto inteiro. */
         dlg.materialIA = texto;
         const ctx = c.contexto ? c.contexto() : {};
-        global.IADIA.extrair(c.extrair, texto, ctx).then(function (r) {
+        /* O que foi carregado, para o balão poder dizer o que está lendo. Um
+           nome de arquivo na tela é a diferença entre "analisando" e "lendo o
+           infográfico da GELITA" — e a segunda frase prova que o anexo entrou. */
+        const detalhe = comTexto.length
+          ? (comTexto.length === 1 ? comTexto[0].nome
+             : comTexto.length + ' documentos: ' + comTexto.map(function (d) { return d.nome; }).join(', '))
+          : '';
+        global.IADIA.extrair(c.extrair, texto, ctx, detalhe).then(function (r) {
           botao.disabled = false;
           /* O motivo vem do assistente e é mostrado como veio. A frase única
              de antes — "não consegui falar com o assistente" — servia para
@@ -762,6 +769,155 @@
     });
   }
 
+
+  /* ---------------- o balão da análise ----------------
+
+     O botão ficava cinza com "Analisando…" ao lado, e era tudo. Uma leitura de
+     documento leva de vinte a noventa segundos: tempo de sobra para alguém
+     concluir que travou e clicar de novo, fechar o formulário ou recarregar a
+     página no meio do pedido — os três perdem o trabalho.
+
+     Três decisões, e cada uma é uma recusa:
+
+     1. Nenhuma porcentagem. Uma chamada ao modelo é opaca; ninguém sabe se
+        está em 20% ou em 80%. Barra que anda sozinha é enfeite que mente, e
+        este app já trocou uma mentira dessas (o PDF "provavelmente
+        digitalizado") por quatro verdades.
+     2. Nenhum botão de cancelar. O pedido já está no servidor e vai ser
+        cobrado do mesmo jeito; um botão que não cancela nada é pior que
+        botão nenhum.
+     3. O relógio aparece COM o prazo: "23s de até 90s". Segundo correndo sem
+        teto é a mesma angústia de antes, com números. Com o teto escrito, a
+        pessoa sabe que existe um fim e qual é.
+
+     E a fila de provedores fica à vista. Desde que existem dois, o pedido pode
+     cair da OpenAI para o Claude sem ninguém saber — e queda silenciosa é
+     exatamente o que este app não faz. */
+  const PASSOS_DA_ANALISE = ['material', 'assistente', 'conferindo'];
+
+  let balao = null;          /* o <dialog>, criado uma vez */
+  let emCurso = {};          /* token -> o que está acontecendo nele */
+  let relogio = null;
+
+  function quantosEmCurso() { return Object.keys(emCurso).length; }
+
+  function caixaDoBalao() {
+    if (balao) return balao;
+    balao = document.createElement('dialog');
+    balao.className = 'balao-ia';
+    /* Esc fecharia o balão sem parar o pedido, e aí a tela voltaria a mentir
+       — só que ao contrário: trabalho acontecendo, nada na tela. */
+    balao.addEventListener('cancel', function (e) { e.preventDefault(); });
+    document.body.appendChild(balao);
+    return balao;
+  }
+
+  function segundos(ms) { return Math.max(0, Math.round(ms / 1000)); }
+
+  /* "a OpenAI (gpt-5) responde primeiro; o Claude (claude-opus-5) é a
+     reserva". Sai da fila que o diagnóstico leu do servidor — o navegador não
+     tem nem vê chave nenhuma, só a ordem e o nome do modelo. */
+  function filaEmTexto(provedores) {
+    const lista = (provedores || []).filter(function (x) { return x && x.nome; });
+    if (!lista.length) return '';
+    const nome = function (x) { return x.nome + (x.modelo ? ' (' + x.modelo + ')' : ''); };
+    if (lista.length === 1) return 'Quem responde: ' + nome(lista[0]) + '.';
+    return 'Quem responde: ' + nome(lista[0]) + '. Se ela recusar, ' +
+      lista.slice(1).map(nome).join(' e depois ') + ' — e você só vê o resultado.';
+  }
+
+  function linhaDoPasso(passo, atual, texto) {
+    const ondeEstou = PASSOS_DA_ANALISE.indexOf(atual);
+    const meu = PASSOS_DA_ANALISE.indexOf(passo);
+    const estado = meu < ondeEstou ? 'feito' : (meu === ondeEstou ? 'andando' : 'esperando');
+    const marca = estado === 'feito' ? '✓' : (estado === 'andando' ? '⟳' : '·');
+    return '<li class="' + estado + '"><span class="marca">' + marca + '</span>' +
+      '<span>' + esc(texto) + '</span></li>';
+  }
+
+  function pintarBalao() {
+    const tokens = Object.keys(emCurso);
+    if (!tokens.length) return;
+    const p = emCurso[tokens[0]];
+    const passados = Date.now() - p.inicio;
+    const letras = p.letras
+      ? numero(p.letras) + (p.letras === 1 ? ' caractere' : ' caracteres')
+      : 'o que você escreveu';
+
+    const material = 'Material preparado — ' + letras + (p.detalhe ? ' · ' + p.detalhe : '');
+    const espera = p.passo === 'assistente'
+      ? 'Esperando o assistente — ' + segundos(passados) + 's de até ' + segundos(p.prazo) + 's'
+      : 'O assistente respondeu em ' + segundos(p.respondeuEm || passados) + 's';
+    const conferindo = p.provedor
+      ? 'Conferindo o que a ' + p.provedor + ' devolveu'
+      : 'Conferindo o que voltou';
+
+    const fila = filaEmTexto(p.provedores);
+    const outros = tokens.length - 1;
+
+    caixaDoBalao().innerHTML =
+      '<div class="corpo-balao">' +
+        '<h3>✨ ' + esc(p.rotulo) + '</h3>' +
+        '<ol class="passos-ia">' +
+          linhaDoPasso('material', p.passo, material) +
+          linhaDoPasso('assistente', p.passo, espera) +
+          linhaDoPasso('conferindo', p.passo, conferindo) +
+        '</ol>' +
+        (fila ? '<p class="fila-balao">' + esc(fila) + '</p>' : '') +
+        (outros ? '<p class="fila-balao">E mais ' + outros +
+          (outros === 1 ? ' pedido' : ' pedidos') + ' em andamento.</p>' : '') +
+        '<p class="aviso-balao">Pode deixar aberto — isto fecha sozinho. ' +
+        'Se passar de ' + segundos(p.prazo) + 's eu paro de esperar e digo o que houve.</p>' +
+      '</div>';
+  }
+
+  function abrirBalao() {
+    const d = caixaDoBalao();
+    pintarBalao();
+    /* `showModal` e não `show`: o balão precisa ficar ACIMA do formulário, que
+       também é modal. Só a camada de topo consegue isso, e só o modal entra
+       nela. Em navegador sem suporte, o balão aparece atrás — feio, mas a
+       informação não some. */
+    if (!d.open) { try { d.showModal(); } catch (e) { d.setAttribute('open', ''); } }
+    if (!relogio) relogio = setInterval(pintarBalao, 1000);
+  }
+
+  function fecharBalao() {
+    if (relogio) { clearInterval(relogio); relogio = null; }
+    if (balao && balao.open) { try { balao.close(); } catch (e) { balao.removeAttribute('open'); } }
+    if (balao) balao.removeAttribute('open');
+  }
+
+  function ligarBalaoDaIA() {
+    const IA = global.IADIA;
+    if (!IA || !IA.aoProgresso) return;
+    IA.aoProgresso(function (ev) {
+      if (!ev || !ev.token) return;
+      if (ev.fase === 'comecou') {
+        emCurso[ev.token] = {
+          rotulo: ev.rotulo, letras: ev.letras, prazo: ev.prazo,
+          detalhe: ev.detalhe, provedores: ev.provedores,
+          inicio: Date.now(), passo: 'assistente'
+        };
+        abrirBalao();
+        return;
+      }
+      const p = emCurso[ev.token];
+      if (!p) return;
+      if (ev.fase === 'conferindo') {
+        p.passo = 'conferindo';
+        p.respondeuEm = Date.now() - p.inicio;
+        p.provedor = ev.provedor || '';
+        pintarBalao();
+        return;
+      }
+      if (ev.fase === 'terminou') {
+        delete emCurso[ev.token];
+        if (!quantosEmCurso()) fecharBalao(); else pintarBalao();
+      }
+    });
+  }
+
   function confirmar(mensagem) { return global.confirm(mensagem); }
 
   function barra(percentual, alt) {
@@ -780,6 +936,9 @@
     esc: esc, moeda: moeda, compacto: compacto, data: data, numero: numero,
     numeroDigitado: numeroDigitado, paraCampoMoeda: paraCampoMoeda,
     formulario: formulario, ficha: ficha, confirmar: confirmar, barra: barra, vozDisponivel: vozDisponivel, botaoVoz: botaoVoz, ligarVoz: ligarVoz,
-    assistenteAtivo: assistenteAtivo, marcarSugerido: marcarSugerido, limparSugestao: limparSugestao
+    assistenteAtivo: assistenteAtivo, marcarSugerido: marcarSugerido, limparSugestao: limparSugestao,
+    ligarBalaoDaIA: ligarBalaoDaIA,
+    __balaoAberto: function () { return !!(balao && balao.hasAttribute('open')); },
+    __passosDoBalao: function () { return balao ? balao.innerText : ''; }
   };
 })(window);

@@ -1509,6 +1509,13 @@
           window.scrollTo(0, 0);
         };
         if (!temIA || !IA.leituraDaCarteira) return terminar(null);
+        /* A varredura termina e começa a leitura da carteira — que leva outros
+           tantos segundos. A faixa de progresso ficava parada em "X de X"
+           durante essa última espera, e parado é indistinguível de travado.
+           Esta linha é o único lugar que sabe que o passo mudou. */
+        V.definirProgressoDaAnalise({ feitos: urgentes.length, total: urgentes.length,
+          fase: 'Lendo a carteira inteira…' });
+        repintarConteudo('#/hoje', V.hoje);
         IA.leituraDaCarteira(pan, fila.itens).then(terminar, function () { terminar(null); });
       };
 
@@ -10099,6 +10106,10 @@
     global.IADSincronia.ligar();
     global.IADSincronia.aoMudar(function (sinc) { vigiarGravacao(sinc); render(); });
     global.IADAjuda.ligar();
+    /* O balão que conta o que a IA está fazendo. Ligado uma vez, aqui, porque
+       ele escuta o barramento do IADIA — não a tela. Todo pedido nasce
+       coberto, inclusive os que ainda não existem. */
+    U.ligarBalaoDaIA();
     ligarOcio();
     montarNav();
     abrirNoHoje();

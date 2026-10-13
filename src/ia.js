@@ -18,6 +18,116 @@
      que estão chegando. */
   const PRAZO_REUNIAO = 90000;
 
+  /* ---------------- o que está acontecendo, enquanto acontece ----------------
+
+     O botão ficava cinza com "Analisando…" ao lado, e nada mais. Numa leitura
+     de documento isso dura de vinte a noventa segundos — tempo mais do que
+     suficiente para alguém concluir que travou, clicar de novo, fechar o
+     formulário ou recarregar a página no meio do pedido. Os três desfechos
+     perdem o trabalho.
+
+     O balão não tem porcentagem, e isso é de propósito. Uma chamada ao modelo
+     é opaca: ninguém sabe se ela está em 20% ou em 80%, e uma barra inventada
+     seria a mesma mentira do PDF "provavelmente digitalizado". O que dá para
+     dizer com honestidade é o PASSO em que estamos, há quantos segundos, e até
+     quando eu espero antes de desistir — e é isso que o balão diz.
+
+     Fica aqui e não na tela porque toda chamada passa por aqui: assim o balão
+     cobre os doze pedidos de uma vez, e um pedido novo nasce coberto sem que
+     ninguém precise lembrar de ligar nada. */
+  const ROTULOS_DO_PEDIDO = {
+    conta: 'Lendo o material desta empresa',
+    contato: 'Lendo o material desta pessoa',
+    oportunidade: 'Lendo o material deste negócio',
+    pessoas: 'Procurando as pessoas no material',
+    evidencia: 'Separando a evidência',
+    reuniao: 'Lendo o material e separando as evidências',
+    notas: 'Relendo as oito decisões',
+    plano: 'Montando os próximos passos',
+    orientacao: 'Lendo este negócio',
+    panorama: 'Lendo a carteira inteira',
+    segmentos: 'Classificando os leads',
+    desenvolvimento: 'Lendo a sua série de semanas',
+    insight: 'Escrevendo o reenquadramento'
+  };
+
+  /* Quem NÃO ganha balão, e por quê. A regra é uma só: balão onde a espera é
+     cega. Onde a tela já conta o que está acontecendo, um balão por cima seria
+     a mesma informação duas vezes — e uma delas tapando a outra.
+
+     `classificar` roda enquanto a pessoa DIGITA: um balão por pausa de teclado
+     seria um piscar constante em cima do campo. `diagnostico` é conversa do
+     app com o servidor, e ninguém pediu nada. `orientacao` e `segmentos` rodam
+     em laço, com contador próprio na tela — sessenta balões seguidos seria o
+     pior dos dois mundos. `panorama` fecha a análise do Hoje, na mesma faixa de
+     progresso que a varredura acabou de usar. */
+  const SEM_BALAO = {
+    classificar: true, diagnostico: true,
+    orientacao: true, segmentos: true, panorama: true
+  };
+
+  let ouvintes = [];
+  let proximoPedido = 1;
+
+  function aoProgresso(fn) { if (typeof fn === 'function') ouvintes.push(fn); }
+
+  function avisarProgresso(ev) {
+    ouvintes.forEach(function (f) {
+      /* Um ouvinte que explode não pode derrubar a análise: o balão é
+         enfeite, o pedido é o trabalho. */
+      try { f(ev); } catch (e) { console.warn('progresso da IA:', e); }
+    });
+  }
+
+  /* Todo pedido ao assistente passa por aqui. Devolve a mesma promessa que o
+     `chamarFuncao` devolvia — quem chama não muda em nada. */
+  function pedirAoAssistente(corpo, prazo, detalhe) {
+    const tipo = String(corpo.tipo || '');
+    const mudo = !!SEM_BALAO[tipo];
+    const token = 'p' + (proximoPedido++);
+    let fechado = false;
+
+    const fechar = function (porque, erro) {
+      if (mudo || fechado) return;
+      fechado = true;
+      avisarProgresso({ token: token, fase: 'terminou', porque: porque, erro: erro || '' });
+    };
+
+    if (!mudo) {
+      avisarProgresso({
+        token: token, fase: 'comecou', tipo: tipo,
+        rotulo: ROTULOS_DO_PEDIDO[tipo] || 'Analisando',
+        letras: String(corpo.texto || '').length,
+        prazo: prazo || PRAZO_REUNIAO,
+        detalhe: detalhe || '',
+        provedores: provedores
+      });
+      /* O prazo fecha o balão mesmo quando a resposta não chega. Quem chamou
+         já desistiu de esperar nesse instante; deixar o balão aberto para
+         sempre seria trocar um travamento silencioso por um travamento com
+         legenda, que é pior. */
+      setTimeout(function () { fechar('prazo'); }, (prazo || PRAZO_REUNIAO) + 400);
+    }
+
+    return Nuvem.chamarFuncao('assistente', corpo).then(function (r) {
+      if (!mudo && !fechado) {
+        /* O servidor diz qual provedor respondeu quando a função publicada é
+           nova o bastante para informar. Quando não diz, o balão não inventa:
+           ele mostra a FILA configurada, que o app conhece pelo diagnóstico. */
+        avisarProgresso({ token: token, fase: 'conferindo',
+          provedor: (r && r.provedor) || '' });
+        /* Um quarto de segundo: o app ainda está aplicando campos e
+           repintando a tela quando a resposta chega, e sumir no milissegundo
+           da chegada deixa a impressão de que o último passo não aconteceu. */
+        setTimeout(function () { fechar('resposta'); }, 250);
+      }
+      return r;
+    }, function (e) {
+      fechar('falha', (e && e.message) || '');
+      throw e;
+    });
+  }
+
   /* Estar conectado ao servidor não quer dizer que a função do assistente foi
      publicada — são dois passos separados, e o segundo é manual. Sem esta
      distinção o app mostrava a caixa ✨ para todo mundo e só descobria a
@@ -152,7 +262,10 @@
      devolvia null para tudo — tempo esgotado, recusa do servidor, texto curto
      — e a tela tinha uma frase só para três causas diferentes. Frase única
      para causas diferentes é o que faz alguém mexer no lugar errado. */
-  function extrair(tipo, texto, contexto) {
+  /* `detalhe` é o que o vendedor carregou — "1 documento · proposta.pdf". Ele
+     não muda o pedido: existe para o balão poder dizer o que está sendo lido,
+     em vez de "analisando" no vazio. */
+  function extrair(tipo, texto, contexto, detalhe) {
     if (!disponivel()) return Promise.resolve({ erro: 'O assistente não está no ar. Veja Configuração → Assistente de IA.' });
     let t = String(texto || '').trim();
     if (t.length < 12) return Promise.resolve({ erro: 'Texto curto demais para eu ler.' });
@@ -165,9 +278,9 @@
        aos dois casos. */
     const prazoDaVez = t.length > 2000 ? PRAZO_REUNIAO : PRAZO;
 
-    const pedido = Nuvem.chamarFuncao('assistente', {
+    const pedido = pedirAoAssistente({
       tipo: tipo, texto: t, contexto: contexto || {}
-    }).then(
+    }, prazoDaVez, detalhe).then(
       function (r) { return { resposta: r }; },
       function (e) { return { falha: e }; }
     );
@@ -258,9 +371,9 @@
     }
     if (t.length > LIMITE_PEDIDO) t = t.slice(0, LIMITE_PEDIDO);
 
-    const pedido = Nuvem.chamarFuncao('assistente', {
+    const pedido = pedirAoAssistente({
       tipo: 'reuniao', texto: t, contexto: contexto || {}
-    });
+    }, PRAZO_REUNIAO);
     const prazo = new Promise(function (resolve) {
       setTimeout(function () { resolve({ estourou: true }); }, PRAZO_REUNIAO);
     });
@@ -475,7 +588,7 @@
         return linhaDoLead(e, k + 1);          /* numeração local do bloco */
       }).join('\n\n');
 
-      const pedido = Nuvem.chamarFuncao('assistente', {
+      const pedido = pedirAoAssistente({
         tipo: 'segmentos',
         texto: texto,
         contexto: {
@@ -688,7 +801,7 @@
   function planoDaOportunidade(op, r, etapaNova) {
     if (!disponivel()) return Promise.resolve(null);
 
-    const pedido = Nuvem.chamarFuncao('assistente', {
+    const pedido = pedirAoAssistente({
       tipo: 'plano',
       texto: retratoDaOportunidade(op, r),
       contexto: { hoje: global.IADStore.hoje(), etapaNova: etapaNova || '' }
@@ -750,7 +863,7 @@
     if (!disponivel()) {
       return Promise.resolve({ erro: 'O assistente não está no ar. Veja Configuração → Assistente de IA.' });
     }
-    const pedido = Nuvem.chamarFuncao('assistente', {
+    const pedido = pedirAoAssistente({
       tipo: 'desenvolvimento',
       texto: retratoDaCarteira(ev),
       contexto: { hoje: global.IADStore.hoje(), semanas: ev.semanas.length }
@@ -796,7 +909,7 @@
     /* A releitura das oito precisa da mesma régua da leitura. Sem ela, os dois
        caminhos pontuavam com critérios diferentes — e o vendedor via a nota
        mudar sozinha conforme por onde a IA tinha passado. */
-    const pedido = Nuvem.chamarFuncao('assistente', {
+    const pedido = pedirAoAssistente({
       tipo: 'notas', texto: retrato,
       contexto: { hoje: global.IADStore.hoje(), escada: esbocoDaEscada() }
     });
@@ -1021,7 +1134,7 @@
   function leituraDaOportunidade(op, r, x) {
     if (!disponivel()) return Promise.resolve(null);
 
-    const pedido = Nuvem.chamarFuncao('assistente', {
+    const pedido = pedirAoAssistente({
       tipo: 'orientacao',
       texto: retratoComOrientacao(op, r, x),
       contexto: Object.assign(contextoDaOportunidade(op), {
@@ -1186,7 +1299,7 @@
   function leituraDaCarteira(pan, itens) {
     if (!disponivel()) return Promise.resolve(null);
 
-    const pedido = Nuvem.chamarFuncao('assistente', {
+    const pedido = pedirAoAssistente({
       tipo: 'panorama',
       texto: retratoDaCarteiraDoDia(pan, itens),
       contexto: { hoje: global.IADStore.hoje() }
@@ -1216,6 +1329,7 @@
     disponivel: disponivel,
     verificar: verificar,
     diagnostico: diagnostico,
+    aoProgresso: aoProgresso,
     extrair: extrair,
     analisarReuniao: analisarReuniao,
     classificarSegmentos: classificarSegmentos,

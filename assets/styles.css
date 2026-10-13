@@ -1867,3 +1867,39 @@ td .tiny { display: block; line-height: 1.35; }
 .btn-lapis:hover, .btn-lapis:focus-visible { color: var(--orange); opacity: 1; background: var(--bg); }
 /* Alvo de toque decente no celular sem engordar o desenho. */
 @media (pointer: coarse) { .btn-lapis { padding: 6px; margin-left: 2px; } }
+
+/* ---------- o balão da análise da IA ----------
+   Estreito e colado embaixo, de propósito. Ele nasce por cima de um
+   formulário que a pessoa acabou de preencher, e um painel no meio da tela
+   taparia justamente o texto que ela colou — a mesma regra do balão de ajuda,
+   que não pode cobrir o que você está olhando. Embaixo ele informa sem
+   esconder, e o formulário continua à vista enquanto a IA lê. */
+dialog.balao-ia {
+  width: min(460px, 92vw); border-radius: 14px;
+  margin-top: auto; margin-bottom: max(18px, env(safe-area-inset-bottom));
+}
+dialog.balao-ia::backdrop { background: rgba(6, 14, 24, .35); }
+.corpo-balao { padding: 18px 20px 16px; }
+.corpo-balao h3 { margin: 0 0 12px; font-size: .95rem; line-height: 1.3; }
+
+.passos-ia { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+.passos-ia li { display: flex; gap: 9px; align-items: flex-start; font-size: .82rem; line-height: 1.35; }
+.passos-ia .marca { flex: 0 0 1.1em; text-align: center; font-weight: 700; }
+.passos-ia li.feito { color: var(--text); }
+.passos-ia li.feito .marca { color: #1a7f4b; }
+.passos-ia li.andando { color: var(--text); font-weight: 600; }
+.passos-ia li.andando .marca { color: var(--brand, #5b2d8e); animation: gira 1.4s linear infinite; display: inline-block; }
+.passos-ia li.esperando { color: var(--muted); }
+
+@keyframes gira { to { transform: rotate(360deg); } }
+/* Quem pediu menos movimento na tela não precisa de uma seta girando: o texto
+   do passo já diz tudo o que a animação diria. */
+@media (prefers-reduced-motion: reduce) {
+  .passos-ia li.andando .marca { animation: none; }
+}
+
+.fila-balao, .aviso-balao {
+  margin: 12px 0 0; font-size: .72rem; line-height: 1.45; color: var(--muted);
+}
+.fila-balao { padding-top: 10px; border-top: 1px dashed var(--line); }
+.aviso-balao { margin-top: 6px; }

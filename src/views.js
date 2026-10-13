@@ -6136,6 +6136,11 @@
     return '<div class="card" id="m-ia"><h2>As tarefas da IA</h2>' +
       '<p class="small">Não existe "a IA do sistema" em geral. Existem pedidos de escopo fechado, cada um com regras ' +
       'próprias e um lugar onde aparece. Esta é a lista inteira.</p>' +
+      '<p class="small">Enquanto um deles roda, um balão no rodapé diz em que passo está, há quantos segundos, ' +
+      'até quando o app espera antes de desistir e quem responde primeiro. Sem barra de porcentagem: ' +
+      'uma chamada ao modelo é opaca, ninguém sabe se ela está em 20% ou em 80%, e número inventado ' +
+      'é pior do que número nenhum. Os que rodam em laço ou em segundo plano — a varredura dos negócios, ' +
+      'a importação do Linked Helper — contam o progresso na própria tela, e não abrem balão.</p>' +
       '<div class="tabela-rolagem"><table class="tabela-manual"><thead><tr><th>Pedido</th><th>Onde aparece</th>' +
       '<th>O que faz — e o que é proibida de fazer</th></tr></thead><tbody>' + linhas + '</tbody></table></div></div>';
   }

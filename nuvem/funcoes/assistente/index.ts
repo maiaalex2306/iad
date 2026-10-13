@@ -1224,7 +1224,14 @@ export function valeOutroProvedor(_status: number): boolean {
   return true;
 }
 
-async function chamarIA(sistema: string, usuario: string, teto: number, rapido = false): Promise<string> {
+/* `marca` é um papelzinho que o chamador entrega para a função anotar QUEM
+   respondeu. Existe porque a fila pode cair da OpenAI para o Claude sem que
+   ninguém perceba — e desde que há dois provedores, uma queda silenciosa é
+   justamente o que este sistema não faz. O navegador mostra o nome no balão
+   de progresso; se esta função for antiga e não mandar nada, o balão mostra a
+   fila configurada e não inventa. */
+async function chamarIA(sistema: string, usuario: string, teto: number, rapido = false,
+                        marca?: { provedor?: string }): Promise<string> {
   if (!PROVEDORES.length) {
     throw new Error('Nenhum provedor de IA configurado. Ponha IA_CHAVE_OPENAI (ou ' +
       'IA_CHAVE_ANTHROPIC) nos Secrets da função e publique de novo.');
@@ -1234,7 +1241,9 @@ async function chamarIA(sistema: string, usuario: string, teto: number, rapido =
   for (let i = 0; i < PROVEDORES.length; i++) {
     const prov = PROVEDORES[i];
     try {
-      return await chamarProvedor(prov, sistema, usuario, teto, rapido);
+      const texto = await chamarProvedor(prov, sistema, usuario, teto, rapido);
+      if (marca) marca.provedor = prov.nome;
+      return texto;
     } catch (e) {
       const erro = e as RecusaDaIA;
       const status = Number(erro.status) || 0;
@@ -2594,7 +2603,18 @@ Deno.serve(async (req: Request) => {
       ? (entrada.match(/^\d+\. /gm) || []).length
       : 0;
 
-    let bruto = await chamarIA(promptDe(tipo, ctx), entrada, tetoDeSaida(tipo, quantosLeads), usaRapido);
+    /* Local, nunca global: num isolate que atende dois pedidos ao mesmo tempo,
+       uma variável de módulo devolveria o nome do provedor do pedido do
+       vizinho — e nome errado é pior do que nome nenhum. */
+    const quem: { provedor?: string } = {};
+    const responderIA = (corpo: unknown, status = 200) => {
+      if (status === 200 && corpo && typeof corpo === 'object' && quem.provedor) {
+        (corpo as Record<string, unknown>).provedor = quem.provedor;
+      }
+      return responder(corpo, status);
+    };
+
+    let bruto = await chamarIA(promptDe(tipo, ctx), entrada, tetoDeSaida(tipo, quantosLeads), usaRapido, quem);
     let json = lerJSON(bruto);
 
     /* Segunda passada para empresa, e só quando a primeira achou de quem se
@@ -2611,7 +2631,7 @@ Deno.serve(async (req: Request) => {
       if (nome) {
         const comBusca = await enriquecerConta(entrada, site, nome);
         if (comBusca !== entrada) {
-          const brutoDois = await chamarIA(promptDe(tipo, ctx), comBusca, tetoDeSaida(tipo, quantosLeads), usaRapido);
+          const brutoDois = await chamarIA(promptDe(tipo, ctx), comBusca, tetoDeSaida(tipo, quantosLeads), usaRapido, quem);
           const jsonDois = lerJSON(brutoDois);
           /* O que a segunda achou vence onde a primeira estava vazia, e vence
              também no que é dado oficial — razão social, CNPJ e endereço saem
@@ -2625,30 +2645,30 @@ Deno.serve(async (req: Request) => {
     }
     /* JSON torto devolve vazio. Nunca dado inventado no formulário do vendedor. */
     if (!json) {
-      if (tipo === 'reuniao') return responder({ evidencias: [], contatos: [], negocio: {}, decisoes: [] });
-      if (tipo === 'segmentos') return responder({ itens: [] });
-      if (tipo === 'plano') return responder({ passos: [], atencao: [] });
-      if (tipo === 'notas') return responder({ decisoes: [] });
-      if (tipo === 'desenvolvimento') return responder({ leitura: '', indoBem: [], indoMal: [], mudancas: [] });
-      if (tipo === 'orientacao') return responder({ leitura: '', acelerar: [], risco: [] });
-      if (tipo === 'panorama') return responder({ leitura: '', agora: [], padroes: [], riscos: [] });
-      if (tipo === 'pessoas') return responder({ campos: {}, frases: {}, contatos: [] });
-      return responder({ campos: {}, frases: {} });
+      if (tipo === 'reuniao') return responderIA({ evidencias: [], contatos: [], negocio: {}, decisoes: [] });
+      if (tipo === 'segmentos') return responderIA({ itens: [] });
+      if (tipo === 'plano') return responderIA({ passos: [], atencao: [] });
+      if (tipo === 'notas') return responderIA({ decisoes: [] });
+      if (tipo === 'desenvolvimento') return responderIA({ leitura: '', indoBem: [], indoMal: [], mudancas: [] });
+      if (tipo === 'orientacao') return responderIA({ leitura: '', acelerar: [], risco: [] });
+      if (tipo === 'panorama') return responderIA({ leitura: '', agora: [], padroes: [], riscos: [] });
+      if (tipo === 'pessoas') return responderIA({ campos: {}, frases: {}, contatos: [] });
+      return responderIA({ campos: {}, frases: {} });
     }
-    if (tipo === 'reuniao') return responder(validarReuniao(json, ctx, entrada));
-    if (tipo === 'segmentos') return responder(validarSegmentos(json, ctx));
-    if (tipo === 'plano') return responder(validarPlano(json));
-    if (tipo === 'notas') return responder(validarNotas(json, entrada));
-    if (tipo === 'desenvolvimento') return responder(validarDesenvolvimento(json));
-    if (tipo === 'orientacao') return responder(validarOrientacao(json));
-    if (tipo === 'panorama') return responder(validarPanorama(json));
+    if (tipo === 'reuniao') return responderIA(validarReuniao(json, ctx, entrada));
+    if (tipo === 'segmentos') return responderIA(validarSegmentos(json, ctx));
+    if (tipo === 'plano') return responderIA(validarPlano(json));
+    if (tipo === 'notas') return responderIA(validarNotas(json, entrada));
+    if (tipo === 'desenvolvimento') return responderIA(validarDesenvolvimento(json));
+    if (tipo === 'orientacao') return responderIA(validarOrientacao(json));
+    if (tipo === 'panorama') return responderIA(validarPanorama(json));
     /* `campos` vazio de propósito: quem chama é a mesma função de extração do
        app, e ela exige o campo para distinguir resposta da função de página de
        erro do gateway. Aqui o que interessa vai em `contatos`. */
     if (tipo === 'pessoas') {
-      return responder({ campos: {}, frases: {}, contatos: validarContatos(json.contatos, ctx) });
+      return responderIA({ campos: {}, frases: {}, contatos: validarContatos(json.contatos, ctx) });
     }
-    return responder(validar(tipo, json, ctx));
+    return responderIA(validar(tipo, json, ctx));
   } catch (e) {
     return responder({ erro: String((e as Error).message || e) }, 502);
   }
