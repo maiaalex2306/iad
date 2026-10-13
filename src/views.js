@@ -6108,7 +6108,7 @@
     ['contato', '✨ no formulário de contato',
      'Deduz o papel na compra a partir do cargo (Suprimentos → Compras; CFO → Decisor econômico). Perfil Challenger só se o texto mostrar como a pessoa age.'],
     ['oportunidade', '✨ no formulário de negócio',
-     'Título, empresa, segmento, tipo e concorrentes — incluindo "não fazer nada". Não devolve valor, etapa nem data de fechamento: isso é seu.'],
+     'Título, segmento, tipo e concorrentes — incluindo "não fazer nada" —, a ficha inteira da empresa cliente e as pessoas citadas. Num gesto só: a empresa nova nasce com a ficha preenchida, e a pessoa que você escolher no campo Contato é cadastrada e entra no grupo comprador deste negócio. Não devolve valor, etapa nem data de fechamento: isso é seu.'],
     ['evidencia', '✨ no registro de evidência',
      'Extrai UMA evidência do que o cliente fez, começando pelo lado dele. Dimensão, força, pessoa, canal, data e o próximo passo combinado. Não devolve a nota.'],
     ['classificar', 'enquanto você digita a evidência',

@@ -2147,7 +2147,12 @@
         anexarAoRegistro(docs, { oportunidadeId: op.id, contaId: alvo });
         const novoContato = criarContatoDoFormulario(alvo, op, doForm);
         const itens = aplicarItens(op, doForm.produtoIds);
-        const quantos = criarContatosPropostos(alvo, pessoas);
+        /* Quem o app recusa, ele diz. Um e-mail de domínio nosso ou de outra
+           conta da carteira não vira contato daqui — e recusar em silêncio é
+           trocar um erro invisível por outro: o vendedor marcou a pessoa,
+           ninguém apareceu, e ele descobre na semana seguinte. */
+        const recusados = [];
+        const quantos = criarContatosPropostos(alvo, pessoas, recusados);
         location.hash = '#/op/' + op.id;
         render();
         /* "criada" e não "empresaNova": a pessoa pode ter escolhido outra
@@ -2161,6 +2166,13 @@
             (quantos ? '\n· ' + (quantos === 1 ? '1 contato' : quantos + ' contatos') + ' adicionados' : '') +
             (itens ? '\n· ' + (itens === 1 ? '1 item' : itens + ' itens') + ' do catálogo' : '') +
             '\n· negócio criado.\n\nConfira o papel de cada pessoa na compra — é ele que alimenta a cobertura do grupo comprador.');
+        }
+        if (recusados.length) {
+          alert('Não cadastrei ' + (recusados.length === 1 ? 'esta pessoa' : 'estas pessoas') + ':\n\n' +
+            recusados.map(function (x) {
+              return '\u00b7 ' + x.nome + (x.email ? ' (' + x.email + ')' : '') + ' \u2014 ' + x.porque;
+            }).join('\n') +
+            '\n\nSe for engano, cadastre em Contatos \u2192 + Novo contato, escolhendo a empresa certa.');
         }
 
         /* E agora o material inteiro, de novo, com a leitura de reunião.
@@ -2195,6 +2207,8 @@
             dlg.empresaNovaIA = null;
             const caixa = dlg.querySelector('[data-empresa-ia]');
             if (caixa && caixa.querySelector('[data-cria-empresa]')) caixa.innerHTML = '';
+            const op = sel.querySelector('option[value="' + NOVA_CONTA + '"]');
+            if (op) op.textContent = '+ Cadastrar nova empresa…';
             return;
           }
           const guardado = valoresDoFormulario(dlg, campos);
@@ -9373,6 +9387,83 @@
      documento vira negócio, empresa e pessoas de uma vez.
 
      Oferecemos, não fazemos: a empresa só nasce se a caixa ficar marcada. */
+  /* Mostrava cidade, UF, CNPJ e segmento — quatro dos doze campos que a ficha
+     pode trazer. Um dossiê que rendeu descrição, necessidades, porte e site
+     aparecia na tela como uma linha vazia, e quem lê uma linha vazia conclui
+     que a IA não achou nada e que o material foi desperdiçado. Era o
+     contrário: estava tudo lá, indo para o banco, sem ninguém saber.
+
+     Agora a tela lista o que vai ser gravado. E quando de fato só veio o nome,
+     ela diz isso com todas as letras — "o material não trazia mais nada" é uma
+     informação sobre o documento, não um silêncio sobre o aplicativo. */
+  const ROTULOS_DA_FICHA = [
+    ['razaoSocial', 'razão social'], ['cnpj', 'CNPJ'], ['segmento', 'segmento'],
+    ['porte', 'porte'], ['cidade', 'cidade'], ['uf', 'UF'], ['pais', 'país'],
+    ['telefone', 'telefone'], ['site', 'site'], ['linkedin', 'LinkedIn'],
+    ['descricao', 'descrição'], ['necessidades', 'necessidades']
+  ];
+
+  function resumoDaFicha(ficha) {
+    const curto = [ficha.cidade, ficha.uf, ficha.segmento, ficha.porte, ficha.cnpj, ficha.site]
+      .filter(Boolean).join(' · ');
+    const todos = ROTULOS_DA_FICHA
+      .filter(function (x) { return String(ficha[x[0]] || '').trim(); })
+      .map(function (x) { return x[1]; });
+    if (!todos.length) {
+      return '<em>Só o nome — o material não trazia mais nada sobre a empresa. ' +
+        'Você completa a ficha depois em Contas.</em>';
+    }
+    const conta = todos.length === 1 ? '1 campo da ficha' : todos.length + ' campos da ficha';
+    return '<em>' + U.esc(curto ? curto + ' — ' : '') +
+      conta + ': ' + U.esc(todos.join(', ')) + '.</em>';
+  }
+
+  /* As pessoas do material entram no campo Contato. A caixa de cima decide
+     quem vira contato da EMPRESA; este campo decide quem é o contato DESTE
+     negócio — o que entra no grupo comprador. São perguntas diferentes, e
+     antes a segunda não tinha como ser respondida numa empresa nova.
+
+     Quem o assistente nomeou como contato principal (`contatoNome`) vem
+     escolhido: a escolha é dele, com o material na frente, não nossa. Com
+     várias pessoas e nenhuma nomeada, o campo fica vazio de propósito —
+     sortear o contato principal é o mesmo erro de nascer na primeira empresa
+     da ordem alfabética. */
+  function resolverContatoDaIA(dlg, r) {
+    const contato = dlg.querySelector('[name="contatoId"]');
+    if (!contato) return;
+
+    const chave = function (t) {
+      return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase().replace(/[^a-z0-9]/g, '');
+    };
+    const achadas = ((r && r.contatos) || []).slice();
+    const campos = (r && r.campos) || {};
+    const nomeado = String(campos.contatoNome || '').trim();
+
+    let alvo = -1;
+    if (nomeado) {
+      achadas.forEach(function (p, i) { if (chave(p.nome) === chave(nomeado)) alvo = i; });
+      /* O assistente preenche `contatoNome` e `contatoCargo` desde sempre, e
+         esses campos ficam escondidos enquanto ninguém escolhe "cadastrar novo
+         contato" — ou seja, a pessoa que ele nomeou era extraída e jogada fora
+         sem nada aparecer na tela. Se ela não estiver na lista, entra. */
+      if (alvo === -1) {
+        achadas.unshift({ nome: nomeado, cargo: campos.contatoCargo || '', email: '', telefone: '' });
+        alvo = 0;
+      }
+    }
+    if (alvo === -1 && achadas.length === 1) alvo = 0;
+
+    dlg.pessoasIA = achadas;
+    if (dlg.repintarContatos) dlg.repintarContatos();
+    if (alvo >= 0) {
+      contato.value = PESSOA_IA + alvo;
+      /* O `change` à mão: mexer no `value` por código não dispara evento, e é
+         o evento que copia nome, cargo e e-mail para os campos e os mostra. */
+      contato.dispatchEvent(new Event('change'));
+    }
+  }
+
   function resolverEmpresaDaIA(dlg, r, contas) {
     const caixa = dlg.querySelector('[data-empresa-ia]');
     if (!caixa) return;
@@ -9396,6 +9487,10 @@
       if (sel) sel.value = achada.id;
       caixa.innerHTML = '<p class="achou-empresa">Empresa reconhecida: <strong>' +
         U.esc(achada.nome) + '</strong> — já cadastrada, e já escolhida acima.</p>';
+      /* Trocar a empresa por código não dispara `change`, e sem repintar o
+         campo Contato continuava listando as pessoas da empresa anterior —
+         o negócio nasceria com o contato de outra conta. */
+      if (dlg.repintarContatos) dlg.repintarContatos();
       return;
     }
 
@@ -9408,11 +9503,17 @@
        contraditórias na mesma tela, e a errada era a que valia. */
     if (sel) sel.value = NOVA_CONTA;
 
-    const detalhe = [ficha.cidade, ficha.uf, ficha.cnpj, ficha.segmento].filter(Boolean).join(' · ');
+    /* O select TEM de dizer de qual empresa se trata. "+ Cadastrar nova
+       empresa…" é o rótulo genérico do menu, e lido num campo já escolhido
+       parece tarefa pendente — o vendedor olha e pensa que precisa fazer algo
+       ali. Com o nome dentro, o campo afirma o que vai acontecer. */
+    const opcaoNova = sel && sel.querySelector('option[value="' + NOVA_CONTA + '"]');
+    if (opcaoNova) opcaoNova.textContent = 'Cadastrar ' + nome + ' (empresa nova)';
+
     caixa.innerHTML = '<label class="empresa-nova-ia">' +
       '<input type="checkbox" checked data-cria-empresa>' +
       '<span><strong>' + U.esc(nome) + '</strong> ainda não está cadastrada — cadastrar junto com o negócio.' +
-      (detalhe ? '<em>' + U.esc(detalhe) + '</em>' : '') + '</span></label>';
+      resumoDaFicha(ficha) + '</span></label>';
     const marca = caixa.querySelector('[data-cria-empresa]');
     marca.addEventListener('change', function () {
       dlg.empresaNovaIA = marca.checked ? Object.assign({}, ficha, { nome: nome }) : null;
@@ -9437,7 +9538,12 @@
         return;
       }
       const el = dlg.querySelector('[name="' + c.id + '"]');
-      if (el && el.value && el.value !== NOVA_CONTA) v[c.id] = el.value;
+      /* A escolha "pessoa do material" é um índice numa lista que o formulário
+         reaberto não tem mais — guardá-la apontaria para ninguém. O que ela
+         produziu (nome, cargo, e-mail) está nos campos ao lado e volta
+         inteiro, que é o que importa. */
+      if (el && el.value && el.value !== NOVA_CONTA &&
+          String(el.value).indexOf(PESSOA_IA) !== 0) v[c.id] = el.value;
     });
     return v;
   }
@@ -9600,19 +9706,53 @@
   }
 
   const NOVO_CONTATO = '__novo_contato__';
+  const PESSOA_IA = '__pessoa_ia__';
 
   /* Os contatos de UMA empresa, mais a saída de cadastrar um na hora. Quem
      está abrindo a oportunidade acabou de falar com alguém; mandar cadastrar
      a pessoa em outra tela antes é o desvio em que o contato não é
      cadastrado — e negócio sem contato nasce com o grupo comprador vazio,
      que é o alarme mais barulhento e mais inútil do app. */
-  function opcoesDeContato(contaId) {
+  /* `achadas` são as pessoas que o assistente acabou de ler no material e que
+     ainda não existem no banco. Sem elas, a tela dizia "nenhum contato nesta
+     empresa" logo abaixo de uma caixa listando duas pessoas com nome, cargo e
+     e-mail — duas afirmações contraditórias na mesma tela, e a errada era a
+     que valia: o negócio nascia sem contato principal e com o grupo comprador
+     vazio, que é o alarme mais barulhento e mais inútil do app.
+
+     Elas entram como opção de verdade, não como enfeite: escolher uma cadastra
+     a pessoa e a amarra ao grupo comprador no salvamento. */
+  function opcoesDeContato(contaId, achadas) {
     const pessoas = contaId ? Store.contatosDaConta(contaId) : [];
-    return [{ valor: '', rotulo: pessoas.length ? '— escolher depois —' : '— nenhum contato nesta empresa —' }]
+    const doMaterial = achadas || [];
+    const vazio = doMaterial.length
+      ? '— escolher quem é o contato principal —'
+      : (pessoas.length ? '— escolher depois —' : '— nenhum contato nesta empresa —');
+    return [{ valor: '', rotulo: vazio }]
       .concat(pessoas.map(function (c) {
         return { valor: c.id, rotulo: c.nome + (c.cargo ? ' — ' + c.cargo : '') };
       }))
+      .concat(doMaterial.map(function (p, i) {
+        const cargo = p.cargo || p.area || '';
+        return { valor: PESSOA_IA + i,
+          rotulo: p.nome + (cargo ? ' — ' + cargo : '') + ' · do material, cadastrar junto' };
+      }))
       .concat([{ valor: NOVO_CONTATO, rotulo: '+ Cadastrar novo contato…' }]);
+  }
+
+  /* Escolher uma pessoa do material é cadastrar um contato novo — só que com
+     os campos já preenchidos. Por isso os dois valores andam juntos daqui
+     para a frente: o que decide é "vai nascer gente?", não qual opção foi
+     clicada. */
+  function ehContatoNovo(valor) {
+    const v = String(valor || '');
+    return v === NOVO_CONTATO || v.indexOf(PESSOA_IA) === 0;
+  }
+
+  function pessoaEscolhida(dlg, valor) {
+    const v = String(valor || '');
+    if (v.indexOf(PESSOA_IA) !== 0) return null;
+    return (dlg.pessoasIA || [])[Number(v.slice(PESSOA_IA.length))] || null;
   }
 
   const CAMPOS_CONTATO_NOVO = ['contatoNome', 'contatoCargo', 'contatoEmail', 'contatoTelefone', 'contatoPapel'];
@@ -9623,19 +9763,42 @@
     if (!conta || !contato) return;
 
     const ajustarNovo = function () {
-      U.mostrarCampos(dlg, CAMPOS_CONTATO_NOVO, contato.value === NOVO_CONTATO);
+      U.mostrarCampos(dlg, CAMPOS_CONTATO_NOVO, ehContatoNovo(contato.value));
     };
+
+    /* Escolheu alguém que o assistente achou: os campos do contato novo
+       nascem preenchidos com o que estava no material. Preenchidos e
+       visíveis — cargo e papel na compra são justamente o que o vendedor
+       sabe e o documento não diz, e ele corrige ali mesmo, antes de salvar. */
+    const copiarDoMaterial = function () {
+      const p = pessoaEscolhida(dlg, contato.value);
+      if (!p) return;
+      const por = { contatoNome: p.nome, contatoCargo: p.cargo || p.area || '',
+        contatoEmail: p.email || '', contatoTelefone: p.telefone || '' };
+      Object.keys(por).forEach(function (k) {
+        const el = dlg.querySelector('[name="' + k + '"]');
+        if (el) el.value = por[k];
+      });
+    };
+
     const pintar = function () {
-      /* Empresa nova ainda não tem id, e portanto não tem contatos: o campo
-         vira só a porta de cadastrar. */
+      /* Empresa nova ainda não tem id, e portanto não tem contatos
+         cadastrados — mas pode muito bem ter as pessoas que vieram no mesmo
+         documento que a criou. */
       const alvo = (conta.value && conta.value !== NOVA_CONTA) ? conta.value : '';
-      contato.innerHTML = opcoesDeContato(alvo).map(function (x) {
+      const antes = contato.value;
+      contato.innerHTML = opcoesDeContato(alvo, dlg.pessoasIA).map(function (x) {
         return '<option value="' + U.esc(x.valor) + '">' + U.esc(x.rotulo) + '</option>';
       }).join('');
+      /* Repintar não pode desfazer a escolha de quem já escolheu: o select
+         volta para o mesmo valor quando ele ainda existe na lista nova. */
+      if (antes) contato.value = antes;
+      if (contato.selectedIndex < 0) contato.selectedIndex = 0;
       ajustarNovo();
     };
     conta.addEventListener('change', pintar);
-    contato.addEventListener('change', ajustarNovo);
+    contato.addEventListener('change', function () { copiarDoMaterial(); ajustarNovo(); });
+    dlg.repintarContatos = pintar;
     pintar();
   }
 
@@ -9658,11 +9821,11 @@
      ao grupo comprador. Devolve o contato, ou null quando não havia nada
      para criar. */
   function criarContatoDoFormulario(contaId, op, d) {
-    if (d.contatoId && d.contatoId !== NOVO_CONTATO) {
+    if (d.contatoId && !ehContatoNovo(d.contatoId)) {
       if (op) Store.vincularStakeholder(op, d.contatoId);
       return null;
     }
-    if (d.contatoId !== NOVO_CONTATO || !String(d.contatoNome || '').trim()) return null;
+    if (!ehContatoNovo(d.contatoId) || !String(d.contatoNome || '').trim()) return null;
     const novo = Store.criarContato({
       contaId: contaId, nome: d.contatoNome.trim(), cargo: d.contatoCargo || '',
       email: d.contatoEmail || '', telefone: d.contatoTelefone || '',
@@ -9811,7 +9974,12 @@
            Se a IA mexer na etapa, ela apaga o alerta de "falso avançado". */
         nunca: ['valor', 'etapa', 'fechamentoPrevisto'],
         contexto: function () { return IA.contextoDaConta(contaPadrao); },
-        aoAplicar: function (dlg, r) { resolverEmpresaDaIA(dlg, r, contas); } },
+        aoAplicar: function (dlg, r) {
+          /* Nesta ordem: a empresa primeiro, porque é ela que decide de quem
+             são os contatos que o campo de baixo vai listar. */
+          resolverEmpresaDaIA(dlg, r, contas);
+          resolverContatoDaIA(dlg, r);
+        } },
       { id: 'titulo', rotulo: 'Título' },
       { tipo: 'slot', slot: 'empresa-ia' },
       /* A opção de cadastrar vem sempre, e primeiro quando não há nenhuma:
@@ -9825,7 +9993,10 @@
        influência e perfil. Repetir aqui daria duas verdades sobre a mesma
        coisa. */
     const doContato = o.edicao ? [] : [
-      { id: 'contatoId', rotulo: 'Contato', tipo: 'select', opcoes: opcoesDeContato(contaInicial) },
+      { id: 'contatoId', rotulo: 'Contato', tipo: 'select', opcoes: opcoesDeContato(contaInicial),
+        dica: 'As pessoas que o assistente achou no material aparecem aqui. A que você escolher ' +
+          'é cadastrada e entra no grupo comprador DESTE negócio; as marcadas lá em cima entram ' +
+          'como contatos da empresa, sem papel na compra.' },
       { id: 'contatoNome', rotulo: 'Nome do novo contato' },
       { id: 'contatoCargo', rotulo: 'Cargo', largura: 'metade' },
       { id: 'contatoPapel', rotulo: 'Papel na compra', tipo: 'select', largura: 'metade', opcoes: P.PAPEIS },
