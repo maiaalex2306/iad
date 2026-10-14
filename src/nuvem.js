@@ -105,7 +105,15 @@
      que não diz nada ao vendedor. Numa recusa por token vencido, renovamos e
      repetimos a chamada uma vez — só uma, para um refresh inválido não virar
      laço infinito. */
+  /* A costura do teste. Uma linha, e ela existe porque o que precisa ser
+     provado aqui é COM QUANTAS LINHAS o envio sai — e isso não dá para medir
+     sem pôr um servidor no lugar do servidor. O alvo é a regra de "só sobe o
+     que mudou", que é a diferença entre mil e trezentas linhas por clique e
+     uma. Fora do teste, `substitutoDeTeste` é nulo e esta linha não faz nada. */
+  let substitutoDeTeste = null;
+
   function chamar(caminho, opcoes) {
+    if (substitutoDeTeste) return substitutoDeTeste(caminho, opcoes);
     return tentar(caminho, opcoes, true);
   }
 
@@ -938,6 +946,69 @@
      acabado de subir a carteira inteira naquela manhã. Data velha numa tela
      que existe para dizer se está tudo certo é pior do que data nenhuma: ela
      não erra por acaso, erra para o lado de assustar. */
+  /* ---------- só sobe o que mudou ----------
+
+     Cada `salvar` do app dispara um envio, e o envio mandava a CARTEIRA
+     INTEIRA: 277 empresas, 393 contatos, 282 oportunidades, 326 tarefas, mais
+     eventos e evidências. A cada clique. Marcar uma tarefa como feita
+     reescrevia mil e trezentas linhas no Postgres para mudar uma — e era isso
+     que deixava o app lento no aparelho de quem tem carteira de verdade.
+     Quanto mais o vendedor trabalha, mais lento fica: exatamente ao contrário
+     do que deveria.
+
+     A conta nova é simples: guarda-se uma marca por registro — o que foi
+     mandado da última vez, resumido num número — e só sobe quem não bate.
+
+     Por que marca e não data de alteração: data de alteração exigiria que
+     TODA mutação do Store lembrasse de carimbar, e a que esquecesse nunca
+     mais subiria. Erro silencioso, do pior tipo. A marca é calculada do
+     registro inteiro na hora de enviar: se qualquer campo mudou, ela muda —
+     não há como esquecer. */
+  const CHAVE_DAS_MARCAS = 'iad-crm:nuvem-marcas';
+  const DIA = 24 * 60 * 60 * 1000;
+
+  /* FNV-1a de 32 bits. Não é segurança, é comparação: precisa ser rápido em
+     mil linhas e caber em poucos bytes no localStorage. */
+  function marcaDoTexto(t) {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < t.length; i++) {
+      h ^= t.charCodeAt(i);
+      h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+    }
+    return h.toString(36);
+  }
+
+  /* O dono entra na marca de propósito: o mesmo registro carimbado para outra
+     empresa é outra linha no banco, e tem de subir de novo. */
+  function marcaDoRegistro(r, dono, donoId) {
+    try { return marcaDoTexto(JSON.stringify(r) + '|' + dono + '|' + donoId); }
+    catch (e) { return ''; }                 /* sem marca, sobe sempre */
+  }
+
+  function lerMarcas(chaveDaConta) {
+    try {
+      const bruto = JSON.parse(localStorage.getItem(CHAVE_DAS_MARCAS) || 'null');
+      if (!bruto || bruto.conta !== chaveDaConta) return { conta: chaveDaConta, em: 0, tabelas: {} };
+      /* Uma vez por dia sobe tudo de novo, dê no que der. É a rede contra o
+         caso que eu não previ: marca certa para um registro que o servidor,
+         por qualquer motivo, não tem. Custa um envio completo por dia e
+         compra a garantia de que nada fica para trás para sempre. */
+      if (!bruto.em || Date.now() - bruto.em > DIA) return { conta: chaveDaConta, em: 0, tabelas: {} };
+      return { conta: chaveDaConta, em: bruto.em, tabelas: bruto.tabelas || {} };
+    } catch (e) {
+      return { conta: chaveDaConta, em: 0, tabelas: {} };
+    }
+  }
+
+  function gravarMarcas(m) {
+    try { localStorage.setItem(CHAVE_DAS_MARCAS, JSON.stringify(m)); }
+    catch (e) { /* armazenamento cheio não pode derrubar o envio */ }
+  }
+
+  function esquecerMarcas() {
+    try { localStorage.removeItem(CHAVE_DAS_MARCAS); } catch (e) { /* idem */ }
+  }
+
   function marcarEnvio() {
     try { localStorage.setItem('iad-crm:nuvem-ultimo-envio', new Date().toISOString()); }
     catch (e) { /* aparelho com armazenamento cheio não pode derrubar o envio */ }
@@ -945,14 +1016,89 @@
 
   function ultimoEnvio() { return localStorage.getItem('iad-crm:nuvem-ultimo-envio') || ''; }
 
-  function empurrar() {
-    return perfilParaEnviar().then(empurrarComPerfil).then(function (r) {
+  /* `tudo` manda a carteira inteira, ignorando as marcas. É o que o botão
+     "Sincronizar agora" faz: quando alguém clica nele, é porque desconfia —
+     e a resposta a uma desconfiança não pode ser "mandei só o que eu ACHO que
+     mudou". */
+  function empurrar(opcoes) {
+    const tudo = !!(opcoes && opcoes.tudo);
+    return perfilParaEnviar().then(function (perfil) {
+      return empurrarComPerfil(perfil, tudo);
+    }).then(function (r) {
       marcarEnvio();
       return r;
     });
   }
 
-  function empurrarComPerfil(perfil) {
+  /* Quem é "outra empresa" e quem é só registro sem carimbo de servidor.
+
+     A empresa do servidor tem id UUID, criado pelo Postgres. O carimbo que o
+     próprio app inventa quando encontra registro órfão tem a forma `ten_xxx`,
+     e nunca existiu em servidor nenhum — é do vendedor que cadastrou antes de
+     haver empresa. Segurar esse é perdê-lo para sempre, porque nenhum login
+     vai casar com ele. Então só fica retido o que está carimbado com um UUID
+     diferente do meu: aquilo é carteira de outra empresa de verdade.
+
+     Saíram de dentro do envio e viraram funções do módulo porque quem calcula
+     as marcas depois de BAIXAR precisa usar exatamente as mesmas regras.
+     Duplicá-las seria escrever dois comportamentos com um nome só — e o dia em
+     que divergissem, o envio passaria a pular registros que nunca subiram. */
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  function filtroDaEmpresa(perfil, souAdmin) {
+    return function (r) {
+      const dele = String(r.tenantId || '');
+      /* Administrador sem empresa no perfil: só sobe o que tem carimbo de
+         servidor. O resto não tem para onde ir — e mandar com `tenant_id`
+         nulo esbarraria no NOT NULL e derrubaria a TABELA inteira, levando
+         junto as linhas que estavam certas. */
+      if (!perfil.tenant_id) return UUID.test(dele);
+      if (!dele) return true;
+      if (dele === String(perfil.tenant_id)) return true;
+      if (souAdmin && UUID.test(dele)) return true;
+      return !UUID.test(dele);
+    };
+  }
+
+  /* Carimbo de servidor manda. Sem carimbo, ou com carimbo local `ten_xxx`, o
+     dono é a empresa de quem está sincronizando — é o registro criado offline
+     antes de haver empresa. */
+  function carimboDoRegistro(perfil) {
+    return function (r) {
+      const dele = String(r.tenantId || '');
+      return UUID.test(dele) ? dele : perfil.tenant_id;
+    };
+  }
+
+  /* O que acabou de descer É o que o servidor tem. Calcular as marcas agora
+     evita que o primeiro envio depois de cada login remande a carteira inteira
+     de volta para quem acabou de mandá-la — que seria trocar a lentidão de
+     todo clique pela lentidão de toda entrada. */
+  function marcarOQueDesceu() {
+    return perfilParaEnviar().then(function (perfil) {
+      const donoId = (sessao().user || {}).id || '';
+      const souAdmin = String(perfil.papel || '') === 'admin';
+      const daEmpresa = filtroDaEmpresa(perfil, souAdmin);
+      const dono = carimboDoRegistro(perfil);
+      const estado = Store.obter();
+      const tabelas = {};
+      TABELAS.forEach(function (t) {
+        const mapa = {};
+        (estado[t.local] || []).filter(daEmpresa).forEach(function (r) {
+          mapa[r.id] = marcaDoRegistro(r, dono(r), donoId);
+        });
+        tabelas[t.local] = mapa;
+      });
+      gravarMarcas({ conta: String(perfil.tenant_id || '') + '|' + donoId,
+        em: Date.now(), tabelas: tabelas });
+    }).catch(function () {
+      /* Não deu para calcular: apagar é a saída segura — o próximo envio sobe
+         tudo uma vez, que é lento e correto, em vez de rápido e errado. */
+      esquecerMarcas();
+    });
+  }
+
+  function empurrarComPerfil(perfil, tudo) {
 
     /* Sem empresa no perfil, o envio parava aqui — para todo mundo. Certo para
        o vendedor: o RLS do banco confere `tenant_id = meu_tenant()`, e com
@@ -1000,7 +1146,6 @@
 
        Então só fica retido o que está carimbado com um UUID diferente do meu:
        aquilo é carteira de outra empresa de verdade. */
-    const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
     /* O administrador é a exceção, e a falta dela custou caro uma vez.
 
@@ -1015,18 +1160,8 @@
        RLS do banco decide de novo do lado de lá. O que muda é só quem tem
        permissão de empurrar carimbo de outra empresa — e é o administrador,
        que já pode ler e escrever em todas. */
-    const daEmpresa = function (r) {
-      const dele = String(r.tenantId || '');
-      /* Administrador sem empresa no perfil: só sobe o que tem carimbo de
-         servidor. O resto não tem para onde ir — e mandar com `tenant_id`
-         nulo esbarraria no NOT NULL e derrubaria a TABELA inteira, levando
-         junto as linhas que estavam certas. */
-      if (!perfil.tenant_id) return UUID.test(dele);
-      if (!dele) return true;
-      if (dele === String(perfil.tenant_id)) return true;
-      if (souAdmin && UUID.test(dele)) return true;
-      return !UUID.test(dele);
-    };
+    const daEmpresa = filtroDaEmpresa(perfil, souAdmin);
+    const donoDoRegistro = carimboDoRegistro(perfil);
 
     /* Uma tabela que falha não pode esconder as outras. Com Promise.all, o
        primeiro erro aborta tudo e o problema seguinte só aparece depois de
@@ -1043,10 +1178,6 @@
        Carimbo de servidor manda. Sem carimbo, ou com carimbo local `ten_xxx`,
        o dono é a empresa de quem está sincronizando — é o registro criado
        offline antes de haver empresa. */
-    const donoDoRegistro = function (r) {
-      const dele = String(r.tenantId || '');
-      return UUID.test(dele) ? dele : perfil.tenant_id;
-    };
 
     /* Apagar vai na frente. O envio é `upsert`, então uma linha excluída aqui
        e ainda presente lá voltaria na descida seguinte como se nada tivesse
@@ -1061,14 +1192,34 @@
         }))
       : Promise.resolve([]);
 
+    const chaveDaConta = String(perfil.tenant_id || '') + '|' + donoId;
+    const marcas = tudo ? { conta: chaveDaConta, em: 0, tabelas: {} } : lerMarcas(chaveDaConta);
+    const marcasNovas = {};
+
     let retidos = 0;
     const envios = TABELAS.map(function (t) {
-      const minhas = (estado[t.local] || []).filter(daEmpresa);
-      retidos += ((estado[t.local] || []).length - minhas.length);
-      const linhas = minhas.map(function (r) { return paraBanco(r, donoDoRegistro(r), donoId); });
-      if (!linhas.length) return Promise.resolve({ tabela: t.remota, enviados: 0 });
+      const todas = estado[t.local] || [];
+      const minhas = todas.filter(daEmpresa);
+      retidos += (todas.length - minhas.length);
 
-      return Promise.all(porFormato(linhas).map(function (lote) {
+      /* A marca de agora para CADA registro meu, e a lista do que mudou. O
+         mapa novo é montado inteiro aqui — inclusive para quem não mudou —,
+         e é ele que vale depois do envio: assim o registro excluído sai do
+         mapa sozinho, sem ninguém precisar varrer. */
+      const antes = marcas.tabelas[t.local] || {};
+      const agora = {};
+      const mudaram = [];
+      minhas.forEach(function (r) {
+        const dono = donoDoRegistro(r);
+        const marca = marcaDoRegistro(r, dono, donoId);
+        agora[r.id] = marca;
+        if (!marca || antes[r.id] !== marca) mudaram.push(paraBanco(r, dono, donoId));
+      });
+      marcasNovas[t.local] = agora;
+
+      if (!mudaram.length) return Promise.resolve({ tabela: t.remota, enviados: 0, local: t.local, guardar: true });
+
+      return Promise.all(porFormato(mudaram).map(function (lote) {
         return enviarLote(t.remota, lote, []);
       })).then(
         function (foras) {
@@ -1079,9 +1230,13 @@
               if (atrasadas.indexOf(nome) === -1) atrasadas.push(nome);
             });
           });
-          return { tabela: t.remota, enviados: linhas.length, atrasadas: atrasadas };
+          return { tabela: t.remota, enviados: mudaram.length, atrasadas: atrasadas,
+            local: t.local, guardar: true };
         },
-        function (e) { return { tabela: t.remota, enviados: 0, erro: e.message }; }
+        /* Tabela que falhou NÃO guarda marca nova: o que não subiu continua
+           sujo e tenta de novo no próximo envio. É a diferença entre
+           "mandamos" e "o servidor aceitou". */
+        function (e) { return { tabela: t.remota, enviados: 0, erro: e.message, local: t.local }; }
       );
     });
 
@@ -1092,6 +1247,19 @@
       const erroAoApagar = saidas.filter(function (r) { return r.erro; });
 
       return Promise.all(envios).then(function (resultados) {
+        /* Guarda o que o servidor confirmou, tabela por tabela. Mesmo quando
+           outra tabela falhou: o que passou, passou, e remandar amanhã o que
+           já está lá é justamente o desperdício que isto veio tirar. */
+        const guardadas = {};
+        resultados.forEach(function (r) {
+          if (r.guardar && r.local) guardadas[r.local] = marcasNovas[r.local];
+        });
+        if (Object.keys(guardadas).length) {
+          const juntas = Object.assign({}, marcas.tabelas, guardadas);
+          gravarMarcas({ conta: chaveDaConta, em: tudo ? Date.now() : (marcas.em || Date.now()),
+            tabelas: juntas });
+        }
+
         const falhas = resultados.filter(function (r) { return r.erro; })
           .concat(erroAoApagar.map(function (r) { return { tabela: r.tabela + ' (apagar)', erro: r.erro }; }));
         if (falhas.length) {
@@ -1175,12 +1343,14 @@
         resultados.forEach(function (r) { estado[r.local] = r.linhas; });
         Store.salvar();
       });
-      return resultados.reduce(function (s, r) { return s + r.linhas.length; }, 0);
+
+      const quantos = resultados.reduce(function (s, r) { return s + r.linhas.length; }, 0);
+      return marcarOQueDesceu().then(function () { return quantos; });
     });
   }
 
   function sincronizar() {
-    return empurrar().then(function (subida) {
+    return empurrar({ tudo: true }).then(function (subida) {
       return puxar().then(function (recebidos) {
         localStorage.setItem('iad-crm:nuvem-ultima', new Date().toISOString());
         return { enviados: subida.enviados, retidos: subida.retidos, recebidos: recebidos };
@@ -1257,6 +1427,8 @@
     config, salvarConfig, configurada, conectado, mandaNoAcesso, estado, sessao,
     cadastrar, entrar, sair, renovar, precisaRenovar, eu, meuPerfil, salvarPerfil, criarMinhaEmpresa,
     guardarPerfilNaSessao, empurrar, puxar, sincronizar, ultimaSincronizacao, ultimoEnvio,
+    esquecerMarcas,
+    __trocarChamar: function (fn) { substitutoDeTeste = fn || null; },
     perfisDaNuvem, empresasDaNuvem, souAdminNaNuvem, existeEmpresa,
     definirEmpresaDoPerfil, definirPapelDoPerfil, salvarMeuNome,
     definirBloqueioDoPerfil, definirBloqueioDaEmpresa, definirPonteDaEmpresa,

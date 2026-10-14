@@ -420,6 +420,18 @@
   let caixaDoAviso = null;
 
   function vigiarGravacao(sinc) {
+    /* Na tela de login não há o que avisar: sem sessão o servidor recusa
+       tudo, a recusa não é falha de ninguém, e quem está ali não tem o que
+       fazer a respeito. O aviso mais grave do app aparecendo onde não cabe é
+       como ele perde o crédito para o dia em que couber. */
+    const S = global.IADSincronia;
+    if (S && S.temSessao && !S.temSessao()) {
+      avisadoEm = 0;
+      if (relogioDoAviso) { clearTimeout(relogioDoAviso); relogioDoAviso = null; }
+      if (caixaDoAviso && caixaDoAviso.isConnected) { try { caixaDoAviso.close(); } catch (e) {} }
+      caixaDoAviso = null;
+      return;
+    }
     if (!sinc || sinc.situacao !== 'erro' || !sinc.desde) {
       /* Gravou: o episódio acabou. A caixa aberta some sozinha — deixar na
          tela um aviso que já não é verdade ensina a ignorar os próximos. */
@@ -997,6 +1009,10 @@
       location.hash = '#/hoje';
       render();
 
+      /* O que ficou da sessão anterior — ou do logout por ociosidade — sobe
+         agora, que é o primeiro instante em que ele PODE subir. */
+      global.IADSincronia.retomar();
+
       /* Perguntar ao servidor se o assistente existe só acontecia no boot, e
          no boot ainda não havia sessão para perguntar. Quem entrava agora
          ficava sem IA até recarregar a página — e nada dizia isso, porque o
@@ -1073,21 +1089,31 @@
     if (!S || !S.filaPendente || !P) return Promise.resolve();
     return S.filaPendente().then(function (fila) {
       if (!fila || !fila.estado) return;
-      const quanto = P.resumir(fila.estado);
+      /* Os números saíram da faixa, e a razão é que eles mentiam.
+
+         `resumir` conta a cópia guardada — e a cópia é da CARTEIRA INTEIRA,
+         porque é assim que a fila é gravada: um retrato de tudo, antes de
+         cada tentativa. A faixa então anunciava "recuperei o que tinha ficado
+         para trás (277 empresas, 393 contatos, 282 oportunidades, 326
+         tarefas)", e quem lia entendia que 1.278 registros estavam perdidos e
+         voltaram. Não estavam: estava guardado o retrato, e o que faltava
+         subir podia ser uma tarefa só.
+
+         Número que descreve outra coisa é pior do que número nenhum, porque
+         parece preciso. */
       const quando = fila.quando ? new Date(fila.quando) : null;
       const dia = quando ? U.data(fila.quando.slice(0, 10)) : '';
       S.marcarNaFila(true);
       Store.semSincronizar(function () { Store.substituir(fila.estado); });
       return N.empurrar().then(function () {
         return S.limparFila().then(function () {
-          avisoSincronizacao = 'Recuperei o que tinha ficado para trás' +
-            (dia ? ' de ' + dia : '') + (quanto ? ' (' + quanto + ')' : '') +
-            ' e mandei para o servidor. Nada se perdeu.';
+          avisoSincronizacao = 'Subi o que tinha ficado da sua última sessão' +
+            (dia ? ' (' + dia + ')' : '') + '. Nada se perdeu.';
           render();
         });
       }, function (e) {
         avisoSincronizacao = 'Há trabalho seu que ainda não chegou ao servidor' +
-          (dia ? ', de ' + dia : '') + (quanto ? ' (' + quanto + ')' : '') + ': ' +
+          (dia ? ', da sessão de ' + dia : '') + ': ' +
           ((e && e.message) || 'erro desconhecido') +
           ' — está guardado neste aparelho e o app continua tentando sozinho.';
         render();
@@ -1429,6 +1455,10 @@
     __tempoParado: function () { return tempoParado(); },
     __porQueNaoEntra: function (contaId, p) { return porQueNaoEntra(contaId, p); },
     __criarContatosPropostos: function (contaId, ps, rec) { return criarContatosPropostos(contaId, ps, rec); },
+    /* O vigia do aviso de gravação. Exposto porque o caso que importa é o que
+       NÃO acontece — a caixa que deixou de abrir na tela de login —, e um
+       comportamento ausente só se prova chamando o que o produziria. */
+    __vigiarGravacao: function (sinc) { return vigiarGravacao(sinc); },
     __ligarAcharPessoas: function (dlg, op) { return ligarAcharPessoas(dlg, op); },
     __telefoneValido: function (bruto) { return telefoneValido(bruto); },
     __donoDoEmail: function (email, contatos) { return donoDoEmail(email, contatos); },
@@ -5611,12 +5641,17 @@
       V.definirTelaAcesso('login', null, '');
       location.hash = '#/hoje';
       render();
+      global.IADSincronia.retomar();
     },
 
     sair: function (semPerguntar, recado) {
       if (!semPerguntar && !U.confirmar('Sair do sistema?')) return;
       fecharMenuUsuario();
       A.encerrarSessao();
+      /* Encerrada a sessão, o envio para de tentar na hora. Sem esta linha a
+         escada de reenvio seguia correndo contra um servidor que agora recusa
+         tudo, e o aviso acabava aberto por cima da tela de login. */
+      global.IADSincronia.enviar();
       const N = global.IADNuvem;
       /* O recado sobrevive ao logout de propósito: quem clicou em "trocar de
          conta" precisa ver na tela de entrada por que está ali. */

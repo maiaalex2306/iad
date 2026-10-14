@@ -84,7 +84,10 @@
     if (nova === 'erro') {
       falhas++;
       if (!erradoDesde) erradoDesde = Date.now();
-    } else if (nova === 'ocioso') {
+    } else if (nova === 'ocioso' || nova === 'pausado') {
+      /* 'pausado' zera junto com 'ocioso': o relógio de "há quanto tempo não
+         grava" não pode correr enquanto ninguém está logado, senão o aviso
+         aparece inteiro no primeiro segundo depois do login. */
       falhas = 0;
       erradoDesde = 0;
     }
@@ -92,6 +95,35 @@
     situacao = nova;
     recado = texto || '';
     avisar();
+  }
+
+  /* ---------- enquanto ninguém está dentro, isto cala a boca ----------
+
+     O relato: "aparecem mensagens toda vez que vamos entrar no sistema ou
+     quando cai por 20 minutos de não uso". E a mensagem era a mais grave que
+     este app tem — "O seu trabalho não está indo para o servidor" —, aberta
+     por cima da TELA DE LOGIN.
+
+     Fazia sentido do lado de dentro do código e nenhum do lado de fora. Sem
+     sessão, o servidor recusa tudo; o envio falhava, a escada de reenvio
+     seguia correndo e o aviso aparecia. Sozinho, era verdade. Na tela de
+     login era ruído puro: quem está ali não fez nada que pudesse ter se
+     perdido, não tem o que consertar, e o botão "Tentar gravar agora" ia
+     falhar de novo pelo mesmo motivo.
+
+     Pior: ensina a ignorar. O aviso existe para o dia em que o servidor cai
+     no meio do trabalho de alguém — e esse dia chega depois de o vendedor já
+     ter aprendido a fechar essa caixa sem ler.
+
+     Então, sem ninguém dentro, o envio PAUSA. A fila continua gravada no
+     aparelho, com o dono carimbado, e sobe no próximo login — que é o que ela
+     sempre fez. O que some é o alarme sobre uma falha que não é falha. */
+  function temSessao() {
+    const N = global.IADNuvem;
+    const A = global.IADAuth;
+    const s = N && N.sessao && N.sessao();
+    const dentro = A && A.atual && A.atual();
+    return !!(s && s.user && s.user.id && dentro);
   }
 
   function donoAtual() {
@@ -148,6 +180,15 @@
   function enviar() {
     const N = global.IADNuvem;
 
+    /* Ninguém dentro: guarda e espera. Nada de erro, nada de escada, nada de
+       aviso — não há falha nenhuma aqui, só ausência de quem assine. */
+    if (!temSessao()) {
+      pararDeTentar();
+      guardarFila();
+      definir('pausado', '');
+      return;
+    }
+
     /* Sem servidor configurado não há o que tentar, e insistir seria mentir.
        Mas a fila é gravada do mesmo jeito: o trabalho tem de sobreviver à
        aba, esteja o servidor de pé ou não. */
@@ -186,6 +227,9 @@
   }
 
   function agendar() {
+    /* Fora da sessão não há alteração do vendedor para subir — e agendar
+       serviria só para marcar a hora de um erro que não interessa a ninguém. */
+    if (!temSessao()) { guardarFila(); return; }
     if (relogio) clearTimeout(relogio);
     relogio = setTimeout(function () { relogio = null; enviar(); }, ESPERA);
   }
@@ -196,6 +240,14 @@
     if (relogio) { clearTimeout(relogio); relogio = null; }
     pararDeTentar();
     enviar();
+  }
+
+  /* Chamado quando alguém entra. A fila que ficou da sessão anterior — ou do
+     logout por ociosidade — sobe agora, que é o primeiro instante em que ela
+     PODE subir. */
+  function retomar() {
+    if (!temSessao()) return;
+    tentarDeNovo();
   }
 
   /* A saída honesta quando o envio não vai mesmo: jogar fora o que está na
@@ -235,17 +287,19 @@
        voltou para a aba. O segundo é exatamente o caso do relato — o app
        ficou parado, a sessão venceu, e a primeira ação depois disso falhava. */
     global.addEventListener('online', function () {
-      if (situacao === 'erro' || naFila) tentarDeNovo();
+      if (!temSessao()) return;
+      if (situacao === 'erro' || situacao === 'pausado' || naFila) tentarDeNovo();
     });
     global.document.addEventListener('visibilitychange', function () {
       if (global.document.visibilityState !== 'visible') return;
-      if (situacao === 'erro' || naFila) tentarDeNovo();
+      if (!temSessao()) return;
+      if (situacao === 'erro' || situacao === 'pausado' || naFila) tentarDeNovo();
       else renovarSePreciso();
     });
   }
 
   global.IADSincronia = {
-    ligar, agendar, enviar, tentarDeNovo, descartarERecarregar, estado, aoMudar,
-    filaPendente, limparFila, marcarNaFila
+    ligar, agendar, enviar, tentarDeNovo, retomar, descartarERecarregar, estado, aoMudar,
+    filaPendente, limparFila, marcarNaFila, temSessao
   };
 })(window);
