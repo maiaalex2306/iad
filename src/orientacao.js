@@ -98,6 +98,18 @@
           : 'A bola está com você. Nada custa mais caro do que o vendedor ser o atraso.');
     }
 
+    /* A bola com a gente vem logo abaixo da espera, e pelo motivo oposto: a
+       espera diz "não faça nada hoje"; esta diz "é a única coisa que não pode
+       esperar". Nos dois casos o que a tela ganha é parar de cobrar o errado. */
+    if (item.esperando) {
+      const e = item.esperando;
+      por('esperando', 88 + Math.min(e.dias, 10),
+        'O cliente escreveu por ' + e.canal + ' em ' + dataBr(e.desde) +
+          ' e nós não voltamos — faz ' + plural(e.dias, 'dia', 'dias') + '.',
+        'Não é silêncio dele: é o nosso. Quem perguntou e não foi respondido em uma semana ' +
+        'conclui sozinho que não era prioridade — e tem razão.');
+    }
+
     const mom = item.porQueAgora;
     if (mom) {
       por('agora', 92 + Math.min(mom.atraso, 8),
@@ -549,6 +561,7 @@
     tarefas: 'tarefa sua vencida',
     decisor: 'proposta sem o decisor econômico',
     gates: 'proposta emitida sem prontidão',
+    esperando: 'o cliente falou e nós não voltamos',
     silencio: 'silêncio do cliente além da régua',
     parado: 'nenhuma decisão subiu no mês',
     resistencia: 'resistência em papel crítico',

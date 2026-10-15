@@ -29,6 +29,47 @@
     return diasEntre(maisRecente);
   }
 
+  /* A DATA da última evidência, não a idade dela.
+
+     `evidenceAge` devolve dias, e dias não dão para comparar com a data em que
+     NÓS fizemos alguma coisa. Essa comparação é o que distingue "o cliente
+     sumiu" de "o cliente falou e nós não voltamos" — duas situações que a fila
+     vinha tratando como a mesma, com a legenda da primeira. */
+  function ultimaEvidenciaEm(op) {
+    const decisoes = eventosDeDecisao(op);
+    if (!decisoes.length) return '';
+    return decisoes.reduce(function (max, e) { return e.data > max ? e.data : max; }, decisoes[0].data);
+  }
+
+  /* Os canais em que o cliente ESCREVE e fica esperando.
+
+     A distinção importa e quase me escapou. Numa reunião, numa visita ou numa
+     ligação os dois lados estiveram presentes: o cliente "se manifestou", mas
+     ninguém ficou devendo resposta ao sair da sala. Num e-mail, num WhatsApp
+     ou numa mensagem de LinkedIn, ele escreveu e foi embora esperando.
+
+     Sem esta lista, a regra transformaria metade da carteira em "o cliente
+     está esperando" — e um balde que contém tudo não prioriza nada, que é
+     exatamente o defeito que ele veio consertar. */
+  const CANAIS_DE_ESPERA = ['e-mail', 'email', 'whatsapp', 'linkedin', 'linkedhelper', 'linked helper'];
+
+  /* Quantos dias uma resposta continua sendo uma RESPOSTA. Passou disso, a
+     conversa não continua: ela recomeça — e aí o enquadramento certo é o do
+     resgate, que já existe e diz outra coisa ("requalifique ou encerre"). */
+  const DIAS_DA_RESPOSTA = 30;
+
+  function esperaDoCliente(op, nossoEm) {
+    const decisoes = eventosDeDecisao(op);
+    if (!decisoes.length) return null;
+    const ultima = decisoes.reduce(function (m, e) { return e.data > m.data ? e : m; }, decisoes[0]);
+    const canal = String(ultima.canal || '').trim().toLowerCase();
+    if (CANAIS_DE_ESPERA.indexOf(canal) === -1) return null;
+    if (nossoEm && ultima.data <= nossoEm) return null;
+    const dias = diasEntre(ultima.data);
+    if (dias < 1 || dias > DIAS_DA_RESPOSTA) return null;
+    return { desde: ultima.data, dias: dias, canal: ultima.canal, titulo: ultima.titulo || '' };
+  }
+
   function faixaEvidencia(dias) {
     return P.FAIXAS_EVIDENCIA.find(function (f) { return dias <= f.max; });
   }
@@ -1159,6 +1200,17 @@
       if (t.oportunidadeId) (porOp[t.oportunidadeId] = porOp[t.oportunidadeId] || []).push(t);
     });
 
+    /* A última vez que NÓS nos mexemos em cada negócio. Tarefa concluída é o
+       registro de que alguém do nosso lado fez alguma coisa — ligou, mandou,
+       visitou —, e é o único que o motor enxerga sem depender de e-mail nem
+       de WhatsApp, que moram noutros módulos. */
+    const nossoUltimo = {};
+    (tarefas || []).forEach(function (t) {
+      if (!t.oportunidadeId || t.status !== 'concluida' || !t.concluidaEm) return;
+      const atual = nossoUltimo[t.oportunidadeId] || '';
+      if (t.concluidaEm > atual) nossoUltimo[t.oportunidadeId] = t.concluidaEm;
+    });
+
     const todos = (oportunidades || []).filter(function (o) {
       if (o.desfecho) return false;
       /* Nutrição saiu da previsão E do dia — é para isso que ela serve. Só
@@ -1186,13 +1238,33 @@
         return t.vencimento && t.vencimento >= hoje;
       }).sort(function (a, b) { return a.vencimento < b.vencimento ? -1 : 1; });
       const marcado = marcadas[0] || null;
+      /* ---------- A BOLA ESTÁ COM VOCÊ ----------
+
+         O caso que me fez escrever isto: um Coordenador de produção respondeu
+         "estamos atrás de ideias inovadoras de sustentabilidade" no dia 25/09.
+         Vinte dias depois, ninguém tinha voltado. A fila classificava esse
+         negócio como "20 dias sem evidência do cliente" — e cobrava do
+         vendedor que o cliente estava calado.
+
+         Estava ao contrário. O cliente falou; quem calou fomos nós.
+
+         A legenda errada não é só deselegante: ela manda o vendedor para o
+         lugar errado. "O cliente sumiu" convida a cobrar; "ele perguntou e
+         está esperando" convida a responder — e é a única das duas em que o
+         cliente já está com a expectativa aberta.
+
+         A conta é simples: a última manifestação DELE é mais nova do que a
+         última coisa que NÓS fizemos. */
+      const esperando = esperaDoCliente(op, nossoUltimo[op.id] || '');
+
       const dim = r.nbd.dimensao;
       const quem = dim ? quemProva(op, dim.id) : { pessoa: null, papel: '', presente: false, porta: null };
       const canal = dim ? canalDaFila(dim, quem.pessoa || quem.porta, op.dims[dim.id] || 0) : null;
 
       const item = {
         resumo: r, tarefas: porOp[op.id] || [],
-        decisao: dim, comQuem: quem, canal: canal, porQueAgora: mom
+        decisao: dim, comQuem: quem, canal: canal, porQueAgora: mom,
+        esperando: esperando
       };
       const marcar = function (pontos, tipo, motivo, acao) {
         item.pontos = pontos;
@@ -1255,6 +1327,18 @@
           comp.dono === 'cliente'
             ? 'Cobre o retorno combinado e reagende com data nova.'
             : 'A bola está com você: entregue o que foi combinado hoje.');
+      } else if (esperando) {
+        /* Acima da tarefa vencida (80) de propósito, e isso é uma escolha.
+           A tarefa que você esqueceu é uma promessa sua a você mesmo; o
+           cliente esperando é uma promessa sua A ELE — e é ele quem fecha a
+           venda, e quem percebe a demora. Teto nos dez dias: a partir daí o
+           que muda não é a prioridade, é o tipo de conversa. */
+        marcar(88 + Math.min(esperando.dias, 10), 'esperando',
+          'O cliente escreveu por ' + esperando.canal + ' em ' +
+            esperando.desde.split('-').reverse().join('/') +
+            ' e nós não voltamos — faz ' + esperando.dias + ' dia(s).',
+          'A bola está com você. Responder hoje custa uma mensagem; daqui a uma semana custa ' +
+          'recomeçar a conversa.');
       } else if (depoisDaProposta(op) && !r.coverage.temEconomicBuyer) {
         marcar(76, 'trava', 'Em ' + String(op.etapa).toLowerCase() + ' sem acesso ao decisor econômico',
           r.nbd.acao);
@@ -1588,6 +1672,7 @@
     iad, evidenceAge, faixaEvidencia, decisionVelocity, coverage, gates,
     saude, classificar, nextBestDecision, alertas, resumo, carteira,
     fila, nuncaComecou, quemProva, canalDaFila, rotuloDoSinal,
+    ultimaEvidenciaEm, esperaDoCliente,
     potencial, baseDoPotencial, faixaDoPotencial, senioridade, aprendizado, sugerirDimensao, podeComprovar, degrauPermitido, evidenciasDaDimensao,
     tarefasAtrasadas,
     filtrar, mesesDisponiveis, segmentosDisponiveis, rotuloMes, segmentoDe, faixaSaude,
