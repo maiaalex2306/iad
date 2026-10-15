@@ -1082,7 +1082,43 @@
       (tarefas ? '<div class="tarefas">' + tarefas + '</div>' : '') +
       '<div class="row" style="margin-top:10px">' +
       '<button class="btn alt mini" onclick="App.novaTarefa(\'' + r.op.id + '\',\'\',{situacao:\'feita\'})" data-ajuda-titulo="Nova tarefa" data-ajuda="O que aconteceu com este cliente nesta semana. Se nada mudou do lado dele, não houve avanço — e é isso que a revisão quer expor.">+ Tarefa</button>' +
-      '<button class="btn ghost mini" onclick="App.abrir(\'' + r.op.id + '\')">Abrir</button></div></div>';
+      '<button class="btn ghost mini" onclick="App.abrir(\'' + r.op.id + '\')">Abrir</button>' +
+      botaoDeNutricao(r.op) + '</div></div>';
+  }
+
+  /* ---------------- tirar da previsão sem sair do Hoje ----------------
+
+     Triar a carteira é decidir, negócio a negócio, quem fica na previsão e
+     quem não está pronto. A decisão nasce exatamente aqui: o vendedor acabou
+     de ler as causas, a última fala do cliente e os dias de silêncio — é
+     nesse instante que ele sabe que a conta não vai andar este trimestre.
+
+     E era nesse instante que ele tinha de ir ao Pipeline, achar o mesmo
+     negócio no meio de cento e sessenta e seis, abrir, e só então clicar. Três
+     telas e uma busca para registrar uma decisão que já estava tomada — e
+     decisão que custa três telas é decisão que não é registrada. O negócio
+     fica na previsão inflando o número de todo mundo, e volta amanhã cobrando
+     a mesma coisa.
+
+     O botão não decide nada sozinho: abre o mesmo formulário do cockpit, com
+     o motivo e a data de revisão. O que ele tira do caminho é a busca.
+
+     Negócio que JÁ está em nutrição e voltou porque a revisão venceu ganha o
+     outro rótulo: ali a pergunta não é "tirar da previsão?", é "quando olhar
+     de novo?". Mesma função, mesma tela — o que muda é o que a palavra no
+     botão promete. */
+  function botaoDeNutricao(op) {
+    if (!op || op.desfecho) return '';
+    const jaEsta = !!op.nutricao;
+    return '<button class="btn ghost mini" onclick="App.colocarEmNutricao(\'' + op.id + '\')"' +
+      ajudaComLinhas(jaEsta ? 'Nova data de revisão' : 'Mandar para nutrição',
+        jaEsta
+          ? 'A revisão desta conta venceu e ela voltou para o Hoje. Marque quando olhar de novo — ou tire da nutrição pelo cockpit, se ela já estiver pronta.'
+          : 'A conta não está pronta e você sabe disso agora. Tire da previsão aqui mesmo, sem ir ao Pipeline procurar o mesmo negócio.',
+        [['O que acontece', 'O negócio continua aberto e some da previsão e do Hoje. Nada é perdido: o histórico, as evidências e as tarefas ficam.'],
+         ['Quando ele volta', 'Sozinho, assim que o cliente produzir qualquer evidência nova — e na data de revisão que você marcar, o que vier primeiro.'],
+         ['O que isso não é', 'Não é encerrar. Encerrar é dizer que acabou, e tem motivo próprio; nutrição é dizer que ainda não é agora.']]) +
+      '>' + (jaEsta ? 'Nova data' : 'Nutrição') + '</button>';
   }
 
   /* ---------------- Painel executivo ---------------- */
