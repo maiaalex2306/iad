@@ -60,6 +60,70 @@
      `custo` diz o que isso cobra — é a parte que ensina. "40 dias sem
      evidência" é um fato; "quanto mais tempo passa, mais a conversa reinicia
      do zero" é o motivo de mexer hoje. */
+  /* ---------------- O QUE ELE DISSE, E O QUE FAZER COM ISSO ----------------
+
+     O cartão contava tudo sobre o negócio menos a única coisa que o cliente
+     produziu: as palavras dele. "175 dias sem evidência do cliente" num
+     negócio em que a última mensagem foi "Bom dia muito obrigado !!!" —
+     e o vendedor não tem como saber, pelo cartão, se aquilo foi um "manda a
+     proposta" ou um "não me procure mais". São decisões opostas sobre a
+     manhã de hoje.
+
+     A leitura é por REGRA e não por IA, de propósito. Esta linha aparece em
+     cento e sessenta e sete cartões a cada abertura do Hoje; uma chamada por
+     cartão seria cara e lenta, e — pior — sumiria no dia em que o assistente
+     caísse, justamente no cartão que mais precisa dela. Regra é grosseira e
+     está sempre lá. A IA continua fazendo o trabalho fino na análise.
+
+     Quatro leituras, da mais acionável para a menos. */
+  const SO_CORTESIA = /^(ok|certo|claro|sim|bom dia|boa tarde|boa noite|ol[áa]|oi|obrigad[oa]|obg|muito obrigad[oa]|valeu|agrade[çc]o|igualmente|prazer|abra[çc]o|at[ée] mais|tudo bem|tudo bom|show|legal|beleza|perfeito|pel[oa] (contato|conex[ãa]o|retorno|mensagem|aceite|aten[çc][ãa]o|convite|interesse)|por ter (aceito|respondido)|\p{Emoji}|[\s!.,;:)(\u2013\u2014-])+$/iu;
+
+  const PEDE_ALGO = /(mand[ae]|envi[ae]|me pass|encaminh|gostaria de receber|quero ver|pode mandar|pode enviar|material|apresenta[çc][ãa]o|proposta|or[çc]amento|cota[çc][ãa]o|agenda|reuni[ãa]o|conversar|call)/i;
+  const TEM_NUMERO = /\d[\d.,]*\s*(%|m3|m³|t\b|ton|kg|l\b|mil|milh|R\$|dias|meses|unidades|plantas|f[áa]bricas)/i;
+
+  function leituraDaFala(texto) {
+    const t = String(texto || '').trim();
+    if (!t) return null;
+
+    /* Pergunta dele é o caso mais fácil e o mais desperdiçado: a resposta já
+       foi pedida, e basta dá-la. */
+    if (t.indexOf('?') !== -1) {
+      return { rotulo: 'ele perguntou', peso: 92,
+        significa: 'Pergunta aberta dele. Responder isto é a coisa mais barata que existe aqui — e a única ' +
+          'que ele já está esperando.',
+        fazer: 'Responda a pergunta em uma linha e devolva outra, pedindo um número da operação dele.' };
+    }
+
+    if (TEM_NUMERO.test(t) || t.length >= 140) {
+      return { rotulo: 'ele contou alguma coisa', peso: 90,
+        significa: 'Ele descreveu a operação dele. Isto é matéria-prima de evidência — não deixe virar só ' +
+          'uma mensagem lida.',
+        fazer: 'Registre como evidência na decisão que ela toca, e volte perguntando o número que falta ' +
+          'para fechar o quadro.' };
+    }
+
+    if (PEDE_ALGO.test(t)) {
+      return { rotulo: 'ele pediu alguma coisa', peso: 91,
+        significa: 'Ele pediu algo concreto. Pedido não atendido vira a primeira impressão de como ' +
+          'trabalhamos.',
+        fazer: 'Entregue o que ele pediu hoje, e combine data para a conversa seguinte antes de mandar.' };
+    }
+
+    if (t.length <= 90 && SO_CORTESIA.test(t)) {
+      return { rotulo: 'foi só cortesia', peso: 88,
+        significa: 'Agradecimento não é interesse: é educação. Ele não disse nada sobre a empresa dele, ' +
+          'e o negócio não andou um milímetro com esta mensagem.',
+        fazer: 'Não peça para mandar apresentação — isso rende "pode mandar" e silêncio, e gasta a única ' +
+          'chance de abrir. Mande UMA pergunta que ele responde em dez segundos e que você não consegue ' +
+          'responder sozinho: um número da operação dele. "Não sei" também serve — diz quem sabe.' };
+    }
+
+    return { rotulo: 'ele respondeu', peso: 86,
+      significa: 'Respondeu, e a resposta não diz o que ele precisa. Não dá para saber se há interesse.',
+      fazer: 'Devolva uma pergunta de número, curta. É ela que separa quem está dentro de quem está ' +
+        'sendo educado.' };
+  }
+
   function causas(item) {
     const r = item.resumo;
     const op = r.op;
@@ -108,6 +172,19 @@
           ' e nós não voltamos — faz ' + plural(e.dias, 'dia', 'dias') + '.',
         'Não é silêncio dele: é o nosso. Quem perguntou e não foi respondido em uma semana ' +
         'conclui sozinho que não era prioridade — e tem razão.');
+    }
+
+    /* A fala do cliente entra com as palavras dele entre aspas. Cortada em
+       200 caracteres porque cartão não é transcrição — a conversa inteira
+       está no histórico, e é para lá que quem quiser mais vai. */
+    const fala = E.ultimaFalaDoCliente(op);
+    const leitura = fala ? leituraDaFala(fala.texto) : null;
+    if (leitura) {
+      const recorte = fala.texto.length > 200 ? fala.texto.slice(0, 200) + '…' : fala.texto;
+      por('fala', leitura.peso,
+        'A última coisa que ele disse, em ' + dataBr(fala.data) +
+          (fala.canal ? ' por ' + fala.canal : '') + ': “' + recorte + '” — ' + leitura.rotulo + '.',
+        leitura.significa + ' ' + leitura.fazer);
     }
 
     const mom = item.porQueAgora;
@@ -562,6 +639,7 @@
     decisor: 'proposta sem o decisor econômico',
     gates: 'proposta emitida sem prontidão',
     esperando: 'o cliente falou e nós não voltamos',
+    fala: 'a última mensagem do cliente ainda não virou ação',
     silencio: 'silêncio do cliente além da régua',
     parado: 'nenhuma decisão subiu no mês',
     resistencia: 'resistência em papel crítico',

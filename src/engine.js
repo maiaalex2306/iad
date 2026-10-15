@@ -58,6 +58,27 @@
      resgate, que já existe e diz outra coisa ("requalifique ou encerre"). */
   const DIAS_DA_RESPOSTA = 30;
 
+  /* A ÚLTIMA COISA QUE O CLIENTE DISSE, com as palavras dele.
+
+     Estava guardada e não aparecia em lugar nenhum da tela do dia. O cartão
+     dizia "175 dias sem evidência do cliente" sobre um negócio em que o
+     cliente tinha escrito "Bom dia muito obrigado !!!" — e quem lê o cartão
+     não tem como saber se aquilo foi um "manda a proposta" ou um "não me
+     procure mais". São decisões opostas sobre o que fazer hoje.
+
+     `frase` é o trecho literal quando a IA separou a evidência; `titulo` é o
+     texto da mensagem quando ela veio de uma importação do LinkedIn. Nos dois
+     casos é o cliente falando. */
+  function ultimaFalaDoCliente(op) {
+    const decisoes = eventosDeDecisao(op);
+    if (!decisoes.length) return null;
+    const ultima = decisoes.reduce(function (m, e) { return e.data > m.data ? e : m; }, decisoes[0]);
+    const texto = String(ultima.frase || ultima.titulo || '').trim();
+    if (!texto) return null;
+    return { texto: texto, data: ultima.data, canal: ultima.canal || '',
+      dias: diasEntre(ultima.data), forca: ultima.forca || '' };
+  }
+
   function esperaDoCliente(op, nossoEm) {
     const decisoes = eventosDeDecisao(op);
     if (!decisoes.length) return null;
@@ -1672,7 +1693,7 @@
     iad, evidenceAge, faixaEvidencia, decisionVelocity, coverage, gates,
     saude, classificar, nextBestDecision, alertas, resumo, carteira,
     fila, nuncaComecou, quemProva, canalDaFila, rotuloDoSinal,
-    ultimaEvidenciaEm, esperaDoCliente,
+    ultimaEvidenciaEm, esperaDoCliente, ultimaFalaDoCliente,
     potencial, baseDoPotencial, faixaDoPotencial, senioridade, aprendizado, sugerirDimensao, podeComprovar, degrauPermitido, evidenciasDaDimensao,
     tarefasAtrasadas,
     filtrar, mesesDisponiveis, segmentosDisponiveis, rotuloMes, segmentoDe, faixaSaude,
