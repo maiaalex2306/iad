@@ -6151,7 +6151,7 @@
     ['plano', 'cartão Próximos passos',
      'Até 4 passos na ordem de execução, cada um com dimensão-alvo, ação, uma pergunta pronta e o porquê citando o cliente. Proibida de sugerir nota e de passo genérico.'],
     ['segmentos', 'importação do Linked Helper',
-     'Todos os leads de uma vez: segmento da lista da equipe, papel provável na compra e o insight comercial. O lead que chega sem site e sem descrição — que é a maioria — tem o site procurado pelo nome da empresa antes de a classificação acontecer: "Outros" é para quem não tem relação com nenhum segmento, não para quem ninguém foi conferir.'],
+     'Todos os leads de uma vez: segmento da lista da equipe, papel provável na compra, o insight comercial e A PRÓXIMA MENSAGEM — uma pergunta pronta, que pede um número em vez de uma reunião. O lead que chega sem site e sem descrição — que é a maioria — tem o site procurado pelo nome da empresa antes de a classificação acontecer: "Outros" é para quem não tem relação com nenhum segmento, não para quem ninguém foi conferir.'],
     ['desenvolvimento', 'Plano de desenvolvimento, no Painel',
      'Lê a série semanal e o rendimento por tipo de tarefa e escreve o que melhorou, o que piorou e até três mudanças. Proibida de estimar, projetar ou comparar com "mercado".'],
     ['insight', 'campo de insight do negócio',
@@ -9520,8 +9520,67 @@
       '<table class="tabela mini">' + linhas + '</table></details>';
   }
 
+  /* ---------------- a quem responder primeiro ----------------
+
+     Nove leads chegavam em ordem de chegada, todos com o mesmo peso visual, e
+     a pergunta que o vendedor tem na cabeça — "por onde eu começo?" — não
+     tinha resposta na tela. Ele responde os três primeiros, cansa, e os outros
+     seis esfriam na ordem em que o Linked Helper os entregou, que não é ordem
+     nenhuma.
+
+     Três grupos, e eles saem de um campo que o servidor já calculava e a tela
+     nunca mostrou: `resposta`, em positiva | neutra | negativa.
+
+     A diferença entre as duas primeiras é a que mais custa dinheiro aqui.
+     "Estamos atrás de ideias inovadoras de sustentabilidade" e "Podemos trocar
+     boas ideias" chegavam idênticos — e são coisas opostas. O primeiro é uma
+     intenção declarada; o segundo é a educação brasileira dizendo não sem
+     dizer não. Tratar os dois igual faz o vendedor gastar a manhã no errado e
+     construir pipeline em cima de cortesia. */
+  const GRUPOS_DO_LEAD = [
+    { id: 'conteudo', titulo: 'Responderam com conteúdo',
+      nota: 'Têm expectativa aberta. É aqui que a resposta de hoje vale mais do que a de amanhã.' },
+    { id: 'cortesia', titulo: 'Responderam por cortesia',
+      nota: 'Educação não é interesse. Precisam de uma pergunta, não de uma apresentação — e não viram negócio por terem respondido.' },
+    { id: 'duvida', titulo: 'Vieram desmarcados',
+      nota: 'Quem recusou, quem saiu da empresa, quem não respondeu, ou quem veio sem empresa. Marque se quiser trazer assim mesmo.' }
+  ];
+
+  function grupoDoLead(l) {
+    if (motivoDeDuvida(l)) return 'duvida';
+    if (l.respostaDaIA === 'neutra') return 'cortesia';
+    return 'conteudo';
+  }
+
+  /* Há quantos dias ele escreveu. O dado mais acionável do cartão estava no
+     texto mais miúdo, espremido entre SDR, campanha e conexões em comum —
+     vinte dias de espera e um dia de espera se pareciam na tela. */
+  function esperaDoLead(l) {
+    if (!l.respostaEm) return null;
+    const dias = E.diasEntre(l.respostaEm);
+    if (dias < 0) return null;
+    return { dias: dias, data: l.respostaEm };
+  }
+
   function revisaoDaImportacao(leads, avisoSegmento, quantosDescartados) {
-    const linhas = leads.map(function (l, i) {
+    /* A ordem dentro do grupo: quem escreveu mais recentemente primeiro. Não
+       é quem espera há mais tempo — é quem tem mais chance de a conversa
+       continuar de onde parou. Quem espera há muito já virou outra conversa,
+       e a tela diz isso no próprio cartão. */
+    const ordenados = leads.map(function (l, i) { return { l: l, i: i }; })
+      .sort(function (a, b) {
+        const ga = GRUPOS_DO_LEAD.findIndex(function (g) { return g.id === grupoDoLead(a.l); });
+        const gb = GRUPOS_DO_LEAD.findIndex(function (g) { return g.id === grupoDoLead(b.l); });
+        if (ga !== gb) return ga - gb;
+        const ra = a.l.respostaEm || '';
+        const rb = b.l.respostaEm || '';
+        if (ra !== rb) return ra < rb ? 1 : -1;
+        return a.i - b.i;
+      });
+
+    const cartao = function (par) {
+      const l = par.l;
+      const i = par.i;
       const duvida = motivoDeDuvida(l);
       const rede = [
         l.grau === 'DISTANCE_1' ? '1\u00ba grau' : '',
@@ -9530,12 +9589,21 @@
         l.respostaEm ? '\u00faltima em ' + U.data(l.respostaEm) : ''
       ].filter(Boolean).join(' \u00b7 ');
 
+      const espera = esperaDoLead(l);
+
       return '<li class="achado">' +
         '<label class="linha-achado"><input type="checkbox" data-lead="' + i + '"' +
         (duvida ? '' : ' checked') + '>' +
         '<strong>' + esc(l.nome || 'Sem nome') + '</strong>' +
         (l.cargo ? '<span class="tiny muted">' + esc(l.cargo) + '</span>' : '') +
         '<span class="espaco"></span>' +
+        (espera
+          ? '<span class="pill' + (espera.dias >= 7 ? ' urg' : '') + '" ' +
+            'title="Ele escreveu em ' + esc(U.data(espera.data)) + '">' +
+            (espera.dias === 0 ? 'respondeu hoje'
+              : 'esperando h\u00e1 ' + espera.dias + (espera.dias === 1 ? ' dia' : ' dias')) +
+            '</span> '
+          : '') +
         '<span class="pill' + (duvida ? '' : ' navy') + '">' + esc(l.empresa || 'sem empresa') + '</span>' +
         '<button type="button" class="btn ghost mini" data-excluir="' + i + '" ' +
         'title="Tira este lead da ponte para sempre. Ele não volta na próxima busca.">Excluir</button>' +
@@ -9583,24 +9651,46 @@
           : (l.resposta ? '<p class="origem">\u201c' + esc(l.resposta) + '\u201d</p>' : '')) +
         juntarNaConta(l, i) +
         juntarNaNegociacao(l, i) +
+        /* A próxima mensagem, pronta para copiar.
+
+           Os vinte dias de silêncio do caso que originou isto não foram
+           preguiça: foram a página em branco. Responder bem a "estamos atrás
+           de ideias inovadoras de sustentabilidade" dá trabalho, e trabalho
+           adia. Uma pergunta escrita, que pede um número em vez de uma
+           reunião, troca meia hora de redação por um clique — e o número que
+           voltar é a primeira evidência do cliente neste negócio. */
+        (l.pergunta
+          ? '<div class="pergunta-pronta"><div class="row">' +
+            '<span class="rotulo">A próxima mensagem</span><span class="espaco"></span>' +
+            '<button type="button" class="btn ghost mini" data-copiar="' + i + '">Copiar</button></div>' +
+            '<p>' + esc(l.pergunta) + '</p>' +
+            '<span class="tiny muted">Pede um número, não uma reunião: quem responde um número já entrou ' +
+            'na conversa, e "não sei" diz quem sabe.</span></div>'
+          : '') +
         (l.insight
           ? '<p class="tiny muted" style="margin:6px 0 0"><b>Reenquadramento (rascunho):</b> ' + esc(l.insight) + '</p>'
           : '') +
       '</li>';
+    };
+
+    const linhas = GRUPOS_DO_LEAD.map(function (g) {
+      const doGrupo = ordenados.filter(function (par) { return grupoDoLead(par.l) === g.id; });
+      if (!doGrupo.length) return '';
+      return '<li class="grupo-achados"><h4>' + esc(g.titulo) + ' · ' + doGrupo.length + '</h4>' +
+        '<p class="tiny muted">' + esc(g.nota) + '</p></li>' +
+        doGrupo.map(cartao).join('');
     }).join('');
 
-    const comDuvida = leads.filter(motivoDeDuvida).length;
 
     return '<form method="dialog"><div class="corpo">' +
       '<h2>Importar do Linked Helper</h2>' +
       '<p class="small muted">Cada marcado vira empresa, contato e oportunidade em ' +
       '<strong>Prospec\u00e7\u00e3o</strong> \u2014 ou <strong>Conex\u00e3o</strong>, se a pessoa j\u00e1 respondeu \u2014 ' +
       'com origem Linked Helper. A resposta entra como evid\u00eancia de for\u00e7a relato, na data em que ela aconteceu.</p>' +
-      (comDuvida
-        ? '<div class="aviso">' + comDuvida + (comDuvida === 1 ? ' lead veio desmarcado' : ' leads vieram desmarcados') +
-          ': quem respondeu que n\u00e3o, quem saiu da empresa ou quem ainda n\u00e3o respondeu. ' +
-          'Marque se quiser trazer assim mesmo.</div>'
-        : '') +
+      /* O aviso de "N vieram desmarcados" saiu daqui: agora é o cabeçalho do
+         próprio grupo que diz isso, no lugar onde eles estão. Dizer duas
+         vezes a mesma coisa em telas diferentes é como se aprende a não ler
+         nenhuma das duas. */
       (avisoSegmento ? '<div class="aviso">' + esc(avisoSegmento) + '</div>' : '') +
       /* Filtrar em silêncio faria a pessoa achar que a ponte perdeu entrega.
          O número diz que o descarte está valendo, que é o contrário. */

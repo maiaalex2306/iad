@@ -901,7 +901,7 @@ Papéis na compra, e SÓ estes:
 ${papeis.map((x) => '- ' + x).join('\n')}
 
 Regras absolutas:
-- Responda SOMENTE com um objeto JSON: {"itens":[{"n":1,"segmento":"...","confianca":"alta|media|baixa","porque":"...","maisProximo":"...","papel":"...","resposta":"positiva|negativa|neutra","porqueRecusa":"...","insight":"..."${contas.length ? ',"contaExistente":"...","porqueConta":"..."' : ''}},...]}
+- Responda SOMENTE com um objeto JSON: {"itens":[{"n":1,"segmento":"...","confianca":"alta|media|baixa","porque":"...","maisProximo":"...","papel":"...","resposta":"positiva|negativa|neutra","porqueRecusa":"...","insight":"...","pergunta":"..."${contas.length ? ',"contaExistente":"...","porqueConta":"..."' : ''}},...]}
 - "segmento" tem de ser copiado EXATAMENTE de uma das linhas de SEGMENTOS acima, ou ser "Outros". Nada fora disso — nem um nome parecido, nem um subsegmento.
 - "confianca": "alta" quando o que a empresa faz está escrito na lista; "media" quando você chegou por proximidade; "baixa" quando é palpite.
 - "porque": no máximo 12 palavras, dizendo o que na empresa levou a esse segmento.
@@ -915,6 +915,13 @@ Regras absolutas:
 - "porqueRecusa": SÓ quando "resposta" for "negativa". Até 12 palavras, dizendo o que ela recusou, na terceira pessoa: "disse que não mora em condomínio", "pediu para sair da lista". Nos outros casos devolva "".
 - "insight" é o reenquadramento: a verdade sobre o negócio DELE que ele não enxerga sozinho, tirada do que a empresa faz e do que a pessoa respondeu. Uma ou duas frases, na linguagem do setor dele, sem citar a nossa solução e sem elogio. Se a conversa e a descrição não derem base para nada além de genérico, devolva "" — insight genérico é pior que nenhum, porque o vendedor o repete achando que tem um.
 - O insight é hipótese NOSSA, não é o cliente falando. Nunca escreva que o cliente disse, admitiu ou confirmou o que quer que seja.
+- "pergunta" é A PRÓXIMA MENSAGEM, escrita para ser enviada a ESTA pessoa, hoje. É o campo mais útil da sua resposta, e o mais fácil de errar. Regras:
+  - UMA pergunta só, até 2 linhas, começando pelo primeiro nome dela.
+  - Ela pede um NÚMERO ou um FATO que só quem trabalha lá tem: volume, consumo por tonelada, quantas unidades, qual norma, quem aprova, qual prazo. Nunca pede opinião ("o que você acha de..."), nunca pede agenda ("podemos marcar 15 minutos?") e nunca oferece nada nosso.
+  - Nasce do que ELA escreveu, quando houve resposta. Se ela disse "estamos atrás de ideias de sustentabilidade", a pergunta pergunta o número que daria uma ideia concreta — não repete a palavra sustentabilidade de volta.
+  - Sem resposta dela, nasce do que a EMPRESA faz. Com o site e a descrição em branco também, devolva "".
+  - Por que um número e não uma reunião: quem responde um número já entrou na conversa, e o número vira a primeira evidência do cliente. Quem responde "sim, podemos marcar" não entregou nada, e metade some depois. Além disso, "não sei" também serve: diz quem sabe, e esse nome é o que falta no grupo de compra.
+  - Escreva como um profissional do setor escreve para outro: sem "espero que esteja bem", sem "gostaria de saber", sem adjetivo.
 - Um item de saída para cada lead da entrada, com o mesmo "n".
 - Nada de texto fora do JSON.
 
@@ -1981,6 +1988,13 @@ function validarSegmentos(bruto: Record<string, unknown>, ctx: Record<string, un
       /* O insight é rascunho nosso, e curto de propósito: o que não cabe em
          três linhas o vendedor não fala numa ligação. */
       insight: limparTexto(o.insight, 400),
+      /* A próxima mensagem, pronta para enviar. É o campo que ataca o motivo
+         real da demora: não é preguiça, é a página em branco. Responder bem a
+         "estamos atrás de ideias inovadoras de sustentabilidade" dá trabalho,
+         e trabalho adia — foram vinte dias de silêncio nosso num lead que
+         tinha levantado a mão. Duzentos e quarenta caracteres: o que não cabe
+         numa mensagem de LinkedIn não serve para o que ela existe. */
+      pergunta: limparTexto(o.pergunta, 240),
       /* Devolve o id, não o nome: é o id que o app usa para achar a conta, e
          mandar o nome de volta obrigaria o app a casar por texto outra vez —
          exatamente o problema que esta pergunta existe para resolver. */

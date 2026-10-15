@@ -1432,6 +1432,10 @@
              IA é sobre esta conversa. Quando existem os dois, vale o desta
              conversa — foi para isso que a conversa foi lida. */
           if (achado.insight) l.insight = achado.insight;
+          /* A próxima mensagem, pronta. Fica no lead e vai para a tela: é lá
+             que o vendedor decide a quem responder, e é lá que a página em
+             branco cobra os vinte dias. */
+          l.pergunta = achado.pergunta || '';
         });
         espera.close(); espera.remove();
         marcarContasCandidatas(lista);
@@ -6148,6 +6152,42 @@
       linha.closest('.achado').hidden = true;
       return lead.id;
     };
+
+    /* Copiar a próxima mensagem. O botão confirma na própria legenda e volta
+       sozinho: sem isso, num diálogo com nove leads, ninguém sabe se o clique
+       pegou — e clicar duas vezes em "copiar" não dá erro nenhum, só dúvida.
+
+       `clipboard` falha em http sem cadeado e em navegador antigo. Quando
+       falha, o texto é selecionado na tela: copiar à mão é um Ctrl+C, e é
+       melhor do que um botão que não faz nada e não diz. */
+    dlg.querySelectorAll('[data-copiar]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        const lead = lista[Number(b.getAttribute('data-copiar'))];
+        if (!lead || !lead.pergunta) return;
+        const antes = b.textContent;
+        const confirmar = function (texto) {
+          b.textContent = texto;
+          setTimeout(function () { b.textContent = antes; }, 2000);
+        };
+        const aMao = function () {
+          const alvo = b.closest('.pergunta-pronta');
+          const p = alvo && alvo.querySelector('p');
+          if (p && global.getSelection) {
+            const faixa = document.createRange();
+            faixa.selectNodeContents(p);
+            const sel = global.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(faixa);
+          }
+          confirmar('selecionei — Ctrl+C');
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(lead.pergunta).then(function () { confirmar('copiado'); }, aMao);
+        } else {
+          aMao();
+        }
+      });
+    });
 
     dlg.querySelectorAll('[data-excluir]').forEach(function (b) {
       b.addEventListener('click', function () {
