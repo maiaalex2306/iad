@@ -134,9 +134,26 @@
 
   /* Grava a fila antes de tentar. Se o IndexedDB não existir ou falhar, o
      envio segue: a fila é uma rede de segurança, não um pedágio. */
+  /* A cópia de emergência é gravada antes de cada tentativa — e era gravada
+     SEMPRE, inclusive quando não havia nada por enviar. No arranque seguinte o
+     app achava essa cópia, concluía que havia trabalho perdido e anunciava
+     "recuperei o que tinha ficado para trás" com os números da carteira
+     inteira. Toda entrada. Sem nunca ter ficado nada para trás.
+
+     Era o aviso de sempre virando paisagem — a mesma doença da caixa que
+     abria na tela de login, num lugar diferente.
+
+     Agora a cópia só existe quando existe trabalho para proteger. E quando
+     não existe, a cópia velha some: deixá-la lá seria o mesmo anúncio errado
+     amanhã. Na dúvida, `haMudancas` responde SIM — cópia à toa custa um aviso
+     a mais; cópia que faltou custa o trabalho. */
   function guardarFila() {
     const P = global.IADPendencias;
     if (!P || !P.disponivel() || !Store || !Store.obter) return Promise.resolve();
+
+    const N = global.IADNuvem;
+    if (N && N.haMudancas && !N.haMudancas()) return limparFila();
+
     return P.guardar(Store.obter(), donoAtual()).then(function (ok) {
       if (ok && !naFila) { naFila = true; avisar(); }
     });

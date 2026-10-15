@@ -985,7 +985,13 @@
     catch (e) { return ''; }                 /* sem marca, sobe sempre */
   }
 
-  function lerMarcas(chaveDaConta) {
+  /* `semValidade` existe porque as marcas respondem a DUAS perguntas e só uma
+     delas envelhece. "O que preciso mandar agora?" aceita a regra do dia — um
+     envio completo por dia é barato e cobre o caso que eu não previ. "Existe
+     trabalho não enviado?" não aceita: marca de ontem continua dizendo a
+     verdade sobre o que o servidor tem, e fingir que não diria faria o app
+     guardar uma fila de emergência todo dia, sem nada para guardar. */
+  function lerMarcas(chaveDaConta, semValidade) {
     try {
       const bruto = JSON.parse(localStorage.getItem(CHAVE_DAS_MARCAS) || 'null');
       if (!bruto || bruto.conta !== chaveDaConta) return { conta: chaveDaConta, em: 0, tabelas: {} };
@@ -993,10 +999,57 @@
          caso que eu não previ: marca certa para um registro que o servidor,
          por qualquer motivo, não tem. Custa um envio completo por dia e
          compra a garantia de que nada fica para trás para sempre. */
-      if (!bruto.em || Date.now() - bruto.em > DIA) return { conta: chaveDaConta, em: 0, tabelas: {} };
+      if (!bruto.em) return { conta: chaveDaConta, em: 0, tabelas: {} };
+      if (!semValidade && Date.now() - bruto.em > DIA) return { conta: chaveDaConta, em: 0, tabelas: {} };
       return { conta: chaveDaConta, em: bruto.em, tabelas: bruto.tabelas || {} };
     } catch (e) {
       return { conta: chaveDaConta, em: 0, tabelas: {} };
+    }
+  }
+
+  /* Existe alguma coisa que o servidor ainda não tem?
+
+     Pergunta nova, e ela existe por causa de um defeito que eu mesmo criei: a
+     fila de emergência — a cópia que o app grava no aparelho antes de cada
+     tentativa — era gravada SEMPRE, inclusive quando não havia nada para
+     enviar. No arranque seguinte o app encontrava essa cópia, concluía que
+     tinha havido trabalho perdido e anunciava "recuperei o que tinha ficado
+     para trás" com os números da carteira inteira. Toda entrada. Sem nunca
+     ter ficado nada para trás.
+
+     Agora dá para responder com precisão, porque as marcas dizem exatamente
+     o que o servidor confirmou ter recebido. Na dúvida — sem perfil, sem
+     marcas, erro de leitura — a resposta é SIM: guardar uma cópia à toa custa
+     um aviso a mais; não guardar quando era preciso custa o trabalho. */
+  function haMudancas() {
+    try {
+      const p = sessaoPerfil();
+      if (!p) return true;
+      const s = sessao();
+      const donoId = (s && s.user && s.user.id) || '';
+      const marcas = lerMarcas(String(p.tenant_id || '') + '|' + donoId, true);
+      if (!marcas.em) return true;
+      if (Store.exclusoesPendentes && Store.exclusoesPendentes().length) return true;
+
+      const daEmpresa = filtroDaEmpresa(p, String(p.papel || '') === 'admin');
+      const dono = carimboDoRegistro(p);
+      const estado = Store.obter();
+
+      for (let i = 0; i < TABELAS.length; i++) {
+        const t = TABELAS[i];
+        const antes = marcas.tabelas[t.local] || {};
+        const minhas = (estado[t.local] || []).filter(daEmpresa);
+        /* Registro que sumiu da marca sem passar pela exclusão também conta:
+           o número de linhas tem de bater. */
+        if (minhas.length !== Object.keys(antes).length) return true;
+        for (let k = 0; k < minhas.length; k++) {
+          const r = minhas[k];
+          if (antes[r.id] !== marcaDoRegistro(r, dono(r), donoId)) return true;
+        }
+      }
+      return false;
+    } catch (e) {
+      return true;
     }
   }
 
@@ -1427,7 +1480,7 @@
     config, salvarConfig, configurada, conectado, mandaNoAcesso, estado, sessao,
     cadastrar, entrar, sair, renovar, precisaRenovar, eu, meuPerfil, salvarPerfil, criarMinhaEmpresa,
     guardarPerfilNaSessao, empurrar, puxar, sincronizar, ultimaSincronizacao, ultimoEnvio,
-    esquecerMarcas,
+    esquecerMarcas, haMudancas,
     __trocarChamar: function (fn) { substitutoDeTeste = fn || null; },
     perfisDaNuvem, empresasDaNuvem, souAdminNaNuvem, existeEmpresa,
     definirEmpresaDoPerfil, definirPapelDoPerfil, salvarMeuNome,

@@ -1089,6 +1089,12 @@
     if (!S || !S.filaPendente || !P) return Promise.resolve();
     return S.filaPendente().then(function (fila) {
       if (!fila || !fila.estado) return;
+
+      /* Cópia velha de quando o app guardava uma a cada tentativa, houvesse ou
+         não o que guardar. Se o servidor já tem tudo, ela não representa
+         trabalho perdido nenhum — e anunciá-la seria o aviso errado mais uma
+         vez. Some em silêncio, que é o que ela merece. */
+      if (N.haMudancas && !N.haMudancas()) return S.limparFila();
       /* Os números saíram da faixa, e a razão é que eles mentiam.
 
          `resumir` conta a cópia guardada — e a cópia é da CARTEIRA INTEIRA,
