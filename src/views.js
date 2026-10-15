@@ -424,7 +424,7 @@
       '<button class="btn ghost mini" onclick="location.hash=\'#/playbook\'" aria-label="O método"' +
       ' data-ajuda-titulo="O método" data-ajuda="Como uma tarefa vira avanço, o que conta como evidência em cada uma das oito decisões, e o que fazer em cada canal.">?</button></div>' +
       linhaDoPrimeiro(foco) +
-      cartaoDaAnalise() +
+      cartaoDaAnalise(foco) +
       linhaDasNotas() +
       linhaDaTriagem(foco.triagem) +
       responderamNoWhatsapp() +
@@ -558,7 +558,18 @@
       itens.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul></section>';
   }
 
-  function cartaoDaAnalise() {
+  /* `foco` é a fila de AGORA. A análise é guardada no aparelho e reapresentada
+     enquanto for do mesmo dia — e foi assim que uma análise contando "0 de 0"
+     ficou na tela acima dos cartões dizendo 165 negócios, com a frase "os
+     números acima são cálculo e valem do mesmo jeito" embaixo.
+
+     Não valiam. Eles eram o cálculo CERTO de outro momento — a carteira ainda
+     não tinha descido do servidor quando a análise rodou — e continuaram certos
+     a respeito de uma carteira que já não existe.
+
+     Número que já foi verdade é o mais perigoso de todos: não há nada na cara
+     dele que denuncie. Então a comparação é feita na hora de mostrar. */
+  function cartaoDaAnalise(foco) {
     if (analisando) {
       const p = analisando;
       const quanto = p.total ? Math.round((p.feitos / p.total) * 100) : 0;
@@ -580,6 +591,24 @@
     const p = a.panorama || {};
     const ia = a.ia || null;
     const hora = String(a.em || '').slice(11, 16);
+
+    const agora = (foco && foco.itens) ? foco.itens.length : null;
+    const contados = Number(p.total || 0);
+    const mudou = agora !== null && agora !== contados;
+    /* Zero contra carteira cheia não é "mudou um pouco": é uma análise que não
+       olhou para nada. Os números somem, porque não descrevem coisa alguma —
+       e a frase de que eles "valem do mesmo jeito" sairia mentindo junto. */
+    const vazia = mudou && contados === 0 && agora > 0;
+
+    const desencontro = mudou
+      ? '<div class="aviso" style="margin-top:8px">Esta análise contou ' +
+        (contados === 1 ? '1 negócio' : contados + ' negócios') + ' na fila; agora são ' +
+        (agora === 1 ? '1' : agora) + '. ' +
+        (vazia
+          ? 'Ela rodou antes de a carteira chegar do servidor, então não tem o que dizer sobre a de agora — refaça.'
+          : 'O que está escrito abaixo vale para o momento em que ela foi feita.') +
+        '</div>'
+      : '';
 
     /* Os números primeiro, porque são os que não dependem de nada e não
        erram. A leitura da IA vem depois, marcada como leitura. */
@@ -614,7 +643,7 @@
       (a.lidos ? ' · ' + a.lidos + ' negócio(s) relidos' : '') + '</span>' +
       '<button class="btn ghost mini" onclick="App.analisarPendencias()">Refazer</button>' +
       '<button class="btn ghost mini" onclick="App.fecharAnalise()" aria-label="Fechar">✕</button></div>' +
-      numeros + daIa + '</div>';
+      desencontro + (vazia ? '' : numeros + daIa) + '</div>';
   }
 
   /* ---------------- as conversas do WhatsApp ----------------

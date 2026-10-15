@@ -1127,9 +1127,21 @@
     }, function () {});
   }
 
+  /* A carteira desce do servidor em segundo plano, e durante alguns segundos
+     a memória tem o que estava no aparelho — às vezes nada. Tudo o que só LÊ
+     aguenta isso: a tela repinta quando os dados chegam.
+
+     O que não aguenta é o que GRAVA uma conclusão. A análise das pendências
+     conta a carteira e guarda o resultado no aparelho, com a data de hoje; se
+     ela rodar nesse intervalo, o que fica guardado é um retrato do vazio — e
+     ele volta a aparecer a cada entrada até o fim do dia, com a frase "os
+     números acima são cálculo e valem do mesmo jeito" embaixo. */
+  let baixando = false;
+
   function baixarDoServidor() {
     const N = global.IADNuvem;
     if (!N.conectado() || !A.atual()) return Promise.resolve();
+    baixando = true;
     avisoSincronizacao = '';
     espelharEmpresaDoServidor();
     return resgatarFilaPendente().then(function () { return N.puxar(); }).then(function () {
@@ -1141,7 +1153,9 @@
       /* E-mail depende do cadastro para casar: sem contas e contatos na
          memória, toda conversa cairia como "sem dono". */
       pintarEmails();
+      baixando = false;
     }, function (e) {
+      baixando = false;
       semServidor = (e && e.message) || 'não consegui falar com o servidor';
       render();
     });
@@ -1499,6 +1513,16 @@
       const IA = global.IADIA;
       const O = global.IADOrientacao;
       if (!O) return;
+
+      /* Enquanto a carteira está descendo, analisar é contar o que ainda não
+         chegou — e o resultado fica guardado o dia inteiro. Esperar cinco
+         segundos é mais barato do que conviver com um retrato do vazio. */
+      if (baixando) {
+        alert('A carteira ainda está descendo do servidor.\n\n' +
+          'Espere ela terminar de aparecer e clique de novo — analisar agora ' +
+          'contaria só o que já chegou.');
+        return;
+      }
 
       const est = Store.dados();
       const foco = E.fila(est.oportunidades, est.tarefas);
