@@ -1928,3 +1928,120 @@ dialog.balao-ia::backdrop { background: rgba(6, 14, 24, .35); }
 .pergunta-pronta p {
   margin: 5px 0 4px; font-size: .84rem; line-height: 1.45; overflow-wrap: anywhere;
 }
+
+/* ---------- o quadro financeiro da proposta ----------
+
+   O desenho segue o que a literatura de revisão de extração converge: os
+   números primeiro, grandes, e cada valor apontando para onde foi lido. O que
+   a IA preencheu tem uma marca discreta à esquerda — discreta porque ela diz
+   "confira", não "cuidado", e um alarme em cada linha não é alarme nenhum. */
+
+/* A área de soltar. Alta o bastante para ser alvo de arrasto com o mouse em
+   movimento, e clicável porque metade das pessoas vai clicar nela de qualquer
+   jeito. */
+.solta-quadro {
+  margin: 14px 0 0; padding: 26px 16px; border-radius: 12px; cursor: pointer;
+  border: 2px dashed var(--line); background: var(--surface);
+  display: grid; gap: 5px; justify-items: center; text-align: center;
+  transition: border-color .15s, background .15s;
+}
+.solta-quadro:hover { border-color: var(--orange); }
+.solta-quadro.em-cima { border-color: var(--orange); background: var(--orange-soft); }
+
+/* Os três números. Grade que cai para duas colunas no celular em vez de
+   encolher a fonte: número de proposta que não se lê de longe não serve. */
+.placar-quadro {
+  margin: 14px 0 0; display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+.placar-quadro .pq {
+  padding: 12px 14px; border-radius: 11px;
+  border: 1px solid var(--line); background: var(--surface);
+}
+.placar-quadro .pq.forte { border-color: var(--orange); background: var(--orange-soft); }
+.placar-quadro .rot {
+  font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
+}
+.placar-quadro .val {
+  margin: 4px 0 2px; font-size: 1.32rem; font-weight: 700; line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+.placar-quadro .obs { font-size: .7rem; color: var(--muted); line-height: 1.35; }
+
+/* Os cenários lado a lado. A coluna em uso fica marcada porque é dela que
+   saem os números do topo — sem isso são quatro totais na tela e nenhuma
+   indicação de qual é o da proposta. */
+table.cenarios { width: 100%; border-collapse: collapse; }
+table.cenarios th, table.cenarios td {
+  padding: 7px 10px; border-bottom: 1px solid var(--line); font-size: .84rem;
+}
+table.cenarios th { text-align: left; vertical-align: top; }
+table.cenarios th.ativa, table.cenarios td.ativa { background: var(--orange-soft); }
+table.cenarios tr.total td { border-top: 2px solid var(--line); }
+table.cenarios .right { text-align: right; }
+input.nome-cenario {
+  width: 100%; min-width: 92px; padding: 4px 6px; font: inherit; font-weight: 700;
+  border: 1px solid transparent; border-radius: 7px; background: transparent; color: inherit;
+}
+input.nome-cenario:hover { border-color: var(--line); }
+input.nome-cenario:focus { border-color: var(--orange); outline: none; background: var(--bg); }
+
+/* As linhas. Toda célula é campo — o ponto da tela é o estudo, e estudo com
+   campo bloqueado volta para a planilha. */
+table.quadro-linhas, table.quadro-premissas { width: 100%; border-collapse: collapse; }
+table.quadro-linhas th {
+  padding: 6px 8px; text-align: left; font-size: .68rem; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid var(--line);
+}
+table.quadro-linhas th.right { text-align: right; }
+table.quadro-linhas td, table.quadro-premissas td {
+  padding: 5px 8px; border-bottom: 1px solid var(--line); font-size: .86rem; vertical-align: middle;
+}
+table.quadro-linhas td.right { text-align: right; white-space: nowrap; }
+table.quadro-linhas tr.grupo td {
+  padding-top: 12px; font-size: .7rem; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--brand, #5b2d8e); font-weight: 700; border-bottom: none;
+}
+/* A marca do que veio da IA. Uma barra de 3px e nada mais: ela responde "de
+   onde saiu este número" junto com o balão, sem competir com o número. */
+tr.da-ia td:first-child { box-shadow: inset 3px 0 0 var(--orange); }
+
+input.cel, select.cel {
+  width: 100%; padding: 5px 7px; font: inherit; font-size: .86rem; color: inherit;
+  border: 1px solid transparent; border-radius: 7px; background: transparent;
+}
+input.cel:hover, select.cel:hover { border-color: var(--line); }
+input.cel:focus, select.cel:focus { border-color: var(--orange); outline: none; background: var(--bg); }
+input.cel.num, input.cel.dinheiro { text-align: right; font-variant-numeric: tabular-nums; }
+input.cel.rotulo { min-width: 140px; }
+/* O seletor nasce com a altura da fonte e corta o texto em alguns
+   navegadores. A altura mínima resolve, e alinha com os campos de texto ao
+   lado — numa linha de tabela, campo mais baixo que o vizinho lê como erro. */
+select.cel {
+  border-color: var(--line); min-height: 30px; line-height: 1.4;
+  appearance: auto; background: var(--bg);
+}
+
+/* As caixas de cenário na linha: três letras, porque o nome inteiro em cada
+   linha empurraria a tabela para fora da tela do celular. O nome completo
+   está no title e no cabeçalho da comparação, logo acima. */
+td.cenas { white-space: nowrap; }
+.marca-cenario {
+  display: inline-flex; align-items: center; gap: 3px; margin-right: 5px; cursor: pointer;
+  padding: 2px 6px; border-radius: 999px; border: 1px solid var(--line);
+  font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted);
+}
+.marca-cenario.on { border-color: var(--orange); background: var(--orange-soft); color: inherit; }
+.marca-cenario input { margin: 0; }
+
+.condicoes { display: flex; flex-wrap: wrap; gap: 14px 18px; align-items: center; }
+.condicoes .cond { display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; }
+.condicoes .cond > span:first-child { color: var(--muted); }
+.condicoes .cond input.cel { border-color: var(--line); }
+
+.grupo-escopo { margin: 0 0 12px; }
+.grupo-escopo .rot {
+  font-size: .7rem; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--brand, #5b2d8e); font-weight: 700;
+}
+.grupo-escopo ul { margin: 5px 0 0; padding-left: 18px; display: grid; gap: 3px; font-size: .84rem; }

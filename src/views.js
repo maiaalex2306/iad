@@ -3027,7 +3027,7 @@
        Tarefas     o que está combinado
        WhatsApp    o que o cliente falou
        E-mail      o que foi trocado por escrito
-       Propostas   o que foi ofertado, por quanto
+       Propostas   o quadro financeiro: entrada, mensalidade e cenários
        Produtos    o que está sendo vendido
        Arquivos    o que foi anexado
 
@@ -3052,7 +3052,7 @@
     whatsapp: 'As conversas de WhatsApp que casaram com um contato desta empresa.',
     sinais: 'O que o comprador fez sozinho: respondeu, abriu, voltou. Não é evidência de decisão — é o que diz QUANDO a conversa tem hora.',
     email: 'Os e-mails trocados dentro deste negócio. Ainda não construído.',
-    propostas: 'As propostas enviadas, com valor, validade e resposta. Ainda não construído.',
+    propostas: 'O quadro financeiro: leia os arquivos da proposta e a IA separa entrada, mensalidade, escopo, premissas e as formas de negócio. Tudo fica aberto para você estudar.',
     produtos: 'O que está sendo vendido, com quantidade e preço.',
     arquivos: 'Os anexos, organizados pela decisão que destravam.'
   };
@@ -3628,13 +3628,335 @@
     return topo(aviso + minhas.map(function (c) { return conversaDeEmail(c, op); }).join(''));
   }
 
+  /* ================= A ABA PROPOSTAS: O QUADRO FINANCEIRO =================
+
+     O QUE ELA SUBSTITUI
+
+     Uma planilha de sete abas e um campo `valor` digitado à mão. Entre as
+     duas coisas havia um vendedor somando equipamento com mensalidade de
+     cabeça, na frente do cliente.
+
+     A FORMA DA TELA, e por que esta e não outra
+
+     Toda a literatura de revisão de extração converge no mesmo desenho:
+     o documento de um lado, os campos do outro, e CADA VALOR APONTANDO PARA
+     ONDE FOI LIDO. É o que faz alguém confiar o bastante para corrigir em vez
+     de refazer. Aqui não há coordenadas de página — o app lê texto, não
+     imagem —, então o apontamento é a frase ou a célula de onde o número
+     saiu, no balão de cada linha. É a versão honesta do mesmo princípio.
+
+     E os três números no topo, sempre, antes de qualquer lista: é o que o
+     vendedor veio ver. Entrada, por mês, e total do contrato — este último o
+     ÚNICO lugar onde os dois primeiros se encontram, com o prazo escrito na
+     conta à vista.
+
+     TUDO ABERTO
+
+     Cada rótulo, cada quantidade, cada valor, cada premissa e o prazo são
+     campos editáveis. Não é generosidade: um quadro que a IA montou e o
+     vendedor não pode mexer é um quadro que ele refaz na planilha. O que a
+     IA entrega é o PONTO DE PARTIDA, e a tela existe para o estudo em cima
+     dele. */
   function abaPropostas(op) {
-    return porVir('Propostas',
-      'O que foi ofertado neste negócio: itens, valor único e valor mensal separados, desconto, validade e a resposta do cliente.',
-      ['Valor de implantação e valor mensal nunca somam. Hoje o sistema não sabe a diferença entre 10 mil uma vez e 10 mil por mês.',
-       'O preço de tabela fica congelado na linha da proposta. Sem isso, mexer no catálogo reescreve o que já foi enviado.',
-       'O estado da proposta é o que mais interessa aqui: "expirada sem resposta" é o retrato do falso avançado, que é justamente o que o IAD existe para denunciar.',
-       'O estudo está em estudos/PROPOSTAS.md. Nada disso foi construído ainda.']);
+    const Q = global.IADQuadro;
+    const q = op.quadro;
+
+    if (!q || (!(q.linhas || []).length && !(q.escopo || []).length && !(q.arquivos || []).length)) {
+      return quadroVazio(op);
+    }
+    return quadroMontado(op, q, Q);
+  }
+
+  /* A tela de quem ainda não leu nada. Diz o que ela faz, com o que ela
+     trabalha, e não finge ter um quadro em branco para preencher à mão —
+     preencher à mão é o que a planilha já faz melhor. */
+  function quadroVazio(op) {
+    return '<div class="card"><div class="row"><h2 style="margin:0">Quadro financeiro</h2>' +
+      '<span class="espaco"></span>' +
+      '<button class="btn" onclick="App.lerArquivosDaProposta(\'' + op.id + '\')"' +
+      ajudaComLinhas('Ler arquivos', 'Escolha vários de uma vez. Eu leio o texto de cada um e monto o quadro.',
+        [['Eu leio', '.docx .xlsx .pptx .pdf .csv .txt .md e .zip'],
+         ['O que eu procuro', 'escopo, valores de uma vez, valores por mês, premissas e as formas de negócio'],
+         ['Depois', 'tudo fica aberto para você editar e estudar']]) +
+      '>Ler arquivos</button></div>' +
+      '<p class="small" style="margin:8px 0 0">Solte aqui os arquivos desta proposta — o escopo, a planilha de ' +
+      'preço, a apresentação, o que houver — e eu separo o valor do projeto, as mensalidades, o escopo, ' +
+      'as premissas e as formas de negócio.</p>' +
+      '<div class="solta-quadro" id="solta-quadro" data-op="' + esc(op.id) + '">' +
+      '<strong>Arraste os arquivos para cá</strong>' +
+      '<span class="tiny muted">vários de uma vez · .docx .xlsx .pptx .pdf .csv .txt .zip</span></div>' +
+      '<div id="quadro-estado"></div>' +
+      '<p class="tiny muted" style="margin:10px 0 0">Nada disso sai do seu aparelho sem você mandar: o texto ' +
+      'vai para o assistente, os arquivos não.</p></div>';
+  }
+
+  /* Os três números. Ficam no topo e sozinhos num bloco porque são a resposta
+     da tela; o resto é como se chega neles.
+
+     "nunca somam" está escrito na tela de propósito. É o erro que todo mundo
+     comete uma vez, e quem o comete na frente do cliente não comete de novo —
+     mas aí já custou. */
+  function placarDoQuadro(t, Q) {
+    const eq = Q.mensalEquivalente(t);
+    const pct = Math.round(t.parteRecorrente * 100);
+    return '<div class="placar-quadro" id="placar-quadro">' +
+      '<div class="pq"><div class="rot">Entrada</div><div class="val">' + U.moeda(t.entrada) + '</div>' +
+      '<div class="obs">uma vez' + (t.multEntrada !== 1
+        ? ' · ' + U.moeda(t.brutoEntrada) + ' + premissas' : '') + '</div></div>' +
+      '<div class="pq"><div class="rot">Por mês</div><div class="val">' + U.moeda(t.mensal) + '</div>' +
+      '<div class="obs">recorrente' + (t.multMensal !== 1
+        ? ' · ' + U.moeda(t.brutoMensal) + ' + premissas' : '') + '</div></div>' +
+      '<div class="pq forte"><div class="rot">Total do contrato</div><div class="val">' + U.moeda(t.contrato) + '</div>' +
+      '<div class="obs">entrada + mensal × ' + t.meses + ' meses</div></div>' +
+      '<div class="pq"><div class="rot">Equivalente por mês</div><div class="val">' + U.moeda(eq) + '</div>' +
+      '<div class="obs">' + pct + '% do contrato é recorrente</div></div>' +
+      '</div>' +
+      '<p class="tiny muted" style="margin:6px 0 0">Entrada e mensalidade <strong>nunca somam</strong> entre si. ' +
+      'O único lugar onde as duas se encontram é o total do contrato — e lá o prazo está na conta.</p>';
+  }
+
+  /* Os cenários lado a lado. Esta é a tabela que a planilha dele tem com três
+     colunas e ✓/x, e é ela que responde "quais as possibilidades de forma de
+     negócio": a mesma linha entra numa modalidade e não entra na outra, e é
+     isso — não um desconto — que faz os números serem tão diferentes. */
+  function cenariosLadoALado(op, q, Q) {
+    const linhas = Q.comparar(q);
+    if (linhas.length < 2) return '';
+    const col = function (f) { return linhas.map(f).join(''); };
+    return '<div class="card sub"><div class="row"><h3 style="margin:0">Formas de negócio, lado a lado</h3>' +
+      '<span class="espaco"></span>' +
+      '<button class="btn ghost mini" onclick="App.quadroCenarioNovo(\'' + op.id + '\')">+ Cenário</button></div>' +
+      '<p class="tiny muted" style="margin:6px 0 10px">O que muda entre elas é QUAIS linhas entram, e não o ' +
+      'preço de cada uma. Marque as caixas na lista abaixo.</p>' +
+      '<div class="tabela-rolagem"><table class="cenarios"><thead><tr><th></th>' +
+      col(function (c) {
+        return '<th class="' + (c.ativo ? 'ativa' : '') + '">' +
+          '<input class="nome-cenario" value="' + esc(c.nome) + '" ' +
+          'onchange="App.quadroCenarioNome(\'' + op.id + '\',\'' + c.cenario + '\',this.value)">' +
+          (c.ativo ? '<span class="tiny muted">em uso</span>'
+            : '<button class="btn ghost mini" onclick="App.quadroUsarCenario(\'' + op.id + '\',\'' + c.cenario + '\')">usar</button>') +
+          '</th>';
+      }) + '</tr></thead><tbody>' +
+      '<tr><td>Entrada</td>' + col(function (c) {
+        return '<td class="right' + (c.ativo ? ' ativa' : '') + '">' + U.moeda(c.entrada) + '</td>';
+      }) + '</tr>' +
+      '<tr><td>Por mês</td>' + col(function (c) {
+        return '<td class="right' + (c.ativo ? ' ativa' : '') + '">' + U.moeda(c.mensal) + '</td>';
+      }) + '</tr>' +
+      '<tr class="total"><td>Total do contrato</td>' + col(function (c) {
+        return '<td class="right' + (c.ativo ? ' ativa' : '') + '"><strong>' + U.moeda(c.contrato) + '</strong></td>';
+      }) + '</tr>' +
+      '<tr><td class="tiny muted">equivalente/mês</td>' + col(function (c) {
+        return '<td class="right tiny muted' + (c.ativo ? ' ativa' : '') + '">' +
+          U.moeda(Q.mensalEquivalente(c)) + '</td>';
+      }) + '</tr>' +
+      '<tr><td class="tiny muted">recorrente</td>' + col(function (c) {
+        return '<td class="right tiny muted' + (c.ativo ? ' ativa' : '') + '">' +
+          Math.round(c.parteRecorrente * 100) + '%</td>';
+      }) + '</tr>' +
+      '</tbody></table></div></div>';
+  }
+
+  /* O balão de cada linha diz de onde o número veio. Sem isso o quadro é um
+     palpite bem formatado: o vendedor não sabe se "29.106,28" saiu da célula
+     F28 da planilha dele ou da imaginação do modelo, e na dúvida refaz tudo. */
+  function deOndeVeio(x) {
+    if (!x || !x.origem) {
+      return ajudaComLinhas('Digitado aqui', 'Esta linha não veio de arquivo nenhum: foi escrita nesta tela.');
+    }
+    return ajudaComLinhas('De onde veio', x.origem,
+      [['Confira', 'o número é do arquivo, mas quem responde por ele é você']]);
+  }
+
+  /* O campo mostra o número como um brasileiro o escreve, e aceita de volta
+     as duas formas. "29106.28" num campo de dinheiro não é um número cru
+     exposto por honestidade: é um número que o vendedor relê como vinte e
+     nove mil cento e seis vírgula vinte e oito só depois de pensar, e que ele
+     vai conferir contra uma planilha onde está escrito 29.106,28.
+
+     A volta é `IADQuadro.numero`, que lê os dois formatos — então quem
+     digitar "29106.28" também acerta. */
+  function dinheiroNoCampo(v) {
+    const n = Number(v) || 0;
+    if (!n) return '0';
+    const casas = Math.abs(n * 100 - Math.round(n) * 100) > 0.5 ? 2 : 0;
+    return n.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
+  }
+
+  function linhasDoQuadro(op, q, Q) {
+    const cen = q.cenarios || [];
+    const umaLinha = function (l) {
+      const marcas = cen.map(function (c) {
+        const dentro = Q.naCena(l, c.id);
+        return '<label class="marca-cenario' + (dentro ? ' on' : '') + '" title="' + esc(c.nome) + '">' +
+          '<input type="checkbox"' + (dentro ? ' checked' : '') +
+          ' onchange="App.quadroLinhaCenario(\'' + op.id + '\',\'' + l.id + '\',\'' + c.id + '\',this.checked)">' +
+          '<span>' + esc((c.nome || '?').slice(0, 3)) + '</span></label>';
+      }).join('');
+      return '<tr' + (l.daIa ? ' class="da-ia"' : '') + '>' +
+        '<td><input class="cel rotulo" value="' + esc(l.rotulo) + '"' + deOndeVeio(l) +
+        ' onchange="App.quadroLinha(\'' + op.id + '\',\'' + l.id + '\',\'rotulo\',this.value)"></td>' +
+        '<td><input class="cel num" inputmode="decimal" value="' + esc(dinheiroNoCampo(l.quantidade)) + '"' +
+        ' data-previa="linha:' + l.id + ':quantidade" oninput="App.quadroPrevia(\'' + op.id + '\')"' +
+        ' onchange="App.quadroLinha(\'' + op.id + '\',\'' + l.id + '\',\'quantidade\',this.value)"></td>' +
+        '<td><input class="cel dinheiro" inputmode="decimal" value="' + esc(dinheiroNoCampo(l.valor)) + '"' +
+        ' data-previa="linha:' + l.id + ':valor" oninput="App.quadroPrevia(\'' + op.id + '\')"' +
+        ' onchange="App.quadroLinha(\'' + op.id + '\',\'' + l.id + '\',\'valor\',this.value)"></td>' +
+        '<td><select class="cel" onchange="App.quadroLinha(\'' + op.id + '\',\'' + l.id + '\',\'tipo\',this.value)">' +
+        Q.TIPOS_DE_LINHA.map(function (t) {
+          return '<option value="' + t[0] + '"' + (l.tipo === t[0] ? ' selected' : '') + '>' + t[1] + '</option>';
+        }).join('') + '</select></td>' +
+        '<td class="right">' + U.moeda(Q.totalDaLinha(l)) +
+        (l.tipo === 'mensal' ? '<span class="tiny muted">por mês</span>' : '') + '</td>' +
+        '<td class="cenas">' + marcas + '</td>' +
+        '<td><button class="btn ghost mini" onclick="App.quadroLinhaFora(\'' + op.id + '\',\'' + l.id + '\')" ' +
+        'title="Remover esta linha">✕</button></td></tr>';
+    };
+
+    const unicas = (q.linhas || []).filter(function (l) { return l.tipo !== 'mensal'; });
+    const mensais = (q.linhas || []).filter(function (l) { return l.tipo === 'mensal'; });
+    const grupo = function (titulo, nota, lista) {
+      if (!lista.length) return '';
+      return '<tr class="grupo"><td colspan="7">' + esc(titulo) +
+        ' <span class="tiny muted">' + esc(nota) + '</span></td></tr>' + lista.map(umaLinha).join('');
+    };
+
+    return '<div class="card sub"><div class="row"><h3 style="margin:0">O que entra na conta</h3>' +
+      '<span class="espaco"></span>' +
+      '<button class="btn ghost mini" onclick="App.quadroLinhaNova(\'' + op.id + '\',\'unico\')">+ Uma vez</button> ' +
+      '<button class="btn ghost mini" onclick="App.quadroLinhaNova(\'' + op.id + '\',\'mensal\')">+ Por mês</button></div>' +
+      '<div class="tabela-rolagem"><table class="quadro-linhas"><thead><tr>' +
+      '<th>O quê</th><th style="width:70px">Qtd</th><th style="width:120px">Valor</th>' +
+      '<th style="width:110px">Cobrança</th><th class="right" style="width:120px">Total</th>' +
+      '<th style="width:1%">Cenários</th><th style="width:1%"></th></tr></thead><tbody>' +
+      grupo('Uma vez', 'implantação, equipamento, licença', unicas) +
+      grupo('Por mês', 'serviço, operação assistida, plataforma', mensais) +
+      (!(q.linhas || []).length
+        ? '<tr><td colspan="7" class="tiny muted">Nenhuma linha. Use os botões acima, ou leia outro arquivo.</td></tr>'
+        : '') +
+      '</tbody></table></div></div>';
+  }
+
+  /* As premissas são o que faz a tela servir para ESTUDO e não só para
+     registro. Desligar "segmento alimentos" e ver o contrato inteiro andar é
+     a pergunta que o vendedor faz dez vezes por proposta, e que hoje ele
+     responde abrindo a planilha e torcendo para não quebrar uma fórmula. */
+  function premissasDoQuadro(op, q, Q) {
+    const uma = function (p) {
+      const ehConta = p.tipo === 'percentual';
+      return '<tr' + (p.daIa ? ' class="da-ia"' : '') + '>' +
+        '<td style="width:1%"><input type="checkbox"' + (p.ligada ? ' checked' : '') +
+        (ehConta ? '' : ' disabled') + ' data-previa="premissa:' + p.id + ':ligada"' +
+        ' onchange="App.quadroPremissa(\'' + op.id + '\',\'' + p.id + '\',\'ligada\',this.checked)"></td>' +
+        '<td><input class="cel rotulo" value="' + esc(p.rotulo) + '"' + deOndeVeio(p) +
+        ' onchange="App.quadroPremissa(\'' + op.id + '\',\'' + p.id + '\',\'rotulo\',this.value)">' +
+        (p.observacao ? '<div class="tiny muted">' + esc(p.observacao) + '</div>' : '') + '</td>' +
+        '<td style="width:90px">' + (ehConta
+          ? '<input class="cel num" inputmode="decimal" value="' + esc(String(p.percentual)) + '"' +
+            ' data-previa="premissa:' + p.id + ':percentual" oninput="App.quadroPrevia(\'' + op.id + '\')"' +
+            ' onchange="App.quadroPremissa(\'' + op.id + '\',\'' + p.id + '\',\'percentual\',this.value)">'
+          : '<span class="tiny muted">—</span>') + '</td>' +
+        '<td style="width:150px">' + (ehConta
+          ? '<select class="cel" onchange="App.quadroPremissa(\'' + op.id + '\',\'' + p.id + '\',\'incideEm\',this.value)">' +
+            Q.ONDE.map(function (o) {
+              return '<option value="' + o[0] + '"' + (p.incideEm === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+            }).join('') + '</select>'
+          : '<span class="pill">condição</span>') + '</td>' +
+        '<td style="width:1%"><button class="btn ghost mini" ' +
+        'onclick="App.quadroPremissaFora(\'' + op.id + '\',\'' + p.id + '\')" title="Remover">✕</button></td></tr>';
+    };
+
+    return '<div class="card sub"><div class="row"><h3 style="margin:0">Premissas</h3>' +
+      '<span class="espaco"></span>' +
+      '<button class="btn ghost mini" onclick="App.quadroPremissaNova(\'' + op.id + '\')">+ Premissa</button></div>' +
+      '<p class="tiny muted" style="margin:6px 0 10px">O que multiplica o preço: segmento, região, prazo, ' +
+      'distância. Desligue uma e veja os números andarem — é para isso que ela tem uma caixa. ' +
+      'As que não têm percentual são condições comerciais: entram na proposta, não na conta.</p>' +
+      (!(q.premissas || []).length
+        ? '<div class="vazio tiny">Nenhuma premissa.</div>'
+        : '<div class="tabela-rolagem"><table class="quadro-premissas"><tbody>' +
+          (q.premissas || []).map(uma).join('') + '</tbody></table></div>') +
+      '</div>';
+  }
+
+  function escopoDoQuadro(op, q) {
+    if (!(q.escopo || []).length) return '';
+    const grupos = {};
+    (q.escopo || []).forEach(function (e) {
+      const g = e.grupo || 'Escopo';
+      (grupos[g] = grupos[g] || []).push(e);
+    });
+    return '<div class="card sub"><h3 style="margin:0 0 4px">Escopo</h3>' +
+      '<p class="tiny muted" style="margin:0 0 10px">O que foi prometido. Não entra na conta — entra na ' +
+      'proposta, e é onde nascem as discussões de "isso estava incluído?".</p>' +
+      Object.keys(grupos).map(function (g) {
+        return '<div class="grupo-escopo"><div class="rot">' + esc(g) + '</div><ul>' +
+          grupos[g].map(function (e) {
+            return '<li' + deOndeVeio(e) + '>' +
+              (e.quantidade && e.quantidade !== 1 ? '<strong>' + U.numero(e.quantidade) + '×</strong> ' : '') +
+              esc(e.item) + (e.observacao ? ' <span class="tiny muted">' + esc(e.observacao) + '</span>' : '') +
+              '</li>';
+          }).join('') + '</ul></div>';
+      }).join('') + '</div>';
+  }
+
+  function condicoesDoQuadro(op, q) {
+    const campo = function (id, rot, valor, sufixo, largura, ajuda) {
+      return '<label class="cond"' + ajuda + '><span>' + esc(rot) + '</span>' +
+        '<input class="cel" style="width:' + largura + '" value="' + esc(String(valor == null ? '' : valor)) + '"' +
+        (id === 'prazoMeses' ? ' inputmode="numeric" data-previa="quadro::prazoMeses"' +
+          ' oninput="App.quadroPrevia(\'' + op.id + '\')"' : '') +
+        ' onchange="App.quadroCampo(\'' + op.id + '\',\'' + id + '\',this.value)">' +
+        (sufixo ? '<span class="tiny muted">' + esc(sufixo) + '</span>' : '') + '</label>';
+    };
+    return '<div class="card sub"><h3 style="margin:0 0 10px">Condições</h3><div class="condicoes">' +
+      campo('prazoMeses', 'Prazo', q.prazoMeses, 'meses', '70px',
+        ajudaComLinhas('Prazo do contrato', 'É ele que transforma mensalidade em total de contrato. Mexa e veja tudo andar.')) +
+      campo('validadeDias', 'Validade', q.validadeDias, 'dias', '70px',
+        ajudaComLinhas('Validade da proposta', 'O costume de mercado no Brasil é de 15 a 30 dias. Proposta sem validade é proposta que o cliente responde em março.')) +
+      campo('pagamento', 'Pagamento', q.pagamento, '', '180px',
+        ajudaComLinhas('Condição de pagamento', 'À vista, parcelado, 30/60/90 — como foi combinado o desembolso.')) +
+      campo('reajuste', 'Reajuste', q.reajuste, '', '180px',
+        ajudaComLinhas('Reajuste', 'Índice e periodicidade, por exemplo IPCA anual. Num contrato de 36 meses é o que decide se a conta fecha.')) +
+      '</div></div>';
+  }
+
+  function quadroMontado(op, q, Q) {
+    const t = Q.totais(q);
+    const arqs = (q.arquivos || []);
+    const quando = q.lidoEm ? U.data(String(q.lidoEm).slice(0, 10)) : '';
+
+    const cabeca = '<div class="card"><div class="row"><h2 style="margin:0">Quadro financeiro</h2>' +
+      '<span class="espaco"></span>' +
+      '<button class="btn ghost mini" onclick="App.lerArquivosDaProposta(\'' + op.id + '\')"' +
+      ajudaComLinhas('Ler mais arquivos', 'O que vier se SOMA ao quadro: nada do que você editou é apagado.') +
+      '>+ Arquivos</button> ' +
+      '<button class="btn ghost mini" onclick="App.quadroLevarParaONegocio(\'' + op.id + '\')"' +
+      ajudaComLinhas('Levar para o negócio', 'Grava a entrada no valor do negócio e a mensalidade no valor mensal — ' +
+        'que é o que o pipeline, a previsão e os gráficos leem.') +
+      '>Levar para o negócio</button> ' +
+      '<button class="btn ghost mini" onclick="App.quadroApagar(\'' + op.id + '\')" title="Apagar o quadro">✕</button></div>' +
+      (arqs.length
+        ? '<p class="tiny muted" style="margin:6px 0 0">Lido de ' + arqs.length + ' arquivo(s)' +
+          (quando ? ' em ' + quando : '') + ': ' +
+          arqs.map(function (a) { return '<span class="pill">' + esc(a.nome) + '</span>'; }).join(' ') + '</p>'
+        : '') +
+      '<div id="quadro-estado"></div>' + placarDoQuadro(t, Q) + '</div>';
+
+    const duvidas = (q.duvidas || []).length
+      ? '<div class="card sub"><h3 style="margin:0 0 6px">O que eu não consegui ler</h3>' +
+        '<p class="tiny muted" style="margin:0 0 8px">Dito na frente, e não escondido: número que eu inventaria ' +
+        'aqui sairia numa proposta.</p><ul class="small" style="margin:0;padding-left:18px;display:grid;gap:6px">' +
+        (q.duvidas || []).map(function (d) { return '<li>' + esc(d) + '</li>'; }).join('') + '</ul></div>'
+      : '';
+
+    return cabeca +
+      cenariosLadoALado(op, q, Q) +
+      linhasDoQuadro(op, q, Q) +
+      premissasDoQuadro(op, q, Q) +
+      condicoesDoQuadro(op, q) +
+      escopoDoQuadro(op, q) +
+      duvidas;
   }
 
   /* A aba que ainda não tem obra dentro. Existe para o lugar ficar definido
@@ -10192,6 +10514,10 @@
     conversas, definirConversa, conversaAberta: function () { return conversaAberta; },
     iconeWhatsapp, linkWhatsapp,
     acesso, barraAdmin, menuDoUsuario, definirTelaAcesso, recadoDoAcesso, definirPrimeiraEmpresa, listaUsuariosNuvem,
+    /* A prévia ao vivo do quadro troca só o bloco dos três números, sem
+       repintar a tela: repintar a cada tecla mataria o cursor no meio do
+       número que está sendo digitado. */
+    __placarDoQuadro: placarDoQuadro,
     pendenteAcesso: function () { return pendente; },
     definirFiltroFunil, limparFiltroFunil, definirFunilAberto, definirForma, tarefasFiltrar, tarefasEstado, tarefasVisiveis, tarefasDaPagina, tarefasSelecionadas, tarefasMarcar,
     pipelineEstado, pipelineFiltrar, pipelineLimparTudo, gavetaDeFiltros, conferirSessao, zerarFiltros,

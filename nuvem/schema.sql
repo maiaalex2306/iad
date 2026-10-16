@@ -127,6 +127,12 @@ create table if not exists public.oportunidades (
   /* As passagens pela nutrição: entrou quando, por quê, e por que voltou.
      Responde "quantas vezes esta conta já entrou e saiu" seis meses depois. */
   historico_nutricao   jsonb not null default '[]'::jsonb,
+  /* O quadro financeiro da proposta: escopo, linhas de entrada e de
+     mensalidade, premissas e os cenários de forma de negócio, lidos dos
+     arquivos do negócio e editados pelo vendedor. Entrada e mensalidade nunca
+     somam; só o total do contrato junta as duas, e lá o prazo está na conta.
+     Nulo é o estado normal — a maioria dos negócios não chega a ter quadro. */
+  quadro               jsonb,
   /* A leitura que o assistente escreve uma vez por dia: o que ele entendeu do
      texto das conversas, por que a conta está urgente, o que está atrasado e o
      que fazer. Datada, porque leitura de ontem apresentada como de hoje é pior

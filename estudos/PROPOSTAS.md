@@ -1,6 +1,6 @@
 # Propostas: o que existe hoje, o que o mercado usa, e o que eu faria
 
-Estudo, não plano de obra. Nada aqui foi construído.
+Estudo. **Metade dele virou obra na v259** — ver a seção 8, no fim.
 
 ---
 
@@ -204,3 +204,43 @@ proposta não vira nota sozinha: ela vira tarefa concluída com relato, a IA lê
 as oito decisões andam. A mesma porta do WhatsApp, da reunião e do e-mail.
 
 Nada de novo no motor. De novo.
+
+---
+
+## 8. O que foi construído na v259, e o que continua estudo
+
+A aba **Propostas** deixou de dizer "por construir". O que entrou foi o
+**quadro financeiro**: ler os arquivos da proposta, montar os números e
+deixar tudo aberto para o vendedor estudar.
+
+**Construído:**
+
+| peça | onde |
+|---|---|
+| leitura de vários arquivos de uma vez (docx, xlsx, pptx, pdf, csv, txt, zip) | `src/documentos.js`, que já existia |
+| repartição do material entre arquivos e abas quando não cabe num pedido só | `src/quadro.js` → `juntarDocumentos` |
+| extração para escopo, linhas únicas, linhas mensais, premissas e cenários | `nuvem/funcoes/assistente/index.ts`, tipo `quadro` |
+| a conta — entrada, mensal, total do contrato, equivalente/mês, % recorrente | `src/quadro.js` → `totais` |
+| a tela, com tudo editável e a origem de cada número no balão | `src/views.js` → `abaPropostas` |
+| cenários de forma de negócio lado a lado | a mesma tela |
+| ponte para `valor` e `valorMensal` do negócio | `App.quadroLevarParaONegocio` |
+| a coluna | `nuvem/correcao-27-quadro-financeiro.sql` |
+
+A regra da seção 3.4 — **único e recorrente nunca somam** — é o eixo do
+módulo inteiro, e está escrita na tela, não só no código.
+
+**Continua estudo, e de propósito:**
+
+- **A proposta como DOCUMENTO**: número, versão, data de emissão, estado.
+  O quadro é um só por negócio; a sequência de versões, que é o que conta a
+  história da negociação, não existe ainda.
+- **O estado, e o que ele vale para o método** (seção 5). "Expirada sem
+  resposta" continua invisível — e ela é, como está escrito lá em cima, a
+  justificativa mais forte para construir o resto.
+- **A tabela de preços** (seção 2). O quadro lê preço de documento; não
+  existe price book, e portanto não existe piso de desconto (seção 4).
+- **O PDF.** O quadro calcula; quem escreve a proposta ainda é o Word.
+
+A ordem natural da continuação é: estado da proposta primeiro, porque é o que
+alimenta o método; versão depois; PDF por último, porque é o único item desta
+lista que outro programa já resolve.

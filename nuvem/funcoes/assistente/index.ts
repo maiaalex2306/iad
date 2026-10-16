@@ -162,6 +162,11 @@ const ANON = Deno.env.get('IAD_CHAVE_PUBLICA') ||
    no modelo, e o pedido continua respondendo em segundos. */
 const LIMITE_TEXTO = 16000;
 const LIMITE_REUNIAO = 40000;   /* transcrição de call cabe; base de dados não */
+/* O quadro da proposta é o único pedido que recebe PLANILHA INTEIRA. A de
+   precificação do cliente rende sessenta mil letras de conteúdo em sete abas,
+   e o escopo em Word vem no mesmo pedido. Com o teto da reunião, o corte cai
+   na última aba — que é onde ficam as premissas. */
+const LIMITE_QUADRO = 90000;
 const LIMITE_LISTA = 120;
 
 const CORS: Record<string, string> = {
@@ -934,6 +939,105 @@ A entrada traz, para cada lead: nome, cargo e perfil da pessoa, nome da empresa,
 Quando um lead chegar sem site e sem descrição, nós fomos PROCURAR: o bloco "[site do lead N — dominio, encontrado por busca]" é a página que achamos pelo nome da empresa e que comprovadamente cita esse nome. Leia-a como se fosse a descrição dela — foi buscada exatamente para esse lead, que não tinha nenhuma. Com esse bloco na mão, "Outros" por falta de informação deixa de ser resposta.${blocoContas}${nomes.length ? '' : '\n\nAtenção: a lista de segmentos veio vazia. Devolva "Outros" para todos.'}${detalhados ? '' : '\n\nOs segmentos desta equipe vieram SÓ COM O NOME, sem subsegmentos nem exemplos. Então trabalhe pelo significado do nome de cada um no mercado brasileiro, e seja mais generoso na aproximação: com a lista assim, exigir correspondência exata é o mesmo que mandar tudo para "Outros".'}`;
   }
 
+  /* ---------- O QUADRO FINANCEIRO DA PROPOSTA ----------
+
+     A entrada são os arquivos da proposta inteiros: o escopo em Word, a
+     planilha de preço em Excel, a apresentação. O que sai é um orçamento
+     estruturado.
+
+     O que este prompt combate, em ordem de estrago:
+
+     1. SOMAR ENTRADA COM MENSALIDADE. É o erro que o vendedor comete uma vez
+        na frente do cliente. O modelo tem de separar os dois na origem, e a
+        pergunta que resolve é sempre a mesma: isto é cobrado UMA VEZ ou TODO
+        MÊS?
+     2. INVENTAR NÚMERO. Um número inventado aqui sai numa proposta assinada.
+        Campo sem base fica vazio e vira dúvida — dúvida na tela custa trinta
+        segundos, número errado custa a conta.
+     3. PERDER A ORIGEM. Cada valor volta dizendo de que arquivo e de que
+        lugar dele saiu. É o que faz o vendedor conferir em vez de refazer.
+     4. ACHAR QUE CENÁRIO É DESCONTO. Nas propostas deste mercado a forma de
+        negócio muda QUAIS LINHAS ENTRAM — serviço como assinatura ou
+        equipamento vendido —, e não o preço de cada uma. */
+  if (tipo === 'quadro') {
+    const empresa = limparTexto(ctx.empresa, 80);
+    const negocio = limparTexto(ctx.negocio, 120);
+    const arquivos = (Array.isArray(ctx.arquivos) ? ctx.arquivos : []).map((a) => limparTexto(a, 90));
+    return `${BASE}
+
+Tarefa: você recebe os ARQUIVOS DE UMA PROPOSTA COMERCIAL — escopo, planilha de preço, apresentação, memorial de cálculo, o que houver — e monta o quadro financeiro dela.${empresa ? `\n\nCliente: ${empresa}.` : ''}${negocio ? `\nNegócio: ${negocio}.` : ''}${arquivos.length ? `\nArquivos que vieram: ${arquivos.join(', ')}.` : ''}
+
+Responda SOMENTE com este JSON:
+
+{"quadro":{
+  "escopo":[{"grupo":"...","item":"...","quantidade":1,"observacao":"","origem":"..."}],
+  "unicos":[{"rotulo":"...","quantidade":1,"valor":0,"cenarios":["..."],"origem":"..."}],
+  "mensais":[{"rotulo":"...","quantidade":1,"valor":0,"cenarios":["..."],"origem":"..."}],
+  "premissas":[{"rotulo":"...","percentual":0,"incideEm":"mensal|entrada|ambos","observacao":"","origem":"..."}],
+  "cenarios":[{"nome":"...","nota":"..."}],
+  "prazoMeses":0,"validadeDias":0,"pagamento":"","reajuste":"",
+  "duvidas":["..."]
+}}
+
+A REGRA QUE MANDA EM TUDO: VALOR ÚNICO E VALOR RECORRENTE NUNCA SOMAM.
+
+Implantação de 30 mil mais 8 mil por mês não é 38 mil — são dois números que vivem em dimensões diferentes. Por isso há duas listas e não uma, e a pergunta que decide em qual lista a linha cai é sempre: ISTO É COBRADO UMA VEZ OU TODO MÊS?
+
+- "unicos": equipamento, implantação, instalação, comissionamento, licença de instalação, treinamento, projeto, setup, integração, frete. Tudo o que se paga uma vez.
+- "mensais": operação assistida, serviço, manutenção, monitoramento, plataforma, assinatura, suporte, locação, comodato. Tudo o que se paga por período.
+- Se a planilha disser "valor unitário mensal" ou "por mês", é mensal, não importa o nome da linha. Se disser "valor de referência do equipamento", é único, não importa o que mais esteja escrito ao lado.
+- Valor ANUAL vira mensal dividido por 12, e você diz isso na origem. Valor por trimestre, dividido por 3. A lista de mensais é mensal.
+
+NÚMEROS
+
+- "valor" é o valor UNITÁRIO em reais, como número puro: 29106.28, nunca "R$ 29.106,28" e nunca "29.106,28".
+- "quantidade" é quantos. Quando o documento não disser, é 1.
+- Planilha brasileira usa vírgula decimal e ponto de milhar. "1.935,60" é mil novecentos e trinta e cinco, não um vírgula nove.
+- Número que você não achou NÃO É ZERO. Zero é um preço; ausência não é. Quando a linha existe no escopo e o preço não aparece em lugar nenhum, traga a linha com valor 0 E escreva em "duvidas" que aquele preço não estava nos arquivos.
+- Nunca calcule o total: o app soma. Você traz unitário e quantidade.
+
+ORIGEM — o campo que faz esta tela valer
+
+"origem" diz de ONDE saiu aquele número, em até 20 palavras, citando o arquivo: "planilha Precificação, aba Equipamentos, linha do analisador multi", "escopo Heineken, seção Sentinela Orgânica", "apresentação, slide de investimento". Quem lê o quadro precisa poder conferir sem abrir os três arquivos. Origem vaga ("na planilha") não serve; origem inventada é pior do que vazia.
+
+CENÁRIOS — as formas de negócio
+
+Muita proposta deste tipo tem mais de uma modalidade: assinatura com tudo incluído, modelo híbrido, venda do equipamento. Elas aparecem na planilha como colunas, com ✓ e x, ou na apresentação como opções.
+
+- "cenarios" traz o NOME de cada modalidade como o documento a chama — "WaaS", "Adaptável", "Venda", "Locação", "Plano Pro". Não invente nomes bonitos e não traduza.
+- Em cada linha, "cenarios" é a lista dos nomes em que ela ENTRA. Linha que entra em todas devolve [] — é mais curto e quer dizer a mesma coisa.
+- O que separa uma modalidade da outra é QUAIS LINHAS ENTRAM, não o preço delas. Na venda o equipamento é cobrado e o serviço some; na assinatura o equipamento some e o serviço é a conta inteira. É isso que você está lendo.
+- Se o documento tiver uma proposta só, devolva um cenário só, com o nome que ele usar, ou "Proposta".
+
+PREMISSAS — o que multiplica
+
+São os percentuais que a planilha aplica por fora: acréscimo por segmento do cliente, desconto por região, desconto por prazo de contrato, desconto por distância de manutenção, acréscimo por complexidade.
+
+- "percentual" é o número em pontos percentuais, com sinal: 20 para +20%, -6 para 6% de desconto. Uma planilha que escreve 0,2 ou 0,06 está falando de 20% e 6%: converta.
+- "incideEm" diz onde ela pega. Muita planilha escreve "incide apenas no serviço" — isso é "mensal". Quando não disser, use "mensal", que é o caso comum, e registre a dúvida.
+- Condição comercial SEM percentual também entra aqui, com "percentual": 0 — faturamento 30/60/90, carência, prazo indeterminado, multa de rescisão. Elas entram na proposta mesmo não entrando na conta.
+- Traga só a premissa que se aplica A ESTA proposta. Uma tabela com doze segmentos e um cliente de alimentos tem UMA premissa de segmento, a de alimentos — as outras onze são a tabela, não a proposta.
+
+ESCOPO
+
+O que foi prometido, item a item, agrupado como o documento agrupa — por estação, por etapa, por módulo. "grupo" é o título da seção; "item" é a linha. Mantenha as palavras do documento: "Sensor de DQO (0 – 1500 ppm)" é o nome do que vai ser entregue, e resumir isso para "sensor" apaga a informação que decide a instalação.
+
+CONDIÇÕES
+
+- "prazoMeses": a duração do contrato. Sem ela não existe total de contrato.
+- "validadeDias": por quantos dias a proposta vale. Costume brasileiro: 15 a 30.
+- "pagamento" e "reajuste": como está escrito, curto. Vazio quando não aparece.
+- Tudo o que não aparecer nos arquivos fica em 0 ou "". Não há padrão a adivinhar aqui.
+
+DÚVIDAS
+
+"duvidas" é onde vai o que você NÃO conseguiu resolver, em português e dirigido ao vendedor: preço que não estava em lugar nenhum, duas tabelas que se contradizem, unidade ambígua, modalidade citada sem valores. Até 8 itens, uma frase cada.
+
+Esta lista é obrigação, não enfeite: o vendedor vai mandar este quadro ao cliente. O que você não sabe tem de estar escrito, porque o que não está escrito ele vai assumir que você soube.
+
+E uma dúvida honesta vale mais do que um número plausível: quem lê um quadro completo confere menos.`;
+  }
+
   if (tipo === 'desenvolvimento') {
     return `${BASE}
 
@@ -1170,6 +1274,11 @@ function recusouPorTamanho(status: number, corpo: string): boolean {
    4000 cobre o lote grande de quem não usa blocos. */
 function tetoDeSaida(tipo: string, quantos = 0): number {
   if (tipo === 'reuniao' || tipo === 'notas') return 8000;
+  /* O quadro é a saída mais longa que esta função produz: o escopo de uma
+     proposta industrial passa de cem itens, e cada linha ainda carrega a
+     origem de onde foi lida. Cortar aqui não devolve um quadro menor —
+     devolve JSON truncado, que é quadro nenhum. */
+  if (tipo === 'quadro') return 12000;
   if (tipo === 'segmentos') {
     /* 260 por lead era a conta do texto de saída, e estava certa para um
        modelo que só escreve. Os gpt-oss não são: eles gastam tokens
@@ -1887,6 +1996,126 @@ function descreverContas(ctx: Record<string, unknown>): string {
     ].filter(Boolean).join(' · ');
     return '- ' + c.nome + (detalhe ? ' (' + detalhe + ')' : '');
   }).join('\n');
+}
+
+/* ---------- o quadro financeiro ----------
+
+   Validar aqui não é zelo: o que sai desta função vira os números que o
+   vendedor mostra ao cliente. Um "R$ 29.106,28" que chegou como texto e passou
+   direto vira NaN três telas adiante, e NaN numa proposta é pior do que erro
+   nenhum — porque ninguém sabe de onde veio.
+
+   A conversão de número é a parte que mais importa. Planilha brasileira
+   escreve "1.935,60" e planilha exportada escreve "1935.60", e os dois têm de
+   dar o mesmo número. A regra é a posição do ÚLTIMO separador: o que vem
+   depois dele é decimal. */
+function numeroDoQuadro(v: unknown): number {
+  if (typeof v === 'number') return isFinite(v) ? v : 0;
+  const t = String(v == null ? '' : v).trim();
+  if (!t) return 0;
+  const limpo = t.replace(/[^\d,.\-]/g, '');
+  if (!limpo) return 0;
+  const virgula = limpo.lastIndexOf(',');
+  const ponto = limpo.lastIndexOf('.');
+  let normal: string;
+  if (virgula > ponto) normal = limpo.replace(/\./g, '').replace(',', '.');
+  else if (ponto > virgula) normal = limpo.replace(/,/g, '');
+  else normal = limpo.replace(/,/g, '.');
+  const n = parseFloat(normal);
+  return isFinite(n) ? n : 0;
+}
+
+function listaDeTextos(v: unknown, quantos: number, max: number): string[] {
+  if (!Array.isArray(v)) return [];
+  return v.slice(0, quantos).map((x) => limparTexto(x, max)).filter(Boolean);
+}
+
+function validarQuadro(bruto: Record<string, unknown>) {
+  /* O modelo pode devolver {"quadro":{…}} ou o objeto direto, dependendo de
+     como ele leu o pedido. Aceitar os dois custa uma linha e evita que uma
+     leitura boa de dois documentos se perca por uma chave a mais. */
+  const q = (bruto && typeof bruto.quadro === 'object' && bruto.quadro)
+    ? bruto.quadro as Record<string, unknown> : bruto;
+
+  const cenarios = (Array.isArray(q.cenarios) ? q.cenarios : [])
+    .slice(0, 6)
+    .map((c) => {
+      const o = (c && typeof c === 'object') ? c as Record<string, unknown> : {};
+      return { nome: limparTexto(o.nome, 40), nota: limparTexto(o.nota, 200) };
+    })
+    .filter((c) => c.nome);
+
+  const nomesValidos = cenarios.map((c) => c.nome.toLowerCase());
+
+  const linhas = (v: unknown) => (Array.isArray(v) ? v : []).slice(0, 120).map((x) => {
+    const o = (x && typeof x === 'object') ? x as Record<string, unknown> : {};
+    const quantidade = numeroDoQuadro(o.quantidade);
+    return {
+      rotulo: limparTexto(o.rotulo, 120),
+      /* Quantidade zero quase sempre é "o documento não disse", e zero
+         multiplica o valor para zero — some com a linha na conta sem avisar.
+         Um é o padrão honesto: a linha aparece com o preço dela à vista, e
+         corrigir a quantidade é um campo. */
+      quantidade: quantidade > 0 ? quantidade : 1,
+      valor: Math.max(0, numeroDoQuadro(o.valor)),
+      /* Nome de cenário que não existe na lista é descartado: linha apontando
+         para um cenário fantasma sumiria da tela sem nunca aparecer em
+         nenhuma coluna. */
+      cenarios: listaDeTextos(o.cenarios, 6, 40)
+        .filter((n) => nomesValidos.indexOf(n.toLowerCase()) !== -1),
+      origem: limparTexto(o.origem, 240)
+    };
+  }).filter((l) => l.rotulo);
+
+  const premissas = (Array.isArray(q.premissas) ? q.premissas : []).slice(0, 20).map((x) => {
+    const o = (x && typeof x === 'object') ? x as Record<string, unknown> : {};
+    let pct = numeroDoQuadro(o.percentual);
+    /* Planilha escreve 0,2 quando quer dizer 20%, e o prompt pede a
+       conversão. Quando ela não vem feita, fazemos: um acréscimo declarado
+       como "0,2%" em vez de "20%" não é um erro de arredondamento, é a
+       proposta inteira errada — e, entre os dois, o valor fracionário é o que
+       praticamente não existe em tabela comercial. */
+    if (pct !== 0 && Math.abs(pct) < 1) pct = pct * 100;
+    const onde = limparTexto(o.incideEm, 10);
+    return {
+      rotulo: limparTexto(o.rotulo, 80),
+      percentual: Math.max(-100, Math.min(400, Math.round(pct * 100) / 100)),
+      incideEm: (onde === 'entrada' || onde === 'ambos') ? onde : 'mensal',
+      observacao: limparTexto(o.observacao, 200),
+      origem: limparTexto(o.origem, 240)
+    };
+  }).filter((p) => p.rotulo);
+
+  const escopo = (Array.isArray(q.escopo) ? q.escopo : []).slice(0, 200).map((x) => {
+    const o = (x && typeof x === 'object') ? x as Record<string, unknown> : {};
+    const quantidade = numeroDoQuadro(o.quantidade);
+    return {
+      grupo: limparTexto(o.grupo, 80),
+      item: limparTexto(o.item, 160),
+      quantidade: quantidade > 0 ? quantidade : 1,
+      observacao: limparTexto(o.observacao, 200),
+      origem: limparTexto(o.origem, 240)
+    };
+  }).filter((e) => e.item);
+
+  const meses = Math.round(numeroDoQuadro(q.prazoMeses));
+  const dias = Math.round(numeroDoQuadro(q.validadeDias));
+
+  return {
+    escopo: escopo,
+    unicos: linhas(q.unicos),
+    mensais: linhas(q.mensais),
+    premissas: premissas,
+    cenarios: cenarios,
+    /* Teto de 600 meses e 365 dias: números acima disso são leitura errada de
+       célula, não contrato. Deixar passar um prazo de 2026 meses multiplicaria
+       a mensalidade por dois mil na tela do cliente. */
+    prazoMeses: meses > 0 && meses <= 600 ? meses : 0,
+    validadeDias: dias > 0 && dias <= 365 ? dias : 0,
+    pagamento: limparTexto(q.pagamento, 120),
+    reajuste: limparTexto(q.reajuste, 120),
+    duvidas: listaDeTextos(q.duvidas, 8, 240)
+  };
 }
 
 function validarSegmentos(bruto: Record<string, unknown>, ctx: Record<string, unknown>) {
@@ -2690,7 +2919,7 @@ Deno.serve(async (req: Request) => {
   const limite = (tipo === 'reuniao' || tipo === 'segmentos' || tipo === 'plano' || tipo === 'notas' ||
                   tipo === 'desenvolvimento' || tipo === 'orientacao' || tipo === 'panorama' ||
                   tipo === 'conta' || tipo === 'oportunidade')
-    ? LIMITE_REUNIAO : LIMITE_TEXTO;
+    ? LIMITE_REUNIAO : (tipo === 'quadro' ? LIMITE_QUADRO : LIMITE_TEXTO);
   const texto = String(pedido.texto || '').slice(0, limite).trim();
   if (texto.length < 10) return responder({ campos: {}, frases: {} });
 
@@ -2860,6 +3089,10 @@ Deno.serve(async (req: Request) => {
       if (tipo === 'orientacao') return responderIA({ leitura: '', acelerar: [], risco: [] });
       if (tipo === 'panorama') return responderIA({ leitura: '', agora: [], padroes: [], riscos: [] });
       if (tipo === 'pessoas') return responderIA({ campos: {}, frases: {}, contatos: [] });
+      /* Sem `quadro` no corpo o app diz "não foi no formato esperado" e mostra
+         o que veio. Devolver a chave vazia aqui seria pior: a tela montaria um
+         quadro em branco como se tivesse lido os arquivos. */
+      if (tipo === 'quadro') return responderIA({ erro: 'Não consegui ler os arquivos como proposta.' }, 200);
       return responderIA({ campos: {}, frases: {} });
     }
     if (tipo === 'reuniao') return responderIA(validarReuniao(json, ctx, entrada));
@@ -2869,6 +3102,7 @@ Deno.serve(async (req: Request) => {
     if (tipo === 'desenvolvimento') return responderIA(validarDesenvolvimento(json));
     if (tipo === 'orientacao') return responderIA(validarOrientacao(json));
     if (tipo === 'panorama') return responderIA(validarPanorama(json));
+    if (tipo === 'quadro') return responderIA({ quadro: validarQuadro(json) });
     /* `campos` vazio de propósito: quem chama é a mesma função de extração do
        app, e ela exige o campo para distinguir resposta da função de página de
        erro do gateway. Aqui o que interessa vai em `contatos`. */

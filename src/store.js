@@ -972,7 +972,13 @@
       snapshots: [],
       gateLiberadoPor: null,
       desfecho: null,
-      notas: ''
+      notas: '',
+      /* O quadro financeiro: o que foi lido dos arquivos da proposta, já
+         separado em entrada, mensalidade, premissas e cenários. Nasce nulo
+         porque a maioria dos negócios nunca chega a ter proposta montada, e um
+         objeto vazio em cada um dos 282 registros é peso que sobe e desce em
+         toda sincronização sem dizer nada. */
+      quadro: null
     }, carimbo(true), dados);
     /* O formulário devolve string vazia quando ninguém digitou, e string vazia
        venceria o padrão no Object.assign acima. Sem esta linha o campo em

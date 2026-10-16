@@ -58,7 +58,8 @@
     panorama: 'Lendo a carteira inteira',
     segmentos: 'Classificando os leads',
     desenvolvimento: 'Lendo a sua série de semanas',
-    insight: 'Escrevendo o reenquadramento'
+    insight: 'Escrevendo o reenquadramento',
+    quadro: 'Lendo os arquivos da proposta'
   };
 
   /* Quem NÃO ganha balão, e por quê. A regra é uma só: balão onde a espera é
@@ -256,6 +257,16 @@
      cortar mais cedo aqui era jogar fora material que caberia. Os 2000 de
      folga são o cabeçalho que a função acrescenta. */
   const LIMITE_PEDIDO = 38000;
+  /* O quadro da proposta tem teto próprio, e maior, porque o material dele é
+     de outra natureza: uma planilha de precificação com sete abas rende
+     sessenta mil letras de CONTEÚDO — medido, não estimado — e o escopo em
+     Word vem junto. Com o teto comum, o corte cairia na última aba, que é
+     onde moram as premissas: o quadro sairia completo e sem premissa
+     nenhuma, sem nada na tela dizendo por quê.
+
+     Quem reparte o que não couber é o `juntarDocumentos`, proporcionalmente
+     entre arquivos e entre abas, e ele diz o que cortou. */
+  const LIMITE_QUADRO = 90000;
 
   /* O corpo que voltou, legível e curto. `mensagem` é o campo que o nuvem.js
      usa quando a resposta não era JSON — ali está o texto cru, que é
@@ -275,6 +286,67 @@
   /* `detalhe` é o que o vendedor carregou — "1 documento · proposta.pdf". Ele
      não muda o pedido: existe para o balão poder dizer o que está sendo lido,
      em vez de "analisando" no vazio. */
+  /* ---------- O QUADRO FINANCEIRO DA PROPOSTA ----------
+
+     Não passa por `extrair` porque o formato de volta é outro: `extrair`
+     devolve {campos, frases, contatos}, que é o desenho de quem está lendo um
+     relato para preencher ficha. Aqui o que volta é um orçamento — linhas de
+     entrada, linhas de mensalidade, premissas, escopo e cenários — e enfiar
+     isso em `campos` seria carregar um formato pela compatibilidade com um
+     caso que não é este.
+
+     O prazo é o longo desde a primeira linha. Dois documentos de proposta
+     passam dos quarenta mil caracteres com facilidade, e a decisão de qual
+     prazo usar pelo tamanho do texto — que serve bem à sugestão digitada ao
+     vivo — aqui só erraria. */
+  function quadroDaProposta(texto, contexto, detalhe) {
+    if (!disponivel()) {
+      return Promise.resolve({ erro: 'O assistente não está no ar. Veja Configuração → Assistente de IA.' });
+    }
+    let t = String(texto || '').trim();
+    if (t.length < 40) return Promise.resolve({ erro: 'Os arquivos não tinham texto suficiente para eu ler.' });
+
+    let cortado = false;
+    if (t.length > LIMITE_QUADRO) { t = t.slice(0, LIMITE_QUADRO); cortado = true; }
+
+    const pedido = pedirAoAssistente({
+      tipo: 'quadro', texto: t, contexto: contexto || {}
+    }, PRAZO_REUNIAO, detalhe).then(
+      function (r) { return { resposta: r }; },
+      function (e) { return { falha: e }; }
+    );
+
+    const prazo = new Promise(function (resolve) {
+      setTimeout(function () { resolve({ estourou: true }); }, PRAZO_REUNIAO);
+    });
+
+    return Promise.race([pedido, prazo]).then(function (x) {
+      if (x.estourou) {
+        return { erro: 'O assistente demorou mais de ' + Math.round(PRAZO_REUNIAO / 1000) +
+          ' segundos. Tente com menos arquivos de uma vez.' };
+      }
+      if (x.falha) return { erro: (x.falha && x.falha.message) || 'O servidor recusou a leitura.' };
+      const r = x.resposta;
+      if (!r) return { erro: 'O servidor respondeu vazio.' };
+      if (r.erro) return { erro: r.erro };
+      if (!r.quadro) {
+        return { erro: 'O assistente respondeu, mas não no formato esperado. ' +
+          'Voltou: ' + amostraDaResposta(r) };
+      }
+      const q = r.quadro;
+      /* O corte do texto não pode sumir: um quadro montado com metade da
+         planilha parece completo e não é, e quem lê a tela não tem como
+         saber. Vira dúvida, que é onde a tela mostra o que não deu. */
+      if (cortado) {
+        q.duvidas = (Array.isArray(q.duvidas) ? q.duvidas : []).concat([
+          'Os arquivos somaram mais do que eu leio de uma vez; li as primeiras ' +
+          Math.round(LIMITE_QUADRO / 1000) + ' mil letras. O que ficou de fora não está neste quadro.'
+        ]);
+      }
+      return q;
+    });
+  }
+
   function extrair(tipo, texto, contexto, detalhe) {
     if (!disponivel()) return Promise.resolve({ erro: 'O assistente não está no ar. Veja Configuração → Assistente de IA.' });
     let t = String(texto || '').trim();
@@ -1364,6 +1436,7 @@
     diagnostico: diagnostico,
     aoProgresso: aoProgresso,
     extrair: extrair,
+    quadroDaProposta: quadroDaProposta,
     analisarReuniao: analisarReuniao,
     classificarSegmentos: classificarSegmentos,
     planoDaOportunidade: planoDaOportunidade,

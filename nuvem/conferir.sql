@@ -93,6 +93,7 @@ with esperado(grupo, tipo, alvo, coluna, arquivo) as (
     ('1 carteira', 'coluna', 'oportunidades', 'orientacao', 'nuvem/correcao-16-tudo-em-dia.sql'),
     ('1 carteira', 'coluna', 'oportunidades', 'origem', 'nuvem/correcao-06-origem.sql'),
     ('1 carteira', 'coluna', 'oportunidades', 'prazo_contrato_meses', 'nuvem/correcao-15-itens-e-cobranca.sql'),
+    ('1 carteira', 'coluna', 'oportunidades', 'quadro', 'nuvem/correcao-27-quadro-financeiro.sql'),
     ('1 carteira', 'coluna', 'oportunidades', 'sdr', 'nuvem/correcao-06-origem.sql'),
     ('1 carteira', 'coluna', 'oportunidades', 'sdr_email', 'nuvem/correcao-06-origem.sql'),
     ('1 carteira', 'coluna', 'oportunidades', 'valor_mensal', 'nuvem/correcao-15-itens-e-cobranca.sql'),

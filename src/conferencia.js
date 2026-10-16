@@ -73,6 +73,7 @@
     ["carteira", "coluna", "oportunidades", "orientacao", "nuvem/correcao-16-tudo-em-dia.sql"],
     ["carteira", "coluna", "oportunidades", "origem", "nuvem/correcao-06-origem.sql"],
     ["carteira", "coluna", "oportunidades", "prazo_contrato_meses", "nuvem/correcao-15-itens-e-cobranca.sql"],
+    ["carteira", "coluna", "oportunidades", "quadro", "nuvem/correcao-27-quadro-financeiro.sql"],
     ["carteira", "coluna", "oportunidades", "sdr", "nuvem/correcao-06-origem.sql"],
     ["carteira", "coluna", "oportunidades", "sdr_email", "nuvem/correcao-06-origem.sql"],
     ["carteira", "coluna", "oportunidades", "valor_mensal", "nuvem/correcao-15-itens-e-cobranca.sql"],

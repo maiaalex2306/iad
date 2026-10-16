@@ -16,7 +16,25 @@
   'use strict';
 
   const LIMITE_BYTES = 20 * 1024 * 1024;   /* 20 MB por arquivo */
-  const LIMITE_TEXTO = 60000;              /* o que vai para a IA, por arquivo */
+  /* ---------- POR QUE ESTE NÚMERO SUBIU ----------
+
+     Era 60.000, e esse número estava fazendo um trabalho que não é dele.
+
+     A planilha de precificação de um cliente real tem SETE ABAS e rende
+     60.012 letras. O corte em 60.000 derrubava as quatro últimas — entre elas
+     a aba Premissas, que é onde moram os acréscimos por segmento e os
+     descontos por prazo. Quem pedisse o quadro da proposta receberia um
+     quadro completo, bonito, e sem premissa nenhuma. Nada na tela diria por
+     quê, porque aqui ninguém sabia que estava decidindo isso.
+
+     O erro não era o tamanho: era o LUGAR. Este arquivo LÊ; quem decide o que
+     cabe num pedido à IA é quem monta o pedido, e lá a repartição é
+     proporcional entre arquivos e entre abas — ninguém some inteiro.
+
+     O teto continua existindo porque isto roda na memória do navegador do
+     vendedor, e um .xlsx de 20 MB pode render muito texto. Mas agora ele é um
+     limite de memória, que é o que ele sempre deveria ter sido. */
+  const LIMITE_TEXTO = 400000;             /* teto de memória por arquivo, não de pedido */
 
   function extensao(nome) {
     const m = String(nome || '').toLowerCase().match(/\.([a-z0-9]+)$/);
@@ -140,6 +158,19 @@
     return new Response(fluxo).arrayBuffer().then(function (b) { return new Uint8Array(b); });
   }
 
+  /* O nome da aba vem de um ATRIBUTO XML, não de um nó de texto: `semTags`
+     devolveria a string inteira sem tirar as entidades, porque não há tag
+     nenhuma para tirar. Uma aba chamada "Preço & Custo" chega como
+     "Preço &amp; Custo" e seria isso que a IA citaria como origem. */
+  function desescapar(s) {
+    return String(s == null ? '' : s)
+      .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'").replace(/&#(\d+);/g, function (_, n) {
+        return String.fromCharCode(Number(n));
+      })
+      .replace(/&amp;/g, '&');
+  }
+
   function semTags(xml) {
     return xml.replace(/<[^>]+>/g, '')
       .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
@@ -176,17 +207,68 @@
      O texto das células não fica na planilha: fica numa tabela de strings
      compartilhadas, e a célula guarda só o índice. Ler a planilha sem ela
      devolve uma grade de números sem nenhuma palavra. */
+  /* O NOME de cada aba, na ordem em que o Excel as mostra.
+
+     Antes saía "--- planilha 4 ---", e o número não diz nada a ninguém. Numa
+     planilha de precificação as abas se chamam Precificação, Equipamentos,
+     Premissas, Memorial de Cálculo — e é com ESSE nome que a IA consegue
+     dizer de onde tirou um número. "Aba Premissas, acréscimo por segmento" é
+     conferível em dez segundos; "planilha 4" manda a pessoa abrir o arquivo e
+     contar abas.
+
+     O nome está no `xl/workbook.xml`, que aponta para o arquivo de cada aba
+     por um identificador de relação; a tradução do identificador para o nome
+     do arquivo está no `.rels` ao lado. Quando qualquer um dos dois faltar —
+     planilha gerada por ferramenta exótica —, cai no número de antes, que é
+     o que havia e não é pior do que era. */
+  function nomesDasAbas(zip) {
+    return Promise.all([
+      zip.texto('xl/workbook.xml'),
+      zip.texto('xl/_rels/workbook.xml.rels')
+    ]).then(function (r) {
+      const wb = r[0] || '', rels = r[1] || '';
+      const destino = {};
+      (rels.match(/<Relationship\b[^>]*>/g) || []).forEach(function (tag) {
+        const id = (tag.match(/Id="([^"]+)"/) || [])[1];
+        const alvo = (tag.match(/Target="([^"]+)"/) || [])[1];
+        if (id && alvo) destino[id] = 'xl/' + String(alvo).replace(/^\/?(xl\/)?/, '');
+      });
+      const ordem = [];
+      (wb.match(/<sheet\b[^>]*>/g) || []).forEach(function (tag) {
+        const nome = (tag.match(/name="([^"]*)"/) || [])[1] || '';
+        const id = (tag.match(/r:id="([^"]+)"/) || [])[1] ||
+                   (tag.match(/relationships:id="([^"]+)"/) || [])[1];
+        const arquivo = id ? destino[id] : '';
+        if (arquivo) ordem.push({ arquivo: arquivo, nome: desescapar(nome) });
+      });
+      return ordem;
+    }).catch(function () { return []; });
+  }
+
   function lerXlsx(zip) {
-    return zip.texto('xl/sharedStrings.xml').then(function (xml) {
+    return Promise.all([zip.texto('xl/sharedStrings.xml'), nomesDasAbas(zip)]).then(function (r) {
+      const xml = r[0];
       const compartilhadas = [];
       if (xml) {
         const itens = xml.match(/<si\b[\s\S]*?<\/si>/g) || [];
         itens.forEach(function (si) { compartilhadas.push(semTags(si)); });
       }
-      const abas = zip.nomes().filter(function (n) { return /^xl\/worksheets\/sheet\d+\.xml$/.test(n); }).sort();
-      return Promise.all(abas.map(function (n, i) {
-        return zip.texto(n).then(function (folha) {
-          return '--- planilha ' + (i + 1) + ' ---\n' + linhasDaFolha(folha, compartilhadas);
+      const existentes = zip.nomes();
+      /* A ordem do workbook é a ordem das abas na tela do Excel; a ordem
+         alfabética dos arquivos não é — sheet10 vem antes de sheet2. */
+      let abas = r[1].filter(function (a) { return existentes.indexOf(a.arquivo) !== -1; });
+      if (!abas.length) {
+        abas = existentes
+          .filter(function (n) { return /^xl\/worksheets\/sheet\d+\.xml$/.test(n); })
+          .sort(function (a, b) {
+            return Number((a.match(/(\d+)/) || [])[1] || 0) - Number((b.match(/(\d+)/) || [])[1] || 0);
+          })
+          .map(function (n) { return { arquivo: n, nome: '' }; });
+      }
+      return Promise.all(abas.map(function (a, i) {
+        return zip.texto(a.arquivo).then(function (folha) {
+          return '--- planilha ' + (i + 1) + (a.nome ? ': ' + a.nome : '') + ' ---\n' +
+            linhasDaFolha(folha, compartilhadas);
         });
       }));
     }).then(function (partes) { return partes.filter(Boolean).join('\n\n'); });

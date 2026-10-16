@@ -204,6 +204,9 @@
       const id = hash.slice(5);
       conteudo.innerHTML = faixa + V.cockpit(id);
       pintarArquivos(id);
+      /* A área de soltar arquivo do quadro financeiro nasce com a aba e precisa
+         ser religada a cada repintura: o HTML é refeito, os ouvintes não. */
+      pintarSoltaQuadro();
     } else {
       const rota = ROTAS.find(function (r) { return r.hash === hash; }) || ROTAS[0];
       conteudo.innerHTML = faixa + rota.render();
@@ -4271,6 +4274,199 @@
         if (escolhidos.length) perguntarSobreOsAnexos(opId, escolhidos);
       };
       entrada.click();
+    },
+
+    /* ================= O QUADRO FINANCEIRO DA PROPOSTA =================
+
+       Tudo aqui mexe em `op.quadro` e repinta. O que NÃO repinta é a prévia:
+       repintar a tela a cada tecla digitada mataria o cursor no meio do
+       número, e um campo que perde o foco enquanto se digita é um campo que
+       não se usa duas vezes. */
+
+    lerArquivosDaProposta: function (opId) {
+      const entrada = document.createElement('input');
+      entrada.type = 'file';
+      entrada.multiple = true;
+      entrada.onchange = function () {
+        const escolhidos = Array.prototype.slice.call(entrada.files || []);
+        if (escolhidos.length) lerParaOQuadro(opId, escolhidos);
+      };
+      entrada.click();
+    },
+
+    /* A prévia: recalcula o placar sem repintar a tela.
+
+       Lê os valores direto dos campos — é a única fonte certa enquanto a
+       pessoa digita, porque o modelo só recebe o valor quando o campo perde o
+       foco. Monta uma cópia do quadro com o que está escrito AGORA e troca só
+       o bloco dos três números. */
+    quadroPrevia: function (opId) {
+      const Q = global.IADQuadro;
+      const op = Store.oportunidade(opId);
+      if (!op || !op.quadro || !Q) return;
+
+      const copia = JSON.parse(JSON.stringify(op.quadro));
+      const porId = function (lista, id) {
+        return (lista || []).filter(function (x) { return x.id === id; })[0];
+      };
+      Array.prototype.forEach.call(document.querySelectorAll('[data-previa]'), function (el) {
+        const partes = String(el.getAttribute('data-previa')).split(':');
+        const onde = partes[0], id = partes[1], campo = partes[2];
+        const valor = el.type === 'checkbox' ? el.checked : el.value;
+        if (onde === 'quadro') { copia[campo] = valor; return; }
+        const alvo = porId(onde === 'linha' ? copia.linhas : copia.premissas, id);
+        if (!alvo) return;
+        alvo[campo] = (campo === 'ligada') ? !!valor : Q.numero(valor);
+      });
+
+      const caixa = document.getElementById('placar-quadro');
+      if (!caixa) return;
+      /* `placarDoQuadro` devolve o bloco MAIS o parágrafo de aviso; aqui só o
+         bloco é trocado, então o que vem depois do </div> é descartado. */
+      const inteiro = V.__placarDoQuadro(Q.totais(copia), Q);
+      const fim = inteiro.indexOf('</div><p');
+      caixa.outerHTML = fim === -1 ? inteiro : inteiro.slice(0, fim + 6);
+    },
+
+    quadroLinha: function (opId, linhaId, campo, valor) {
+      mexerNoQuadro(opId, function (q) {
+        const l = (q.linhas || []).filter(function (x) { return x.id === linhaId; })[0];
+        if (!l) return;
+        if (campo === 'quantidade' || campo === 'valor') l[campo] = global.IADQuadro.numero(valor);
+        else l[campo] = String(valor || '');
+        /* Mexeu, é seu. A marca da IA sai para o balão parar de prometer uma
+           origem que o número já não tem. */
+        if (campo !== 'tipo') { l.daIa = false; l.origem = l.origem ? l.origem + ' (editado)' : ''; }
+      });
+    },
+
+    quadroLinhaNova: function (opId, tipo) {
+      mexerNoQuadro(opId, function (q) {
+        q.linhas = (q.linhas || []).concat([{
+          id: global.IADQuadro.novoId('l'), rotulo: '', quantidade: 1, valor: 0,
+          tipo: tipo === 'mensal' ? 'mensal' : 'unico', cenarios: {}, origem: '', daIa: false
+        }]);
+      });
+    },
+
+    quadroLinhaFora: function (opId, linhaId) {
+      mexerNoQuadro(opId, function (q) {
+        q.linhas = (q.linhas || []).filter(function (x) { return x.id !== linhaId; });
+      });
+    },
+
+    /* A caixa que diz se a linha entra naquela forma de negócio. É a peça que
+       faz os cenários existirem: o que separa WaaS de Venda não é desconto, é
+       QUAIS linhas entram em cada uma. */
+    quadroLinhaCenario: function (opId, linhaId, cenarioId, marcado) {
+      mexerNoQuadro(opId, function (q) {
+        const l = (q.linhas || []).filter(function (x) { return x.id === linhaId; })[0];
+        if (!l) return;
+        /* Linha sem marca nenhuma vale para todos — então desmarcar a
+           primeira caixa precisa primeiro escrever o estado "está em todos",
+           senão desmarcar uma apagaria a regra inteira e a linha continuaria
+           aparecendo em tudo. */
+        const vazio = !l.cenarios || !Object.keys(l.cenarios).filter(function (k) { return l.cenarios[k]; }).length;
+        if (vazio) {
+          l.cenarios = {};
+          (q.cenarios || []).forEach(function (c) { l.cenarios[c.id] = true; });
+        }
+        l.cenarios[cenarioId] = !!marcado;
+      });
+    },
+
+    quadroPremissa: function (opId, pId, campo, valor) {
+      mexerNoQuadro(opId, function (q) {
+        const p = (q.premissas || []).filter(function (x) { return x.id === pId; })[0];
+        if (!p) return;
+        if (campo === 'ligada') p.ligada = !!valor;
+        else if (campo === 'percentual') {
+          p.percentual = global.IADQuadro.numero(valor);
+          /* Premissa que ganhou número passa a contar; a que perdeu volta a
+             ser condição comercial. O tipo segue o conteúdo em vez de ficar
+             preso ao que a IA decidiu na leitura. */
+          p.tipo = p.percentual ? 'percentual' : 'texto';
+        } else p[campo] = String(valor || '');
+      });
+    },
+
+    quadroPremissaNova: function (opId) {
+      mexerNoQuadro(opId, function (q) {
+        q.premissas = (q.premissas || []).concat([{
+          id: global.IADQuadro.novoId('p'), rotulo: '', tipo: 'percentual', percentual: 0,
+          observacao: '', incideEm: 'mensal', ligada: true, origem: '', daIa: false
+        }]);
+      });
+    },
+
+    quadroPremissaFora: function (opId, pId) {
+      mexerNoQuadro(opId, function (q) {
+        q.premissas = (q.premissas || []).filter(function (x) { return x.id !== pId; });
+      });
+    },
+
+    quadroCampo: function (opId, campo, valor) {
+      mexerNoQuadro(opId, function (q) {
+        if (campo === 'prazoMeses' || campo === 'validadeDias') {
+          q[campo] = Math.max(0, Math.round(global.IADQuadro.numero(valor)));
+        } else q[campo] = String(valor || '').slice(0, 160);
+      });
+    },
+
+    quadroCenarioNovo: function (opId) {
+      mexerNoQuadro(opId, function (q) {
+        const usados = (q.cenarios || []).map(function (c) { return c.id; });
+        let n = 1;
+        while (usados.indexOf('c' + n) !== -1) n++;
+        q.cenarios = (q.cenarios || []).concat([{ id: 'c' + n, nome: 'Cenário ' + n, nota: '' }]);
+      });
+    },
+
+    quadroCenarioNome: function (opId, cId, nome) {
+      mexerNoQuadro(opId, function (q) {
+        const c = (q.cenarios || []).filter(function (x) { return x.id === cId; })[0];
+        if (c) c.nome = String(nome || '').slice(0, 40);
+      });
+    },
+
+    quadroUsarCenario: function (opId, cId) {
+      mexerNoQuadro(opId, function (q) { q.cenarioAtivo = cId; });
+    },
+
+    quadroApagar: function (opId) {
+      if (!U.confirmar('Apagar o quadro financeiro deste negócio?\n\nOs arquivos continuam onde estão; ' +
+        'o que se perde é o que foi lido e o que você editou aqui.')) return;
+      Store.atualizarOportunidade(opId, { quadro: null });
+      render();
+    },
+
+    /* O quadro mora na aba; o pipeline, a previsão e os gráficos leem `valor`
+       e `valorMensal`. Sem esta ponte o vendedor montaria o quadro e o resto
+       do app continuaria mostrando o número velho — duas verdades sobre o
+       mesmo negócio, que é a doença que este app existe para não ter.
+
+       É um botão e não automático de propósito: enquanto ele estuda cenários,
+       mexer na previsão da empresa a cada tecla seria mentir para todo mundo
+       que lê o pipeline. Ele decide quando o estudo virou proposta. */
+    quadroLevarParaONegocio: function (opId) {
+      const Q = global.IADQuadro;
+      const op = Store.oportunidade(opId);
+      if (!op || !op.quadro) return;
+      const t = Q.totais(op.quadro);
+      const cena = (op.quadro.cenarios || []).filter(function (c) {
+        return c.id === t.cenario;
+      })[0] || {};
+      if (!U.confirmar('Levar o cenário "' + (cena.nome || 'atual') + '" para o negócio?\n\n' +
+        'Valor do negócio: ' + U.moeda(t.entrada) + '\n' +
+        'Valor mensal: ' + U.moeda(t.mensal) + '\n' +
+        'Prazo: ' + t.meses + ' meses\n\n' +
+        'É isso que o pipeline, a previsão e os gráficos passam a mostrar.')) return;
+      Store.atualizarOportunidade(opId, {
+        valor: t.entrada, valorMensal: t.mensal, prazoContratoMeses: t.meses
+      });
+      render();
+      alert('Levado. O negócio agora vale ' + U.moeda(t.entrada) + ' de entrada e ' +
+        U.moeda(t.mensal) + ' por mês.');
     },
 
     abrirArquivo: function (id) {
@@ -9462,6 +9658,141 @@
      seria um terceiro campo por linha, e com dez arquivos ninguém responde
      trinta campos — responde o primeiro e aceita o resto como veio, que é
      pior do que uma resposta só, consciente. */
+  /* ---------- O QUADRO FINANCEIRO: ler os arquivos e montar ----------
+
+     A ordem importa e é esta: ler TUDO primeiro, no aparelho, e só então
+     mandar o texto junto numa chamada só.
+
+     Uma chamada por arquivo seria mais simples de escrever e daria um quadro
+     pior: o escopo está no .docx e o preço está no .xlsx, e é justamente o
+     cruzamento dos dois que diz quanto custa o que foi prometido. Dois
+     pedidos separados devolveriam dois meios-quadros que ninguém junta. */
+  function mexerNoQuadro(opId, mudar) {
+    const Q = global.IADQuadro;
+    const op = Store.oportunidade(opId);
+    if (!op || !Q) return;
+    const q = op.quadro ? JSON.parse(JSON.stringify(op.quadro)) : Q.vazio();
+    mudar(q);
+    Store.atualizarOportunidade(opId, { quadro: q });
+    render();
+  }
+
+  /* O recado da leitura. `recadoNuvem` escreve num elemento que só existe na
+     tela de Configuração: chamado daqui ele não falha, não avisa e não
+     aparece — que é a pior das três. Este escreve onde a aba está. */
+  function estadoDoQuadro(texto) {
+    const alvo = document.getElementById('quadro-estado');
+    if (!alvo) return;
+    alvo.innerHTML = texto
+      ? '<div class="faixa-delta" style="margin-top:10px">' + U.esc(texto) + '</div>' : '';
+  }
+
+  function lerParaOQuadro(opId, arquivos) {
+    const D = global.IADDocumentos, Q = global.IADQuadro;
+    const op = Store.oportunidade(opId);
+    if (!op || !D || !Q) return;
+
+    const conta = op.contaId ? Store.conta(op.contaId) : null;
+    avisoSincronizacao = '';
+    /* O balão de progresso só nasce quando a IA é chamada. A leitura dos
+       arquivos acontece antes dele e pode demorar num .xlsx grande, então
+       esta linha é o que impede a tela de parecer travada no intervalo. */
+    estadoDoQuadro('Lendo ' + arquivos.length + ' arquivo(s) neste aparelho…');
+
+    D.lerVarios(arquivos).then(function (lidos) {
+      const bons = lidos.filter(function (d) { return d.texto && !d.erro; });
+      const ruins = lidos.filter(function (d) { return !d.texto || d.erro; });
+
+      if (!bons.length) {
+        estadoDoQuadro('');
+        alert('Não consegui tirar texto de nenhum arquivo.\n\n' +
+          ruins.map(function (d) { return '· ' + d.nome + ': ' + (d.erro || 'veio vazio'); }).join('\n'));
+        return;
+      }
+
+      /* Cada arquivo entra com o nome na frente. É o que permite à IA dizer
+         "planilha Precificação, aba Premissas" na origem de cada número — e a
+         origem é o que faz o vendedor conferir em vez de refazer.
+
+         Quem monta é o `juntarDocumentos`, e não um `join`: quando o material
+         passa do que cabe num pedido, ele reparte proporcionalmente entre os
+         arquivos e entre as abas de cada planilha, em vez de cortar o fim —
+         que é onde, numa planilha de precificação, moram as premissas. */
+      const junto = Q.juntarDocumentos(bons, 88000);
+      const texto = junto.texto;
+
+      const contexto = {
+        empresa: conta ? conta.nome : '',
+        segmento: conta ? (conta.segmento || '') : '',
+        negocio: op.titulo || '',
+        arquivos: bons.map(function (d) { return d.nome; })
+      };
+
+      return global.IADIA.quadroDaProposta(texto, contexto,
+        bons.length + ' arquivo(s), ' + Math.round(texto.length / 1000) + ' mil letras'
+      ).then(function (r) {
+        estadoDoQuadro('');
+        if (!r || r.erro) {
+          alert('Não consegui montar o quadro: ' + ((r && r.erro) || 'erro desconhecido'));
+          return;
+        }
+        const base = op.quadro ? JSON.parse(JSON.stringify(op.quadro)) : Q.vazio();
+        const q = Q.normalizar(r, base);
+        /* Arquivo que entrou pela metade é dito na tela, junto com o que a IA
+           não conseguiu ler. Documento cortado em silêncio é a pior saída
+           possível: o quadro parece completo, e quem lê não tem como saber. */
+        if (junto.cortados.length) {
+          q.duvidas = (q.duvidas || []).concat([
+            'Não coube tudo num pedido só, então li uma parte de: ' +
+            junto.cortados.join(', ') + '. Se faltar alguma coisa no quadro, ' +
+            'leia esse arquivo sozinho, pelo botão + Arquivos.'
+          ]);
+        }
+        /* Os arquivos que já estavam na lista continuam lá: o botão "+
+           Arquivos" soma ao quadro, e um quadro que esquece de onde veio
+           perde a única coisa que o torna conferível. */
+        q.arquivos = (base.arquivos || []).concat(bons.map(function (d) {
+          return { nome: d.nome, letras: d.texto.length };
+        }));
+        Store.atualizarOportunidade(opId, { quadro: q });
+        render();
+
+        if (ruins.length) {
+          alert('Montei o quadro com ' + bons.length + ' arquivo(s).\n\n' +
+            'Não consegui ler:\n' +
+            ruins.map(function (d) { return '· ' + d.nome + ': ' + (d.erro || 'veio vazio'); }).join('\n'));
+        }
+      });
+    }).catch(function (e) {
+      estadoDoQuadro('');
+      alert('Falhou na leitura: ' + ((e && e.message) || 'erro desconhecido'));
+    });
+  }
+
+  /* A área de soltar. Existe porque o caminho natural de quem tem a proposta
+     aberta no Explorer é arrastar, e um app que só aceita clique manda a
+     pessoa procurar o arquivo de novo numa janela que ela acabou de fechar. */
+  function pintarSoltaQuadro() {
+    const caixa = document.getElementById('solta-quadro');
+    if (!caixa || caixa.__ligada) return;
+    caixa.__ligada = true;
+    const opId = caixa.getAttribute('data-op');
+    const parar = function (e) { e.preventDefault(); e.stopPropagation(); };
+    ['dragenter', 'dragover'].forEach(function (nome) {
+      caixa.addEventListener(nome, function (e) { parar(e); caixa.classList.add('em-cima'); });
+    });
+    ['dragleave', 'drop'].forEach(function (nome) {
+      caixa.addEventListener(nome, function (e) { parar(e); caixa.classList.remove('em-cima'); });
+    });
+    caixa.addEventListener('drop', function (e) {
+      const arquivos = Array.prototype.slice.call((e.dataTransfer && e.dataTransfer.files) || []);
+      if (arquivos.length) lerParaOQuadro(opId, arquivos);
+    });
+    caixa.addEventListener('click', function () {
+      global.App.lerArquivosDaProposta(opId);
+    });
+  }
+
   function perguntarSobreOsAnexos(opId, arquivos) {
     const op = Store.oportunidade(opId);
     const campos = [];
