@@ -19,6 +19,12 @@
     recadoAcesso = recado || '';
   }
 
+  /* Quem já tem recado na tela de entrada não ganha outro por cima. O
+     genérico de sessão vencida não pode apagar o específico — "sua empresa
+     está bloqueada" é a informação que a pessoa precisa para saber que não
+     adianta digitar a senha de novo. */
+  function recadoDoAcesso() { return recadoAcesso; }
+
   /* A tela de quando o servidor não respondeu.
 
      Com o navegador guardando carteira, isto era uma faixa em cima do que
@@ -1793,7 +1799,41 @@
       '<p class="tiny muted" style="margin-top:8px">Nota média (0 a ' + P.NOTA_MAXIMA + ') de cada dimensão no dia em que o negócio foi encerrado.</p></div>';
   }
 
+  /* ---------- A TELA DE PRIMEIRA VEZ SÓ VALE NA PRIMEIRA VEZ ----------
+
+     "Bem-vindo ao IAD CRM — Criar primeira conta" é a resposta certa para
+     quem não tem nada, e a mais perigosa que existe para quem tem a carteira
+     inteira no servidor e ainda não a recebeu. No aparelho os dois casos são
+     a mesma coisa: zero oportunidades.
+
+     Foi o que apareceu na tela do Alexandre com 277 empresas no servidor. E o
+     convite era para CRIAR — ou seja, a tela oferecia a ação mais errada
+     possível no pior momento possível, com a aparência de ser a única.
+
+     Com a nuvem no comando, carteira vazia num aparelho que nunca completou
+     uma sincronização não é carteira vazia: é carteira que não chegou. Essa
+     tela diz isso, e o botão é o de baixar. */
+  function carteiraNaoChegou() {
+    return '<div class="card"><h1>Sua carteira ainda não desceu</h1>' +
+      '<p>Este aparelho está conectado ao servidor, mas ainda não recebeu nada ' +
+      'nesta conta. O que você tem está lá, inteiro.</p>' +
+      '<p class="small muted">Não cadastre nem importe nada antes de baixar: ' +
+      'começar do zero aqui não apaga o servidor, mas cria uma carteira ' +
+      'paralela que depois tem de ser juntada à mão.</p>' +
+      '<div class="row"><button class="btn" onclick="App.puxarNuvem()" ' +
+      'data-ajuda-titulo="Baixar agora" data-ajuda="Traz do servidor as empresas, ' +
+      'contatos, oportunidades e tarefas desta conta.">Baixar agora</button>' +
+      '<button class="btn ghost" onclick="App.ir(\'#/config\')" ' +
+      'data-ajuda-titulo="Configuração" data-ajuda="A tela da nuvem, onde fica o ' +
+      'estado da sincronização e o que o servidor respondeu.">Ver a nuvem</button></div></div>';
+  }
+
   function boasVindas() {
+    const N = global.IADNuvem;
+    /* A pergunta não é "tem sessão?", é "este aparelho já conversou com o
+       servidor nesta conta?". Quem acabou de entrar tem sessão e não tem
+       carteira ainda — e é exatamente quem não pode ver o convite de criar. */
+    if (N.mandaNoAcesso() && N.sessao() && !N.jaSincronizou()) return carteiraNaoChegou();
     return '<div class="card"><h1>Bem-vindo ao IAD CRM</h1>' +
       '<p>Este CRM não mede o que o vendedor fez. Mede o que mudou na decisão do comprador.</p>' +
       '<p class="small muted">Comece com dados de demonstração para entender o modelo, cadastre sua primeira conta ou importe sua carteira de uma planilha.</p>' +
@@ -10151,7 +10191,7 @@
     marcarLendo, estaLendo, revisaoDasNotas, respostaDaConversa,
     conversas, definirConversa, conversaAberta: function () { return conversaAberta; },
     iconeWhatsapp, linkWhatsapp,
-    acesso, barraAdmin, menuDoUsuario, definirTelaAcesso, definirPrimeiraEmpresa, listaUsuariosNuvem,
+    acesso, barraAdmin, menuDoUsuario, definirTelaAcesso, recadoDoAcesso, definirPrimeiraEmpresa, listaUsuariosNuvem,
     pendenteAcesso: function () { return pendente; },
     definirFiltroFunil, limparFiltroFunil, definirFunilAberto, definirForma, tarefasFiltrar, tarefasEstado, tarefasVisiveis, tarefasDaPagina, tarefasSelecionadas, tarefasMarcar,
     pipelineEstado, pipelineFiltrar, pipelineLimparTudo, gavetaDeFiltros, conferirSessao, zerarFiltros,

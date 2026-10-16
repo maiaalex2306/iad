@@ -105,6 +105,38 @@
       logado = null;
     }
 
+    /* ---------- E `naNuvem` É UMA MARCA, NÃO UMA SESSÃO ----------
+
+       A linha acima conferia a MARCA que ficou gravada no aparelho no dia em
+       que a pessoa entrou pela nuvem. A marca não vence; a sessão vence.
+
+       Quando a sessão do Supabase some — venceu e a renovação falhou, ou
+       alguém clicou em "Sair da nuvem" na Configuração, que derruba a sessão
+       do servidor e NÃO a daqui — a marca continua lá dizendo "esta pessoa
+       entrou pela nuvem". O `render` acreditava nela e abria o app.
+
+       Só que sem sessão a carteira não desce. O app abria inteiro, com zero
+       empresas, e a tela de primeira vez convidava quem tem 277 delas no
+       servidor a "Criar primeira conta". Foi exatamente o que apareceu na
+       tela do Alexandre, e os quatro 401 em /auth/v1/logout no console são a
+       assinatura disso.
+
+       Carteira que vive no servidor exige sessão viva. Sem ela a resposta
+       certa é a tela de entrada — que é onde se conserta isso em dez
+       segundos — e nunca a tela de quem não tem nada. */
+    if (logado && global.IADNuvem.mandaNoAcesso() && !global.IADNuvem.sessao()) {
+      A.encerrarSessao();
+      logado = null;
+      /* O recado é escrito uma vez. `render` roda muitas vezes seguidas, e
+         reescrevê-lo apagaria um recado mais específico — o de empresa
+         bloqueada, por exemplo — que outro caminho acabou de pôr ali. */
+      if (!V.recadoDoAcesso()) {
+        V.definirTelaAcesso('login', null,
+          'Sua sessão expirou. Entre de novo — sua carteira está guardada no ' +
+          'servidor e desce inteira assim que você entrar.');
+      }
+    }
+
     /* Trocou a pessoa, trocam os filtros. Sem isto, quem filtrava "as
        negociações do Alexandre", saía e entrava como outra pessoa via um
        pipeline vazio — o filtro continuava valendo, apontando para alguém que

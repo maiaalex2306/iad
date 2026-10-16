@@ -265,11 +265,24 @@
     });
   }
 
+  /* Os quatro `401` em /auth/v1/logout no console eram nossos.
+
+     A ordem era: apagar a sessão daqui e DEPOIS avisar o servidor. Só que o
+     aviso é uma chamada autenticada, e o token que ela precisava acabava de
+     ser jogado fora — então saía com a chave pública e voltava 401, toda vez.
+     Barulho vermelho no console que não era defeito nenhum do servidor, e que
+     atrapalha quem está lendo o console à procura do defeito de verdade.
+
+     Agora o pedido parte com o token na mão — os cabeçalhos são montados na
+     hora da chamada — e a sessão é apagada no instante seguinte, sem esperar
+     a resposta. Sair do app nunca pode depender da internet. E, quando a
+     resposta chegar, já não há sessão aqui para a renovação tentar ressuscitar. */
   function sair() {
     const s = sessao();
+    if (!s) { guardarSessao(null); return Promise.resolve(); }
+    const aviso = chamar('/auth/v1/logout', { metodo: 'POST' }).catch(function () {});
     guardarSessao(null);
-    if (!s) return Promise.resolve();
-    return chamar('/auth/v1/logout', { metodo: 'POST' }).catch(function () {});
+    return aviso;
   }
 
   /* ESTE ERA O DEFEITO, e ele explica a história inteira.
@@ -1007,6 +1020,31 @@
     }
   }
 
+  /* Este aparelho já trocou alguma coisa com o servidor nesta conta?
+
+     A pergunta existe por causa da tela de primeira vez. "Bem-vindo ao IAD
+     CRM — crie sua primeira conta" é a resposta certa para quem não tem nada,
+     e a resposta mais perigosa que existe para quem tem 277 empresas no
+     servidor e ainda não as recebeu: os dois casos são, no aparelho, a mesma
+     carteira vazia.
+
+     A marca distingue os dois. Ela é gravada quando um `puxar` ou um
+     `empurrar` termina bem, e por isso significa exatamente "esta conta já
+     conversou com o servidor daqui". Sem marca, carteira vazia não quer
+     dizer carteira vazia: quer dizer que nada chegou ainda.
+
+     Sem validade de propósito — a marca de ontem continua respondendo a esta
+     pergunta, que é sobre o passado e não sobre estar em dia. */
+  function jaSincronizou() {
+    try {
+      const p = sessaoPerfil();
+      if (!p) return false;
+      const s = sessao();
+      const donoId = (s && s.user && s.user.id) || '';
+      return !!lerMarcas(String(p.tenant_id || '') + '|' + donoId, true).em;
+    } catch (e) { return false; }
+  }
+
   /* Existe alguma coisa que o servidor ainda não tem?
 
      Pergunta nova, e ela existe por causa de um defeito que eu mesmo criei: a
@@ -1480,7 +1518,7 @@
     config, salvarConfig, configurada, conectado, mandaNoAcesso, estado, sessao,
     cadastrar, entrar, sair, renovar, precisaRenovar, eu, meuPerfil, salvarPerfil, criarMinhaEmpresa,
     guardarPerfilNaSessao, empurrar, puxar, sincronizar, ultimaSincronizacao, ultimoEnvio,
-    esquecerMarcas, haMudancas,
+    esquecerMarcas, haMudancas, jaSincronizou,
     __trocarChamar: function (fn) { substitutoDeTeste = fn || null; },
     perfisDaNuvem, empresasDaNuvem, souAdminNaNuvem, existeEmpresa,
     definirEmpresaDoPerfil, definirPapelDoPerfil, salvarMeuNome,
