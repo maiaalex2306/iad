@@ -147,6 +147,21 @@
      não existe, a cópia velha some: deixá-la lá seria o mesmo anúncio errado
      amanhã. Na dúvida, `haMudancas` responde SIM — cópia à toa custa um aviso
      a mais; cópia que faltou custa o trabalho. */
+  /* E a cópia do VAZIO nunca é gravada.
+
+     Entre abrir o app e a carteira descer do servidor existe um intervalo de
+     alguns segundos em que a memória está zerada. Qualquer tentativa de envio
+     nesse intervalo gravava um retrato do nada — e esse retrato, no arranque
+     seguinte, era colado por cima da carteira inteira.
+
+     Carteira vazia não tem trabalho para proteger: a cópia dela não serve
+     para nada e pode apagar tudo. Das duas, a segunda é a que importa. */
+  function temMovimento(e) {
+    return ['contas', 'contatos', 'oportunidades', 'tarefas'].some(function (n) {
+      return (((e && e[n]) || []).length) > 0;
+    });
+  }
+
   function guardarFila() {
     const P = global.IADPendencias;
     if (!P || !P.disponivel() || !Store || !Store.obter) return Promise.resolve();
@@ -154,7 +169,10 @@
     const N = global.IADNuvem;
     if (N && N.haMudancas && !N.haMudancas()) return limparFila();
 
-    return P.guardar(Store.obter(), donoAtual()).then(function (ok) {
+    const estado = Store.obter();
+    if (!temMovimento(estado)) return Promise.resolve();
+
+    return P.guardar(estado, donoAtual()).then(function (ok) {
       if (ok && !naFila) { naFila = true; avisar(); }
     });
   }

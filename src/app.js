@@ -1109,6 +1109,44 @@
          parece preciso. */
       const quando = fila.quando ? new Date(fila.quando) : null;
       const dia = quando ? U.data(fila.quando.slice(0, 10)) : '';
+
+      /* ---------- A CÓPIA NUNCA PODE ENCOLHER A CARTEIRA ----------
+
+         `substituir` troca o estado INTEIRO pelo da cópia. Era a linha mais
+         perigosa do arranque e não tinha trava nenhuma: bastava a cópia ter
+         sido gravada num instante em que a memória estava vazia — aparelho
+         novo, armazenamento limpo, ou o intervalo entre abrir o app e a
+         carteira descer do servidor — para que o arranque seguinte apagasse
+         a carteira inteira com um retrato do nada.
+
+         O `puxar` já tinha essa trava desde a v206, com estas palavras:
+         "gravar o vazio por cima apagaria esse trabalho". A fila de
+         emergência não tinha, e ela é justamente a que existe para NÃO
+         perder.
+
+         A regra é absoluta: cópia de segurança que contém menos do que o
+         aparelho tem não é cópia de segurança. Quando isso acontece, o que
+         manda é o aparelho — e o que estava por enviar sobe do mesmo jeito,
+         porque é o estado do aparelho que vai no envio. */
+      const DE_MOVIMENTO = ['contas', 'contatos', 'oportunidades', 'tarefas'];
+      const quantos = function (e) {
+        return DE_MOVIMENTO.reduce(function (soma, nome) {
+          return soma + (((e && e[nome]) || []).length);
+        }, 0);
+      };
+      const naCopia = quantos(fila.estado);
+      const noAparelho = quantos(Store.obter());
+
+      if (naCopia < noAparelho) {
+        /* Nada de `substituir`: o aparelho vence. A cópia some, porque uma
+           cópia menor do que o original só pode atrapalhar o próximo
+           arranque. E o envio acontece assim mesmo — o que não subiu está no
+           estado que ficou. */
+        return S.limparFila().then(function () {
+          return N.empurrar().then(function () { render(); }, function () { render(); });
+        });
+      }
+
       S.marcarNaFila(true);
       Store.semSincronizar(function () { Store.substituir(fila.estado); });
       return N.empurrar().then(function () {
@@ -1483,6 +1521,11 @@
        NÃO acontece — a caixa que deixou de abrir na tela de login —, e um
        comportamento ausente só se prova chamando o que o produziria. */
     __vigiarGravacao: function (sinc) { return vigiarGravacao(sinc); },
+    /* O resgate da fila de emergência. Exposto porque o que ele faz é apagar
+       e substituir a carteira inteira: é a linha mais perigosa do arranque, e
+       o caso que importa — a cópia menor que NÃO pode vencer — só se prova
+       chamando o resgate com uma cópia menor na mão. */
+    __resgatarFila: function () { return resgatarFilaPendente(); },
     __ligarAcharPessoas: function (dlg, op) { return ligarAcharPessoas(dlg, op); },
     __telefoneValido: function (bruto) { return telefoneValido(bruto); },
     __donoDoEmail: function (email, contatos) { return donoDoEmail(email, contatos); },
