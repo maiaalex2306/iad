@@ -300,6 +300,17 @@ const FORMATOS: Record<string, Record<string, Regra>> = {
      validarContatos. Precisa estar aqui porque esta tabela é também a lista
      do que a função aceita — tipo fora dela volta "tipo desconhecido". */
   pessoas: {},
+  /* O quadro financeiro da proposta. Sem regra de campo porque a saída não é
+     uma ficha: são cinco listas — escopo, linhas únicas, linhas mensais,
+     premissas e cenários —, e quem as valida é `validarQuadro`.
+
+     ESTA LINHA É O PORTÃO, e foi exatamente ela que faltou quando o tipo
+     nasceu: o prompt estava escrito, o validador estava escrito, o despacho
+     estava escrito, e o pedido morria aqui em cima com "tipo desconhecido"
+     sem nunca chegar em nenhum dos três. `deno check` não pega — esta tabela
+     é um registro de execução, não um tipo. Quem pega é o teste de bancada,
+     que compara os ramos de `promptDe` com as chaves daqui. */
+  quadro: {},
   /* 'intencao' é o roteador da conversa: a frase do vendedor entra, o nome de
      uma pergunta conhecida sai. Um campo de texto só, e curto de propósito —
      quem confere se o id existe é o aplicativo, contra a própria lista que
