@@ -2045,3 +2045,27 @@ td.cenas { white-space: nowrap; }
   color: var(--brand, #5b2d8e); font-weight: 700;
 }
 .grupo-escopo ul { margin: 5px 0 0; padding-left: 18px; display: grid; gap: 3px; font-size: .84rem; }
+
+/* ---------- as abas de versão da proposta ----------
+   Precificação nova é proposta nova. As abas ficam acima do quadro e não
+   dentro dele: elas trocam o conteúdo inteiro, e aba que mora dentro do que
+   ela troca confunde quem procura o botão depois. */
+.card.versoes { padding: 10px 14px; }
+.abas-versao { display: flex; flex-wrap: wrap; gap: 6px; }
+.aba-versao {
+  padding: 6px 12px; border-radius: 999px; cursor: pointer; font: inherit;
+  font-size: .82rem; font-weight: 600; color: var(--muted);
+  border: 1px solid var(--line); background: var(--surface);
+}
+.aba-versao:hover { border-color: var(--orange); color: inherit; }
+.aba-versao.ativa {
+  border-color: var(--orange); background: var(--orange-soft); color: inherit;
+}
+input.nome-versao {
+  font: inherit; font-size: 1.05rem; font-weight: 700; color: inherit;
+  padding: 3px 7px; min-width: 190px; border-radius: 8px;
+  border: 1px solid transparent; background: transparent;
+}
+input.nome-versao:hover { border-color: var(--line); }
+input.nome-versao:focus { border-color: var(--orange); outline: none; background: var(--bg); }
+table.cenarios th .tiny { display: block; font-weight: 400; }

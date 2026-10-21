@@ -1027,6 +1027,9 @@ São os percentuais que a planilha aplica por fora: acréscimo por segmento do c
 - "percentual" é o número em pontos percentuais, com sinal: 20 para +20%, -6 para 6% de desconto. Uma planilha que escreve 0,2 ou 0,06 está falando de 20% e 6%: converta.
 - "incideEm" diz onde ela pega. Muita planilha escreve "incide apenas no serviço" — isso é "mensal". Quando não disser, use "mensal", que é o caso comum, e registre a dúvida.
 - Condição comercial SEM percentual também entra aqui, com "percentual": 0 — faturamento 30/60/90, carência, prazo indeterminado, multa de rescisão. Elas entram na proposta mesmo não entrando na conta.
+- NUNCA ponha percentual em multa, rescisão, carência, juros, mora, caução, fidelização, prazo mínimo, prazo indeterminado, vigência ou faturamento parcelado. Essas palavras descrevem o que acontece SE alguma coisa der errado, ou QUANDO se paga — nunca QUANTO se paga. Multa de rescisão de 65% é o que o cliente paga se cancelar; ela não acrescenta 65% à mensalidade de quem não cancela.
+  Isto aconteceu de verdade, numa proposta real: a multa virou +65% no mensal e a mensalidade saiu com mais do dobro do valor certo, com o número bem formatado. Se você encontrar um percentual ao lado de uma dessas palavras, ele é de outra célula — devolva "percentual": 0 e escreva a condição no "rotulo".
+- Cada regra UMA vez. Se a mesma regra aparecer em duas planilhas — o acréscimo de segmento na aba Premissas e de novo no cabeçalho da Precificação —, é uma premissa só. Duas linhas dizendo a mesma coisa somam duas vezes, e o acréscimo dobra sem ninguém ver.
 - Traga só a premissa que se aplica A ESTA proposta. Uma tabela com doze segmentos e um cliente de alimentos tem UMA premissa de segmento, a de alimentos — as outras onze são a tabela, não a proposta.
 
 ESCOPO
@@ -2041,6 +2044,11 @@ function listaDeTextos(v: unknown, quantos: number, max: number): string[] {
   return v.slice(0, quantos).map((x) => limparTexto(x, max)).filter(Boolean);
 }
 
+/* O que descreve condição e nunca preço: o que se paga SE algo der errado, ou
+   QUANDO se paga — nunca QUANTO se paga. */
+const SO_CONDICAO =
+  /multa|rescis|resi[cs]|caren[cç]|car[êe]nc|cau[cç][aã]o|penalidade|juros|mora\b|indeniza|fideliza|prazo\s+(m[íi]nimo|indeterminado)|faturamento\s+\d|vig[êe]ncia/i;
+
 function validarQuadro(bruto: Record<string, unknown>) {
   /* O modelo pode devolver {"quadro":{…}} ou o objeto direto, dependendo de
      como ele leu o pedido. Aceitar os dois custa uma linha e evita que uma
@@ -2081,6 +2089,14 @@ function validarQuadro(bruto: Record<string, unknown>) {
   const premissas = (Array.isArray(q.premissas) ? q.premissas : []).slice(0, 20).map((x) => {
     const o = (x && typeof x === 'object') ? x as Record<string, unknown> : {};
     let pct = numeroDoQuadro(o.percentual);
+    /* Multa, carência, juros, prazo mínimo: condição, nunca preço.
+
+       Numa proposta real a multa de rescisão voltou como +65% "só no
+       mensal", e sozinha pôs a mensalidade em mais do dobro do valor certo.
+       A regra está escrita no pedido; esta linha é o que acontece quando o
+       modelo não a seguir, porque um número plausível numa proposta não tem
+       quem o revise. */
+    if (SO_CONDICAO.test(limparTexto(o.rotulo, 80))) pct = 0;
     /* Planilha escreve 0,2 quando quer dizer 20%, e o prompt pede a
        conversão. Quando ela não vem feita, fazemos: um acréscimo declarado
        como "0,2%" em vez de "20%" não é um erro de arredondamento, é a

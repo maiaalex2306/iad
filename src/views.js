@@ -3659,12 +3659,104 @@
      dele. */
   function abaPropostas(op) {
     const Q = global.IADQuadro;
-    const q = op.quadro;
+    const pasta = Q.daPasta(op.quadro);
+    const v = Q.versaoAtiva(pasta);
+    const alguma = pasta.versoes.some(Q.temConteudo);
 
-    if (!q || (!(q.linhas || []).length && !(q.escopo || []).length && !(q.arquivos || []).length)) {
-      return quadroVazio(op);
-    }
-    return quadroMontado(op, q, Q);
+    if (!alguma) return quadroVazio(op);
+    return abasDasVersoes(op, pasta, Q) +
+      (Q.temConteudo(v)
+        ? quadroMontado(op, v, Q)
+        : versaoEmBranco(op, v)) +
+      (pasta.versoes.filter(Q.temConteudo).length > 1 ? historicoDasVersoes(op, pasta, Q) : '');
+  }
+
+  /* ---------- AS ABAS DE VERSÃO ----------
+
+     Precificação nova é PROPOSTA NOVA, não emenda na anterior. A primeira
+     versão desta tela somava tudo num quadro só, e o estrago não foi
+     estético: a premissa de segmento, lida de duas planilhas, entrou duas
+     vezes na mesma lista. +20% e +20% viraram +40%, e a mensalidade da
+     Heineken apareceu com mais do dobro do valor certo — com os dois rótulos
+     diferentes e as duas linhas corretas, cada uma por si.
+
+     Separar por versão não é organização: é a trava. */
+  function abasDasVersoes(op, pasta, Q) {
+    return '<div class="card versoes"><div class="row">' +
+      '<div class="abas-versao">' +
+      pasta.versoes.map(function (v) {
+        const t = Q.temConteudo(v) ? Q.totais(v) : null;
+        return '<button class="aba-versao' + (v.id === pasta.ativa ? ' ativa' : '') + '"' +
+          ' onclick="App.quadroVerVersao(\'' + op.id + '\',\'' + v.id + '\')"' +
+          ajudaComLinhas(v.nome,
+            t ? 'Entrada ' + U.moeda(t.entrada) + ' · ' + U.moeda(t.mensal) + ' por mês · contrato ' +
+                U.moeda(t.contrato)
+              : 'Ainda sem arquivos lidos.',
+            [['Criada em', v.criadaEm ? U.data(String(v.criadaEm).slice(0, 10)) : '—'],
+             ['Arquivos', String((v.arquivos || []).length)]]) +
+          '>' + esc(v.nome) + '</button>';
+      }).join('') +
+      '</div><span class="espaco"></span>' +
+      '<button class="btn alt mini" onclick="App.quadroNovaProposta(\'' + op.id + '\')"' +
+      ajudaComLinhas('Nova proposta', 'Lê os arquivos para uma aba NOVA, sem tocar nas anteriores.',
+        [['Por que separado', 'precificação nova é outra oferta, não emenda na de antes'],
+         ['O que você ganha', 'as duas lado a lado, e nenhuma premissa contada duas vezes']]) +
+      '>+ Nova proposta</button></div></div>';
+  }
+
+  /* A versão recém-criada, ainda sem arquivos. */
+  function versaoEmBranco(op, v) {
+    return '<div class="card"><div class="row"><h2 style="margin:0">' + esc(v.nome) + '</h2>' +
+      '<span class="espaco"></span>' +
+      '<button class="btn" onclick="App.lerArquivosDaProposta(\'' + op.id + '\')">Ler arquivos</button>' +
+      '<button class="btn ghost mini" onclick="App.quadroApagarVersao(\'' + op.id + '\',\'' + v.id + '\')"' +
+      ' title="Apagar esta proposta">✕</button></div>' +
+      '<p class="small" style="margin:8px 0 0">Aba nova e vazia. Solte aqui a precificação desta versão.</p>' +
+      '<div class="solta-quadro" id="solta-quadro" data-op="' + esc(op.id) + '">' +
+      '<strong>Arraste os arquivos para cá</strong>' +
+      '<span class="tiny muted">vários de uma vez · .docx .xlsx .pptx .pdf .csv .txt .zip</span></div>' +
+      '<div id="quadro-estado"></div></div>';
+  }
+
+  /* ---------- A SEQUÊNCIA DAS PROPOSTAS ----------
+
+     É a razão de existirem versões, e não só o efeito colateral de separá-las.
+     Duas propostas lado a lado respondem "para onde esta negociação andou" —
+     subiu de preço, caiu, virou assinatura — e essa pergunta é do método, não
+     da contabilidade. Uma proposta só não tem história; a terceira tem. */
+  function historicoDasVersoes(op, pasta, Q) {
+    const cheias = pasta.versoes.filter(Q.temConteudo);
+    const col = function (f) { return cheias.map(f).join(''); };
+    const linha = function (rot, pega, forte) {
+      return '<tr' + (forte ? ' class="total"' : '') + '><td>' + rot + '</td>' + cheias.map(function (v) {
+        return '<td class="right' + (v.id === pasta.ativa ? ' ativa' : '') + '">' +
+          (forte ? '<strong>' : '') + U.moeda(pega(Q.totais(v))) + (forte ? '</strong>' : '') + '</td>';
+      }).join('') + '</tr>';
+    };
+    /* A variação contra a PRIMEIRA proposta: é dela que o cliente se lembra. */
+    const base = Q.totais(cheias[0]);
+    return '<div class="card sub"><h3 style="margin:0 0 4px">As propostas desta negociação</h3>' +
+      '<p class="tiny muted" style="margin:0 0 10px">Para onde ela andou. A variação é contra a primeira — ' +
+      'que é a que o cliente tem na cabeça.</p>' +
+      '<div class="tabela-rolagem"><table class="cenarios"><thead><tr><th></th>' +
+      col(function (v) {
+        return '<th class="' + (v.id === pasta.ativa ? 'ativa' : '') + '">' + esc(v.nome) +
+          '<span class="tiny muted">' +
+          (v.criadaEm ? U.data(String(v.criadaEm).slice(0, 10)) : '') + '</span></th>';
+      }) + '</tr></thead><tbody>' +
+      linha('Entrada', function (t) { return t.entrada; }) +
+      linha('Por mês', function (t) { return t.mensal; }) +
+      linha('Total do contrato', function (t) { return t.contrato; }, true) +
+      '<tr><td class="tiny muted">contra a primeira</td>' + col(function (v) {
+        const t = Q.totais(v);
+        const d = t.contrato - base.contrato;
+        const pct = base.contrato ? Math.round(d / base.contrato * 100) : 0;
+        return '<td class="right tiny' + (v.id === pasta.ativa ? ' ativa' : '') + '">' +
+          (Math.abs(d) < 0.5 ? '<span class="muted">—</span>'
+            : '<span class="' + (d < 0 ? 'atrasado' : 'subiu') + '">' +
+              (d > 0 ? '+' : '−') + U.moeda(Math.abs(d)) + ' (' + (d > 0 ? '+' : '−') +
+              Math.abs(pct) + '%)</span>') + '</td>';
+      }) + '</tr></tbody></table></div></div>';
   }
 
   /* A tela de quem ainda não leu nada. Diz o que ela faz, com o que ela
@@ -3926,16 +4018,24 @@
     const arqs = (q.arquivos || []);
     const quando = q.lidoEm ? U.data(String(q.lidoEm).slice(0, 10)) : '';
 
-    const cabeca = '<div class="card"><div class="row"><h2 style="margin:0">Quadro financeiro</h2>' +
+    const cabeca = '<div class="card"><div class="row">' +
+      '<h2 style="margin:0"><input class="nome-versao" value="' + esc(q.nome || 'Proposta') + '"' +
+      ' onchange="App.quadroNomeDaVersao(\'' + op.id + '\',\'' + q.id + '\',this.value)"' +
+      ajudaComLinhas('O nome desta proposta', 'Dê o nome que você usa com o cliente — "Proposta 2 — 4 gates", ' +
+        '"Revisada com desconto". É por ele que você vai achar esta versão daqui a um mês.') + '></h2>' +
       '<span class="espaco"></span>' +
       '<button class="btn ghost mini" onclick="App.lerArquivosDaProposta(\'' + op.id + '\')"' +
-      ajudaComLinhas('Ler mais arquivos', 'O que vier se SOMA ao quadro: nada do que você editou é apagado.') +
+      ajudaComLinhas('+ Arquivos NESTA proposta', 'Para o arquivo que faltou nesta mesma versão — ' +
+        'um anexo esquecido, a segunda planilha do mesmo orçamento.',
+        [['Não é para', 'uma precificação NOVA: essa pede uma aba nova, no botão lá de cima'],
+         ['Premissa repetida', 'não entra duas vezes — eu aviso quando descarto uma']]) +
       '>+ Arquivos</button> ' +
       '<button class="btn ghost mini" onclick="App.quadroLevarParaONegocio(\'' + op.id + '\')"' +
       ajudaComLinhas('Levar para o negócio', 'Grava a entrada no valor do negócio e a mensalidade no valor mensal — ' +
-        'que é o que o pipeline, a previsão e os gráficos leem.') +
+        'que é o que o pipeline, a previsão e os gráficos leem. Vale a proposta que está aberta aqui.') +
       '>Levar para o negócio</button> ' +
-      '<button class="btn ghost mini" onclick="App.quadroApagar(\'' + op.id + '\')" title="Apagar o quadro">✕</button></div>' +
+      '<button class="btn ghost mini" onclick="App.quadroApagarVersao(\'' + op.id + '\',\'' + q.id + '\')"' +
+      ' title="Apagar esta proposta">✕</button></div>' +
       (arqs.length
         ? '<p class="tiny muted" style="margin:6px 0 0">Lido de ' + arqs.length + ' arquivo(s)' +
           (quando ? ' em ' + quando : '') + ': ' +

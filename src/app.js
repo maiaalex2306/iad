@@ -4305,7 +4305,7 @@
       const op = Store.oportunidade(opId);
       if (!op || !op.quadro || !Q) return;
 
-      const copia = JSON.parse(JSON.stringify(op.quadro));
+      const copia = JSON.parse(JSON.stringify(Q.versaoAtiva(op.quadro)));
       const porId = function (lista, id) {
         return (lista || []).filter(function (x) { return x.id === id; })[0];
       };
@@ -4433,10 +4433,64 @@
       mexerNoQuadro(opId, function (q) { q.cenarioAtivo = cId; });
     },
 
-    quadroApagar: function (opId) {
-      if (!U.confirmar('Apagar o quadro financeiro deste negócio?\n\nOs arquivos continuam onde estão; ' +
-        'o que se perde é o que foi lido e o que você editou aqui.')) return;
-      Store.atualizarOportunidade(opId, { quadro: null });
+    /* ---------- as versões ---------- */
+
+    quadroVerVersao: function (opId, vId) {
+      mexerNoQuadro(opId, null, function (pasta) { pasta.ativa = vId; });
+    },
+
+    quadroNomeDaVersao: function (opId, vId, nome) {
+      mexerNoQuadro(opId, null, function (pasta) {
+        const v = pasta.versoes.filter(function (x) { return x.id === vId; })[0];
+        if (v) v.nome = String(nome || '').slice(0, 48) || v.nome;
+      });
+    },
+
+    /* Precificação nova é proposta nova. Cria a aba e já abre o seletor de
+       arquivos: criar uma aba vazia e deixar a pessoa procurar o botão seria
+       pedir dois cliques para uma intenção só. */
+    quadroNovaProposta: function (opId) {
+      const Q = global.IADQuadro;
+      const op = Store.oportunidade(opId);
+      if (!op || !Q) return;
+      const pasta = JSON.parse(JSON.stringify(Q.daPasta(op.quadro)));
+      /* O número é o da PRÓXIMA, contando as que existem — e não o tamanho da
+         lista mais um, que repetiria "Proposta 2" depois de apagar a segunda. */
+      let n = 1;
+      const usados = {};
+      pasta.versoes.forEach(function (v) {
+        const m = /Proposta\s+(\d+)/.exec(String(v.nome || ''));
+        if (m) usados[Number(m[1])] = true;
+      });
+      while (usados[n]) n++;
+      const nova = Q.novaVersao(n);
+      pasta.versoes.push(nova);
+      pasta.ativa = nova.id;
+      Store.atualizarOportunidade(opId, { quadro: pasta });
+      render();
+      global.App.lerArquivosDaProposta(opId);
+    },
+
+    quadroApagarVersao: function (opId, vId) {
+      const Q = global.IADQuadro;
+      const op = Store.oportunidade(opId);
+      if (!op || !Q) return;
+      const pasta = JSON.parse(JSON.stringify(Q.daPasta(op.quadro)));
+      const v = pasta.versoes.filter(function (x) { return x.id === vId; })[0];
+      if (!v) return;
+      if (!U.confirmar('Apagar "' + (v.nome || 'esta proposta') + '"?\n\nOs arquivos continuam onde ' +
+        'estão; o que se perde é o que foi lido e o que você editou nesta aba. As outras propostas ' +
+        'deste negócio não são tocadas.')) return;
+      pasta.versoes = pasta.versoes.filter(function (x) { return x.id !== vId; });
+      /* Sem versão nenhuma, a pasta inteira some: a aba volta a ser a tela de
+         quem ainda não leu nada, que é a verdade. */
+      if (!pasta.versoes.length) {
+        Store.atualizarOportunidade(opId, { quadro: null });
+        render();
+        return;
+      }
+      if (pasta.ativa === vId) pasta.ativa = pasta.versoes[0].id;
+      Store.atualizarOportunidade(opId, { quadro: pasta });
       render();
     },
 
@@ -4452,11 +4506,13 @@
       const Q = global.IADQuadro;
       const op = Store.oportunidade(opId);
       if (!op || !op.quadro) return;
-      const t = Q.totais(op.quadro);
-      const cena = (op.quadro.cenarios || []).filter(function (c) {
+      const v = Q.versaoAtiva(op.quadro);
+      const t = Q.totais(v);
+      const cena = (v.cenarios || []).filter(function (c) {
         return c.id === t.cenario;
       })[0] || {};
-      if (!U.confirmar('Levar o cenário "' + (cena.nome || 'atual') + '" para o negócio?\n\n' +
+      if (!U.confirmar('Levar o cenário "' + (cena.nome || 'atual') + '" de "' + (v.nome || 'esta proposta') +
+        '" para o negócio?\n\n' +
         'Valor do negócio: ' + U.moeda(t.entrada) + '\n' +
         'Valor mensal: ' + U.moeda(t.mensal) + '\n' +
         'Prazo: ' + t.meses + ' meses\n\n' +
@@ -9667,13 +9723,22 @@
      pior: o escopo está no .docx e o preço está no .xlsx, e é justamente o
      cruzamento dos dois que diz quanto custa o que foi prometido. Dois
      pedidos separados devolveriam dois meios-quadros que ninguém junta. */
-  function mexerNoQuadro(opId, mudar) {
+  /* Toda edição acontece DENTRO da versão aberta. Quem chama continua
+     recebendo um quadro e mexendo nele como antes — a pasta de versões é
+     invisível daqui para dentro, e foi assim de propósito: a alternativa era
+     reescrever os quinze comandos da tela para falarem de pasta. */
+  function mexerNoQuadro(opId, mudar, mexerNaPasta) {
     const Q = global.IADQuadro;
     const op = Store.oportunidade(opId);
     if (!op || !Q) return;
-    const q = op.quadro ? JSON.parse(JSON.stringify(op.quadro)) : Q.vazio();
-    mudar(q);
-    Store.atualizarOportunidade(opId, { quadro: q });
+    const pasta = JSON.parse(JSON.stringify(Q.daPasta(op.quadro)));
+    if (mexerNaPasta) mexerNaPasta(pasta);
+    else {
+      const v = pasta.versoes.filter(function (x) { return x.id === pasta.ativa; })[0];
+      if (!v) return;
+      mudar(v);
+    }
+    Store.atualizarOportunidade(opId, { quadro: pasta });
     render();
   }
 
@@ -9736,8 +9801,18 @@
           alert('Não consegui montar o quadro: ' + ((r && r.erro) || 'erro desconhecido'));
           return;
         }
-        const base = op.quadro ? JSON.parse(JSON.stringify(op.quadro)) : Q.vazio();
+        const pasta = JSON.parse(JSON.stringify(Q.daPasta(op.quadro)));
+        const alvo = pasta.versoes.filter(function (x) { return x.id === pasta.ativa; })[0];
+        if (!alvo) { alert('Não achei a proposta aberta.'); return; }
+        const base = JSON.parse(JSON.stringify(alvo));
         const q = Q.normalizar(r, base);
+        /* A versão conserva a identidade: `normalizar` parte de um quadro
+           vazio e copia o que veio da base, e id, nome e data não são campos
+           do quadro — são da versão. Sem estas três linhas a aba perderia o
+           nome que o vendedor deu e a data em que nasceu. */
+        q.id = alvo.id;
+        q.nome = alvo.nome;
+        q.criadaEm = alvo.criadaEm;
         /* Arquivo que entrou pela metade é dito na tela, junto com o que a IA
            não conseguiu ler. Documento cortado em silêncio é a pior saída
            possível: o quadro parece completo, e quem lê não tem como saber. */
@@ -9754,7 +9829,8 @@
         q.arquivos = (base.arquivos || []).concat(bons.map(function (d) {
           return { nome: d.nome, letras: d.texto.length };
         }));
-        Store.atualizarOportunidade(opId, { quadro: q });
+        pasta.versoes = pasta.versoes.map(function (x) { return x.id === q.id ? q : x; });
+        Store.atualizarOportunidade(opId, { quadro: pasta });
         render();
 
         if (ruins.length) {

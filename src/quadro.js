@@ -48,6 +48,51 @@
     ['mensal', 'por mês']
   ];
 
+  /* ---------- O QUE NUNCA MULTIPLICA O PREÇO ----------
+
+     Na tela da Heineken apareceu isto, ligado, somando na conta:
+
+         Multa de rescisão (Adaptável) ......... +65%  só no mensal
+
+     Multa de rescisão é o que o cliente paga SE cancelar. Não é um acréscimo
+     no preço de quem não cancela. Entrou como premissa porque está na mesma
+     tabela de condições comerciais da planilha, ao lado de coisas que de fato
+     multiplicam — e sozinha empurrou a mensalidade em sessenta e cinco por
+     cento.
+
+     Estas palavras descrevem CONDIÇÃO, nunca preço. Percentual colado nelas é
+     sempre leitura errada de célula vizinha, e o custo do engano é alto e
+     invisível: o número fica plausível e vai para a proposta.
+
+     A condição continua na lista — ela pertence à proposta —, só não entra em
+     conta nenhuma. */
+  const NAO_MULTIPLICA = new RegExp(
+    'multa|rescis|resi[cs]|caren[cç]|car[êe]nc|cau[cç][aã]o|penalidade|' +
+    'juros|mora\\b|indeniza|fideliza|prazo\\s+(m[íi]nimo|indeterminado)|' +
+    'faturamento\\s+\\d|vig[êe]ncia', 'i');
+
+  function soCondicao(rotulo) {
+    return NAO_MULTIPLICA.test(String(rotulo || ''));
+  }
+
+  /* Duas premissas que dizem a mesma coisa não podem valer duas vezes.
+
+     "Acréscimo por segmento: INDÚSTRIA DE ALIMENTOS E BEBIDAS" e "Segmento:
+     Indústria de Alimentos e Bebidas" são a mesma regra lida de duas
+     planilhas. O rótulo é diferente; a regra é uma só. A chave tira o
+     prefixo descritivo, os acentos e a pontuação, e o que sobra das duas é
+     igual — que é como se descobre que são a mesma. */
+  function chaveDaPremissa(p) {
+    let t = String((p && p.rotulo) || '').toLowerCase();
+    t = t.normalize ? t.normalize('NFD').replace(/[\u0300-\u036f]/g, '') : t;
+    /* O prefixo que só diz o que a linha faz, e não de que regra ela trata. */
+    t = t.replace(/^(acrescimo|desconto|premissa|ajuste|adicional)\s*(por|de|do|da)?\s*/, '');
+    t = t.replace(/[^a-z0-9]+/g, ' ').trim();
+    /* As primeiras palavras bastam: "segmento industria de alimentos" e
+       "segmento industria de alimentos e bebidas" são a mesma regra. */
+    return t.split(' ').slice(0, 4).join(' ');
+  }
+
   function id(prefixo) {
     return prefixo + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
   }
@@ -99,6 +144,73 @@
     };
   }
 
+  /* ================= A PASTA DE VERSÕES =================
+
+     Uma oportunidade tem VÁRIAS propostas ao longo do tempo, e a sequência
+     delas é que conta a história da negociação. A primeira versão desta tela
+     tinha um quadro só, e "+ Arquivos" somava o que viesse ao que já estava.
+
+     Isso produziu um estrago silencioso e caro: a mesma premissa de segmento,
+     lida de duas planilhas diferentes, entrou DUAS VEZES na mesma lista. +20%
+     e +20% viraram +40%, e o mensal da Heineken apareceu com mais do dobro do
+     valor certo. Ninguém viu, porque as duas linhas têm rótulos diferentes —
+     "Acréscimo por segmento: ALIMENTOS E BEBIDAS" e "Segmento: Indústria de
+     Alimentos e Bebidas" — e as duas estavam certas, cada uma por si.
+
+     Precificação nova é PROPOSTA NOVA. Não é emenda na anterior: é outra
+     oferta, com outra data, que a gente compara com a de antes. Essa é a
+     forma do negócio, e era a forma que faltava no app. */
+
+  function nomeDeVersao(n, quando) {
+    const d = quando ? new Date(quando) : new Date();
+    const dia = ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2);
+    return 'Proposta ' + n + ' — ' + dia;
+  }
+
+  function novaVersao(n, quando) {
+    const v = vazio();
+    v.id = id('v');
+    v.nome = nomeDeVersao(n || 1, quando);
+    v.criadaEm = quando || new Date().toISOString();
+    return v;
+  }
+
+  function pastaVazia() {
+    const v = novaVersao(1);
+    return { versoes: [v], ativa: v.id };
+  }
+
+  /* Aceita os dois formatos e devolve sempre a pasta.
+
+     O quadro antigo — sem versão nenhuma, com `linhas` na raiz — vira a
+     primeira versão da pasta, com a data em que foi lido. Ninguém perde o que
+     já tinha montado, e ninguém precisa saber que o formato mudou. */
+  function daPasta(bruto) {
+    if (!bruto || typeof bruto !== 'object') return pastaVazia();
+    if (Array.isArray(bruto.versoes)) {
+      const vs = bruto.versoes.filter(function (v) { return v && v.id; });
+      if (!vs.length) return pastaVazia();
+      const ativa = vs.some(function (v) { return v.id === bruto.ativa; }) ? bruto.ativa : vs[0].id;
+      return { versoes: vs, ativa: ativa };
+    }
+    /* Formato antigo. */
+    const v = Object.assign(vazio(), bruto);
+    v.id = v.id || id('v');
+    v.nome = v.nome || nomeDeVersao(1, bruto.lidoEm);
+    v.criadaEm = v.criadaEm || bruto.lidoEm || new Date().toISOString();
+    return { versoes: [v], ativa: v.id };
+  }
+
+  function versaoAtiva(pasta) {
+    const p = daPasta(pasta);
+    return p.versoes.filter(function (v) { return v.id === p.ativa; })[0] || p.versoes[0];
+  }
+
+  function temConteudo(v) {
+    return !!(v && (((v.linhas || []).length) || ((v.escopo || []).length) ||
+      ((v.arquivos || []).length)));
+  }
+
   /* ---------- a conta ----------
 
      `cenarios` na linha é um objeto {idDoCenario: true}. Linha sem nenhum
@@ -144,8 +256,16 @@
      porque a tela mostra os dois: ver o acréscimo de segmento separado do
      preço de tabela é a diferença entre conferir e acreditar. */
   function totais(quadro, cenarioId) {
-    const q = quadro || vazio();
-    const cena = cenarioId || q.cenarioAtivo || (q.cenarios[0] || {}).id || 'c1';
+    /* Aceita a PASTA e a VERSÃO. Não é mágica: "me dê os números disto" tem
+       uma resposta só quando o que chega é uma pasta — os da proposta aberta.
+
+       Existe porque esta é a função mais chamada do módulo, e a distinção
+       entre pasta e versão é exatamente a que um ponto de chamada futuro vai
+       errar. Errou uma vez no dia em que as versões nasceram, e o custo foi a
+       tela inteira em branco: `q.cenarios[0]` numa pasta estoura, e um erro
+       no meio do `render` não deixa nada ser pintado. */
+    const q = (quadro && Array.isArray(quadro.versoes)) ? versaoAtiva(quadro) : (quadro || vazio());
+    const cena = cenarioId || q.cenarioAtivo || ((q.cenarios || [])[0] || {}).id || 'c1';
     const meses = Math.max(0, Math.round(num(q.prazoMeses)));
 
     let brutoEntrada = 0, brutoMensal = 0;
@@ -186,7 +306,7 @@
      ele pediu — "as possibilidades de forma de negócio" — e ela só existe
      porque a mesma linha pode entrar numa modalidade e não na outra. */
   function comparar(quadro) {
-    const q = quadro || vazio();
+    const q = (quadro && Array.isArray(quadro.versoes)) ? versaoAtiva(quadro) : (quadro || vazio());
     return (q.cenarios || []).map(function (c) {
       const t = totais(q, c.id);
       t.nome = c.nome;
@@ -270,9 +390,13 @@
            digita no campo da tela é o que ele quis dizer, e converter ali
            seria corrigir quem não errou. */
         if (pct !== 0 && Math.abs(pct) < 1) pct = pct * 100;
+        const rotulo = texto(p && p.rotulo, 80);
+        /* Multa, carência, juros, prazo mínimo: condição, nunca preço.
+           Percentual colado nelas é leitura errada de célula vizinha. */
+        if (soCondicao(rotulo)) pct = 0;
         return {
           id: id('p'),
-          rotulo: texto(p && p.rotulo, 80),
+          rotulo: rotulo,
           /* Premissa sem percentual não é cálculo, é contexto — "faturamento
              30/60/90", "prazo indeterminado". Ela continua na lista porque é
              exatamente o que entra na proposta como condição comercial, mas
@@ -287,7 +411,35 @@
           daIa: true
         };
       }).filter(function (p) { return p.rotulo; });
-      if (novas.length) q.premissas = (q.premissas || []).concat(novas);
+
+      /* ---------- A MESMA REGRA NÃO ENTRA DUAS VEZES ----------
+
+         Quando se lê um arquivo a mais para dentro de uma versão que já tem
+         premissas, a regra de segmento da segunda planilha encontra a da
+         primeira. Os rótulos são diferentes e as duas estão certas — e
+         somadas dão o dobro do acréscimo, em silêncio.
+
+         A que já estava vence: ela pode ter sido editada pelo vendedor, e
+         sobrescrever a edição dele com o palpite da leitura nova seria
+         desfazer trabalho sem avisar. */
+      if (novas.length) {
+        const jaTem = {};
+        (q.premissas || []).forEach(function (x) { jaTem[chaveDaPremissa(x)] = true; });
+        const inéditas = novas.filter(function (x) {
+          const k = chaveDaPremissa(x);
+          if (jaTem[k]) return false;
+          jaTem[k] = true;
+          return true;
+        });
+        const repetidas = novas.length - inéditas.length;
+        if (repetidas) {
+          q.duvidas = (q.duvidas || []).concat([
+            repetidas + ' premissa(s) que vieram deste arquivo já estavam na lista e ' +
+            'não foram repetidas — contar a mesma regra duas vezes dobraria o acréscimo.'
+          ]);
+        }
+        q.premissas = (q.premissas || []).concat(inéditas);
+      }
     }
 
     if (Array.isArray(b.escopo)) {
@@ -436,6 +588,14 @@
   global.IADQuadro = {
     juntarDocumentos: juntarDocumentos,
     repartir: repartir,
+    daPasta: daPasta,
+    pastaVazia: pastaVazia,
+    novaVersao: novaVersao,
+    nomeDeVersao: nomeDeVersao,
+    versaoAtiva: versaoAtiva,
+    temConteudo: temConteudo,
+    chaveDaPremissa: chaveDaPremissa,
+    soCondicao: soCondicao,
     vazio: vazio,
     totais: totais,
     comparar: comparar,
