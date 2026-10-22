@@ -1813,6 +1813,13 @@
      Com a nuvem no comando, carteira vazia num aparelho que nunca completou
      uma sincronização não é carteira vazia: é carteira que não chegou. Essa
      tela diz isso, e o botão é o de baixar. */
+  function sessaoTerminou() {
+    return '<div class="card"><h1>Sua sessão terminou</h1>' +
+      '<p>Entre de novo. Sua carteira está guardada no servidor e desce inteira ' +
+      'assim que você entrar — não há nada a recriar aqui.</p>' +
+      '<div class="row"><button class="btn" onclick="location.reload()">Entrar de novo</button></div></div>';
+  }
+
   function carteiraNaoChegou() {
     return '<div class="card"><h1>Sua carteira ainda não desceu</h1>' +
       '<p>Este aparelho está conectado ao servidor, mas ainda não recebeu nada ' +
@@ -1830,6 +1837,18 @@
 
   function boasVindas() {
     const N = global.IADNuvem;
+    /* ---------- O ÚLTIMO ANTEPARO ----------
+
+       Sem ninguém dentro, o `Store` filtra a carteira inteira e devolve zero —
+       não porque esteja vazia, mas porque não há a quem mostrar. Zero chega
+       aqui indistinguível de carteira vazia de verdade.
+
+       Já há duas travas antes desta: o `render` e o repinte de fundo. Esta é a
+       terceira, e ela existe porque o erro que ela evita é o pior da tela —
+       oferecer "Criar primeira conta" a quem tem a carteira inteira no
+       servidor. Trava a mais custa uma função; esta tela aparecendo na hora
+       errada custa a confiança no app. */
+    if (global.IADAuth && !global.IADAuth.atual()) return sessaoTerminou();
     /* A pergunta não é "tem sessão?", é "este aparelho já conversou com o
        servidor nesta conta?". Quem acabou de entrar tem sessão e não tem
        carteira ainda — e é exatamente quem não pode ver o convite de criar. */

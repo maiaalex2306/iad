@@ -1297,6 +1297,17 @@
 
     const proximo = function (n) {
       if (n >= pendentes.length) return Promise.resolve(feitas);
+      /* A varredura de 166 negócios leva minutos, e nesse meio-tempo a sessão
+         pode acabar — por ociosidade, ou porque alguém saiu. Daí em diante
+         cada leitura é uma chamada que o servidor recusa, um registro gravado
+         para quem não está mais dentro, e um envio que vai falhar.
+
+         Parar é a resposta: o que foi lido até aqui está gravado, e o resto
+         volta à fila na próxima abertura. Varredura não é trabalho do
+         vendedor — é conforto —, e conforto não insiste contra uma porta
+         fechada. */
+      const A = global.IADAuth;
+      if (A && A.atual && !A.atual()) return Promise.resolve(feitas);
       const item = pendentes[n];
       const op = item.resumo.op;
       return leituraDaOportunidade(op, item.resumo, O.explicar(item))

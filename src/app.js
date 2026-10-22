@@ -303,6 +303,33 @@
      pedida não é a que está aberta, para quem chamou decidir o que fazer. */
   function repintarConteudo(hash, desenhar) {
     if ((location.hash || '') !== hash) return false;
+
+    /* ---------- E SÓ COM ALGUÉM DENTRO ----------
+
+       Esta função é a SEGUNDA porta para a tela, e durante muito tempo a
+       única coisa que ela conferia era o endereço. Só que o endereço não muda
+       quando a sessão acaba: sair por ociosidade deixa o `#/hoje` onde estava.
+
+       O estrago, relatado assim: "eu estava logado, deu 20 minutos, deslogou
+       e foi para a tela de boas-vindas". A cadeia inteira:
+
+         1. a varredura diária começa ao abrir o Hoje — uma chamada de IA por
+            negócio urgente, e ela leva minutos;
+         2. vinte minutos parado, o app encerra a sessão e o `render` pinta a
+            tela de entrada, com a marca `sem-sessao` no corpo;
+         3. o próximo retorno da varredura chama esta função, que vê o mesmo
+            `#/hoje` e escreve POR CIMA da tela de entrada;
+         4. e `V.hoje()` pergunta a carteira ao `Store`, que sem usuário filtra
+            tudo e devolve zero — então sai a tela de primeira vez, convidando
+            a "Criar primeira conta" quem tem 282 negócios no servidor.
+
+       O topo some e o conteúdo fica: é a assinatura de duas pinturas
+       disputando a mesma tela, e foi exatamente isso que apareceu na foto.
+
+       A regra do `render` vale aqui também, e pelo mesmo motivo: carteira que
+       vive no servidor não se mostra a quem não está dentro. */
+    if (!A.atual()) return false;
+
     const conteudo = document.getElementById('conteudo');
     if (!conteudo) return false;
 
@@ -1549,6 +1576,11 @@
     __minutosAteSair: function () { return MINUTOS_ATE_SAIR; },
     __envelhecerOcio: function (ms) { ultimaAcao = Date.now() - ms; },
     __vigiarOcio: function () { return vigiarOcio(); },
+    /* O repinte de fundo. Exposto porque o caso que importa é o que ele
+       DEIXA de fazer — escrever a tela de boas-vindas por cima da tela de
+       entrada depois de sair por ociosidade —, e comportamento ausente só se
+       prova chamando o que o produzia. */
+    __repintarConteudo: function (hash, desenhar) { return repintarConteudo(hash, desenhar); },
     __tempoParado: function () { return tempoParado(); },
     __porQueNaoEntra: function (contaId, p) { return porQueNaoEntra(contaId, p); },
     __criarContatosPropostos: function (contaId, ps, rec) { return criarContatosPropostos(contaId, ps, rec); },
