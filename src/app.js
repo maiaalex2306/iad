@@ -87,7 +87,22 @@
      silêncio faria a pessoa achar que a ponte perdeu entrega. */
   let avisoDeDescartados = 0;
   /* Falha da última sincronização, para a tela poder dizer o que houve. */
-  let avisoSincronizacao = '';
+  /* O recado da sincronização, e a forma dele.
+
+     Era uma string, e a faixa colava um botão "Tentar de novo" em TODA
+     mensagem que caísse ali — inclusive na que diz que deu tudo certo. Uma
+     faixa laranja que anuncia "nada se perdeu" e oferece repetir alguma coisa
+     é uma contradição em duas linhas, e quem lê conclui que houve problema.
+
+     Agora o recado diz o que é: `tom` escolhe a cor, `botao` existe só onde
+     repetir resolve alguma coisa. Quem assina a mensagem é quem sabe qual das
+     duas ela é. */
+  let avisoSincronizacao = null;
+
+  function definirAviso(texto, opcoes) {
+    const o = opcoes || {};
+    avisoSincronizacao = texto ? { texto: texto, tom: o.tom || 'alerta', botao: !!o.botao } : null;
+  }
 
   /* Por que a tela está sem nada para mostrar. Com o servidor sendo a única
      fonte, "não consegui falar com ele" não é um aviso em cima da carteira
@@ -757,8 +772,12 @@
     }
 
     if (avisoSincronizacao) {
-      return '<div class="aviso faixa-aviso">' + U.esc(avisoSincronizacao) +
-        '<button class="btn ghost mini" onclick="App.tentarBaixarDeNovo()">Tentar de novo</button></div>';
+      const a = avisoSincronizacao;
+      const classe = a.tom === 'ok' ? 'faixa-delta faixa-aviso' : 'aviso faixa-aviso';
+      return '<div class="' + classe + '" style="margin:0 0 14px">' + U.esc(a.texto) +
+        (a.botao
+          ? '<button class="btn ghost mini" onclick="App.tentarBaixarDeNovo()">Tentar de novo</button>'
+          : '') + '</div>';
     }
     if (!global.IADNuvem.conectado()) return '';
 
@@ -1124,9 +1143,9 @@
          calado ali já custou caro antes. Para os demais é só a ponte, que se
          explica sozinha na tela de Configuração. */
       if (A.ehAdmin()) {
-        avisoSincronizacao = 'Não consegui listar as empresas do servidor: ' +
+        definirAviso('Não consegui listar as empresas do servidor: ' +
           (e && e.message ? e.message : 'erro desconhecido') +
-          ' — a troca de empresa fica só com a sua.';
+          ' — a troca de empresa fica só com a sua.');
         render();
       }
     });
@@ -1211,17 +1230,59 @@
 
       S.marcarNaFila(true);
       Store.semSincronizar(function () { Store.substituir(fila.estado); });
-      return N.empurrar().then(function () {
+      return N.empurrar().then(function (r) {
         return S.limparFila().then(function () {
-          avisoSincronizacao = 'Subi o que tinha ficado da sua última sessão' +
-            (dia ? ' (' + dia + ')' : '') + '. Nada se perdeu.';
+          /* ---------- SÓ FALA SE ALGUMA COISA SUBIU ----------
+
+             A faixa aparecia em TODA entrada, dizendo "subi o que tinha
+             ficado da sua última sessão — nada se perdeu", numa carteira que
+             estava inteira no servidor. O motivo é que a cópia de emergência
+             é gravada no momento do logout, e o arranque seguinte a encontra
+             e a empurra. O empurrão não manda linha nenhuma — não há o que
+             mandar — e a faixa saía do mesmo jeito.
+
+             Anunciar como evento o que acontece todo dia é a receita de como
+             se aprende a não ler um aviso. Era o mesmo defeito da v251, em
+             outro lugar: lá a cópia era gravada à toa, aqui ela é anunciada à
+             toa.
+
+             `enviados` é o número de linhas que o servidor aceitou. Zero quer
+             dizer que não havia nada para trás — então não há o que contar. */
+          const subiram = (r && Number(r.enviados)) || 0;
+
+          /* ---------- E O SUCESSO NÃO FALA ----------
+
+             Mesmo com algo tendo subido de verdade, não há faixa.
+
+             A lição que criou esta fila foi sobre FALHA silenciosa — as
+             dezessete oportunidades que sumiram sem ninguém ser avisado.
+             Sucesso silencioso é outra coisa: a cópia existe justamente para
+             o app resolver isto sozinho, e anunciar que resolveu é o app
+             aplaudindo a si mesmo numa faixa laranja no alto da tela.
+
+             O que a pessoa perde se nós calarmos aqui: nada. O trabalho está
+             no servidor, que é onde ela o queria. O que ela perde se
+             falarmos todo dia: a capacidade de levar a sério a próxima faixa
+             — e a próxima pode ser a que importa.
+
+             A falha, logo abaixo, continua gritando. É a assimetria certa. */
+          if (subiram > 0) console.info('IAD: subi ' + subiram + ' registro(s) da sessão anterior.');
+          /* O alarme da tentativa anterior sai daqui. Faixa que sobrevive à
+             causa é pior do que faixa nenhuma: ela acusa um problema que já
+             foi resolvido, e quem a lê ou corre atrás do que não existe ou
+             aprende a não ler. É a mesma doença que esta versão veio tratar,
+             um passo adiante. */
+          definirAviso('');
           render();
         });
       }, function (e) {
-        avisoSincronizacao = 'Há trabalho seu que ainda não chegou ao servidor' +
+        /* A falha continua sendo faixa de alerta, e com botão: aqui repetir
+           resolve alguma coisa. */
+        definirAviso('Há trabalho seu que ainda não chegou ao servidor' +
           (dia ? ', da sessão de ' + dia : '') + ': ' +
           ((e && e.message) || 'erro desconhecido') +
-          ' — está guardado neste aparelho e o app continua tentando sozinho.';
+          ' — está guardado neste aparelho e o app continua tentando sozinho.',
+          { botao: true });
         render();
       });
     }, function () {});
@@ -1242,7 +1303,7 @@
     const N = global.IADNuvem;
     if (!N.conectado() || !A.atual()) return Promise.resolve();
     baixando = true;
-    avisoSincronizacao = '';
+    definirAviso('');
     espelharEmpresaDoServidor();
     return resgatarFilaPendente().then(function () { return N.puxar(); }).then(function () {
       semServidor = '';
@@ -5398,17 +5459,18 @@
     },
 
     tentarBaixarDeNovo: function () {
-      avisoSincronizacao = 'Baixando de novo…';
+      definirAviso('Baixando de novo…', { tom: 'ok' });
       render();
       global.IADNuvem.puxar().then(function () {
-        avisoSincronizacao = '';
+        definirAviso('');
         render();
       }, function (e) {
-        avisoSincronizacao = (e && e.vazioSobreCheio)
+        definirAviso((e && e.vazioSobreCheio)
           ? e.message + ' ' + conselhoDoVazio(e)
           : 'Ainda não consegui trazer os dados: ' +
             (e && e.message ? e.message : 'erro desconhecido') +
-            ' — o que está na tela é a última cópia baixada neste aparelho.';
+            ' — o que está na tela é a última cópia baixada neste aparelho.',
+          { botao: true });
         render();
       });
     },
@@ -5497,7 +5559,7 @@
           : '') +
         'Ela volta para este aparelho. Para ficar no servidor também, sincronize depois.')) return;
       if (Store.restaurarCopiaDeSeguranca()) {
-        avisoSincronizacao = '';
+        definirAviso('');
         render();
         alert('Cópia restaurada. Confira a carteira e, se estiver certa, sincronize para mandá-la ao servidor.');
       } else {
@@ -9790,7 +9852,7 @@
     if (!op || !D || !Q) return;
 
     const conta = op.contaId ? Store.conta(op.contaId) : null;
-    avisoSincronizacao = '';
+    definirAviso('');
     /* O balão de progresso só nasce quando a IA é chamada. A leitura dos
        arquivos acontece antes dele e pode demorar num .xlsx grande, então
        esta linha é o que impede a tela de parecer travada no intervalo. */
