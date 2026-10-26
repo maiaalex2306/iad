@@ -129,8 +129,10 @@
       campo('ac-login', naNuvem ? 'E-mail' : 'Login ou e-mail', 'text', '', ' autocomplete="username"') +
       campo('ac-senha', 'Senha', 'password', '', ' autocomplete="current-password" onkeydown="if(event.key===\'Enter\')App.entrar()"') +
       '<button class="btn alt" style="width:100%;margin-top:6px" onclick="App.entrar()">Entrar</button>' +
-      '<p class="small muted" style="margin:16px 0 0">Primeiro acesso? ' +
-      '<a href="#" onclick="event.preventDefault();App.telaAcesso(\'cadastro\')">Criar meu acesso</a></p>' +
+      (naNuvem
+        ? '<p class="small muted" style="margin:16px 0 0">Primeiro acesso? Peça ao administrador o e-mail de convite para criar sua senha.</p>'
+        : '<p class="small muted" style="margin:16px 0 0">Primeiro acesso? ' +
+          '<a href="#" onclick="event.preventDefault();App.telaAcesso(\'cadastro\')">Criar meu acesso</a></p>') +
       /* Quem foi convidado e perdeu o link cai aqui: a conta já existe, então
          um convite novo é recusado, e sem este caminho não haveria nenhum. */
       (naNuvem ? '<p class="small muted" style="margin:6px 0 0">' +
