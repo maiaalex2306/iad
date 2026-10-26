@@ -10872,6 +10872,11 @@
      endereço de tela qualquer vira Hoje. */
   function abrirNoHoje() {
     const h = location.hash || '';
+    /* P0: credenciais de convite e recuperação usam #access_token=...
+       A normalização da rota acontecia ANTES de adotarCredencialDoEndereco().
+       location.replace() apagava o token, e a pessoa voltava ao login
+       sem nunca conseguir definir a senha. Não navegar até consumir o link. */
+    if (credencialNoEndereco()) return;
     if (/^#\/[a-z]+\/.+/.test(h)) return;       /* #/op/123, #/conta/456 */
     if (h === '#/hoje') return;
     /* `replace` e não `=`: trocar o hash normalmente empilharia a tela antiga
