@@ -118,6 +118,19 @@
     pedirNovoLink('Informe seu e-mail para receber um link de recuperação de senha.', '');
   }
 
+  /* Mostrar/ocultar cada entrada separadamente: o usuário pode conferir
+     visualmente a repetição sem depender do preenchimento automático. */
+  document.querySelectorAll('.revelar').forEach(function (botao) {
+    botao.addEventListener('click', function () {
+      var campo = document.getElementById(botao.getAttribute('data-input'));
+      if (!campo) return;
+      var revelar = campo.type === 'password';
+      campo.type = revelar ? 'text' : 'password';
+      botao.textContent = revelar ? 'Ocultar senha' : 'Mostrar senha';
+      botao.setAttribute('aria-pressed', revelar ? 'true' : 'false');
+    });
+  });
+
   frmNova.addEventListener('submit', async function (ev) {
     ev.preventDefault();
     if (!token) { pedirNovoLink('Sua autorização expirou. Solicite outro link.', 'error'); return; }
