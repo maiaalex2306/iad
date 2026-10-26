@@ -66,3 +66,22 @@ Depois faça o teste funcional com a conta da pessoa. O SQL Editor como administ
 - Este documento: procedimentos de diagnóstico e recuperação.
 
 **Não declare homologação 100% sem os testes de autenticação e RLS.**
+
+## Correção confirmada no código — links de senha descartados por redirecionamento
+
+**Causa:** a inicialização em `src/app.js` chamava `abrirNoHoje()` antes de `adotarCredencialDoEndereco()`. Quando o Supabase devolvia `#access_token=...&type=recovery`, o `location.replace(...#/hoje)` podia apagar o fragmento antes de o CRM adotar a sessão. A recuperação acabava na tela de login, onde a senha antiga continuava sendo exigida.
+
+**Correção na branch:** `abrirNoHoje()` não redireciona se `credencialNoEndereco()` detectar um token de recuperação/convite ou erro. A tela de senha especifica claramente a **nova senha** e sua repetição e usa `autocomplete="new-password"`.
+
+**Validação de rota:** simulação isolada com as funções reais do código: recuperação, convite, erro de link expirado, deep-link, pipeline e primeiro acesso foram verificados; não houve teste completo em navegador com o serviço real.
+
+**Procedimento após publicação da versão corrigida:**
+1. Conferir se o Supabase permite `https://maiaalex2306.github.io/iad/` como URL de redirecionamento em Authentication → URL Configuration.
+2. Confirmar que os arquivos efetivamente servidos contêm a correção (a branch do PR não representa deploy).
+3. Solicitar **novo** link de recuperação para a identidade já existente. Links anteriores podem ter sido consumidos ou expirado.
+4. Abrir o link no navegador, definir uma senha nova **não compartilhada**, digitando exatamente a mesma nos dois campos.
+5. Confirmar que a alteração foi salva; sair e entrar com a nova senha em sessão privada.
+6. Verificar como gestora a carteira da Bio Water Care e restrição de outros tenants.
+
+**Não** editar `auth.users` com SQL para definir senha, recriar a conta nem atribuir temporariamente papel de administrador.
+
