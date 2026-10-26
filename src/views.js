@@ -6223,16 +6223,15 @@
         '<td>' + esc(rotuloDoPapel(c.papel)) + '</td>' +
         '<td class="right" style="white-space:nowrap">' +
         '<button class="btn alt mini" onclick="App.enviarConvite(\'' + esc(c.email) + '\')"' +
-        ' data-ajuda-titulo="Enviar convite" data-ajuda="Manda o e-mail pelo servidor, com o link para a pessoa definir a senha. Se o envio automático ainda não estiver publicado, abre seu programa de e-mail com a mensagem pronta.">Enviar</button> ' +
-        '<button class="btn ghost mini" onclick="App.copiarConvite(\'' + esc(c.email) + '\')"' +
-        ' data-ajuda="Copia o texto do convite para colar no WhatsApp ou em outro lugar.">Copiar</button> ' +
+        ' data-ajuda-titulo="Reenviar convite" data-ajuda="Manda o e-mail pelo servidor, com link seguro de ativação e definição da senha.">Reenviar</button> ' +
+
         '<button class="btn ghost mini" onclick="App.cancelarConvite(\'' + esc(c.email) + '\')"' +
-        ' data-ajuda="Cancela o registro. A pessoa ainda poderá criar acesso, mas entrará sem empresa.">Cancelar</button></td></tr>';
+        ' data-ajuda="Cancela um convite ainda não aceito; não apaga usuários ou contas existentes.">Cancelar</button></td></tr>';
     }).join('');
     return '<h4 style="margin:18px 0 6px">Aguardando primeiro acesso</h4>' +
-      '<p class="tiny muted" style="margin:0 0 8px">Já registradas. Quando criarem o acesso com este e-mail, entram direto na empresa indicada. ' +
-      '<strong>Enviar</strong> manda o e-mail pelo servidor, com o link para a pessoa criar a senha dela. ' +
-      'Enquanto o envio automático não estiver publicado, o botão abre seu programa de e-mail com a mensagem pronta.</p>' +
+      '<p class="tiny muted" style="margin:0 0 8px">Convites aprovados pelo administrador. ' +
+      '<strong>Reenviar</strong> solicita outro link de ativação pelo servidor. ' +
+      'O usuário define a senha digitando-a duas vezes; não existe senha padrão.</p>' +
       tabela(['Pessoa', 'Empresa', 'Papel', ''], linhas, '');
   }
 
