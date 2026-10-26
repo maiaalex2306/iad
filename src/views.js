@@ -1975,6 +1975,8 @@
     ordem: 'saude',
     busca: '',
     conta: '',
+    uf: '',
+    municipio: '',
     segmento: '',
     etapa: '',
     produto: '',
@@ -1997,7 +1999,7 @@
 
   /* Quantos filtros da gaveta estão ligados. É o número no botão — sem ele, a
      pessoa filtra, esquece, e depois jura que o pipeline sumiu. */
-  const DA_GAVETA = ['busca', 'conta', 'segmento', 'etapa', 'produto', 'origem', 'sdr',
+  const DA_GAVETA = ['busca', 'conta', 'uf', 'municipio', 'segmento', 'etapa', 'produto', 'origem', 'sdr',
     'semTarefa', 'semCompromisso', 'esfriando', 'gateAberto',
     'iadMin', 'iadMax', 'valorMin', 'valorMax', 'semEvidenciaDias', 'previsaoDe', 'previsaoAte'];
 
@@ -2040,6 +2042,11 @@
     if (f.status === 'perdidas' && (!op.desfecho || op.desfecho.tipo === 'ganho')) return false;
 
     if (f.conta && op.contaId !== f.conta) return false;
+    /* Localização é atributo da CONTA e não do vendedor/negócio. Sem conta
+       ou sem município cadastrado, filtro regional não deve dar falso positivo. */
+    const L = global.IADLocalidades;
+    if (f.uf && (!conta || L.sigla(conta.uf) !== f.uf)) return false;
+    if (f.municipio && (!conta || L.normalizar(conta.cidade) !== L.normalizar(f.municipio))) return false;
     if (f.segmento && E.segmentoDe(op) !== f.segmento) return false;
     if (f.etapa && op.etapa !== f.etapa) return false;
     if (f.origem && (op.origem || 'Manual') !== f.origem) return false;
@@ -2161,6 +2168,8 @@
     }
     if (f.busca) c.push(chip('“' + f.busca + '”', 'busca'));
     if (f.conta) { const x = Store.conta(f.conta); c.push(chip(x ? x.nome : 'Empresa', 'conta')); }
+    if (f.uf) c.push(chip('UF ' + f.uf, 'uf'));
+    if (f.municipio) c.push(chip('Município ' + f.municipio, 'municipio'));
     if (f.segmento) c.push(chip(f.segmento, 'segmento'));
     if (f.etapa) c.push(chip('Etapa ' + f.etapa, 'etapa'));
     if (f.produto) { const p = Store.produto(f.produto); c.push(chip(p ? p.nome : 'Produto', 'produto')); }
@@ -2266,6 +2275,22 @@
     const sdrs = {};
     est.oportunidades.forEach(function (o) { if (o.sdr) sdrs[o.sdr] = true; });
 
+    /* Busca por digitação, com sugestões acessíveis e estado persistido
+       enquanto a gaveta está aberta. A lista oficial vem do IBGE por UF. */
+    const campoGeografico = function (tipo, rotulo, valor, dica, bloqueado) {
+      const texto = tipo === 'uf' ? (global.IADLocalidades.nomeUF(valor) || '') : valor;
+      return '<label class="campo mini iad-geo"><span>' + esc(rotulo) + '</span>' +
+        '<input type="search" id="iad-geo-' + tipo + '" autocomplete="off"' +
+        ' role="combobox" aria-autocomplete="list" aria-expanded="false"' +
+        ' aria-controls="iad-geo-' + tipo + '-opcoes"' +
+        ' placeholder="' + esc(dica) + '" value="' + esc(texto) + '"' +
+        (bloqueado ? ' disabled' : '') +
+        ' onfocus="App.pipelineLocalidadeDigitar(\'' + tipo + '\',this)"' +
+        ' oninput="App.pipelineLocalidadeDigitar(\'' + tipo + '\',this)"' +
+        ' onkeydown="App.pipelineLocalidadeTecla(event,\'' + tipo + '\',this)">' +
+        '<div class="iad-geo-opcoes" id="iad-geo-' + tipo +
+        '-opcoes" role="listbox" hidden></div></label>';
+    };
     const marca = function (id, rotulo, ajuda) {
       return '<label class="item-multi"><input type="checkbox"' + (f[id] ? ' checked' : '') +
         ' onchange="App.pipelineCampo(\'' + id + '\', this.checked)"> <span>' + esc(rotulo) +
@@ -2296,6 +2321,9 @@
       '<div class="secao-form"><span>Onde</span></div>' +
       seletor('Empresa', 'App.pipelineCampo(\'conta\', this.value)',
         [{ valor: '', rotulo: 'Todas' }].concat(contas.map(function (c) { return { valor: c.id, rotulo: c.nome }; })), f.conta) +
+      campoGeografico('uf', 'Estado / UF', f.uf, 'Digite a sigla ou o estado', false) +
+      campoGeografico('municipio', 'Município', f.municipio, f.uf ? 'Digite as primeiras letras' : 'Selecione primeiro o estado', !f.uf) +
+      '<p class="tiny muted" id="iad-geo-info">Base IBGE; municípios carregados conforme a UF. Acentos são opcionais.</p>' +
       seletor('Segmento', 'App.pipelineCampo(\'segmento\', this.value)',
         [{ valor: '', rotulo: 'Todos' }].concat(segmentos.map(function (x) { return { valor: x, rotulo: x }; })), f.segmento) +
       seletor('Etapa CRM', 'App.pipelineCampo(\'etapa\', this.value)',
