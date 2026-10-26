@@ -134,7 +134,7 @@
       /* Quem foi convidado e perdeu o link cai aqui: a conta já existe, então
          um convite novo é recusado, e sem este caminho não haveria nenhum. */
       (naNuvem ? '<p class="small muted" style="margin:6px 0 0">' +
-        '<a href="#" onclick="event.preventDefault();App.recuperarSenha()">Esqueci minha senha</a></p>' : '');
+        '<a href="/recuperar.html">Esqueci minha senha</a></p>' : '');
   }
 
   function telaCadastro() {
