@@ -5,7 +5,8 @@
    metade. */
 const CACHE = 'iad-crm-v265';
 const ARQUIVOS = [
-  './', './index.html', './manifest.webmanifest',
+  './', './index.html', './recuperar.html', './manifest.webmanifest',
+  './src/recuperacao.js',
   './assets/styles.css',
   './src/config.js',
   './src/playbook.js', './src/store.js', './src/auth.js', './src/engine.js',
