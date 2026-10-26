@@ -17,15 +17,17 @@ as $$
 declare
   c public.convites%rowtype;
   primeira_instalacao boolean;
+  convite_encontrado boolean;
 begin
   select * into c from public.convites
   where lower(email) = lower(new.email)
   for update;
+  convite_encontrado := found;
 
   select not exists (select 1 from public.tenants)
     into primeira_instalacao;
 
-  if not found and not primeira_instalacao then
+  if not convite_encontrado and not primeira_instalacao then
     -- Não autorizar cadastro aberto com criação silenciosa de perfil.
     raise exception 'Cadastro permitido apenas por convite do administrador.'
       using errcode = '42501';
