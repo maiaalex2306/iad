@@ -9,7 +9,7 @@
   var h = new URLSearchParams((location.hash || '').slice(1));
   var q = new URLSearchParams((location.search || '').slice(1));
   var tipo = h.get('type') || q.get('type');
-  var recuperacao = tipo === 'recovery' &&
+  var recuperacao = (tipo === 'recovery' || tipo === 'invite') &&
     (h.has('access_token') || h.has('token_hash') || q.has('token_hash') || q.has('code'));
   var erro = h.has('error') || h.has('error_code') || q.has('error') || q.has('error_code');
   if (recuperacao || erro) {
