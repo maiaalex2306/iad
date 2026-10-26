@@ -76,7 +76,7 @@ Depois faça o teste funcional com a conta da pessoa. O SQL Editor como administ
 **Validação de rota:** simulação isolada com as funções reais do código: recuperação, convite, erro de link expirado, deep-link, pipeline e primeiro acesso foram verificados; não houve teste completo em navegador com o serviço real.
 
 **Procedimento após publicação da versão corrigida:**
-1. Conferir se o Supabase permite `https://maiaalex2306.github.io/iad/` como URL de redirecionamento em Authentication → URL Configuration.
+1. Conferir se o Supabase permite `https://www.iadcrm.com.br/` como URL de redirecionamento em Authentication → URL Configuration. Essa é a URL oficial do GitHub Pages configurada no repositório, publicado a partir de `claude/decisoes-estagios-vendas-eckjo0` (root).
 2. Confirmar que os arquivos efetivamente servidos contêm a correção (a branch do PR não representa deploy).
 3. Solicitar **novo** link de recuperação para a identidade já existente. Links anteriores podem ter sido consumidos ou expirado.
 4. Abrir o link no navegador, definir uma senha nova **não compartilhada**, digitando exatamente a mesma nos dois campos.
