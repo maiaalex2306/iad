@@ -92,7 +92,7 @@
     var accessToken = hash.get('access_token');
     var tokenHash = query.get('token_hash') || hash.get('token_hash');
 
-    if (tipo === 'recovery' && (accessToken || tokenHash)) {
+    if ((tipo === 'recovery' || tipo === 'invite') && (accessToken || tokenHash)) {
       try {
         if (accessToken) {
           token = accessToken;
