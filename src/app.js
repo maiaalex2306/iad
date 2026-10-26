@@ -6346,11 +6346,11 @@
            Nos dois casos o caminho manual continua servindo, que é o que
            importa para quem está com o convite na mão. */
         if (!e.status || e.status === 404) {
-          alert('Não consegui falar com o envio automático de e-mail. ' +
-            'A função "convite" ' + SEM_FUNCAO + '\n\n' +
-            'O passo a passo está em nuvem/EMAIL.md.\n\n' +
-            'Abrindo seu programa de e-mail com a mensagem pronta.');
-          return App.enviarPeloProgramaDeEmail(email);
+          alert('O envio automático não está disponível. A função "convite" ' +
+            SEM_FUNCAO + '\n\n' +
+            'O cadastro permanece pendente; configure a função e clique em Enviar novamente. ' +
+            'Não substitua o link seguro por um e-mail manual.');
+          return;
         }
         alert('Não consegui enviar: ' + e.message);
       });
