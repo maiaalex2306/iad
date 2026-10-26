@@ -123,11 +123,77 @@ Deno.serve(async (req: Request) => {
   const email = String(pedido.email || '').trim().toLowerCase();
   if (!emailValido(email)) return responder({ erro: 'E-mail inválido.' }, 400);
 
+  /* Uma única operação administrativa: gravar reserva e convidar.
+     O navegador NÃO grava em convites diretamente nem conhece senha temporária.
+     Convite pendente pode ser reenviado com apenas o e-mail (retomada idempotente).
+     Novos cadastros exigem nome, empresa e papel válidos. */
+  const nome = String(pedido.nome || '').trim();
+  const whatsapp = String(pedido.whatsapp || '').trim();
+  const tenantId = String(pedido.tenant_id || '').trim();
+  const papel = String(pedido.papel || 'usuario').trim();
+  const papeis = ['usuario', 'gestor', 'admin'];
+  if (!papeis.includes(papel)) return responder({ erro: 'Papel inválido.' }, 400);
+  if (nome.length > 160 || whatsapp.length > 45) {
+    return responder({ erro: 'Nome ou WhatsApp excede o tamanho permitido.' }, 400);
+  }
+  const cab = {
+    apikey: SERVICE,
+    authorization: 'Bearer ' + SERVICE
+  };
+  const respostaJson = async (r: Response): Promise<Record<string, unknown>> => {
+    return await r.json().catch(() => ({}));
+  };
+
+  if (tenantId) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenantId) ||
+        nome.length < 2) {
+      return responder({ erro: 'Informe nome e empresa válidos.' }, 400);
+    }
+    const tr = await fetch(
+      URL_SUPABASE + '/rest/v1/tenants?id=eq.' + encodeURIComponent(tenantId) + '&select=id,ativo',
+      { headers: cab }
+    ).catch(() => null);
+    if (!tr || !tr.ok) return responder({ erro: 'Não foi possível verificar a empresa.' }, 502);
+    const tenants = await tr.json().catch(() => []);
+    if (!Array.isArray(tenants) || tenants.length !== 1 || tenants[0].ativo === false) {
+      return responder({ erro: 'Empresa inexistente ou bloqueada.' }, 400);
+    }
+    const reserva = await fetch(URL_SUPABASE + '/rest/v1/convites?on_conflict=email', {
+      method: 'POST',
+      headers: {
+        ...cab,
+        'content-type': 'application/json',
+        Prefer: 'resolution=merge-duplicates,return=representation'
+      },
+      body: JSON.stringify({
+        email, nome, whatsapp, tenant_id: tenantId,
+        papel, criado_por: id
+      })
+    }).catch(() => null);
+    if (!reserva || !reserva.ok) {
+      const detalhe = reserva ? await respostaJson(reserva) : {};
+      return responder({ erro: 'Não foi possível registrar o convite: ' +
+        String(detalhe.message || detalhe.error || 'verifique as migrações do banco.') }, 502);
+    }
+  } else {
+    /* Reenvio só de um convite já aprovado pelo administrador. */
+    const r = await fetch(
+      URL_SUPABASE + '/rest/v1/convites?email=eq.' +
+        encodeURIComponent(email) + '&select=email',
+      { headers: cab }
+    ).catch(() => null);
+    if (!r || !r.ok) return responder({ erro: 'Falha ao consultar o convite existente.' }, 502);
+    const linhas = await r.json().catch(() => []);
+    if (!Array.isArray(linhas) || linhas.length !== 1) {
+      return responder({ erro: 'Não há convite pendente para esse e-mail. Use a recuperação de senha se a conta já existir.' }, 404);
+    }
+  }
+
   /* Para onde a pessoa volta depois de definir a senha. Só endereços http(s),
      e sem nada além do endereço — um redirect_to livre viraria um jeito de
      levar o convidado para fora. */
-  const destinoBruto = String(pedido.destino || '');
-  const destino = /^https?:\/\/[^\s"'<>]+$/.test(destinoBruto) ? destinoBruto : '';
+  const origemPermitida = Deno.env.get('IAD_URL_SITE') || 'https://www.iadcrm.com.br';
+  const destino = origemPermitida.replace(/\/+$/, '') + '/';
 
   /* O convite do GoTrue cria a conta e manda o e-mail com o link de definição
      de senha. O gatilho ao_criar_usuario aplica a empresa e o papel que já
