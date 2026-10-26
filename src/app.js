@@ -1423,8 +1423,10 @@
     const faltaNome = !nome;
     const campos = [];
     if (faltaNome) campos.push({ id: 'nome', rotulo: 'Seu nome', tipo: 'text' });
-    campos.push({ id: 'nova', rotulo: 'Sua senha', tipo: 'password', placeholder: 'mínimo 8 caracteres' });
-    campos.push({ id: 'confere', rotulo: 'Repita a senha', tipo: 'password' });
+    campos.push({ id: 'nova', rotulo: 'Nova senha (não precisa informar a antiga)',
+      tipo: 'password', placeholder: 'mínimo 8 caracteres', autocomplete: 'new-password' });
+    campos.push({ id: 'confere', rotulo: 'Repita exatamente a nova senha',
+      tipo: 'password', autocomplete: 'new-password' });
 
     U.formulario('Bem-vindo' + (nome ? ', ' + nome : '') + ' — escolha sua senha', campos, {}, function (d) {
       if (d.nova.length < 8) { alert('A senha precisa ter pelo menos 8 caracteres.'); pedirSenhaNova(nome); return; }
@@ -6283,10 +6285,10 @@
             perfisNuvem = null;
             pintarUsuariosNuvem(true);
             const empresa = empresas.find(function (t) { return t.id === d.tenantId; });
-            if (U.confirmar('Registrada em ' + ((empresa && empresa.nome) || 'sua empresa') + '.\n\n' +
-                'O sistema não envia e-mail — quem envia é você.\n\nAbrir seu e-mail com o convite pronto?')) {
-              App.enviarConvite(email.toLowerCase());
-            }
+            /* O registro em convites não cria senha nem comprova acesso.
+               Enviar o convite do GoTrue imediatamente evita o estado
+               "cadastrada mas sem saber como entrar". */
+            App.enviarConvite(email.toLowerCase());
           })
           .catch(function (e) { alert('Não foi possível registrar: ' + e.message); });
       });
@@ -10872,6 +10874,11 @@
      endereço de tela qualquer vira Hoje. */
   function abrirNoHoje() {
     const h = location.hash || '';
+    /* P0: credenciais de convite e recuperação usam #access_token=...
+       A normalização da rota acontecia ANTES de adotarCredencialDoEndereco().
+       location.replace() apagava o token, e a pessoa voltava ao login
+       sem nunca conseguir definir a senha. Não navegar até consumir o link. */
+    if (credencialNoEndereco()) return;
     if (/^#\/[a-z]+\/.+/.test(h)) return;       /* #/op/123, #/conta/456 */
     if (h === '#/hoje') return;
     /* `replace` e não `=`: trocar o hash normalmente empilharia a tela antiga
