@@ -5959,7 +5959,14 @@
     },
 
     /* ---------- acesso ---------- */
-    telaAcesso: function (tela) { V.definirTelaAcesso(tela, null, ''); render(); },
+    telaAcesso: function (tela) {
+      if (global.IADNuvem.mandaNoAcesso() && tela === 'cadastro') {
+        V.definirTelaAcesso('login', null, 'Novos usuários são cadastrados somente pelo administrador. Peça seu convite de acesso.');
+      } else {
+        V.definirTelaAcesso(tela, null, '');
+      }
+      render();
+    },
 
     /* Trocar a própria senha. Existe porque a senha inicial de um usuário é
        entregue por outra pessoa — e senha que passou pela mão de alguém não é
@@ -5971,8 +5978,8 @@
         return;
       }
       U.formulario('Trocar minha senha', [
-        { id: 'nova', rotulo: 'Nova senha', tipo: 'password', placeholder: 'mínimo 8 caracteres' },
-        { id: 'confere', rotulo: 'Repita a nova senha', tipo: 'password' }
+        { id: 'nova', rotulo: 'Nova senha', tipo: 'password', placeholder: 'mínimo 8 caracteres', autocomplete: 'new-password' },
+        { id: 'confere', rotulo: 'Repita exatamente a nova senha', tipo: 'password', autocomplete: 'new-password' }
       ], {}, function (d) {
         if (d.nova.length < 8) { alert('A senha precisa ter pelo menos 8 caracteres.'); return; }
         if (d.nova !== d.confere) { alert('As duas senhas não são iguais. Tente de novo.'); return; }
@@ -6033,6 +6040,13 @@
     },
 
     criarAcesso: function () {
+      /* Supabase com cadastro por convite: impedir a antiga chamada pública a /signup
+         mesmo se alguém acionar a função pela console do navegador. */
+      if (global.IADNuvem.mandaNoAcesso()) {
+        V.definirTelaAcesso('login', null, 'Cadastro exclusivo do administrador. Solicite um convite.');
+        render();
+        return;
+      }
       const v = function (id) { return (document.getElementById(id) || {}).value || ''; };
       const nome = v('ac-nome').trim(), email = v('ac-email').trim();
       const senha1 = v('ac-senha1'), senha2 = v('ac-senha2');
@@ -6271,6 +6285,7 @@
       U.formulario('Registrar pessoa', [
         { id: 'nome', rotulo: 'Nome da pessoa', tipo: 'text', placeholder: 'como ela aparece na lista' },
         { id: 'email', rotulo: 'E-mail que ela vai usar', tipo: 'email' },
+        { id: 'whatsapp', rotulo: 'WhatsApp (opcional)', tipo: 'text', placeholder: '(00) 00000-0000' },
         { id: 'tenantId', rotulo: 'Empresa', tipo: 'select',
           opcoes: empresas.map(function (t) { return { valor: t.id, rotulo: t.nome }; }) },
         { id: 'papel', rotulo: 'Papel', tipo: 'select', opcoes: [
@@ -6280,17 +6295,25 @@
       ], {}, function (d) {
         const email = (d.email || '').trim();
         if (!email || email.indexOf('@') === -1) { alert('Informe um e-mail válido.'); return; }
-        global.IADNuvem.convidar(email, d.tenantId, d.papel, d.nome)
-          .then(function () {
-            perfisNuvem = null;
-            pintarUsuariosNuvem(true);
-            const empresa = empresas.find(function (t) { return t.id === d.tenantId; });
-            /* O registro em convites não cria senha nem comprova acesso.
-               Enviar o convite do GoTrue imediatamente evita o estado
-               "cadastrada mas sem saber como entrar". */
-            App.enviarConvite(email.toLowerCase());
-          })
-          .catch(function (e) { alert('Não foi possível registrar: ' + e.message); });
+        if (!d.nome || d.nome.trim().length < 2) { alert('Informe o nome completo.'); return; }
+        /* O servidor valida novamente papel, empresa e administrador; a interface
+           apenas coleta. Uma chamada registra o convite e dispara o e-mail. */
+        global.IADNuvem.chamarFuncao('convite', {
+          email: email.toLowerCase(),
+          nome: d.nome.trim(),
+          whatsapp: (d.whatsapp || '').trim(),
+          tenant_id: d.tenantId,
+          papel: d.papel
+        }).then(function () {
+          perfisNuvem = null;
+          pintarUsuariosNuvem(true);
+          alert('Usuário cadastrado e convite solicitado para ' + email +
+            '.\n\nO link recebido permite criar uma senha nova, digitando-a duas vezes. Não há senha padrão.');
+        }).catch(function (e) {
+          alert('Cadastro não concluído: ' + e.message +
+            '\n\nO convite pode ter ficado pendente. Confira a lista antes de repetir.');
+          pintarUsuariosNuvem(true);
+        });
       });
     },
 
@@ -6302,7 +6325,10 @@
        dele. Ver nuvem/EMAIL.md. */
     enviarConvite: function (email) {
       const N = global.IADNuvem;
-      if (!N.conectado()) return App.enviarPeloProgramaDeEmail(email);
+      if (!N.conectado()) {
+        alert('Entre como administrador para reenviar convites.');
+        return;
+      }
 
       N.chamarFuncao('convite', {
         email: email,
