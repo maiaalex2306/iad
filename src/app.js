@@ -6283,10 +6283,10 @@
             perfisNuvem = null;
             pintarUsuariosNuvem(true);
             const empresa = empresas.find(function (t) { return t.id === d.tenantId; });
-            if (U.confirmar('Registrada em ' + ((empresa && empresa.nome) || 'sua empresa') + '.\n\n' +
-                'O sistema não envia e-mail — quem envia é você.\n\nAbrir seu e-mail com o convite pronto?')) {
-              App.enviarConvite(email.toLowerCase());
-            }
+            /* O registro em convites não cria senha nem comprova acesso.
+               Enviar o convite do GoTrue imediatamente evita o estado
+               "cadastrada mas sem saber como entrar". */
+            App.enviarConvite(email.toLowerCase());
           })
           .catch(function (e) { alert('Não foi possível registrar: ' + e.message); });
       });
