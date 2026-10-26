@@ -3950,8 +3950,9 @@
       if (!area || !L) return;
       const uf = f.uf;
       const todas = tipo === 'uf' ? L.buscarEstados(input.value) :
-        L.buscar(L.lista(uf).concat(L.fallback(uf,Store.dados().contas)),input.value,14)
-          .map(function (nome) { return { nome:nome, sigla:nome }; });
+        L.buscar(Array.from(new Set(
+          L.lista(uf).concat(L.fallback(uf,Store.dados().contas))
+        )),input.value,14).map(function (nome) { return { nome:nome, sigla:nome }; });
       /* Só município selecionado pode ser usado para filtrar, não texto livre
          fora da lista — evita zero resultados por grafia incorreta. */
       area.textContent = '';
