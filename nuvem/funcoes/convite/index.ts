@@ -89,7 +89,7 @@ async function ehAdministrador(id: string): Promise<boolean> {
     );
     if (!r.ok) return false;
     const linhas = await r.json();
-    return Array.isArray(linhas) && linhas[0] && linhas[0].papel === 'admin';
+    return Array.isArray(linhas) && linhas[0] && linhas[0].papel === 'admin' && linhas[0].ativo !== false;
   } catch {
     return false;
   }
