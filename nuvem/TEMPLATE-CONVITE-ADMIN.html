@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="pt-BR">
+  <body style="font-family:Arial,Helvetica,sans-serif;color:#26202f;line-height:1.55">
+    <div style="max-width:600px;margin:auto;padding:26px;border:1px solid #e5deea;border-radius:12px">
+      <h2 style="color:#491277">Seu acesso ao IaD CRM foi cadastrado</h2>
+      <p>Olá, {{ .Data.nome }}!</p>
+      <p>O administrador autorizou seu acesso ao <strong>IaD CRM</strong>.</p>
+      <p><strong>Empresa:</strong> {{ .Data.empresa }}<br>
+         <strong>Perfil de acesso:</strong> {{ .Data.papel }}<br>
+         <strong>E-mail:</strong> {{ .Email }}</p>
+      <p>Para ativar sua conta, clique no link e defina sua senha. Digite a nova senha duas vezes para confirmar. Você não precisa saber nem informar uma senha temporária.</p>
+      <p><a href="{{ .ConfirmationURL }}" style="display:inline-block;background:#491277;color:white;text-decoration:none;padding:12px 18px;border-radius:7px">Definir minha senha</a></p>
+      <p style="color:#716779;font-size:13px">Por segurança, o link é individual e tem validade limitada. Se ele expirar, solicite novo link ao administrador. Se você não reconhece este cadastro, ignore esta mensagem.</p>
+    </div>
+  </body>
+</html>
