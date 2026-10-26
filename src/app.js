@@ -3940,6 +3940,125 @@
       App._buscaPipeline = setTimeout(function () { repintarPipeline(); }, 220);
     },
 
+    /* Sugestões IBGE: não redesenhar a gaveta enquanto a pessoa digita.
+       A filtragem só muda ao escolher uma sugestão completa, evitando recortes
+       involuntários por um nome parcialmente digitado. */
+    pipelineLocalidadeDigitar: function (tipo, input) {
+      const L = global.IADLocalidades;
+      const f = V.pipelineEstado();
+      const area = document.getElementById('iad-geo-' + tipo + '-opcoes');
+      if (!area || !L) return;
+      const uf = f.uf;
+      const todas = tipo === 'uf' ? L.buscarEstados(input.value) :
+        L.buscar(Array.from(new Set(
+          L.lista(uf).concat(L.fallback(uf,Store.dados().contas))
+        )),input.value,14).map(function (nome) { return { nome:nome, sigla:nome }; });
+      /* Só município selecionado pode ser usado para filtrar, não texto livre
+         fora da lista — evita zero resultados por grafia incorreta. */
+      area.textContent = '';
+      const inicial = document.createElement('button');
+      inicial.type = 'button';
+      inicial.className = 'iad-geo-item';
+      inicial.textContent = tipo === 'uf' ? 'Todos os estados' : 'Todos os municípios';
+      inicial.addEventListener('click', function () { App.pipelineLocalidadeEscolher(tipo,''); });
+      area.appendChild(inicial);
+      todas.forEach(function (item) {
+        const botao = document.createElement('button');
+        botao.type = 'button';
+        botao.className = 'iad-geo-item';
+        botao.textContent = tipo === 'uf' ? item.nome + ' (' + item.sigla + ')' : item.nome;
+        botao.addEventListener('click', function () {
+          App.pipelineLocalidadeEscolher(tipo, tipo === 'uf' ? item.sigla : item.nome);
+        });
+        area.appendChild(botao);
+      });
+      if (tipo === 'municipio' && !uf) return;
+      if (!todas.length && input.value.trim()) {
+        const vazio = document.createElement('span');
+        vazio.className = 'iad-geo-vazio';
+        vazio.textContent = 'Nenhuma sugestão encontrada.';
+        area.appendChild(vazio);
+      }
+      area.hidden = false;
+      input.setAttribute('aria-expanded','true');
+    },
+
+    pipelineLocalidadeTecla: function (evento, tipo, input) {
+      const caixa = document.getElementById('iad-geo-' + tipo + '-opcoes');
+      if (!caixa || caixa.hidden) return;
+      const itens = Array.from(caixa.querySelectorAll('button'));
+      if (evento.key === 'Escape') {
+        caixa.hidden = true;
+        input.setAttribute('aria-expanded','false');
+        input.value = tipo === 'uf'
+          ? global.IADLocalidades.nomeUF(V.pipelineEstado().uf)
+          : V.pipelineEstado().municipio;
+      } else if (evento.key === 'ArrowDown') {
+        evento.preventDefault();
+        (itens[0] || input).focus();
+      } else if (evento.key === 'Enter') {
+        evento.preventDefault();
+        if (itens.length) itens[input.value.trim() ? 1 : 0]?.click();
+      }
+    },
+
+    pipelineLocalidadeEscolher: function (tipo, valor) {
+      const L = global.IADLocalidades;
+      if (!L) return;
+      const field = document.getElementById('iad-geo-' + tipo);
+      const opcoes = document.getElementById('iad-geo-' + tipo + '-opcoes');
+      if (opcoes) opcoes.hidden = true;
+      if (field) field.setAttribute('aria-expanded','false');
+
+      if (tipo === 'uf') {
+        const uf = valor ? L.sigla(valor) : '';
+        V.pipelineFiltrar({uf:uf,municipio:''});
+        const cidade = document.getElementById('iad-geo-municipio');
+        if (field) field.value = L.nomeUF(uf);
+        if (cidade) {
+          cidade.disabled = !uf;
+          cidade.value = '';
+          cidade.placeholder = uf ? 'Carregando municípios…' : 'Selecione primeiro o estado';
+          cidade.setAttribute('aria-expanded','false');
+        }
+        const lista = document.getElementById('iad-geo-municipio-opcoes');
+        if (lista) { lista.hidden = true; lista.textContent = ''; }
+        if (uf) App.pipelineLocalidadeCarregar();
+        else {
+          const info = document.getElementById('iad-geo-info');
+          if (info) info.textContent = 'Selecione uma UF para pesquisar os municípios.';
+        }
+      } else {
+        V.pipelineFiltrar({municipio:valor});
+        if (field) field.value = valor;
+      }
+      repintarPipeline();
+    },
+
+    pipelineLocalidadeCarregar: function () {
+      const L = global.IADLocalidades;
+      const uf = V.pipelineEstado().uf;
+      const info = document.getElementById('iad-geo-info');
+      const campo = document.getElementById('iad-geo-municipio');
+      if (!L || !uf || !campo) return;
+      if (info) info.textContent = 'Consultando municípios de ' + L.nomeUF(uf) + ' no IBGE…';
+      L.municipios(uf).then(function (nomes) {
+        if (V.pipelineEstado().uf !== uf || !campo.isConnected) return;
+        campo.disabled = false;
+        campo.placeholder = 'Digite as primeiras letras';
+        if (info) info.textContent = nomes.length + ' municípios disponíveis (IBGE). Busque por nome, com ou sem acento.';
+        if (document.activeElement === campo) App.pipelineLocalidadeDigitar('municipio',campo);
+      }).catch(function () {
+        if (V.pipelineEstado().uf !== uf || !campo.isConnected) return;
+        const conhecidas = L.fallback(uf,Store.dados().contas);
+        campo.disabled = conhecidas.length === 0;
+        campo.placeholder = conhecidas.length ? 'Buscar cidade da carteira' : 'IBGE indisponível';
+        if (info) info.textContent = conhecidas.length
+          ? 'IBGE indisponível. Mostrando ' + conhecidas.length + ' cidades já cadastradas na carteira.'
+          : 'Não foi possível carregar os municípios do IBGE. Verifique a conexão e selecione novamente o estado.';
+      });
+    },
+
     pipelineLimpar: function (alvo) {
       if (alvo === 'tudo') {
         V.pipelineLimparTudo();
@@ -3949,6 +4068,7 @@
       else if (alvo === 'usuarioAdmin') A.definirFiltros({ usuario: 'todos' });
       else if (alvo === 'responsavel') V.pipelineFiltrar({ responsavel: 'todos' });
       else if (alvo === 'status') V.pipelineFiltrar({ status: 'abertas' });
+      else if (alvo === 'uf') V.pipelineFiltrar({uf:'',municipio:''});
       else if (alvo === 'iad') V.pipelineFiltrar({ iadMin: '', iadMax: '' });
       else if (alvo === 'valor') V.pipelineFiltrar({ valorMin: '', valorMax: '' });
       else if (alvo === 'previsao') V.pipelineFiltrar({ previsaoDe: '', previsaoAte: '' });
@@ -3971,6 +4091,7 @@
       document.body.appendChild(dlg);
       dlg.addEventListener('close', function () { dlg.remove(); render(); });
       dlg.showModal();
+      if (V.pipelineEstado().uf) App.pipelineLocalidadeCarregar();
     },
 
     /* ---------- Tela de Tarefas ---------- */
