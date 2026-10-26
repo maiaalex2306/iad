@@ -6127,7 +6127,7 @@
            informações são diferentes: dá para estar liberada e sem empresa. */
         '<td>' + (bloqueado
           ? '<span class="pill warn">bloqueado</span>'
-          : (p.tenant_id ? '<span class="pill ok">ativo</span>' : '<span class="pill warn">sem empresa</span>')) + '</td>' +
+          : (p.tenant_id ? '<span class="pill ok" title="Perfil habilitado no banco. E-mail, senha e primeiro login não foram verificados nesta tela.">perfil habilitado</span><span class="tiny muted">ativação não verificada</span>' : '<span class="pill warn">sem empresa</span>')) + '</td>' +
         '<td class="right" style="white-space:nowrap">' +
         '<button class="btn ghost mini" onclick="App.editarPessoaNuvem(\'' + p.id + '\')"' +
         ' data-ajuda="Corrige o nome e o WhatsApp desta pessoa. Serve para quem entrou pelo convite e chegou sem nome.">Editar</button> ' +
