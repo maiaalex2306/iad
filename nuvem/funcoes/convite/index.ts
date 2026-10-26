@@ -84,7 +84,7 @@ async function ehAdministrador(id: string): Promise<boolean> {
   if (!id) return false;
   try {
     const r = await fetch(
-      URL_SUPABASE + '/rest/v1/perfis?id=eq.' + encodeURIComponent(id) + '&select=papel',
+      URL_SUPABASE + '/rest/v1/perfis?id=eq.' + encodeURIComponent(id) + '&select=papel,ativo',
       { headers: { apikey: SERVICE, authorization: 'Bearer ' + SERVICE } }
     );
     if (!r.ok) return false;
