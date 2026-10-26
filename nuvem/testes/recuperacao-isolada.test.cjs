@@ -35,7 +35,7 @@ function montar({ hash='', search='', responder } = {}) {
   vm.runInNewContext(script, {
     window: {IADConfig:{supabase:{url:'https://example.supabase.co',chave:'sb_publishable_TEST'}}},
     location:endereco, history, URLSearchParams, fetch,
-    document:{getElementById:id=>dom.get(id)}
+    document:{getElementById:id=>dom.get(id),querySelectorAll:()=>[]}
   });
   return {
     dom, chamadas, history,
