@@ -98,7 +98,7 @@
           token = accessToken;
         } else {
           var sessao = await chamar('/auth/v1/verify', 'POST', {
-            type: 'recovery', token_hash: tokenHash
+            type: tipo, token_hash: tokenHash
           });
           token = String(sessao.access_token || '');
         }
