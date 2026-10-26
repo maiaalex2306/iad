@@ -132,6 +132,7 @@ Deno.serve(async (req: Request) => {
   const tenantId = String(pedido.tenant_id || '').trim();
   const papel = String(pedido.papel || 'usuario').trim();
   const papeis = ['usuario', 'gestor', 'admin'];
+  let dadosEmail: Record<string,string> = { nome, whatsapp, papel };
   if (!papeis.includes(papel)) return responder({ erro: 'Papel inválido.' }, 400);
   if (nome.length > 160 || whatsapp.length > 45) {
     return responder({ erro: 'Nome ou WhatsApp excede o tamanho permitido.' }, 400);
@@ -150,7 +151,7 @@ Deno.serve(async (req: Request) => {
       return responder({ erro: 'Informe nome e empresa válidos.' }, 400);
     }
     const tr = await fetch(
-      URL_SUPABASE + '/rest/v1/tenants?id=eq.' + encodeURIComponent(tenantId) + '&select=id,ativo',
+      URL_SUPABASE + '/rest/v1/tenants?id=eq.' + encodeURIComponent(tenantId) + '&select=id,ativo,nome',
       { headers: cab }
     ).catch(() => null);
     if (!tr || !tr.ok) return responder({ erro: 'Não foi possível verificar a empresa.' }, 502);
@@ -158,6 +159,7 @@ Deno.serve(async (req: Request) => {
     if (!Array.isArray(tenants) || tenants.length !== 1 || tenants[0].ativo === false) {
       return responder({ erro: 'Empresa inexistente ou bloqueada.' }, 400);
     }
+    dadosEmail.empresa = String(tenants[0].nome || '');
     const reserva = await fetch(URL_SUPABASE + '/rest/v1/convites?on_conflict=email', {
       method: 'POST',
       headers: {
@@ -179,13 +181,27 @@ Deno.serve(async (req: Request) => {
     /* Reenvio só de um convite já aprovado pelo administrador. */
     const r = await fetch(
       URL_SUPABASE + '/rest/v1/convites?email=eq.' +
-        encodeURIComponent(email) + '&select=email',
+        encodeURIComponent(email) + '&select=email,nome,whatsapp,papel,tenant_id',
       { headers: cab }
     ).catch(() => null);
     if (!r || !r.ok) return responder({ erro: 'Falha ao consultar o convite existente.' }, 502);
     const linhas = await r.json().catch(() => []);
     if (!Array.isArray(linhas) || linhas.length !== 1) {
       return responder({ erro: 'Não há convite pendente para esse e-mail. Use a recuperação de senha se a conta já existir.' }, 404);
+    }
+    const p = linhas[0];
+    dadosEmail = {
+      nome: String(p.nome || ''), whatsapp: String(p.whatsapp || ''),
+      papel: String(p.papel || 'usuario')
+    };
+    const empresa = await fetch(
+      URL_SUPABASE + '/rest/v1/tenants?id=eq.' +
+        encodeURIComponent(String(p.tenant_id || '')) + '&select=nome',
+      { headers: cab }
+    ).catch(() => null);
+    if (empresa && empresa.ok) {
+      const lista = await empresa.json().catch(() => []);
+      dadosEmail.empresa = Array.isArray(lista) ? String(lista[0]?.nome || '') : '';
     }
   }
 
@@ -208,7 +224,7 @@ Deno.serve(async (req: Request) => {
           authorization: 'Bearer ' + SERVICE,
           'content-type': 'application/json'
         },
-        body: JSON.stringify({ email: email })
+        body: JSON.stringify({ email: email, data: dadosEmail })
       }
     );
     const corpo = await r.json().catch(() => ({}));
