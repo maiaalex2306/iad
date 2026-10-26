@@ -1423,8 +1423,10 @@
     const faltaNome = !nome;
     const campos = [];
     if (faltaNome) campos.push({ id: 'nome', rotulo: 'Seu nome', tipo: 'text' });
-    campos.push({ id: 'nova', rotulo: 'Sua senha', tipo: 'password', placeholder: 'mínimo 8 caracteres' });
-    campos.push({ id: 'confere', rotulo: 'Repita a senha', tipo: 'password' });
+    campos.push({ id: 'nova', rotulo: 'Nova senha (não precisa informar a antiga)',
+      tipo: 'password', placeholder: 'mínimo 8 caracteres', autocomplete: 'new-password' });
+    campos.push({ id: 'confere', rotulo: 'Repita exatamente a nova senha',
+      tipo: 'password', autocomplete: 'new-password' });
 
     U.formulario('Bem-vindo' + (nome ? ', ' + nome : '') + ' — escolha sua senha', campos, {}, function (d) {
       if (d.nova.length < 8) { alert('A senha precisa ter pelo menos 8 caracteres.'); pedirSenhaNova(nome); return; }
