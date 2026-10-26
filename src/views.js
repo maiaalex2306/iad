@@ -129,12 +129,14 @@
       campo('ac-login', naNuvem ? 'E-mail' : 'Login ou e-mail', 'text', '', ' autocomplete="username"') +
       campo('ac-senha', 'Senha', 'password', '', ' autocomplete="current-password" onkeydown="if(event.key===\'Enter\')App.entrar()"') +
       '<button class="btn alt" style="width:100%;margin-top:6px" onclick="App.entrar()">Entrar</button>' +
-      '<p class="small muted" style="margin:16px 0 0">Primeiro acesso? ' +
-      '<a href="#" onclick="event.preventDefault();App.telaAcesso(\'cadastro\')">Criar meu acesso</a></p>' +
+      (naNuvem
+        ? '<p class="small muted" style="margin:16px 0 0">Primeiro acesso? Peça ao administrador o e-mail de convite para criar sua senha.</p>'
+        : '<p class="small muted" style="margin:16px 0 0">Primeiro acesso? ' +
+          '<a href="#" onclick="event.preventDefault();App.telaAcesso(\'cadastro\')">Criar meu acesso</a></p>') +
       /* Quem foi convidado e perdeu o link cai aqui: a conta já existe, então
          um convite novo é recusado, e sem este caminho não haveria nenhum. */
       (naNuvem ? '<p class="small muted" style="margin:6px 0 0">' +
-        '<a href="#" onclick="event.preventDefault();App.recuperarSenha()">Esqueci minha senha</a></p>' : '');
+        '<a href="/recuperar.html">Esqueci minha senha</a></p>' : '');
   }
 
   function telaCadastro() {
@@ -6221,16 +6223,15 @@
         '<td>' + esc(rotuloDoPapel(c.papel)) + '</td>' +
         '<td class="right" style="white-space:nowrap">' +
         '<button class="btn alt mini" onclick="App.enviarConvite(\'' + esc(c.email) + '\')"' +
-        ' data-ajuda-titulo="Enviar convite" data-ajuda="Manda o e-mail pelo servidor, com o link para a pessoa definir a senha. Se o envio automático ainda não estiver publicado, abre seu programa de e-mail com a mensagem pronta.">Enviar</button> ' +
-        '<button class="btn ghost mini" onclick="App.copiarConvite(\'' + esc(c.email) + '\')"' +
-        ' data-ajuda="Copia o texto do convite para colar no WhatsApp ou em outro lugar.">Copiar</button> ' +
+        ' data-ajuda-titulo="Reenviar convite" data-ajuda="Manda o e-mail pelo servidor, com link seguro de ativação e definição da senha.">Reenviar</button> ' +
+
         '<button class="btn ghost mini" onclick="App.cancelarConvite(\'' + esc(c.email) + '\')"' +
-        ' data-ajuda="Cancela o registro. A pessoa ainda poderá criar acesso, mas entrará sem empresa.">Cancelar</button></td></tr>';
+        ' data-ajuda="Cancela um convite ainda não aceito; não apaga usuários ou contas existentes.">Cancelar</button></td></tr>';
     }).join('');
     return '<h4 style="margin:18px 0 6px">Aguardando primeiro acesso</h4>' +
-      '<p class="tiny muted" style="margin:0 0 8px">Já registradas. Quando criarem o acesso com este e-mail, entram direto na empresa indicada. ' +
-      '<strong>Enviar</strong> manda o e-mail pelo servidor, com o link para a pessoa criar a senha dela. ' +
-      'Enquanto o envio automático não estiver publicado, o botão abre seu programa de e-mail com a mensagem pronta.</p>' +
+      '<p class="tiny muted" style="margin:0 0 8px">Convites aprovados pelo administrador. ' +
+      '<strong>Reenviar</strong> solicita outro link de ativação pelo servidor. ' +
+      'O usuário define a senha digitando-a duas vezes; não existe senha padrão.</p>' +
       tabela(['Pessoa', 'Empresa', 'Papel', ''], linhas, '');
   }
 

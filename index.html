@@ -2,6 +2,21 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
+<!-- Captura recuperação antes de carregar o CRM, sua sincronização e seu roteador.
+     A URL do Supabase continua apontando para /, já autorizada no dashboard. -->
+<script>
+(function () {
+  var h = new URLSearchParams((location.hash || '').slice(1));
+  var q = new URLSearchParams((location.search || '').slice(1));
+  var tipo = h.get('type') || q.get('type');
+  var recuperacao = (tipo === 'recovery' || tipo === 'invite') &&
+    (h.has('access_token') || h.has('token_hash') || q.has('token_hash') || q.has('code'));
+  var erro = h.has('error') || h.has('error_code') || q.has('error') || q.has('error_code');
+  if (recuperacao || erro) {
+    location.replace('/recuperar.html' + location.search + location.hash);
+  }
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>IAD CRM — Gestão comercial orientada à decisão</title>
 <meta name="description" content="CRM que administra decisões de compra, evidências do cliente e buying groups — não apenas etapas e atividades.">
