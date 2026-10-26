@@ -8,7 +8,7 @@ const ARQUIVOS = [
   './', './index.html', './recuperar.html', './manifest.webmanifest',
   './src/recuperacao.js',
   './assets/styles.css',
-  './src/config.js',
+  './src/config.js', './src/localidades.js',
   './src/playbook.js', './src/store.js', './src/auth.js', './src/engine.js',
   './src/funis.js', './src/orientacao.js', './src/conferencia.js', './src/arquivos.js', './src/pendencias.js', './src/csv.js', './src/graficos.js', './src/integracoes.js', './src/nuvem.js', './src/sincronia.js', './src/ia.js', './src/documentos.js', './src/quadro.js',
   './src/ui.js', './src/ajuda.js', './src/seed.js', './src/whatsapp.js', './src/email.js', './src/conversa.js', './src/views.js', './src/app.js',
