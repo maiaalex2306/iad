@@ -130,3 +130,43 @@ test('Auth rejeita token: não permite criar senha até novo link', async ()=>{
   assert.equal(page.dom.get('form-nova').hidden,true);
   assert.equal(page.chamadas.length,1);
 });
+
+
+test('convite administrativo passa pelo fluxo isolado de duas senhas',async ()=>{
+  const code = index.match(/<script>\s*([\s\S]*?)<\/script>/)?.[1];
+  const paths = [];
+  vm.runInNewContext(code,{
+    location:{hash:'#access_token=convite_teste&type=invite',search:'',replace:x=>paths.push(x)},
+    URLSearchParams
+  });
+  assert.equal(paths[0],'/recuperar.html#access_token=convite_teste&type=invite');
+
+  const page=montar({hash:'#access_token=convite_teste&type=invite',
+    responder:async(url,opts)=>{
+      if(url.endsWith('/auth/v1/user') && opts.method==='GET')return {body:{id:'id_convite'}};
+      if(url.endsWith('/auth/v1/user') && opts.method==='PUT')return {body:{id:'id_convite'}};
+      return {status:400,body:{message:'unexpected'}};
+    }});
+  await page.settle();
+  assert.equal(page.dom.get('form-nova').hidden,false);
+  page.dom.get('nova').value='SenhaForte-2026-Exemplo!';
+  page.dom.get('confirmacao').value='SenhaForte-2026-Exemplo!';
+  await page.submit('form-nova');
+  assert.equal(page.chamadas.filter(x=>x.opts.method==='PUT').length,1);
+  assert.match(page.dom.get('status').textContent,/sucesso/);
+});
+
+test('nenhum botão de signup para contas conectadas, cadastro só pelo administrador',()=>{
+  const views=fs.readFileSync(path.join(root,'src/views.js'),'utf8');
+  const app=fs.readFileSync(path.join(root,'src/app.js'),'utf8');
+  const server=fs.readFileSync(path.join(root,'nuvem/funcoes/convite/index.ts'),'utf8');
+  const migration=fs.readFileSync(path.join(root,'nuvem/correcao-28-cadastro-administrativo.sql'),'utf8');
+  assert.match(views,/Primeiro acesso\? Peça ao administrador/);
+  assert.match(app,/Cadastro exclusivo do administrador/);
+  assert.match(app,/chamarFuncao\('convite', \{/);
+  assert.match(server,/Só o administrador convida pessoas/);
+  assert.match(server,/papel, criado_por: id/);
+  assert.match(server,/data: dadosEmail/);
+  assert.match(migration,/convite_encontrado/);
+  assert.match(migration,/Cadastro permitido apenas por convite do administrador/);
+});
