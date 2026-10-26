@@ -16,7 +16,7 @@ const navegador = trecho('  function abrirNoHoje() {', '\n  window.addEventListe
 function simular(hash: string) {
   const rotas: string[] = [];
   const location = {
-    hash, pathname: '/iad/', search: '',
+    hash, pathname: '/', search: '',
     replace: (destino: string) => { rotas.push(destino); }
   };
   // As funções consultam somente a localização; jamais são usadas credenciais reais.
@@ -46,9 +46,9 @@ testar('Link expirado preserva erro para exibir causa', r.rotas.length === 0 && 
 r = simular('#/op/teste');
 testar('Deep link comercial é preservado', r.rotas.length === 0);
 r = simular('#/pipeline');
-testar('Navegação comum continua abrindo Hoje', r.rotas[0] === '/iad/#/hoje');
+testar('Navegação comum continua abrindo Hoje', r.rotas[0] === '/#/hoje');
 r = simular('');
-testar('Primeiro acesso comum abre Hoje', r.rotas[0] === '/iad/#/hoje');
+testar('Primeiro acesso comum abre Hoje', r.rotas[0] === '/#/hoje');
 
 testar('Troca de senha usa endpoint de atualização autenticada',
   app.includes('global.IADNuvem.trocarMinhaSenha(d.nova)'));
