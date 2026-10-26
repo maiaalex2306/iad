@@ -188,7 +188,8 @@
         return '<label class="campo' + (c.largura === 'metade' ? ' meia' : '') + '"><span>' + esc(c.rotulo) + '</span>' +
           '<span class="campo-senha">' +
           '<input type="password" name="' + c.id + '" value="' + esc(v) + '"' +
-          (c.placeholder ? ' placeholder="' + esc(c.placeholder) + '"' : '') + '>' +
+          (c.placeholder ? ' placeholder="' + esc(c.placeholder) + '"' : '') +
+          (c.autocomplete ? ' autocomplete="' + esc(c.autocomplete) + '"' : '') + '>' +
           '<button type="button" class="olho" data-olho="' + c.id + '"' +
           ' aria-label="Mostrar a senha" data-ajuda="Mostra ou esconde a senha digitada.">👁</button>' +
           '</span></label>';
