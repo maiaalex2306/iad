@@ -99,3 +99,19 @@ test('a interface trata refresh inválido separadamente de falta de internet',()
   assert.ok(app.includes("V.definirTelaAcesso('login', null,"));
   assert.ok(app.includes("Sua sessão expirou. Entre novamente"));
 });
+
+test('outra aba encerra a sessão durante refresh: não ressuscitar login',async()=>{
+  const {N,setup,localStorage,eventos}=simular();
+  setup();
+  N.__trocarChamar(()=>{
+    localStorage.removeItem(KEY);
+    return Promise.resolve({
+      access_token:'access-antigo-retornado',
+      refresh_token:'refresh-antigo-retornado',
+      user:{id:'conta-teste'}
+    });
+  });
+  await assert.rejects(N.renovar(),e=>e.sessaoExpirada===true);
+  assert.equal(localStorage.getItem(KEY),null);
+  assert.deepEqual(eventos,['iad-sessao-expirada']);
+});
