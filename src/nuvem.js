@@ -316,8 +316,18 @@
       metodo: 'POST', autenticado: false, corpo: { refresh_token: tokenUsado }
     }).then(function (resposta) {
       const atual = sessao();
+      /* Outra aba pode ter encerrado a sessão enquanto a renovação
+         estava em trânsito. Não ressuscitar uma sessão sem dono. */
+      if (!atual) {
+        const expirada = new Error('Sua sessão foi encerrada. Entre novamente.');
+        expirada.sessaoExpirada = true;
+        if (typeof global.dispatchEvent === 'function' && typeof global.CustomEvent === 'function') {
+          global.dispatchEvent(new global.CustomEvent('iad-sessao-expirada'));
+        }
+        throw expirada;
+      }
       /* Outro login/aba já renovou. Não sobrescrever credencial mais nova. */
-      if (!atual || atual.refresh_token !== tokenUsado) return atual || resposta;
+      if (atual.refresh_token !== tokenUsado) return atual;
       const nova = Object.assign({}, resposta);
       const antes = (anterior.user && anterior.user.id) || '';
       const agora = (nova.user && nova.user.id) || '';
@@ -328,6 +338,7 @@
       guardarSessao(nova);
       return nova;
     }).catch(function (e) {
+      if (e && e.sessaoExpirada) throw e;
       const atual = sessao();
       /* Outra aba substituiu o token: use a sessão mais nova, não encerre. */
       if (atual && atual.refresh_token && atual.refresh_token !== tokenUsado) {
