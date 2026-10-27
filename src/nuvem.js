@@ -111,6 +111,7 @@
      que mudou", que é a diferença entre mil e trezentas linhas por clique e
      uma. Fora do teste, `substitutoDeTeste` é nulo e esta linha não faz nada. */
   let substitutoDeTeste = null;
+  let renovacaoEmCurso = null; /* Evita disputar o mesmo refresh token em chamadas simultâneas. */
 
   function chamar(caminho, opcoes) {
     if (substitutoDeTeste) return substitutoDeTeste(caminho, opcoes);
@@ -300,19 +301,67 @@
      Guardar o perfil só quando é a MESMA pessoa: refresh que volta com outro
      usuário é outra sessão, e carregar o perfil de alguém para dentro dela
      seria o vazamento entre empresas pela porta dos fundos. */
+  /* O refresh token do GoTrue é rotativo: duas chamadas paralelas com o
+     mesmo token podem fazer uma delas voltar "Refresh Token Not Found".
+     Uma promessa compartilhada por aba e uma conferência do token atual
+     impedem que uma falha antiga derrube uma sessão mais nova. */
   function renovar() {
-    const s = sessao();
-    if (!s || !s.refresh_token) return Promise.reject(new Error('Sem sessão para renovar.'));
-    return chamar('/auth/v1/token?grant_type=refresh_token', {
-      metodo: 'POST', autenticado: false, corpo: { refresh_token: s.refresh_token }
-    }).then(function (r) {
-      const nova = Object.assign({}, r);
-      const antes = (s.user && s.user.id) || '';
+    if (renovacaoEmCurso) return renovacaoEmCurso;
+    const anterior = sessao();
+    if (!anterior || !anterior.refresh_token) {
+      return Promise.reject(new Error('Sem sessão para renovar.'));
+    }
+    const tokenUsado = anterior.refresh_token;
+    const pedido = chamar('/auth/v1/token?grant_type=refresh_token', {
+      metodo: 'POST', autenticado: false, corpo: { refresh_token: tokenUsado }
+    }).then(function (resposta) {
+      const atual = sessao();
+      /* Outra aba pode ter encerrado a sessão enquanto a renovação
+         estava em trânsito. Não ressuscitar uma sessão sem dono. */
+      if (!atual) {
+        const expirada = new Error('Sua sessão foi encerrada. Entre novamente.');
+        expirada.sessaoExpirada = true;
+        if (typeof global.dispatchEvent === 'function' && typeof global.CustomEvent === 'function') {
+          global.dispatchEvent(new global.CustomEvent('iad-sessao-expirada'));
+        }
+        throw expirada;
+      }
+      /* Outro login/aba já renovou. Não sobrescrever credencial mais nova. */
+      if (atual.refresh_token !== tokenUsado) return atual;
+      const nova = Object.assign({}, resposta);
+      const antes = (anterior.user && anterior.user.id) || '';
       const agora = (nova.user && nova.user.id) || '';
-      if (!nova.user && s.user) nova.user = s.user;
-      if (s.perfil && (!agora || !antes || agora === antes)) nova.perfil = s.perfil;
+      if (!nova.user && anterior.user) nova.user = anterior.user;
+      if (anterior.perfil && (!agora || !antes || agora === antes)) {
+        nova.perfil = anterior.perfil;
+      }
       guardarSessao(nova);
       return nova;
+    }).catch(function (e) {
+      if (e && e.sessaoExpirada) throw e;
+      const atual = sessao();
+      /* Outra aba substituiu o token: use a sessão mais nova, não encerre. */
+      if (atual && atual.refresh_token && atual.refresh_token !== tokenUsado) {
+        return atual;
+      }
+      const mensagem = String((e && e.message) || '');
+      const invalido = /invalid.refresh.token|refresh.token.not.found|refresh.token.already.used|invalid_grant|session_not_found|refresh.token.expired|refresh.token.revoked/i.test(mensagem) ||
+        ((e && (e.status === 400 || e.status === 401)) &&
+          /refresh|invalid.token|token.*not.found/i.test(mensagem));
+      if (!invalido) throw e; /* Instabilidade de rede não é senha vencida. */
+      /* Somente a credencial do Auth é apagada. Configuração, fila,
+         carteira e dados pendentes de sincronização permanecem intactos. */
+      guardarSessao(null);
+      const erro = new Error('Sua sessão expirou. Entre novamente com seu e-mail e senha.');
+      erro.sessaoExpirada = true;
+      if (typeof global.dispatchEvent === 'function' && typeof global.CustomEvent === 'function') {
+        global.dispatchEvent(new global.CustomEvent('iad-sessao-expirada'));
+      }
+      throw erro;
+    });
+    renovacaoEmCurso = pedido;
+    return pedido.finally(function () {
+      if (renovacaoEmCurso === pedido) renovacaoEmCurso = null;
     });
   }
 

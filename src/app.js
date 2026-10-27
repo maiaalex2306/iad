@@ -1299,6 +1299,22 @@
      números acima são cálculo e valem do mesmo jeito" embaixo. */
   let baixando = false;
 
+  /* Falha de autenticação definitiva não é falha de internet. Voltar à tela
+     de login, sem apagar fila de sincronização ou dados comerciais. */
+  function tratarSessaoExpirada(erro) {
+    const N = global.IADNuvem;
+    const texto = String((erro && erro.message) || '');
+    const invalida = (erro && erro.sessaoExpirada) ||
+      /Invalid.Refresh.Token|Refresh.Token.Not.Found/i.test(texto);
+    if (!invalida || (N && N.sessao && N.sessao())) return false;
+    semServidor = '';
+    A.encerrarSessao();
+    V.definirTelaAcesso('login', null,
+      'Sua sessão expirou. Entre novamente com seu e-mail e senha. Sua carteira continua no servidor.');
+    render();
+    return true;
+  }
+
   function baixarDoServidor() {
     const N = global.IADNuvem;
     if (!N.conectado() || !A.atual()) return Promise.resolve();
@@ -1317,6 +1333,7 @@
       baixando = false;
     }, function (e) {
       baixando = false;
+      if (tratarSessaoExpirada(e)) return;
       semServidor = (e && e.message) || 'não consegui falar com o servidor';
       render();
     });
@@ -1352,9 +1369,8 @@
       A.espelharDaNuvem(u, perfil);
       if (antes.papel !== perfil.papel || antes.tenant_id !== perfil.tenant_id) render();
     }).catch(function (e) {
-      /* Sessão válida e servidor mudo. Antes isto era engolido porque havia
-         carteira no aparelho para mostrar; agora não há, e cair na tela de
-         login faria a pessoa achar que a conta dela deixou de existir. */
+      if (tratarSessaoExpirada(e)) return;
+      /* Falha de rede é diferente de refresh definitivamente inválido. */
       semServidor = (e && e.message) || 'não consegui falar com o servidor';
       render();
     });
@@ -11052,6 +11068,11 @@
     U.ligarBalaoDaIA();
     ligarOcio();
     montarNav();
+    /* Renovação em segundo plano também pode detectar sessão expirada.
+       Não esperar outra consulta à carteira para voltar ao login. */
+    window.addEventListener('iad-sessao-expirada', function () {
+      tratarSessaoExpirada({sessaoExpirada:true});
+    });
     abrirNoHoje();
 
     /* Antes de tudo: quem chega pelo link do e-mail já vem autenticado, e
