@@ -28,6 +28,10 @@ test('gera arquivos estáticos com URL isolada e omite SQL e código servidor',(
   assert.match(config,/exemplo-homolog.supabase.co/);
   assert.doesNotMatch(config,/drhonmdffhnwamwzynrs/);
   assert.match(config,/v268-HOMOLOG/);
+  assert.match(config,/IADHomologacao = true/);
+  const nuvem = fs.readFileSync(path.join(root,'dist/src/nuvem.js'),'utf8');
+  assert.match(nuvem,/if \(global\.IADHomologacao\) return base/);
+  assert.match(nuvem,/if \(global\.IADHomologacao\) throw new Error/);
   assert.equal(fs.existsSync(path.join(root,'dist/nuvem')),false);
   assert.equal(fs.existsSync(path.join(root,'dist/ponte')),false);
   assert.equal(fs.existsSync(path.join(root,'dist/CNAME')),false);
