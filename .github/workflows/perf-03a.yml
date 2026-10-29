@@ -24,8 +24,7 @@ jobs:
           node --check src/nuvem.js
           node --check sw.js
           node --check scripts/build-homologacao.cjs
-          grep -q "numero: 'v270'" src/config.js
-          grep -q "iad-crm-v270" sw.js
+          node -e "const fs=require('fs'); const conf=fs.readFileSync('src/config.js','utf8').match(/numero: '(v[0-9]+)'/);const sw=fs.readFileSync('sw.js','utf8').match(/const CACHE = 'iad-crm-(v[0-9]+)'/);if(!conf||!sw||conf[1]!==sw[1]){throw Error('Versão config/SW divergente')}console.log('Versão consistente:',conf[1]);"
       - name: P0 integridade, paginação e cache
         run: node --test nuvem/testes/perf-03a-integridade.test.cjs
       - name: P1 Pipeline e regressão diferencial v269
