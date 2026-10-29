@@ -39,4 +39,10 @@ test('gera arquivos estáticos com URL isolada e omite SQL e código servidor',(
   assert.equal(fs.existsSync(path.join(root,'dist/src/perf-hoje.js')),true);
   const body=fs.readFileSync(path.join(root,'dist/index.html'),'utf8');
   assert.match(body,/HOMOLOGAÇÃO v268/);
+  assert.match(body,/location\\.replace\\('recuperar\\.html'/);
+  assert.doesNotMatch(body,/location\\.replace\\('\/recuperar\\.html'/);
+  const recuperar = fs.readFileSync(path.join(root,'dist/recuperar.html'),'utf8');
+  assert.match(recuperar,/href="index\\.html"/);
+  const recuperarJS = fs.readFileSync(path.join(root,'dist/src/recuperacao.js'),'utf8');
+  assert.match(recuperarJS,/new URL\\('\.\/'\\, location\\.href\\)\\.href/);
 });
