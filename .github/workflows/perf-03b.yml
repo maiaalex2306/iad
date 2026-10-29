@@ -24,8 +24,7 @@ jobs:
           node --check src/views.js
           node --check scripts/build-homologacao.cjs
           node --check scripts/perf03b-browser-homolog.cjs
-          grep -q "numero: 'v271'" src/config.js
-          grep -q "iad-crm-v271" sw.js
+          node -e "const fs=require('fs');const a=fs.readFileSync('src/config.js','utf8').match(/numero: '(v[0-9]+)'/);const b=fs.readFileSync('sw.js','utf8').match(/const CACHE = 'iad-crm-(v[0-9]+)'/);if(!a||!b||a[1]!==b[1])throw Error('Version config/SW divergent');console.log('PWA',a[1]);"
       - name: Delta, exclusões, integridade, cockpit
         run: node --test nuvem/testes/perf-03b.test.cjs
       - name: Não regredir PERF-03A, PERF-02 e login
