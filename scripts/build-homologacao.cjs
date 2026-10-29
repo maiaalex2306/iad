@@ -26,9 +26,10 @@ if (url.includes(liveProject)) fail('Supabase de PRODUÇÃO detectado. Use um pr
 if (!/^sb_publishable_[A-Za-z0-9_-]+$/.test(publishable)) {
   fail('Configure IAD_STAGING_PUBLISHABLE_KEY com a chave pública do projeto de testes.');
 }
-if (branch && branch !== 'performance/iad-perf-01') {
+if (branch && ['performance/iad-perf-01','performance/iad-perf-02'].indexOf(branch) === -1) {
   fail('Branch de publicação inesperada: ' + branch);
 }
+const versaoHomologacao = branch === 'performance/iad-perf-02' ? 'v269-HOMOLOG' : 'v268-HOMOLOG';
 const files = ['index.html','recuperar.html','manifest.webmanifest','sw.js'];
 const folders = ['src','assets','icons'];
 fs.rmSync(OUT,{recursive:true,force:true});
@@ -40,7 +41,7 @@ const config = `/* Gerado SOMENTE para homologação. Sem chave secreta. */
 window.IADConfig = {
   supabase: { url: ${JSON.stringify(url)}, chave: ${JSON.stringify(publishable)} }
 };
-window.IADVersao = { numero: 'v268-HOMOLOG', data: '2026-10-29' };
+window.IADVersao = { numero: '${versaoHomologacao}', data: '2026-10-29' };
 window.IADHomologacao = true;
 `;
 fs.writeFileSync(path.join(OUT,'src','config.js'),config,'utf8');
@@ -67,7 +68,7 @@ for (const f of ['index.html','recuperar.html']) {
   text = text.replace('<body>',`<body>
 <div role="status" style="background:#8e260b;color:white;text-align:center;
 font:600 13px system-ui;padding:7px;position:relative;z-index:9999;">
-HOMOLOGAÇÃO v268 — use apenas contas e dados de teste
+HOMOLOGAÇÃO ${versaoHomologacao} — use apenas contas e dados de teste
 </div>`);
   text = text.replace('<head>','<head>\n<meta name="robots" content="noindex,nofollow">');
   fs.writeFileSync(p,text,'utf8');
@@ -100,4 +101,4 @@ fs.writeFileSync(recuperarJsPath,recuperarJs,'utf8');
 fs.writeFileSync(path.join(OUT,'robots.txt'),'User-agent: *\nDisallow: /\n');
 const generated = fs.readFileSync(path.join(OUT,'src','config.js'),'utf8');
 if (generated.includes(liveProject)) fail('Arquivo de saída vinculado ao Supabase de produção.');
-console.log('OK: dist/ com IaD CRM v268-HOMOLOG, banco separado e aviso visual.');
+console.log('OK: dist/ com IaD CRM ' + versaoHomologacao + ', banco separado e aviso visual.');
