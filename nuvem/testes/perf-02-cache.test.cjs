@@ -52,10 +52,8 @@ test('sem login nunca reutiliza fila e impede cache entre sessões',()=>{
   x.user(null); x.mod.filaDados(x.dados());x.mod.filaDados(x.dados());
   assert.equal(x.n(),3);
   x.user({id:'u1',papel:'gestor',tenantId:'a'});
-  x.mod.filaDados(x.dados()); assert.equal(x.n(),3);
-  // A revisão e a identidade são iguais: reentrada do mesmo usuário precisa
-  // invalidar também a sessão, não só trocar id. Esse cenário é coberto pela
-  // regra de cache abaixo via token de autenticação, quando disponível.
+  x.mod.filaDados(x.dados()); assert.equal(x.n(),4);
+  assert.equal(x.mod.estatisticas().misses,2);
 });
 test('cálculo que altera dados no meio da execução não entra no cache',()=>{
   const x=preparar();
