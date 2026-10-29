@@ -192,6 +192,20 @@
     }
     pintarTopo();
 
+    /* Primeiro login: não desenhar contadores/decisões em cima de carteira
+       incompleta. A barra de progresso é informativa, o commit dos dados
+       continua sendo feito somente depois da leitura de todas as tabelas. */
+    if (baixando && !Store.obter().oportunidades.length && !Store.obter().contas.length) {
+      const carga = global.IADNuvem.estadoCarga ? global.IADNuvem.estadoCarga() : {};
+      conteudo.innerHTML = '<section class="cartao" role="status" aria-live="polite">' +
+        '<h2>Carregando sua carteira comercial</h2>' +
+        '<p id="progresso-carteira">' + (carga.concluidas || 0) + ' de ' + (carga.total || 10) +
+        ' conjuntos de dados carregados. Os indicadores aparecerão quando a carteira estiver completa.</p>' +
+        '<progress id="barra-progresso-carteira" max="' + (carga.total || 10) +
+        '" value="' + (carga.concluidas || 0) + '"></progress></section>';
+      return;
+    }
+
     const hash = location.hash || '#/hoje';
     /* Onde a pessoa estava em cada tela.
 
@@ -1333,8 +1347,18 @@
     if (!N.conectado() || !A.atual()) return Promise.resolve();
     baixando = true;
     definirAviso('');
+    /* Render de espera somente quando não há snapshot anterior. */
+    if (!Store.obter().oportunidades.length && !Store.obter().contas.length) render();
+    const deixarDeObservar = N.observarCarga ? N.observarCarga(function (p) {
+      const lbl = document.getElementById('progresso-carteira');
+      const barra = document.getElementById('barra-progresso-carteira');
+      if (lbl) lbl.textContent = p.concluidas + ' de ' + p.total +
+        ' conjuntos de dados carregados. Os indicadores aparecerão quando a carteira estiver completa.';
+      if (barra) { barra.max=p.total; barra.value=p.concluidas; }
+    }) : function () {};
     espelharEmpresaDoServidor();
     return resgatarFilaPendente().then(function () { return N.puxar(); }).then(function () {
+      deixarDeObservar();
       semServidor = '';
       render();
       /* Depois de baixar, e não antes: a colheita grava sinal, e sinal gravado
@@ -1345,6 +1369,7 @@
       pintarEmails();
       baixando = false;
     }, function (e) {
+      deixarDeObservar();
       baixando = false;
       if (tratarSessaoExpirada(e)) return;
       semServidor = (e && e.message) || 'não consegui falar com o servidor';
