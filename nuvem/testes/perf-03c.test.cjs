@@ -171,7 +171,7 @@ for(const n of [243,1000,5000,10000])test('PERF03C paridade de carteira admin '+
  const got=await a.N.puxar();
  assert.equal(got,n);
  const ref=a.remote.oportunidades.map(x=>x.id).sort();
- assert.deepEqual(a.state.oportunidades.map(x=>x.id).sort(),ref);
+ assert.equal(JSON.stringify(a.state.oportunidades.map(x=>x.id).sort()),JSON.stringify(ref));
  a.change({id:'opp0',tenant:TA,value:827});
  a.change({id:'opp1',tenant:TB,value:928});
  const delta=await a.N.puxar();
