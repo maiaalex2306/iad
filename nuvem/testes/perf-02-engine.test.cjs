@@ -5,15 +5,18 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const path=require('node:path');
+const cp=require('node:child_process');
 const root=path.join(__dirname,'../..');
-function ambiente() {
+function ambiente(engineSource) {
   const w={console,localStorage:{removeItem(){},getItem(){return null},setItem(){}}};
   let identidade={id:'u1',papel:'gestor',tenantId:'a'};
   let filtros={tenant:'todas',usuario:'todos'};
   w.IADAuth={atual:()=>identidade,filtros:()=>filtros};
   const ctx={window:w,console,Date,Math,JSON,Map,Set};
   for(const file of ['playbook.js','store.js','engine.js','perf-02.js']){
-    vm.runInNewContext(fs.readFileSync(path.join(root,'src',file),'utf8'),ctx,{filename:file});
+    const codigo=file==='engine.js' && engineSource ? engineSource :
+      fs.readFileSync(path.join(root,'src',file),'utf8');
+    vm.runInNewContext(codigo,ctx,{filename:file});
   }
   const S=w.IADStore,P=w.IADPlaybook,E=w.IADEngine;
   const e=S.obter();
@@ -93,4 +96,18 @@ test('cache reflete alteração econômica, conclusão de tarefa e substituiçã
    E.tarefasAtrasadas(e.oportunidades[2]));
  S.limpar();
  assert.equal(perf.filaDados(S.dados()).itens.length,0);
+});
+
+test('paridade integral contra o Decision Engine da v268, não só resumos isolados',()=>{
+  /* Código da v268 publicado em 29/10, mantido como base histórica imutável. */
+  const sha='8b79bd7f035ae165e590c6f53e6e85189cd73d4c';
+  const baseline=cp.execFileSync('git',['show',sha+':src/engine.js'],{
+    cwd:root,encoding:'utf8',maxBuffer:2*1024*1024
+  });
+  const antes=ambiente(baseline);
+  const depois=ambiente();
+  const fila268=antes.E.fila(antes.S.dados().oportunidades,antes.S.dados().tarefas);
+  const fila269=depois.E.fila(depois.S.dados().oportunidades,depois.S.dados().tarefas);
+  assert.equal(JSON.stringify(fila269),JSON.stringify(fila268),
+    'Fila v269 divergiu da v268: prioridade, ordenação ou detalhe alterado');
 });
