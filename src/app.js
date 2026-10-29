@@ -181,6 +181,7 @@
 
     document.body.classList.toggle('sem-sessao', !logado);
     if (!logado) {
+      if (global.IADPerf02) global.IADPerf02.limpar();
       conteudo.innerHTML = V.acesso();
       const primeiro = document.querySelector('.cartao-acesso input');
       if (primeiro) primeiro.focus();
@@ -6271,6 +6272,7 @@
     sair: function (semPerguntar, recado) {
       if (!semPerguntar && !U.confirmar('Sair do sistema?')) return;
       fecharMenuUsuario();
+      if (global.IADPerf02) global.IADPerf02.limpar();
       A.encerrarSessao();
       /* Encerrada a sessão, o envio para de tentar na hora. Sem esta linha a
          escada de reenvio seguia correndo contra um servidor que agora recusa
