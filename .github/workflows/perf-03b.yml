@@ -78,6 +78,7 @@ jobs:
           sudo apt-get -qq update
           sudo apt-get -qq install -y postgresql-client
           psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -X -v ON_ERROR_STOP=1 -f nuvem/schema.sql
+          psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -X -v ON_ERROR_STOP=1 -f nuvem/correcao-05-gestor.sql
           psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -X -v ON_ERROR_STOP=1 -f nuvem/perf-03b-journal.sql
           psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -X -v ON_ERROR_STOP=1 -f nuvem/perf-03b-journal.sql
       - name: RLS e autenticação real no Supabase local
