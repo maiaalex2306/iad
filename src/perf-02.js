@@ -34,6 +34,8 @@
     const usuario = escopo();
     /* Sem identidade, nunca cachear dados que possam ter vindo de outra sessão. */
     if (!usuario || typeof S.revisao !== 'function') {
+      /* Logout revoga imediatamente qualquer referência à carteira anterior. */
+      cache = null;
       return E.fila(est.oportunidades, est.tarefas);
     }
     const revisao = S.revisao();
