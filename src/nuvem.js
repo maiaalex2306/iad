@@ -1495,7 +1495,7 @@
   const DELTA_MAX = 30000;
   function contextoDelta() {
     const p = sessaoPerfil(), s = sessao();
-    if (!p || !s || !s.user || !s.user.id || !p.tenant_id || p.papel === 'admin') return null;
+    if (!p || !s || !s.user || !s.user.id || !p.tenant_id || p.papel !== 'gestor') return null;
     return { tenant:String(p.tenant_id), usuario:String(s.user.id),
       chave:String(p.tenant_id) + '|' + String(s.user.id) + '|' + String(p.papel || '') };
   }
