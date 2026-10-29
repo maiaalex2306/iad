@@ -3,13 +3,13 @@
    mesmo commit: um diz o que está guardado no aparelho, o outro o que está
    rodando, e é a discordância entre os dois que denuncia uma troca pela
    metade. */
-const CACHE = 'iad-crm-v268';
+const CACHE = 'iad-crm-v269';
 const ARQUIVOS = [
   './', './index.html', './recuperar.html', './manifest.webmanifest',
   './src/recuperacao.js',
   './assets/styles.css',
   './src/config.js', './src/performance.js', './src/localidades.js',
-  './src/playbook.js', './src/store.js', './src/auth.js', './src/engine.js',
+  './src/playbook.js', './src/store.js', './src/auth.js', './src/engine.js', './src/perf-02.js',
   './src/funis.js', './src/orientacao.js', './src/conferencia.js', './src/arquivos.js', './src/pendencias.js', './src/csv.js', './src/graficos.js', './src/integracoes.js', './src/nuvem.js', './src/sincronia.js', './src/ia.js', './src/documentos.js', './src/quadro.js',
   './src/ui.js', './src/ajuda.js', './src/seed.js', './src/whatsapp.js', './src/email.js', './src/conversa.js', './src/views.js', './src/perf-hoje.js', './src/app.js',
   './icons/icon-192.png', './icons/icon-512.png'
