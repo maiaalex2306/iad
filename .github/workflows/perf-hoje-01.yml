@@ -23,6 +23,8 @@ jobs:
           node --check sw.js
       - name: Validate targeted updates and local metrics
         run: node --test nuvem/testes/perf-hoje-01.test.cjs
+      - name: Validate safe staging build (no production Supabase)
+        run: node --test nuvem/testes/build-homologacao.test.cjs
       - name: Run existing auth and regional regressions
         run: |
           node --test nuvem/testes/recuperacao-isolada.test.cjs
