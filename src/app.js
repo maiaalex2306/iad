@@ -158,6 +158,9 @@
        não existe na empresa nova. A tela dizia "0 negociações" e não tinha
        como estar mais certa nem mais inútil. */
     V.conferirSessao(logado ? logado.id : null);
+    /* Expiração da sessão também remove o cache, inclusive quando semServidor
+       interrompe o render antes da tela de login. */
+    if (!logado && global.IADPerf02) global.IADPerf02.limpar();
     if (!logado && W) W.esquecer();
 
     /* Registro sem empresa fica invisível. Aqui, com a sessão já conhecida,
@@ -181,7 +184,6 @@
 
     document.body.classList.toggle('sem-sessao', !logado);
     if (!logado) {
-      if (global.IADPerf02) global.IADPerf02.limpar();
       conteudo.innerHTML = V.acesso();
       const primeiro = document.querySelector('.cartao-acesso input');
       if (primeiro) primeiro.focus();
