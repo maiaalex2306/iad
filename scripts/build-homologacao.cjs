@@ -26,10 +26,10 @@ if (url.includes(liveProject)) fail('Supabase de PRODUÇÃO detectado. Use um pr
 if (!/^sb_publishable_[A-Za-z0-9_-]+$/.test(publishable)) {
   fail('Configure IAD_STAGING_PUBLISHABLE_KEY com a chave pública do projeto de testes.');
 }
-if (branch && ['performance/iad-perf-01','performance/iad-perf-02','performance/iad-perf-03a'].indexOf(branch) === -1) {
+if (branch && ['performance/iad-perf-01','performance/iad-perf-02','performance/iad-perf-03a','performance/iad-perf-03b'].indexOf(branch) === -1) {
   fail('Branch de publicação inesperada: ' + branch);
 }
-const versaoHomologacao = branch === 'performance/iad-perf-03a' ? 'v270-HOMOLOG' : (branch === 'performance/iad-perf-02' ? 'v269-HOMOLOG' : 'v268-HOMOLOG');
+const versaoHomologacao = branch === 'performance/iad-perf-03b' ? 'v271-HOMOLOG' : (branch === 'performance/iad-perf-03a' ? 'v270-HOMOLOG' : (branch === 'performance/iad-perf-02' ? 'v269-HOMOLOG' : 'v268-HOMOLOG'));
 const files = ['index.html','recuperar.html','manifest.webmanifest','sw.js'];
 const folders = ['src','assets','icons'];
 fs.rmSync(OUT,{recursive:true,force:true});
