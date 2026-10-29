@@ -26,7 +26,7 @@ async function main(){
  const tenants=await query('/rest/v1/tenants?select=id','POST',service,
   [{nome:'PERF03B DELTA TESTE'}],{'Prefer':'return=representation'});
  const tenant=tenants[0].id;
- await query('/rest/v1/perfis?id=eq.'+u.id,'PATCH',service,{tenant_id:tenant,papel:'usuario'});
+ await query('/rest/v1/perfis?id=eq.'+u.id,'PATCH',service,{tenant_id:tenant,papel:'gestor'});
  const session=await query('/auth/v1/token?grant_type=password','POST',anon,
   {email,password:'Perf03B!StrongPassword12345'});
  const id1='perf03b1_'+salt,id2='perf03b2_'+salt;
@@ -71,7 +71,21 @@ async function main(){
  const excl=await N.puxar();
  assert.equal(state.contas.length,1);
  assert.equal(state.contas[0].id,id2);
- const result={supabase:'local / loopback',firstRecords:init,deltaEvents:delta,deleteEvents:excl,
+ // Um usuário normal não deve descobrir as movimentações dos colegas pelo journal.
+ const spyEmail='perf03b_visivel_'+salt+'@homolog.invalid';
+ const spy=await query('/auth/v1/admin/users','POST',service,{
+  email:spyEmail,password:'Perf03B!StrongPassword12345',email_confirm:true
+ });
+ await query('/rest/v1/perfis?id=eq.'+spy.id,'PATCH',service,{tenant_id:tenant,papel:'usuario'});
+ const spyToken=(await query('/auth/v1/token?grant_type=password','POST',anon,{
+  email:spyEmail,password:'Perf03B!StrongPassword12345'
+ })).access_token;
+ const spyVersoes=await query('/rest/v1/iad_sync_versoes?select=versao','GET',spyToken);
+ const spyEventos=await query('/rest/v1/iad_sync_eventos?select=registro_id,versao','GET',spyToken);
+ assert.deepEqual(spyVersoes,[],'Vendedor sem acesso ao watermark compartilhado');
+ assert.deepEqual(spyEventos,[],'Vendedor não pode enumerar eventos de colegas');
+ const result={supabase:'local / loopback',journalOnlyGestor:true,normalUserNoMetadata:true,
+ firstRecords:init,deltaEvents:delta,deleteEvents:excl,
   lastRecords:state.contas.length,parity:true,isolation:'Authenticated PostgREST/RLS'};
  fs.mkdirSync(path.join(root,'homolog-artifacts'),{recursive:true});
  fs.writeFileSync(path.join(root,'homolog-artifacts','perf03b-e2e.json'),JSON.stringify(result,null,2));
