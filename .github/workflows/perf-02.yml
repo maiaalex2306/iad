@@ -12,6 +12,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # comparação real com SHA da v268
       - name: Sintaxe dos componentes alterados
         run: |
           node --check src/store.js
