@@ -1930,6 +1930,17 @@
   ];
 
   let modoPipeline = 'lista';
+  const TAMANHO_LOTE_PIPELINE = 48;
+  let limitePipeline = TAMANHO_LOTE_PIPELINE;
+  function maisPipeline() { limitePipeline += TAMANHO_LOTE_PIPELINE; }
+  function faixaMaisPipeline(total) {
+    return total > limitePipeline
+      ? '<div class="row" style="justify-content:center;margin:14px 0">' +
+        '<button class="btn alt" onclick="App.pipelineMais()">Mostrar mais ' +
+        Math.min(TAMANHO_LOTE_PIPELINE, total - limitePipeline) +
+        ' de ' + total + ' negociações</button></div>'
+      : '';
+  }
 
   /* ---------------- Seleção em lote no Pipeline ----------------
 
@@ -2001,8 +2012,8 @@
   let pipelineFiltro = Object.assign({}, VAZIO_PIPELINE);
 
   function pipelineEstado() { return pipelineFiltro; }
-  function pipelineFiltrar(mudancas) { Object.assign(pipelineFiltro, mudancas || {}); }
-  function pipelineLimparTudo() { pipelineFiltro = Object.assign({}, VAZIO_PIPELINE); }
+  function pipelineFiltrar(mudancas) { Object.assign(pipelineFiltro, mudancas || {}); limitePipeline = TAMANHO_LOTE_PIPELINE; }
+  function pipelineLimparTudo() { pipelineFiltro = Object.assign({}, VAZIO_PIPELINE); limitePipeline = TAMANHO_LOTE_PIPELINE; }
 
   /* Quantos filtros da gaveta estão ligados. É o número no botão — sem ele, a
      pessoa filtra, esquece, e depois jura que o pipeline sumiu. */
@@ -2124,7 +2135,9 @@
   function resumosDoPipeline(est) {
     const f = pipelineFiltro;
     return ordenarPipeline(
-      est.oportunidades.map(E.resumo)
+      (global.IADPipelinePerf
+        ? global.IADPipelinePerf.resumos(est)
+        : est.oportunidades.map(E.resumo))
         .filter(function (r) { return passaNoFiltroPipeline(r, f); })
         /* "Todos" não inclui nutrição, de propósito. Nutrição é o que saiu da
            previsão: deixá-la no total faria o contador e a soma em reais
@@ -2378,10 +2391,11 @@
       return pipelineFiltro.status !== 'abertas' || !o.desfecho;
     }).length;
 
+    const visiveis = resumos.slice(0, limitePipeline);
     const corpo = resumos.length
       ? (modoPipeline === 'kanban'
-          ? kanban(resumos)
-          : '<div class="lista">' + resumos.map(cardOportunidade).join('') + '</div>')
+          ? kanban(visiveis, resumos)
+          : '<div class="lista">' + visiveis.map(cardOportunidade).join('') + '</div>')
       : '<div class="vazio">Nenhuma negociação com estes filtros.' +
         foraDoRecorte() +
         (quantosNaGaveta() || pipelineFiltro.responsavel !== 'todos' || pipelineFiltro.busca
@@ -2393,7 +2407,8 @@
        ninguém confia. */
     const selecao = modoPipeline === 'lista' ? barraDeSelecao(resumos) : '';
 
-    return cabecalhoPipeline(filtros) + barraDoPipeline(resumos, total) + corpo + selecao;
+    return cabecalhoPipeline(filtros) + barraDoPipeline(resumos, total) + corpo +
+      faixaMaisPipeline(resumos.length) + selecao;
   }
 
   /* O recorte do administrador não é um filtro da barra: mora no menu do
@@ -2445,17 +2460,19 @@
 
   /* Kanban por etapa do funil. A cor da borda continua sendo a decisão,
      não a etapa — mover o cartão não move a decisão. */
-  function kanban(resumos) {
+  function kanban(resumos, totais) {
     const etapas = P.ETAPAS.filter(function (e) { return e !== 'Venda'; });
+    const todos = totais || resumos;
     const colunas = etapas.map(function (etapa) {
       const doGrupo = resumos.filter(function (r) { return r.op.etapa === etapa; });
-      const valor = doGrupo.reduce(function (s, r) { return s + (r.op.valor || 0); }, 0);
+      const completos = todos.filter(function (r) { return r.op.etapa === etapa; });
+      const valor = completos.reduce(function (s, r) { return s + (r.op.valor || 0); }, 0);
       const cartoes = doGrupo.map(function (r) { return cartaoKanban(r, etapas); }).join('') ||
         '<div class="vazio tiny">—</div>';
       return '<section class="coluna" ondragover="event.preventDefault()" ondrop="App.soltar(event,\'' + etapa + '\')">' +
         '<header><div class="row" style="gap:6px"><strong>' + esc(etapa) + '</strong><span class="espaco"></span>' +
         '<button class="mais" title="Cadastro rápido nesta etapa" onclick="App.cadastroRapido(\'' + etapa + '\')">+</button></div>' +
-        '<span class="tiny muted">' + doGrupo.length + ' · ' + U.compacto(valor) + '</span></header>' +
+        '<span class="tiny muted">' + completos.length + ' · ' + U.compacto(valor) + '</span></header>' +
         '<div class="cartoes">' + cartoes + '</div></section>';
     }).join('');
 
@@ -2494,7 +2511,7 @@
     const fechadas = est.oportunidades.filter(function (o) { return o.desfecho; })
       .sort(function (a, b) { return b.desfecho.data.localeCompare(a.desfecho.data); });
 
-    const itens = fechadas.map(function (op) {
+    const itens = fechadas.slice(0, limitePipeline).map(function (op) {
       const d = P.DESFECHOS.find(function (x) { return x.id === op.desfecho.tipo; }) || { rotulo: op.desfecho.tipo, classe: '' };
       const conta = Store.conta(op.contaId);
       return '<button class="item" onclick="App.abrir(\'' + op.id + '\')">' +
@@ -2507,7 +2524,7 @@
         (op.desfecho.motivo ? ' · ' + esc(op.desfecho.motivo) : '') + '</div></button>';
     }).join('') || '<div class="vazio">Nenhum negócio encerrado ainda.</div>';
 
-    return '<div class="lista">' + itens + '</div>';
+    return '<div class="lista">' + itens + '</div>' + faixaMaisPipeline(fechadas.length);
   }
 
   /* Tira compacta: o mesmo mapa das 8 decisões, do tamanho de uma linha. */
@@ -10677,10 +10694,11 @@
     pendenteAcesso: function () { return pendente; },
     definirFiltroFunil, limparFiltroFunil, definirFunilAberto, definirForma, tarefasFiltrar, tarefasEstado, tarefasVisiveis, tarefasDaPagina, tarefasSelecionadas, tarefasMarcar,
     pipelineEstado, pipelineFiltrar, pipelineLimparTudo, gavetaDeFiltros, conferirSessao, zerarFiltros,
+    maisPipeline: maisPipeline, limitePipeline: function () { return limitePipeline; },
     definirSemanasDoAprendizado: function (n) { semanasDoAprendizado = n; },
     semanasDoAprendizado: function () { return semanasDoAprendizado; },
     oportunidadesDoLHSemTarefa, outrasAbertasDaConta,
-    definirFiltro: function (f) { filtroGrupo = f; },
+    definirFiltro: function (f) { filtroGrupo = f; limitePipeline = TAMANHO_LOTE_PIPELINE; },
     definirFiltroHistorico: function (f) { filtroHistorico = f; },
     definirFiltroHoje: function (f) { filtroHoje = f; paginaHoje = 1; },
     definirConferencia: definirConferencia,
@@ -10694,7 +10712,7 @@
     POR_PAGINA: POR_PAGINA,
     definirFiltroTarefas: function (f) { filtroTarefas = f; },
     definirPeriodoTarefas: function (f) { periodoTarefas = f; },
-    definirModoPipeline: function (m) { modoPipeline = m; },
+    definirModoPipeline: function (m) { modoPipeline = m; limitePipeline = TAMANHO_LOTE_PIPELINE; },
     definirAbaCadastro: function (a) { abaCadastro = a; buscaCadastro = ''; },
 
     /* A nutrição precisa do estado dela de fora: o App lê o que está marcado
@@ -10749,7 +10767,7 @@
        escondeu é a forma mais fácil de mover um negócio sem ver. */
     marcarTodosNoPipeline: function () {
       if (!selecaoPipeline) return;
-      const elegiveis = resumosDoPipeline(Store.dados())
+      const elegiveis = resumosDoPipeline(Store.dados()).slice(0, limitePipeline)
         .filter(function (r) { return podeIrParaNutricao(r.op); });
       const todas = elegiveis.length && elegiveis.every(function (r) { return selecaoPipeline[r.op.id]; });
       selecaoPipeline = {};

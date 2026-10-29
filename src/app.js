@@ -161,6 +161,7 @@
     /* Expiração da sessão também remove o cache, inclusive quando semServidor
        interrompe o render antes da tela de login. */
     if (!logado && global.IADPerf02) global.IADPerf02.limpar();
+    if (!logado && global.IADPipelinePerf) global.IADPipelinePerf.limpar();
     if (!logado && W) W.esquecer();
 
     /* Registro sem empresa fica invisível. Aqui, com a sessão já conhecida,
@@ -1820,6 +1821,7 @@
     },
     paginaHoje: function (n) { V.definirPaginaHoje(n); window.scrollTo(0, 0); render(); },
     modoPipeline: function (modo) { V.definirModoPipeline(modo); render(); },
+    pipelineMais: function () { V.maisPipeline(); render(); },
     abaCadastro: function (aba) { V.definirAbaCadastro(aba); render(); window.scrollTo(0, 0); },
     /* Trocar de aba é trocar de lista: aí sim começa do topo. */
     abaNutricao: function (aba) { V.definirAbaNutricao(aba); render(); window.scrollTo(0, 0); },
@@ -6275,6 +6277,7 @@
       if (!semPerguntar && !U.confirmar('Sair do sistema?')) return;
       fecharMenuUsuario();
       if (global.IADPerf02) global.IADPerf02.limpar();
+      if (global.IADPipelinePerf) global.IADPipelinePerf.limpar();
       A.encerrarSessao();
       /* Encerrada a sessão, o envio para de tentar na hora. Sem esta linha a
          escada de reenvio seguia correndo contra um servidor que agora recusa

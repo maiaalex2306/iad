@@ -70,8 +70,8 @@ test('interface e versão PWA carregam PERF-02 na ordem correta',()=>{
   const views=fs.readFileSync(path.join(root,'src/views.js'),'utf8');
   assert.ok(index.indexOf('src/engine.js') < index.indexOf('src/perf-02.js'));
   assert.ok(index.indexOf('src/perf-02.js') < index.indexOf('src/views.js'));
-  assert.match(sw,/iad-crm-v269/);
-  assert.match(config,/numero: 'v269'/);
+  assert.match(sw,/iad-crm-v270/);
+  assert.match(config,/numero: 'v270'/);
   assert.match(sw,/src\/perf-02.js/);
   assert.match(app,/IADPerf02\.filaDados\(est\)/);
   assert.match(views,/IADPerf02\.filaDados\(est\)/);

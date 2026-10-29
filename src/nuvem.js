@@ -1447,10 +1447,44 @@
      Agora vazio não passa por cima de cheio. A cópia local fica, o erro sobe
      com nome, e quem quiser mesmo substituir precisa dizer isso — é o que o
      `forcar` significa. */
+  /* PERF-03A P0: o Supabase pode limitar respostas a 1.000 registros ou
+     menos. Nunca interpretar uma página curta como "fim": o limite da API
+     pode ser menor que nosso lote. Paginação por PK evita saltos de offset
+     se novas linhas surgirem durante o download. A página VAZIA encerra. */
+  const TAMANHO_PAGINA = 500;
+  const MAX_PAGINAS = 2000;
+  function baixarTabelaCompleta(t) {
+    const linhas = [];
+    const ids = new Set();
+    function proxima(cursor, pagina) {
+      if (pagina >= MAX_PAGINAS) {
+        return Promise.reject(new Error('Limite de paginação atingido em ' + t.remota));
+      }
+      const filtro = cursor === null ? '' : '&id=gt.' + encodeURIComponent(cursor);
+      return chamar('/rest/v1/' + t.remota + '?select=*&order=id.asc&limit=' +
+        TAMANHO_PAGINA + filtro).then(function (lote) {
+        if (!Array.isArray(lote)) throw new Error('Resposta inválida em ' + t.remota);
+        if (!lote.length) return linhas;
+        if (lote.length > TAMANHO_PAGINA) throw new Error('Página excedeu o limite em ' + t.remota);
+        lote.forEach(function (r) {
+          if (!r || r.id == null || ids.has(String(r.id))) {
+            throw new Error('Paginação repetida/inválida em ' + t.remota);
+          }
+          ids.add(String(r.id));
+          linhas.push(paraApp(r));
+        });
+        const ultimo = String(lote[lote.length - 1].id);
+        if (cursor === ultimo) throw new Error('Cursor não avançou em ' + t.remota);
+        return proxima(ultimo, pagina + 1);
+      });
+    }
+    return proxima(null, 0);
+  }
+
   function puxar(forcar) {
     const buscas = TABELAS.map(function (t) {
-      return chamar('/rest/v1/' + t.remota + '?select=*').then(
-        function (linhas) { return { local: t.local, linhas: (linhas || []).map(paraApp) }; },
+      return baixarTabelaCompleta(t).then(
+        function (linhas) { return { local: t.local, linhas: linhas }; },
         function (e) { return { local: t.local, tabela: t.remota, erro: e.message }; }
       );
     });
