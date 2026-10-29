@@ -30,10 +30,10 @@ ALTER TABLE public.iad_sync_versoes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.iad_sync_eventos ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS iad_sync_versoes_leitura ON public.iad_sync_versoes;
 CREATE POLICY iad_sync_versoes_leitura ON public.iad_sync_versoes FOR SELECT TO authenticated
-  USING (tenant_id = public.meu_tenant() OR public.sou_admin());
+  USING (public.sou_admin() OR (tenant_id = public.meu_tenant() AND public.sou_gestor()));
 DROP POLICY IF EXISTS iad_sync_eventos_leitura ON public.iad_sync_eventos;
 CREATE POLICY iad_sync_eventos_leitura ON public.iad_sync_eventos FOR SELECT TO authenticated
-  USING (tenant_id = public.meu_tenant() OR public.sou_admin());
+  USING (public.sou_admin() OR (tenant_id = public.meu_tenant() AND public.sou_gestor()));
 
 REVOKE ALL ON public.iad_sync_versoes FROM anon;
 REVOKE ALL ON public.iad_sync_eventos FROM anon;
