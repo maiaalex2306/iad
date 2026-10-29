@@ -399,7 +399,9 @@
     return lista;
   }
 
-  function resumo(op) {
+  /* PERF-02: índice de atrasos opcional por execução da fila. Os consumidores
+     isolados de E.resumo continuam usando a rotina original, sem mudança. */
+  function resumo(op, atrasadasIndex) {
     return {
       op: op,
       conta: Store.conta(op.contaId),
@@ -418,7 +420,7 @@
       tempoNaEtapa: tempoNaEtapa(op),
       delta: deltaSemana(op),
       autoria: autoria(op),
-      tarefasAtrasadas: tarefasAtrasadas(op)
+      tarefasAtrasadas: atrasadasIndex ? (atrasadasIndex[op.id] || 0) : tarefasAtrasadas(op)
     };
   }
 
@@ -1216,6 +1218,14 @@
 
   function fila(oportunidades, tarefas) {
     const hoje = Store.hoje();
+    /* O resumo antigo filtrava Store.dados().tarefas uma vez PARA CADA
+       oportunidade. Uma única passagem preserva o mesmo conjunto visível,
+       independente do subconjunto de tarefas fornecido a fila(). */
+    const atrasadasIndex = Object.create(null);
+    (Store.dados().tarefas || []).forEach(function (t) {
+      if (t.status !== 'aberta' || !t.vencimento || !(t.vencimento < hoje)) return;
+      atrasadasIndex[t.oportunidadeId] = (atrasadasIndex[t.oportunidadeId] || 0) + 1;
+    });
     const porOp = {};
     (tarefas || []).filter(function (t) { return t.status === 'aberta'; }).forEach(function (t) {
       if (t.oportunidadeId) (porOp[t.oportunidadeId] = porOp[t.oportunidadeId] || []).push(t);
@@ -1239,7 +1249,7 @@
       if (o.nutricao && !nutricaoVencida(o)) return false;
       return true;
     }).map(function (op) {
-      const r = resumo(op);
+      const r = resumo(op, atrasadasIndex);
       const mom = momento(op);
       const vencidas = (porOp[op.id] || []).filter(function (t) { return t.vencimento && t.vencimento < hoje; });
 

@@ -135,6 +135,24 @@
   let estado = estadoVazio();
 
   const ouvintes = [];
+  /* PERF-02: revisão monotônica de memória, inclusive após sync silencioso. */
+  let revisaoDados = 0;
+  let revisaoIndices = -1;
+  let contasPorId = new Map();
+  let oportunidadesPorId = new Map();
+  function reconstruirIndices() {
+    if (revisaoIndices === revisaoDados) return;
+    contasPorId = new Map();
+    oportunidadesPorId = new Map();
+    /* find() antigo selecionava a PRIMEIRA ocorrência de IDs duplicados. */
+    (estado.contas || []).forEach(function (r) {
+      if (!contasPorId.has(r.id)) contasPorId.set(r.id, r);
+    });
+    (estado.oportunidades || []).forEach(function (r) {
+      if (!oportunidadesPorId.has(r.id)) oportunidadesPorId.set(r.id, r);
+    });
+    revisaoIndices = revisaoDados;
+  }
 
   /* Migração: um export da v1 precisa continuar abrindo. */
   /* A lista de tipos virou canal ("Telefonema", "WhatsApp"), e quem já usava o
@@ -304,6 +322,8 @@
   }
 
   function salvar() {
+    /* Antes de notificar ouvintes: nunca entregar índice de dados anteriores. */
+    revisaoDados++;
     ouvintes.forEach(function (fn) { fn(estado); });
     if (!silencio && aoMudar) aoMudar();
   }
@@ -869,9 +889,9 @@
     return adotados;
   }
 
-  function conta(id) { return estado.contas.find(function (c) { return c.id === id; }); }
+  function conta(id) { reconstruirIndices(); return contasPorId.get(id); }
   function contato(id) { return estado.contatos.find(function (c) { return c.id === id; }); }
-  function oportunidade(id) { return estado.oportunidades.find(function (o) { return o.id === id; }); }
+  function oportunidade(id) { reconstruirIndices(); return oportunidadesPorId.get(id); }
   function tarefa(id) { return estado.tarefas.find(function (t) { return t.id === id; }); }
   function contatosDaConta(contaId) {
     return estado.contatos.filter(function (c) { return c.contaId === contaId && visivel(c, true); });
@@ -2065,6 +2085,7 @@
 
   global.IADStore = {
     uid, hoje, carregar, salvar, inscrever, obter, substituir, estadoVazio,
+    revisao: function () { return revisaoDados; },
     guardarCopiaDeSeguranca, copiaDeSeguranca, restaurarCopiaDeSeguranca, descartarCopiaDeSeguranca,
     excluirContato,
     quandoMudar, semSincronizar, registrarExclusao, exclusoesPendentes, esquecerExclusoes,
