@@ -140,16 +140,47 @@
   let revisaoIndices = -1;
   let contasPorId = new Map();
   let oportunidadesPorId = new Map();
+  let contatosPorId = new Map();
+  let tarefasPorOportunidade = new Map();
+  let sinaisDiretos = new Map();
+  let sinaisPorContatoSemOp = new Map();
+  let sinaisPorContaSemContato = new Map();
+  function adicionarIndice(indice, chave, valor) {
+    if (chave == null || chave === '') return;
+    const k = String(chave);
+    if (!indice.has(k)) indice.set(k, []);
+    indice.get(k).push(valor);
+  }
   function reconstruirIndices() {
     if (revisaoIndices === revisaoDados) return;
     contasPorId = new Map();
     oportunidadesPorId = new Map();
+    contatosPorId = new Map();
+    tarefasPorOportunidade = new Map();
+    sinaisDiretos = new Map();
+    sinaisPorContatoSemOp = new Map();
+    sinaisPorContaSemContato = new Map();
     /* find() antigo selecionava a PRIMEIRA ocorrência de IDs duplicados. */
     (estado.contas || []).forEach(function (r) {
       if (!contasPorId.has(r.id)) contasPorId.set(r.id, r);
     });
     (estado.oportunidades || []).forEach(function (r) {
       if (!oportunidadesPorId.has(r.id)) oportunidadesPorId.set(r.id, r);
+    });
+    (estado.contatos || []).forEach(function (r) {
+      if (!contatosPorId.has(r.id)) contatosPorId.set(r.id, r);
+    });
+    (estado.tarefas || []).forEach(function (r) {
+      adicionarIndice(tarefasPorOportunidade, r.oportunidadeId, r);
+    });
+    /* Para empates no ordenamento de sinais, conservar a posição na lista
+       original: Array.sort estável não pode receber os sinais em ordem de
+       buckets diferente da v269. */
+    (estado.sinais || []).forEach(function (s, i) {
+      const entrada = { i: i, sinal: s };
+      if (s.oportunidadeId) adicionarIndice(sinaisDiretos, s.oportunidadeId, entrada);
+      else if (s.contatoId) adicionarIndice(sinaisPorContatoSemOp, s.contatoId, entrada);
+      else if (s.contaId) adicionarIndice(sinaisPorContaSemContato, s.contaId, entrada);
     });
     revisaoIndices = revisaoDados;
   }
@@ -890,14 +921,17 @@
   }
 
   function conta(id) { reconstruirIndices(); return contasPorId.get(id); }
-  function contato(id) { return estado.contatos.find(function (c) { return c.id === id; }); }
+  function contato(id) { reconstruirIndices(); return contatosPorId.get(id); }
   function oportunidade(id) { reconstruirIndices(); return oportunidadesPorId.get(id); }
   function tarefa(id) { return estado.tarefas.find(function (t) { return t.id === id; }); }
   function contatosDaConta(contaId) {
     return estado.contatos.filter(function (c) { return c.contaId === contaId && visivel(c, true); });
   }
   function tarefasDaOportunidade(opId) {
-    return estado.tarefas.filter(function (t) { return t.oportunidadeId === opId && visivel(t, true); });
+    reconstruirIndices();
+    return (tarefasPorOportunidade.get(String(opId)) || []).filter(function (t) {
+      return visivel(t, true);
+    });
   }
 
   function criarConta(dados) {
@@ -1275,15 +1309,21 @@
      trabalho de organizar o cadastro — que é quando ele vale mais. */
   function sinaisDaOportunidade(op) {
     if (!op) return [];
-    const doGrupo = {};
-    (op.stakeholders || []).forEach(function (id) { doGrupo[id] = true; });
-    return ordenarSinais((estado.sinais || []).filter(function (s) {
-      if (!visivel(s, true)) return false;
-      if (s.oportunidadeId === op.id) return true;
-      if (s.oportunidadeId) return false;
-      if (s.contatoId && doGrupo[s.contatoId]) return true;
-      return !s.contatoId && !!op.contaId && s.contaId === op.contaId;
-    }));
+    reconstruirIndices();
+    const candidatas = (sinaisDiretos.get(String(op.id)) || []).slice();
+    const vistos = new Set(candidatas.map(function (e) { return e.i; }));
+    function incluir(lista) {
+      (lista || []).forEach(function (e) {
+        if (!vistos.has(e.i)) { vistos.add(e.i); candidatas.push(e); }
+      });
+    }
+    (op.stakeholders || []).forEach(function (id) {
+      incluir(sinaisPorContatoSemOp.get(String(id)));
+    });
+    if (op.contaId) incluir(sinaisPorContaSemContato.get(String(op.contaId)));
+    candidatas.sort(function (a, b) { return a.i - b.i; });
+    return ordenarSinais(candidatas.map(function (e) { return e.sinal; })
+      .filter(function (s) { return visivel(s, true); }));
   }
 
   function excluirSinal(id) {
