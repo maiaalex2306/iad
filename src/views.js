@@ -2933,11 +2933,35 @@
       '>Potencial: ' + esc(pot.faixa.rotulo) + '</span>';
   }
 
+  /* PERF-03B: a mesma negociação não muda de decisão quando o vendedor
+     apenas alterna a aba. Memoizar pelo Store + dia + identidade/recorte. */
+  let cockpitMemo = null;
+  function chaveDeVisao(opId) {
+    const ctx = Store.contexto();
+    const u = ctx && ctx.usuario;
+    if (!u || !u.id || !Store.revisao) return '';
+    const f = ctx.filtros || {};
+    return JSON.stringify([Store.revisao(),Store.hoje(),u.id,u.papel || '',
+      ctx.tenantId || '',f.tenant || '',f.usuario || '',opId]);
+  }
+  function resumoNoCockpit(op) {
+    const chave = chaveDeVisao(op.id);
+    if (chave && cockpitMemo && cockpitMemo.chave === chave) return cockpitMemo.resumo;
+    const atrasos = Object.create(null);
+    const hoje = Store.hoje();
+    atrasos[op.id] = Store.tarefasDaOportunidade(op.id).filter(function (t) {
+      return t.status === 'aberta' && t.vencimento && t.vencimento < hoje;
+    }).length;
+    const perf = global.IADPerformance;
+    const calcular = function () { return E.resumo(op, atrasos); };
+    const resumo = perf ? perf.medir('perf03b.cockpit-resumo', calcular) : calcular();
+    cockpitMemo = chave ? { chave: chave, resumo: resumo } : null;
+    return resumo;
+  }
   function cockpit(id) {
-    renovarPotencial();
     const op = Store.oportunidade(id);
     if (!op) return '<div class="vazio">Oportunidade não encontrada.</div>';
-    const r = E.resumo(op);
+    const r = resumoNoCockpit(op);
     const conta = r.conta;
 
     /* Trocar de negócio volta para a aba da Decisão. Guardar a aba entre
@@ -3159,6 +3183,15 @@
         (n ? '<span class="conta' + (a[0] === 'whatsapp' ? ' zap' : '') + '">' + n + '</span>' : '') +
         '</button>';
     }).join('') + '</div>';
+  }
+
+  /* Aba isolada: trocar Tarefas não reconstrói cabeçalho e dez painéis. */
+  function painelDaAbaCockpit(id) {
+    const op = Store.oportunidade(id);
+    if (!op) return null;
+    const necessitaResumo = abaCockpit === 'decisao';
+    const r = necessitaResumo ? resumoNoCockpit(op) : null;
+    return { abas: abasDoCockpit(op), corpo: corpoDaAba(op, r) };
   }
 
   function corpoDaAba(op, r) {
@@ -5604,8 +5637,16 @@
      e uma oportunidades cento e uma vezes — dez mil passadas para desenhar
      uma tela. Calculado uma vez e jogado fora quando a tela recomeça. */
   let basePotencial = null;
-  function renovarPotencial() { basePotencial = null; }
+  let chaveBasePotencial = '';
+  function renovarPotencial() {
+    const chave = chaveDeVisao('potencial-base');
+    if (!chave || chave !== chaveBasePotencial) {
+      basePotencial = null;
+      chaveBasePotencial = chave;
+    }
+  }
   function potencialDe(op) {
+    renovarPotencial();
     if (!basePotencial) basePotencial = E.baseDoPotencial();
     return E.potencial(op, basePotencial);
   }
@@ -10783,6 +10824,7 @@
     definirFiltroLH: definirFiltroLH, gerarListaLH: gerarListaLH,
     listaDeCampanha: listaDeCampanha, filtroDeCampanha: filtroDeCampanha,
     definirAbaCockpit: definirAbaCockpit,
+    painelDaAbaCockpit: painelDaAbaCockpit,
     definirBuscaCadastro: function (b) { buscaCadastro = b; },
     definirPeriodo: function (f) { filtroPeriodo = f; },
     definirSegmento: function (f) { filtroSegmento = f; }
