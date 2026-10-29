@@ -221,7 +221,10 @@
 
     if (hash.indexOf('#/op/') === 0) {
       const id = hash.slice(5);
-      conteudo.innerHTML = faixa + V.cockpit(id);
+      const perf = global.IADPerformance;
+      const html = perf ? perf.medir('tela.cockpit', function () { return V.cockpit(id); }) : V.cockpit(id);
+      if (perf) perf.medir('dom.cockpit', function () { conteudo.innerHTML = faixa + html; });
+      else conteudo.innerHTML = faixa + html;
       pintarArquivos(id);
       /* A área de soltar arquivo do quadro financeiro nasce com a aba e precisa
          ser religada a cada repintura: o HTML é refeito, os ouvintes não. */
@@ -1873,7 +1876,23 @@
        nada, e a tela se repinta sozinha quando há. */
     abaCockpit: function (aba) {
       V.definirAbaCockpit(aba);
-      render();
+      const hash = location.hash || '';
+      const id = hash.indexOf('#/op/') === 0 ? hash.slice(5) : '';
+      const atual = document.querySelector('.abas-cockpit');
+      const corpo = document.querySelector('.corpo-aba');
+      if (id && atual && corpo && A.atual()) {
+        const perf = global.IADPerformance;
+        const atualizar = function () {
+          const partes = V.painelDaAbaCockpit(id);
+          if (!partes) { render(); return; }
+          atual.outerHTML = partes.abas;
+          corpo.innerHTML = partes.corpo;
+        };
+        if (perf) perf.medir('perf03b.trocar-aba', atualizar);
+        else atualizar();
+        if (aba === 'arquivos') pintarArquivos(id);
+        if (aba === 'propostas') pintarSoltaQuadro();
+      } else render();
       if (aba === 'sinais') colherAberturas();
       if (aba === 'email') buscarNoServidorDeEmail(false);
     },

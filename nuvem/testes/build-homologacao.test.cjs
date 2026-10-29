@@ -66,3 +66,11 @@ test('build PERF-03A v270 preserva isolamento de Supabase',()=>{
   assert.match(index,/HOMOLOGAÇÃO v270-HOMOLOG/);
   assert.match(index,/pipeline-performance\.js/);
 });
+
+test('PERF-03B build isolado v271 proíbe projeto de produção',()=>{
+ const r=exec('https://exemplo-homolog.supabase.co',goodKey,'performance/iad-perf-03b');
+ assert.equal(r.status,0,r.stderr);
+ const config=fs.readFileSync(path.join(root,'dist/src/config.js'),'utf8');
+ assert.match(config,/v271-HOMOLOG/);
+ assert.doesNotMatch(config,/drhonmdffhnwamwzynrs/);
+});
