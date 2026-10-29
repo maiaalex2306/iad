@@ -1,0 +1,86 @@
+name: PERF-03A — Homologacao profunda isolada
+on:
+  pull_request:
+    branches:
+      - claude/decisoes-estagios-vendas-eckjo0
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  scale-differential:
+    name: 243 1000 5000 e paridade v269
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/perf03a-scale-bench.cjs
+      - name: Evidencias de escala
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf03a-scale
+          path: homolog-artifacts/scale-bench.json
+          if-no-files-found: ignore
+
+  browser-isolated:
+    name: Chromium real com dados sinteticos
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Instalar Playwright em runner descartavel
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - run: node scripts/perf03a-browser-homolog.cjs
+      - name: Evidencias de navegador
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf03a-browser
+          path: |
+            homolog-artifacts/browser-bench.json
+            homolog-artifacts/pipeline-b.png
+          if-no-files-found: ignore
+
+  supabase-local:
+    name: Supabase local Postgres Auth RLS
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: supabase/setup-cli@v3
+      - name: Inicializar servidor Supabase isolado
+        run: |
+          supabase init --force
+          supabase start -x studio,imgproxy,realtime,storage-api,edge-runtime,postgres-meta,mailpit,logflare,vector,supavisor
+      - name: Aplicar esquema apenas no Postgres local
+        run: |
+          sudo apt-get -qq update
+          sudo apt-get -qq install -y postgresql-client
+          psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -X -v ON_ERROR_STOP=1 -f nuvem/schema.sql
+      - name: Auth RLS isolamento e paginacao PostgREST
+        run: |
+          set -a
+          source <(supabase status -o env)
+          set +a
+          export API_URL='http://127.0.0.1:54321'
+          node scripts/perf03a-supabase-local.cjs
+      - name: Evidencias Supabase isolado
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf03a-supabase-local
+          path: homolog-artifacts/supabase-local-rls.json
+          if-no-files-found: ignore
