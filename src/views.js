@@ -370,7 +370,10 @@
     if (!est.oportunidades.length) return boasVindas();
 
     const G = global.IADGraficos;
-    const foco = E.fila(est.oportunidades, est.tarefas);
+    const perf = global.IADPerformance;
+    const foco = perf ? perf.medir('hoje.fila', function () {
+      return E.fila(est.oportunidades, est.tarefas);
+    }) : E.fila(est.oportunidades, est.tarefas);
     /* Fila vazia não significa carteira encerrada. Desde que os leads que
        nunca produziram evidência saíram da fila, quem tem cem deles e nenhum
        negócio começado via “Toda a carteira está encerrada” — uma frase falsa
@@ -423,7 +426,9 @@
     const comeco = (pagina - 1) * porPaginaHoje;
     const naPagina = visiveis.slice(comeco, comeco + porPaginaHoje);
 
-    const itens = naPagina.map(cartaoFoco).join('') ||
+    const itens = (perf ? perf.medir('hoje.cartoes', function () {
+      return naPagina.map(cartaoFoco).join('');
+    }) : naPagina.map(cartaoFoco).join('')) ||
       '<div class="vazio">Nada neste filtro.</div>';
 
     return '<div class="row"><h1>Hoje</h1><span class="espaco"></span>' +
@@ -581,10 +586,10 @@
     if (analisando) {
       const p = analisando;
       const quanto = p.total ? Math.round((p.feitos / p.total) * 100) : 0;
-      return '<div class="card analise-dia"><div class="row"><h2 style="margin:0">Analisando a carteira…</h2>' +
-        '<span class="espaco"></span><span class="tiny muted">' + p.feitos + ' de ' + p.total + '</span></div>' +
-        '<div class="barra-progresso"><i style="width:' + quanto + '%"></i></div>' +
-        '<p class="small muted" style="margin:8px 0 0">' + esc(p.fase || '') + ' ' +
+      return '<div class="card analise-dia" data-iad-progresso="1"><div class="row"><h2 style="margin:0">Analisando a carteira…</h2>' +
+        '<span class="espaco"></span><span class="tiny muted" data-iad-contador="1">' + p.feitos + ' de ' + p.total + '</span></div>' +
+        '<div class="barra-progresso"><i data-iad-barra="1" style="width:' + quanto + '%"></i></div>' +
+        '<p class="small muted" data-iad-fase="1" style="margin:8px 0 0">' + esc(p.fase || '') + ' ' +
         'Pode continuar trabalhando — ela avisa quando terminar.</p></div>';
     }
 
@@ -1085,7 +1090,8 @@
           '<br><span class="tiny muted">Nada a fazer aqui hoje — a bola está do outro lado. ' +
           'Se o cliente não voltar até lá, a tarefa vence e o negócio sobe de novo.</span></div>'
         : '') +
-      blocosDaOrientacao(i) +
+      '<div class="iad-orientacao-foco" data-op-id="' + esc(r.op.id) + '">' +
+      blocosDaOrientacao(i) + '</div>' +
       '<div class="tiny muted" style="margin-top:8px">Falta: ' + falta + '</div>' +
       (tarefas ? '<div class="tarefas">' + tarefas + '</div>' : '') +
       '<div class="row" style="margin-top:10px">' +
@@ -10656,6 +10662,7 @@
 
   global.IADViews = {
     semServidor,
+    orientacaoFoco: blocosDaOrientacao,
     hoje, painel, pipeline, tarefas, cockpit, revisao, contas, cadastros, nutricao, notasRapidas, playbook, dados, itemArquivo, listaLeads,
     revisaoDaImportacao, recusaDoCliente, resumoDaLeitura, planoDaIA, definirPlano, planoGuardado,
     marcarLendo, estaLendo, revisaoDasNotas, respostaDaConversa,

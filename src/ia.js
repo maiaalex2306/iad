@@ -1325,7 +1325,7 @@
             Store.guardarOrientacao(op.id, leitura || { leitura: '', acelerar: [], risco: [] });
           });
           if (leitura) feitas++;
-          if (aoAndar) { try { aoAndar(n + 1, pendentes.length); } catch (e) { /* a tela não derruba a varredura */ } }
+          if (aoAndar) { try { aoAndar(n + 1, pendentes.length, item); } catch (e) { /* a tela não derruba a varredura */ } }
           return new Promise(function (resolve) { setTimeout(resolve, PAUSA_ENTRE_LEITURAS); });
         })
         .then(function () { return proximo(n + 1); });
