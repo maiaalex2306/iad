@@ -371,9 +371,10 @@
 
     const G = global.IADGraficos;
     const perf = global.IADPerformance;
-    const foco = perf ? perf.medir('hoje.fila', function () {
-      return E.fila(est.oportunidades, est.tarefas);
-    }) : E.fila(est.oportunidades, est.tarefas);
+    const calcularFila = function () {
+      return global.IADPerf02 ? global.IADPerf02.filaDados(est) : E.fila(est.oportunidades, est.tarefas);
+    };
+    const foco = perf ? perf.medir('hoje.fila', calcularFila) : calcularFila();
     /* Fila vazia não significa carteira encerrada. Desde que os leads que
        nunca produziram evidência saíram da fila, quem tem cem deles e nenhum
        negócio começado via “Toda a carteira está encerrada” — uma frase falsa
