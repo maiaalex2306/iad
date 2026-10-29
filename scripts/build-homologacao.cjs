@@ -41,8 +41,25 @@ window.IADConfig = {
   supabase: { url: ${JSON.stringify(url)}, chave: ${JSON.stringify(publishable)} }
 };
 window.IADVersao = { numero: 'v268-HOMOLOG', data: '2026-10-29' };
+window.IADHomologacao = true;
 `;
 fs.writeFileSync(path.join(OUT,'src','config.js'),config,'utf8');
+
+/* O CRM de produção permite configurar outro Supabase via localStorage.
+   A edição de HOMOLOGAÇÃO não pode mudar de projeto, nem pelo menu nem
+   por configuração salva anteriormente no navegador. Essa alteração
+   afeta SOMENTE a cópia de saída dist/, nunca o código de produção. */
+const nuvemPath = path.join(OUT,'src','nuvem.js');
+let nuvem = fs.readFileSync(nuvemPath,'utf8');
+const chaveConfig = '  function config() {\n    const base = padrao();';
+const inicioConfig = '  function config() {\n    const base = padrao();\n    if (global.IADHomologacao) return base;';
+const salvarConfig = '  function salvarConfig(nova) {';
+const bloquearConfig = '  function salvarConfig(nova) {\n    if (global.IADHomologacao) throw new Error("Na homologação, a conexão Supabase é fixa e isolada.");';
+if (nuvem.split(chaveConfig).length !== 2 || nuvem.split(salvarConfig).length !== 2) {
+  fail('Marcadores de configuração do Supabase mudaram: revise o build antes de publicar.');
+}
+nuvem = nuvem.replace(chaveConfig,inicioConfig).replace(salvarConfig,bloquearConfig);
+fs.writeFileSync(nuvemPath,nuvem,'utf8');
 for (const f of ['index.html','recuperar.html']) {
   const p = path.join(OUT,f);
   let text = fs.readFileSync(p,'utf8');
