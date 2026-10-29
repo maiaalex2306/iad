@@ -72,6 +72,31 @@ HOMOLOGAÇÃO v268 — use apenas contas e dados de teste
   text = text.replace('<head>','<head>\n<meta name="robots" content="noindex,nofollow">');
   fs.writeFileSync(p,text,'utf8');
 }
+/* GitHub Pages usa a subpasta /iadcrm-homolog/. Links absolutos
+   para '/' sairiam dessa subpasta, quebrando recuperação e autenticação.
+   Ajustes somente na cópia dist/, preservando produção. */
+const indexPath = path.join(OUT,'index.html');
+let indexText = fs.readFileSync(indexPath,'utf8');
+const redirectSource = "location.replace('/recuperar.html' + location.search + location.hash)";
+if (!indexText.includes(redirectSource)) fail('Redirecionamento inicial de recuperação mudou.');
+indexText = indexText.replace(redirectSource,
+  "location.replace('recuperar.html' + location.search + location.hash)");
+fs.writeFileSync(indexPath,indexText,'utf8');
+
+const recuperarPath = path.join(OUT,'recuperar.html');
+let recuperarText = fs.readFileSync(recuperarPath,'utf8');
+if (!recuperarText.includes('href="/">')) fail('Link de retorno da recuperação mudou.');
+recuperarText = recuperarText.replace('href="/">','href="index.html">');
+fs.writeFileSync(recuperarPath,recuperarText,'utf8');
+
+const recuperarJsPath = path.join(OUT,'src','recuperacao.js');
+let recuperarJs = fs.readFileSync(recuperarJsPath,'utf8');
+const antigoDestino = "location.origin + '/'";
+if (!recuperarJs.includes(antigoDestino)) fail('Destino de recuperação mudou.');
+recuperarJs = recuperarJs.replace(antigoDestino,
+  "new URL('./', location.href).href");
+fs.writeFileSync(recuperarJsPath,recuperarJs,'utf8');
+
 fs.writeFileSync(path.join(OUT,'robots.txt'),'User-agent: *\nDisallow: /\n');
 const generated = fs.readFileSync(path.join(OUT,'src','config.js'),'utf8');
 if (generated.includes(liveProject)) fail('Arquivo de saída vinculado ao Supabase de produção.');
