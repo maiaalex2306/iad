@@ -224,7 +224,9 @@
       pintarSoltaQuadro();
     } else {
       const rota = ROTAS.find(function (r) { return r.hash === hash; }) || ROTAS[0];
-      conteudo.innerHTML = faixa + rota.render();
+      const perf = global.IADPerformance;
+      const html = perf ? perf.medir('tela.' + hash, function () { return rota.render(); }) : rota.render();
+      conteudo.innerHTML = faixa + html;
       /* Duas telas se completam depois de desenhadas: Dados mede o espaço
          usado e busca os leads na ponte; Cadastros lista quem está no
          servidor. Nenhuma das duas pode segurar o render. */
@@ -297,10 +299,14 @@
     diaVarrido = hoje;
 
     setTimeout(function () {
-      IA.varrerOrientacoes(foco.itens, function () {
-        repintarConteudo('#/hoje', V.hoje);
-      }).then(function (quantas) {
-        if (quantas) repintarConteudo('#/hoje', V.hoje);
+      IA.varrerOrientacoes(foco.itens, function (feitos, total, item) {
+        /* PERF-01: só modifica a orientação do cartão visível, sem E.fila().
+           O callback inclui o item original, que contém a mesma referência à
+           oportunidade onde Store.guardarOrientacao acabou de gravar a IA. */
+        if (global.IADPerfHoje) global.IADPerfHoje.atualizarOrientacao(item);
+      }).then(function () {
+        /* Não é necessária uma repintura final: outras telas são calculadas
+           normalmente quando abertas e os cartões visíveis já estão atuais. */
       }, function () { /* leitura é extra: falhar nela não avisa ninguém */ });
     }, 600);
   }
@@ -1749,7 +1755,10 @@
       const panoramaEleitura = function (lidos) {
         V.definirProgressoDaAnalise({ feitos: urgentes.length, total: urgentes.length,
           fase: 'Lendo a carteira inteira…' });
-        repintarConteudo('#/hoje', V.hoje);
+        if (global.IADPerfHoje) {
+          global.IADPerfHoje.atualizarProgresso(urgentes.length, urgentes.length,
+            'Lendo a carteira inteira…');
+        }
 
         /* Recalcula a fila: as leituras acabaram de mudar os registros. */
         const agora = Store.dados();
@@ -1768,16 +1777,23 @@
            Esta linha é o único lugar que sabe que o passo mudou. */
         V.definirProgressoDaAnalise({ feitos: urgentes.length, total: urgentes.length,
           fase: 'Lendo a carteira inteira…' });
-        repintarConteudo('#/hoje', V.hoje);
+        if (global.IADPerfHoje) {
+          global.IADPerfHoje.atualizarProgresso(urgentes.length, urgentes.length,
+            'Lendo a carteira inteira…');
+        }
         IA.leituraDaCarteira(pan, fila.itens).then(terminar, function () { terminar(null); });
       };
 
       if (!temIA) { panoramaEleitura(0); return; }
 
-      IA.varrerOrientacoes(urgentes, function (feitos, total) {
+      IA.varrerOrientacoes(urgentes, function (feitos, total, item) {
         V.definirProgressoDaAnalise({ feitos: feitos, total: total,
           fase: 'Relendo os negócios urgentes…' });
-        repintarConteudo('#/hoje', V.hoje);
+        if (global.IADPerfHoje) {
+          global.IADPerfHoje.atualizarOrientacao(item);
+          global.IADPerfHoje.atualizarProgresso(feitos, total,
+            'Relendo os negócios urgentes…');
+        }
       }, { forcar: true, teto: urgentes.length }).then(panoramaEleitura, function (e) {
         V.definirAnalise({ erro: (e && e.message) || 'erro desconhecido', em: new Date().toISOString() });
         render();
