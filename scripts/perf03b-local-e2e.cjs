@@ -37,7 +37,7 @@ async function main(){
  const storage=new Map();
  storage.set('iad-crm:nuvem-sessao:v1',JSON.stringify({
   user:{id:u.id,email},access_token:session.access_token,
-  perfil:{tenant_id:tenant,papel:'usuario'}
+  perfil:{tenant_id:tenant,papel:'gestor'}
  }));
  const localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),
   removeItem:k=>storage.delete(k)};
