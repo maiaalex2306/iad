@@ -1495,35 +1495,89 @@
   const DELTA_MAX = 30000;
   function contextoDelta() {
     const p = sessaoPerfil(), s = sessao();
-    if (!p || !s || !s.user || !s.user.id || !p.tenant_id || p.papel !== 'gestor') return null;
-    return { tenant:String(p.tenant_id), usuario:String(s.user.id),
-      chave:String(p.tenant_id) + '|' + String(s.user.id) + '|' + String(p.papel || '') };
+    if (!p || !s || !s.user || !s.user.id ||
+        (!p.tenant_id && p.papel !== 'admin') ||
+        ['gestor','usuario','admin'].indexOf(p.papel) < 0) return null;
+    const usuario = String(s.user.id);
+    /* Admin: o recorte ativo pertence ao cursor; nunca reaproveitar o
+       checkpoint de "todas" numa empresa selecionada. */
+    const filtros = Store.contexto ? ((Store.contexto() || {}).filtros || {}) : {};
+    const selecionada = p.papel === 'admin' && filtros.tenant &&
+      filtros.tenant !== 'todas' ? String(filtros.tenant) : '';
+    const tipo = p.papel === 'admin' ? 'admin' : p.papel;
+    return { tipo:tipo, multitenant:tipo === 'admin',
+      tenant:String(p.tenant_id), usuario:usuario, selecionada:selecionada,
+      chave:String(p.tenant_id) + '|' + usuario + '|' + tipo + '|' + selecionada };
+  }
+  function faltaJournal(e) {
+    return !!(e && (e.status === 404 || /PGRST205|42P01/i.test(e.message || '')));
   }
   function versaoDelta(ctx) {
-    return chamar('/rest/v1/iad_sync_versoes?select=versao&tenant_id=eq.' +
-      encodeURIComponent(ctx.tenant) + '&limit=1').then(function (rows) {
+    const privado = ctx.tipo === 'usuario';
+    const tabela = privado ? 'iad_sync_usuario_versoes' : 'iad_sync_versoes';
+    const filtroUsuario = privado ? '&usuario_id=eq.' + encodeURIComponent(ctx.usuario) : '';
+    return chamar('/rest/v1/' + tabela + '?select=versao&tenant_id=eq.' +
+      encodeURIComponent(ctx.tenant) + filtroUsuario + '&limit=1').then(function (rows) {
         if (!Array.isArray(rows)) throw new Error('Versão de sincronização inválida');
+        if (rows.length && !Number.isSafeInteger(Number(rows[0].versao)))
+          throw new Error('Revisão incremental inválida');
         return rows.length ? Number(rows[0].versao) : 0;
       }, function (e) {
-        /* Tabela opcional: se o DBA ainda não homologou a migração,
-           mantém o protocolo completo da v270, sem falhar login. */
-        if (e && (e.status === 404 ||
-          /PGRST205|42P01/i.test(e.message || ''))) return null;
-        throw e;
+        if (faltaJournal(e)) return null; /* Migração opcional: fallback completo. */
+        throw e; /* Nunca esconder erro 401/403 sob fallback. */
       });
+  }
+
+  /* Admin: watermark individual por empresa. Ordenação por tenant_id com
+     paginação: uma conta com 500 empresas não pode perder a 301ª silenciosamente.
+     Recorte explícito controla somente a LEITURA incremental daquela empresa. */
+  function versoesAdmin(ctx) {
+    const mapa = Object.create(null);
+    function pagina(cursor,n) {
+      if (n > MAX_PAGINAS) return Promise.reject(new Error('Limite de empresas no journal'));
+      const restricao = ctx.selecionada
+        ? '&tenant_id=eq.' + encodeURIComponent(ctx.selecionada)
+        : (cursor ? '&tenant_id=gt.' + encodeURIComponent(cursor) : '');
+      return chamar('/rest/v1/iad_sync_versoes?select=tenant_id,versao' +
+        '&order=tenant_id.asc&limit=300' + restricao).then(function (linhas) {
+          if (!Array.isArray(linhas)) throw new Error('Resposta inválida de empresas');
+          if (linhas.length > 300) throw new Error('Página de versões excessiva');
+          linhas.forEach(function (r) {
+            if (!r.tenant_id || !Number.isSafeInteger(Number(r.versao))) throw new Error('Versão/tenant inválidos');
+            if (ctx.selecionada && r.tenant_id !== ctx.selecionada)
+              throw new Error('Evento fora do recorte de empresa');
+            mapa[String(r.tenant_id)] = Number(r.versao);
+          });
+          if (ctx.selecionada || linhas.length < 300) return mapa;
+          const ultimo = String(linhas[linhas.length-1].tenant_id);
+          if (ultimo === cursor) throw new Error('Paginação de tenant não avançou');
+          return pagina(ultimo,n+1);
+        });
+    }
+    return pagina(null,0).catch(function (e) {
+      if (faltaJournal(e)) return null;
+      throw e;
+    });
   }
   function eventosDelta(ctx, depois) {
     const eventos = [];
     function pagina(cursor) {
       if (eventos.length >= DELTA_MAX) throw new Error('Janela delta excessiva; reconciliar carteira');
-      return chamar('/rest/v1/iad_sync_eventos?select=tenant_id,versao,tabela,registro_id,operacao' +
-        '&tenant_id=eq.' + encodeURIComponent(ctx.tenant) +
+      const privado = ctx.tipo === 'usuario';
+      const remota = privado ? 'iad_sync_usuario_eventos' : 'iad_sync_eventos';
+      const cols = privado ? 'tenant_id,usuario_id,versao,tabela,registro_id,operacao'
+        : 'tenant_id,versao,tabela,registro_id,operacao';
+      const dono = privado ? '&usuario_id=eq.' + encodeURIComponent(ctx.usuario) : '';
+      return chamar('/rest/v1/' + remota + '?select=' + cols +
+        '&tenant_id=eq.' + encodeURIComponent(ctx.tenant) + dono +
         '&versao=gt.' + cursor + '&order=versao.asc&limit=' + DELTA_PAGINA).then(function (lote) {
         if (!Array.isArray(lote)) throw new Error('Resposta delta inválida');
         if (!lote.length) return eventos;
         lote.forEach(function (e) {
           if (!Object.prototype.hasOwnProperty.call(TABELAS_DELTA,e.tabela) ||
-            String(e.tenant_id) !== ctx.tenant || !Number.isSafeInteger(Number(e.versao)) ||
+            String(e.tenant_id) !== ctx.tenant ||
+            (ctx.tipo === 'usuario' && String(e.usuario_id) !== ctx.usuario) ||
+            !Number.isSafeInteger(Number(e.versao)) ||
             Number(e.versao) <= cursor || !e.registro_id ||
             ['I','U','D'].indexOf(e.operacao) < 0) {
             throw new Error('Evento delta inválido ou fora do escopo');
@@ -1556,7 +1610,12 @@
   function aplicarDelta(ctx, eventos, versaoInicial) {
     const revAntes = Store.revisao ? Store.revisao() : null;
     const tocados = Object.create(null);
+    const origemPorId = Object.create(null);
     eventos.forEach(function (e) {
+      const idChave = e.tabela + '|' + e.registro_id;
+      if (origemPorId[idChave] && origemPorId[idChave] !== String(e.tenant_id))
+        throw new Error('ID de evento repetido em empresas distintas');
+      origemPorId[idChave] = String(e.tenant_id);
       const t = e.tabela;
       if (!tocados[t]) tocados[t] = new Set();
       tocados[t].add(String(e.registro_id));
@@ -1589,12 +1648,15 @@
         const existentes = new Set();
         const saída = [];
         (est[p.local] || []).forEach(function (r) {
-          if (r.tenantId !== ctx.tenant || !p.ids.has(String(r.id))) { saída.push(r); return; }
+          if ((!ctx.multitenant && r.tenantId !== ctx.tenant) || !p.ids.has(String(r.id))) {
+            saída.push(r); return;
+          }
           existentes.add(String(r.id));
           if (idParaLinha.has(String(r.id))) saída.push(idParaLinha.get(String(r.id)));
         });
         p.linhas.forEach(function (r) {
-          if (r.tenantId !== ctx.tenant) throw new Error('Entidade delta de outra empresa');
+          if (String(r.tenantId) !== origemPorId[p.tabela + '|' + r.id])
+            throw new Error('Entidade delta de outra empresa');
           if (!existentes.has(String(r.id))) saída.push(r);
         });
         novas[p.local] = saída;
@@ -1604,8 +1666,17 @@
         Store.salvar();
       });
       const ultima = eventos.length ? Number(eventos[eventos.length-1].versao) : versaoInicial;
-      cursorDelta = { chave:ctx.chave, versao:ultima };
-      return marcarOQueDesceu().then(function () { return eventos.length; });
+      /* Só confirmar checkpoint DEPOIS da gravação local e das marcas. */
+      return marcarOQueDesceu().then(function () {
+        if (ctx.multitenant) {
+          const versoes = Object.assign({},versaoInicial || {});
+          eventos.forEach(function (e) {
+            versoes[String(e.tenant_id)] = Number(e.versao);
+          });
+          cursorDelta = {chave:ctx.chave,tipo:'admin',versoes:versoes};
+        } else cursorDelta = {chave:ctx.chave,tipo:ctx.tipo,versao:ultima};
+        return eventos.length;
+      });
     });
   }
   function puxarMudancas(ctx) {
@@ -1616,13 +1687,41 @@
       return aplicarDelta(ctx,eventos,antes);
     });
   }
+  function puxarAdmin(ctx,forcar) {
+    return versoesAdmin(ctx).then(function (atuais) {
+      if (atuais === null) { cursorDelta = null; return puxarCompleto(forcar); }
+      if (!cursorDelta || cursorDelta.chave !== ctx.chave ||
+          cursorDelta.tipo !== 'admin') {
+        /* Watermarks são obtidos ANTES do snapshot: mudanças ocorridas durante
+           a paginação integral serão reproduzidas no próximo puxar(). */
+        return puxarCompleto(forcar).then(function (q) {
+          cursorDelta = {chave:ctx.chave,tipo:'admin',versoes:Object.assign({},atuais)};
+          return q;
+        });
+      }
+      if (haMudancas()) return Promise.reject(new Error(
+        'Existem alterações locais pendentes; não aplicar delta de outra empresa.'));
+      const antes = Object.assign({},cursorDelta.versoes || {});
+      const tarefas = Object.keys(atuais).filter(function (tenant) {
+        return atuais[tenant] > Number(antes[tenant] || 0);
+      }).map(function (tenant) {
+        return eventosDelta({tipo:'admin',tenant:tenant,usuario:ctx.usuario},Number(antes[tenant] || 0));
+      });
+      return Promise.all(tarefas).then(function (grupos) {
+        const eventos = [].concat.apply([],grupos);
+        return aplicarDelta(ctx,eventos,antes);
+      }).catch(function (e) { cursorDelta=null; throw e; });
+    });
+  }
+
   function puxar(forcar) {
     const ctx = contextoDelta();
     if (!ctx || forcar) { cursorDelta = null; return puxarCompleto(forcar); }
+    if (ctx.tipo === 'admin') return puxarAdmin(ctx,forcar);
     return versaoDelta(ctx).then(function (versao) {
       if (versao === null) { cursorDelta = null; return puxarCompleto(forcar); }
       if (cursorDelta && cursorDelta.chave === ctx.chave &&
-          cursorDelta.versao <= versao) {
+          cursorDelta.tipo === ctx.tipo && cursorDelta.versao <= versao) {
         return puxarMudancas(ctx).catch(function (e) {
           /* Não transformar falhas de delta em uma substituição silenciosa:
              o cliente vê o erro e a memória fica preservada. */
@@ -1634,17 +1733,39 @@
          Qualquer alteração confirmada durante o download será reprocessada
          em uma chamada futura, de modo idempotente. */
       return puxarCompleto(forcar).then(function (q) {
-        cursorDelta = { chave:ctx.chave,versao:versao };
+        cursorDelta = { chave:ctx.chave,tipo:ctx.tipo,versao:versao };
         return q;
       });
     });
   }
 
+  /* Progresso da primeira carga sem publicar entidades parciais no Store.
+     As dependências do Decision Engine exigem snapshot íntegro. */
+  let carga = { ativa:false,concluidas:0,total:TABELAS.length,erro:'' };
+  const ouvintesCarga = new Set();
+  function notificarCarga(dados) {
+    carga = Object.assign({},carga,dados);
+    ouvintesCarga.forEach(function (fn) { try { fn(Object.assign({},carga)); } catch(e) {} });
+  }
+  function observarCarga(fn) {
+    if (typeof fn !== 'function') return function () {};
+    ouvintesCarga.add(fn);
+    return function () { ouvintesCarga.delete(fn); };
+  }
+  function estadoCarga() { return Object.assign({},carga); }
+
   function puxarCompleto(forcar) {
+    notificarCarga({ativa:true,concluidas:0,total:TABELAS.length,erro:''});
     const buscas = TABELAS.map(function (t) {
       return baixarTabelaCompleta(t).then(
-        function (linhas) { return { local: t.local, linhas: linhas }; },
-        function (e) { return { local: t.local, tabela: t.remota, erro: e.message }; }
+        function (linhas) {
+          notificarCarga({concluidas:carga.concluidas+1});
+          return { local: t.local, linhas: linhas };
+        },
+        function (e) {
+          notificarCarga({concluidas:carga.concluidas+1,erro:e.message});
+          return { local: t.local, tabela: t.remota, erro: e.message };
+        }
       );
     });
 
@@ -1679,7 +1800,7 @@
 
       const quantos = resultados.reduce(function (s, r) { return s + r.linhas.length; }, 0);
       return marcarOQueDesceu().then(function () { return quantos; });
-    });
+    }).finally(function () { notificarCarga({ativa:false}); });
   }
 
   function sincronizar() {
@@ -1760,6 +1881,7 @@
     config, salvarConfig, configurada, conectado, mandaNoAcesso, estado, sessao,
     cadastrar, entrar, sair, renovar, precisaRenovar, eu, meuPerfil, salvarPerfil, criarMinhaEmpresa,
     guardarPerfilNaSessao, empurrar, puxar, sincronizar, ultimaSincronizacao, ultimoEnvio,
+    observarCarga, estadoCarga,
     esquecerMarcas, haMudancas, jaSincronizou,
     __trocarChamar: function (fn) { substitutoDeTeste = fn || null; },
     perfisDaNuvem, empresasDaNuvem, souAdminNaNuvem, existeEmpresa,

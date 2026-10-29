@@ -24,6 +24,10 @@ function ambiente() {
   N.__trocarChamar((url)=>{
     requests.push(url);
     const u=decode(url),t=u.pathname.split('/').at(-1);
+    if(t==='iad_sync_usuario_versoes'){
+      const e=new Error('PGRST205 private stream not installed');
+      e.status=404;return Promise.reject(e);
+    }
     if(t==='iad_sync_versoes'){
       if(!journal){const e=new Error('PGRST205 schema cache');e.status=404;return Promise.reject(e)}
       return Promise.resolve([{versao:version}]);
@@ -117,7 +121,8 @@ test('PERF03B usuário comum não consulta journal compartilhado; usa RLS integr
  a.clearCalls();a.change('U','op1',888);
  assert.equal(await a.N.puxar(),1);
  assert.equal(a.state.oportunidades[0].valor,888);
- assert.ok(!a.requests().some(s=>s.includes('iad_sync_')));
+ assert.ok(!a.requests().some(s=>s.includes('/iad_sync_eventos?')));
+ assert.ok(a.requests().some(s=>s.includes('/iad_sync_usuario_versoes?')));
  assert.ok(a.requests().some(s=>s.includes('oportunidades?select=*&order=id.asc')));
 });
 test('Cockpit muda somente a aba: paridade de entradas e invalidação após gravação',()=>{
