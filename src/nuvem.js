@@ -1481,7 +1481,166 @@
     return proxima(null, 0);
   }
 
+  /* PERF-03B: após a primeira leitura completa desta sessão, o journal
+     transacional permite baixar APENAS as entidades que mudaram. Sem a
+     migração SQL, admin multiempresa, erro ou pendência local: usa a rotina
+     v270. Nenhum cursor persistido sem uma carteira carregada na memória. */
+  let cursorDelta = null;
+  const TABELAS_DELTA = {
+    contas:'contas', contatos:'contatos', oportunidades:'oportunidades',
+    tarefas:'tarefas', produtos:'produtos', segmentos:'segmentos',
+    tipos_tarefa:'tiposTarefa', fontes:'fontes'
+  };
+  const DELTA_PAGINA = 300;
+  const DELTA_MAX = 30000;
+  function contextoDelta() {
+    const p = sessaoPerfil(), s = sessao();
+    if (!p || !s || !s.user || !s.user.id || !p.tenant_id || p.papel === 'admin') return null;
+    return { tenant:String(p.tenant_id), usuario:String(s.user.id),
+      chave:String(p.tenant_id) + '|' + String(s.user.id) + '|' + String(p.papel || '') };
+  }
+  function versaoDelta(ctx) {
+    return chamar('/rest/v1/iad_sync_versoes?select=versao&tenant_id=eq.' +
+      encodeURIComponent(ctx.tenant) + '&limit=1').then(function (rows) {
+        if (!Array.isArray(rows)) throw new Error('Versão de sincronização inválida');
+        return rows.length ? Number(rows[0].versao) : 0;
+      }, function (e) {
+        /* Tabela opcional: se o DBA ainda não homologou a migração,
+           mantém o protocolo completo da v270, sem falhar login. */
+        if (e && (e.status === 404 || e.status === 406 ||
+          /iad_sync_versoes|PGRST205|42P01|not found/i.test(e.message || ''))) return null;
+        throw e;
+      });
+  }
+  function eventosDelta(ctx, depois) {
+    const eventos = [];
+    function pagina(cursor) {
+      if (eventos.length >= DELTA_MAX) throw new Error('Janela delta excessiva; reconciliar carteira');
+      return chamar('/rest/v1/iad_sync_eventos?select=tenant_id,versao,tabela,registro_id,operacao' +
+        '&tenant_id=eq.' + encodeURIComponent(ctx.tenant) +
+        '&versao=gt.' + cursor + '&order=versao.asc&limit=' + DELTA_PAGINA).then(function (lote) {
+        if (!Array.isArray(lote)) throw new Error('Resposta delta inválida');
+        if (!lote.length) return eventos;
+        lote.forEach(function (e) {
+          if (!Object.prototype.hasOwnProperty.call(TABELAS_DELTA,e.tabela) ||
+            String(e.tenant_id) !== ctx.tenant || !Number.isSafeInteger(Number(e.versao)) ||
+            Number(e.versao) <= cursor || !e.registro_id ||
+            ['I','U','D'].indexOf(e.operacao) < 0) {
+            throw new Error('Evento delta inválido ou fora do escopo');
+          }
+          cursor = Number(e.versao);
+          eventos.push(e);
+        });
+        return pagina(cursor); /* até a página VAZIA, mesmo com limite customizado no servidor */
+      });
+    }
+    return pagina(depois);
+  }
+  function registrosAlterados(tabela, ids) {
+    if (!ids.length) return Promise.resolve([]);
+    /* IDs não compatíveis com filtros id=in.(...) caem em reconciliação,
+       nunca são silenciosamente ignorados. */
+    if (ids.some(function (id) { return !/^[a-zA-Z0-9_.:-]{1,200}$/.test(id); }))
+      return Promise.reject(new Error('ID de evento incompatível com consulta delta'));
+    const grupos = [];
+    for (let i = 0; i < ids.length; i += 60) {
+      const partes = ids.slice(i,i+60).map(function (id) { return '%22' + encodeURIComponent(id) + '%22'; });
+      const rota = '/rest/v1/' + tabela + '?select=*&id=in.(' + partes.join(',') + ')';
+      grupos.push(chamar(rota).then(function (linhas) {
+        if (!Array.isArray(linhas)) throw new Error('Resposta de entidade inválida: ' + tabela);
+        return linhas.map(paraApp);
+      }));
+    }
+    return Promise.all(grupos).then(function (listas) { return [].concat.apply([],listas); });
+  }
+  function aplicarDelta(ctx, eventos, versaoInicial) {
+    const revAntes = Store.revisao ? Store.revisao() : null;
+    const tocados = Object.create(null);
+    eventos.forEach(function (e) {
+      const t = e.tabela;
+      if (!tocados[t]) tocados[t] = new Set();
+      tocados[t].add(String(e.registro_id));
+    });
+    const tabelas = Object.keys(tocados);
+    const trabalhos = tabelas.map(function (t) {
+      return registrosAlterados(t,Array.from(tocados[t])).then(function (linhas) {
+        return { local:TABELAS_DELTA[t],tabela:t,ids:tocados[t],linhas:linhas };
+      });
+    });
+    /* Sinais e notas têm RLS por responsável; o journal contém apenas
+       entidades visíveis a todo o tenant. Não expor a existência de notas
+       privadas; essas duas continuam com leitura completa protegida por RLS. */
+    ['sinais','notas'].forEach(function (nome) {
+      const tab=TABELAS.filter(function (t) { return t.local === nome; })[0];
+      trabalhos.push(baixarTabelaCompleta(tab).then(function (linhas) {
+        return { local:nome,linhas:linhas,completa:true };
+      }));
+    });
+    return Promise.all(trabalhos).then(function (partes) {
+      if (contextoDelta()?.chave !== ctx.chave ||
+        (revAntes !== null && Store.revisao() !== revAntes)) {
+        throw new Error('Dados ou usuário mudaram durante a sincronização; repetir sem sobrescrever');
+      }
+      const est = Store.obter();
+      const novas = {};
+      partes.forEach(function (p) {
+        if (p.completa) { novas[p.local] = p.linhas; return; }
+        const idParaLinha = new Map(p.linhas.map(function (r) { return [String(r.id),r]; }));
+        const existentes = new Set();
+        const saída = [];
+        (est[p.local] || []).forEach(function (r) {
+          if (r.tenantId !== ctx.tenant || !p.ids.has(String(r.id))) { saída.push(r); return; }
+          existentes.add(String(r.id));
+          if (idParaLinha.has(String(r.id))) saída.push(idParaLinha.get(String(r.id)));
+        });
+        p.linhas.forEach(function (r) {
+          if (r.tenantId !== ctx.tenant) throw new Error('Entidade delta de outra empresa');
+          if (!existentes.has(String(r.id))) saída.push(r);
+        });
+        novas[p.local] = saída;
+      });
+      Store.semSincronizar(function () {
+        Object.keys(novas).forEach(function (t) { est[t] = novas[t]; });
+        Store.salvar();
+      });
+      const ultima = eventos.length ? Number(eventos[eventos.length-1].versao) : versaoInicial;
+      cursorDelta = { chave:ctx.chave, versao:ultima };
+      return marcarOQueDesceu().then(function () { return eventos.length; });
+    });
+  }
+  function puxarMudancas(ctx) {
+    const antes = cursorDelta.versao;
+    if (haMudancas()) return Promise.reject(new Error(
+      'Existem alterações locais não confirmadas; aguarde a gravação antes de baixar mudanças.'));
+    return eventosDelta(ctx,antes).then(function (eventos) {
+      return aplicarDelta(ctx,eventos,antes);
+    });
+  }
   function puxar(forcar) {
+    const ctx = contextoDelta();
+    if (!ctx || forcar) { cursorDelta = null; return puxarCompleto(forcar); }
+    return versaoDelta(ctx).then(function (versao) {
+      if (versao === null) { cursorDelta = null; return puxarCompleto(forcar); }
+      if (cursorDelta && cursorDelta.chave === ctx.chave &&
+          cursorDelta.versao <= versao) {
+        return puxarMudancas(ctx).catch(function (e) {
+          /* Não transformar falhas de delta em uma substituição silenciosa:
+             o cliente vê o erro e a memória fica preservada. */
+          cursorDelta = null;
+          throw e;
+        });
+      }
+      /* Snapshot de segurança: registrar watermark ANTES da leitura integral.
+         Qualquer alteração confirmada durante o download será reprocessada
+         em uma chamada futura, de modo idempotente. */
+      return puxarCompleto(forcar).then(function (q) {
+        cursorDelta = { chave:ctx.chave,versao:versao };
+        return q;
+      });
+    });
+  }
+
+  function puxarCompleto(forcar) {
     const buscas = TABELAS.map(function (t) {
       return baixarTabelaCompleta(t).then(
         function (linhas) { return { local: t.local, linhas: linhas }; },
