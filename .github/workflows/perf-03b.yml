@@ -95,6 +95,7 @@ jobs:
           set +a
           export API_URL=http://127.0.0.1:54321
           node scripts/perf03b-local-e2e.cjs
+          node scripts/perf03b-auth-rls-matrix.cjs
       - name: Conferir consistência de eventos SQL
         run: |
           psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -X -v ON_ERROR_STOP=1 -c "
