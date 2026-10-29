@@ -2960,7 +2960,7 @@
   }
   function cockpit(id) {
     const op = Store.oportunidade(id);
-    if (!op) return '<div class="vazio">Oportunidade não encontrada.</div>';
+    if (!op || !Store.visivel(op, true)) return '<div class="vazio">Oportunidade não encontrada.</div>';
     const r = resumoNoCockpit(op);
     const conta = r.conta;
 
@@ -3188,7 +3188,7 @@
   /* Aba isolada: trocar Tarefas não reconstrói cabeçalho e dez painéis. */
   function painelDaAbaCockpit(id) {
     const op = Store.oportunidade(id);
-    if (!op) return null;
+    if (!op || !Store.visivel(op, true)) return null;
     const necessitaResumo = abaCockpit === 'decisao';
     const r = necessitaResumo ? resumoNoCockpit(op) : null;
     return { abas: abasDoCockpit(op), corpo: corpoDaAba(op, r) };
