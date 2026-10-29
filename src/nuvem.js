@@ -1495,7 +1495,8 @@
   const DELTA_MAX = 30000;
   function contextoDelta() {
     const p = sessaoPerfil(), s = sessao();
-    if (!p || !s || !s.user || !s.user.id || !p.tenant_id ||
+    if (!p || !s || !s.user || !s.user.id ||
+        (!p.tenant_id && p.papel !== 'admin') ||
         ['gestor','usuario','admin'].indexOf(p.papel) < 0) return null;
     const usuario = String(s.user.id);
     /* Admin: o recorte ativo pertence ao cursor; nunca reaproveitar o
@@ -1738,11 +1739,33 @@
     });
   }
 
+  /* Progresso da primeira carga sem publicar entidades parciais no Store.
+     As dependências do Decision Engine exigem snapshot íntegro. */
+  let carga = { ativa:false,concluidas:0,total:TABELAS.length,erro:'' };
+  const ouvintesCarga = new Set();
+  function notificarCarga(dados) {
+    carga = Object.assign({},carga,dados);
+    ouvintesCarga.forEach(function (fn) { try { fn(Object.assign({},carga)); } catch(e) {} });
+  }
+  function observarCarga(fn) {
+    if (typeof fn !== 'function') return function () {};
+    ouvintesCarga.add(fn);
+    return function () { ouvintesCarga.delete(fn); };
+  }
+  function estadoCarga() { return Object.assign({},carga); }
+
   function puxarCompleto(forcar) {
+    notificarCarga({ativa:true,concluidas:0,total:TABELAS.length,erro:''});
     const buscas = TABELAS.map(function (t) {
       return baixarTabelaCompleta(t).then(
-        function (linhas) { return { local: t.local, linhas: linhas }; },
-        function (e) { return { local: t.local, tabela: t.remota, erro: e.message }; }
+        function (linhas) {
+          notificarCarga({concluidas:carga.concluidas+1});
+          return { local: t.local, linhas: linhas };
+        },
+        function (e) {
+          notificarCarga({concluidas:carga.concluidas+1,erro:e.message});
+          return { local: t.local, tabela: t.remota, erro: e.message };
+        }
       );
     });
 
@@ -1777,7 +1800,7 @@
 
       const quantos = resultados.reduce(function (s, r) { return s + r.linhas.length; }, 0);
       return marcarOQueDesceu().then(function () { return quantos; });
-    });
+    }).finally(function () { notificarCarga({ativa:false}); });
   }
 
   function sincronizar() {
@@ -1858,6 +1881,7 @@
     config, salvarConfig, configurada, conectado, mandaNoAcesso, estado, sessao,
     cadastrar, entrar, sair, renovar, precisaRenovar, eu, meuPerfil, salvarPerfil, criarMinhaEmpresa,
     guardarPerfilNaSessao, empurrar, puxar, sincronizar, ultimaSincronizacao, ultimoEnvio,
+    observarCarga, estadoCarga,
     esquecerMarcas, haMudancas, jaSincronizou,
     __trocarChamar: function (fn) { substitutoDeTeste = fn || null; },
     perfisDaNuvem, empresasDaNuvem, souAdminNaNuvem, existeEmpresa,
