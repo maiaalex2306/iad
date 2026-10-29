@@ -1,5 +1,8 @@
 name: PERF-03B — Cockpit e Sync Delta Seguro
 on:
+  push:
+    branches:
+      - qa/perf03b-backup-rls-20261029
   pull_request:
     branches:
       - claude/decisoes-estagios-vendas-eckjo0
