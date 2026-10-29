@@ -1507,8 +1507,8 @@
       }, function (e) {
         /* Tabela opcional: se o DBA ainda não homologou a migração,
            mantém o protocolo completo da v270, sem falhar login. */
-        if (e && (e.status === 404 || e.status === 406 ||
-          /iad_sync_versoes|PGRST205|42P01|not found/i.test(e.message || ''))) return null;
+        if (e && (e.status === 404 ||
+          /PGRST205|42P01/i.test(e.message || ''))) return null;
         throw e;
       });
   }
