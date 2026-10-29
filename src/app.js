@@ -292,7 +292,7 @@
 
     const est = Store.dados();
     if (!est.oportunidades || !est.oportunidades.length) return;
-    const foco = E.fila(est.oportunidades, est.tarefas);
+    const foco = global.IADPerf02 ? global.IADPerf02.filaDados(est) : E.fila(est.oportunidades, est.tarefas);
     if (!foco.itens.length) return;
     /* Marcado ANTES de começar: `render` roda a cada clique, e duas
        navegações rápidas dispariam duas varreduras da mesma fila. */
@@ -1724,7 +1724,7 @@
       }
 
       const est = Store.dados();
-      const foco = E.fila(est.oportunidades, est.tarefas);
+      const foco = global.IADPerf02 ? global.IADPerf02.filaDados(est) : E.fila(est.oportunidades, est.tarefas);
       const urgentes = foco.itens.filter(function (i) { return i.urgencia >= 3; });
 
       if (!foco.itens.length) {
@@ -1762,7 +1762,7 @@
 
         /* Recalcula a fila: as leituras acabaram de mudar os registros. */
         const agora = Store.dados();
-        const fila = E.fila(agora.oportunidades, agora.tarefas);
+        const fila = global.IADPerf02 ? global.IADPerf02.filaDados(agora) : E.fila(agora.oportunidades, agora.tarefas);
         const pan = O.panorama(fila.itens, fila.triagem);
 
         const terminar = function (ia) {
