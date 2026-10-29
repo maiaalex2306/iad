@@ -87,6 +87,13 @@ jobs:
           set +a
           export API_URL=http://127.0.0.1:54321
           node scripts/perf03a-supabase-local.cjs
+      - name: Executar cliente real do IAD contra Supabase local e verificar delta
+        run: |
+          set -a
+          source <(supabase status -o env)
+          set +a
+          export API_URL=http://127.0.0.1:54321
+          node scripts/perf03b-local-e2e.cjs
       - name: Conferir consistência de eventos SQL
         run: |
           psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -X -v ON_ERROR_STOP=1 -c "
@@ -98,3 +105,10 @@ jobs:
             WHERE v.versao <> (SELECT COUNT(*) FROM public.iad_sync_eventos e WHERE e.tenant_id=v.tenant_id);
             IF incoerentes <> 0 THEN RAISE EXCEPTION 'Revisões e eventos divergentes: %',incoerentes; END IF;
           END \$\$;"
+      - name: Evidência de integração delta
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf03b-real-delta
+          path: homolog-artifacts/perf03b-e2e.json
+          if-no-files-found: ignore
