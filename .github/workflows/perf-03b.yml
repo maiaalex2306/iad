@@ -29,6 +29,17 @@ jobs:
           node --check scripts/perf03b-browser-homolog.cjs
           grep -q "numero: 'v271'" src/config.js
           grep -q "iad-crm-v271" sw.js
+      - name: Parse PowerShell backup script, sem executá-lo
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $parseErrors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile('scripts/perf03b-backup-restauravel.ps1', [ref]$tokens, [ref]$parseErrors)
+          if ($parseErrors.Count -ne 0) {
+            $parseErrors | Out-String | Write-Error
+            exit 1
+          }
+          Write-Output 'PowerShell parse OK; nenhum backup iniciado.'
       - name: Delta, exclusões, integridade, cockpit
         run: node --test nuvem/testes/perf-03b.test.cjs
       - name: Não regredir PERF-03A, PERF-02 e login
