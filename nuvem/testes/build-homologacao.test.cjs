@@ -46,3 +46,12 @@ test('gera arquivos estáticos com URL isolada e omite SQL e código servidor',(
   const recuperarJS = fs.readFileSync(path.join(root,'dist/src/recuperacao.js'),'utf8');
   assert.ok(recuperarJS.includes("new URL('./', location.href).href"));
 });
+test('build PERF-02 seleciona v269 e exige Supabase de testes',()=>{
+  const a=exec('https://exemplo-homolog.supabase.co',goodKey,'performance/iad-perf-02');
+  assert.equal(a.status,0,a.stderr);
+  const config=fs.readFileSync(path.join(root,'dist/src/config.js'),'utf8');
+  assert.match(config,/v269-HOMOLOG/);
+  assert.doesNotMatch(config,/drhonmdffhnwamwzynrs/);
+  const index=fs.readFileSync(path.join(root,'dist/index.html'),'utf8');
+  assert.match(index,/HOMOLOGAÇÃO v269-HOMOLOG/);
+});
