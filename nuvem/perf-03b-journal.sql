@@ -50,6 +50,13 @@ DECLARE
   _id text;
   _operacao text;
 BEGIN
+  /* Um UPSERT pode atualizar só a marca de transporte (atualizado_em).
+     Não gerar evento comercial se nenhum campo de negócio mudou. */
+  IF TG_OP = 'UPDATE' AND
+    (to_jsonb(NEW) - 'atualizado_em') IS NOT DISTINCT FROM
+    (to_jsonb(OLD) - 'atualizado_em') THEN
+    RETURN NEW;
+  END IF;
   IF TG_OP = 'UPDATE' AND OLD.tenant_id IS DISTINCT FROM NEW.tenant_id THEN
     RAISE EXCEPTION 'Não é permitido mudar tenant_id da entidade em UPDATE';
   END IF;
