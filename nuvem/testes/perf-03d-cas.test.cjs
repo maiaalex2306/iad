@@ -13,3 +13,13 @@ test('reject protected field mutations and missing idempotency',()=>{
  assert.throws(()=>C.operation({...args,operationId:''}));
  assert.throws(()=>C.operation({...args,table:'contas'}));
 });
+test('create lost ACK: only identical remote payload may confirm, never overwrite',()=>{
+ const local={id:'opp-new',tenant_id:'tenant-a',titulo:'Novo',valor:120,
+   dims:{impacto:1,problema:2},itens:[{quantidade:2,preco:60}],atualizado_em:'ignored'};
+ const same={id:'opp-new',tenant_id:'tenant-a',titulo:'Novo',valor:120,
+   dims:{problema:2,impacto:1},itens:[{preco:60,quantidade:2}],revisao:0,atualizado_em:'server'};
+ assert.equal(CAS.sameRecord(local,same),true);
+ assert.equal(CAS.sameRecord(local,{...same,valor:121}),false);
+ assert.equal(CAS.sameRecord(local,{...same,tenant_id:'tenant-b'}),false);
+ assert.equal(CAS.sameRecord(local,{...same,itens:[]}),false);
+});
