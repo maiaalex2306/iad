@@ -2147,6 +2147,11 @@
   }
 
   function excluirOportunidade(id) {
+    /* Jornalizar antes da remoção protege contra falha de persistência:
+       se gravar falhar, o registro continua disponível na carteira. */
+    const existente=(estado.oportunidades || []).find(function(o) { return o.id===id; });
+    if (!existente) return;
+    registrarExclusao('oportunidades', id);
     estado.oportunidades = estado.oportunidades.filter(function (o) { return o.id !== id; });
     /* As tarefas do negócio saem junto, e cada uma precisa da própria ordem de
        apagar: o servidor não sabe que elas pertenciam a ele. */
@@ -2154,7 +2159,6 @@
       if (t.oportunidadeId === id) registrarExclusao('tarefas', t.id);
     });
     estado.tarefas = estado.tarefas.filter(function (t) { return t.oportunidadeId !== id; });
-    registrarExclusao('oportunidades', id);
     salvar();
   }
 
