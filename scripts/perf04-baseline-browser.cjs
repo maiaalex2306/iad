@@ -582,6 +582,51 @@ async function main(){
      measurement:'40 paired warm samples HTML generation plus synchronous innerHTML, no LCP/INP',
      ...p2},null,2));
 
+
+ // SPA navigation is measured in Chromium with synthetic authenticated
+ // sessions and local resources. This is not live-server LCP/INP.
+ const navBench=await page.evaluate(async()=>{
+   const A=window.IADAuth,S=window.IADStore;
+   const user=S.obter().usuarios.find(u=>u.id==='perf-a');
+   A.abrirSessao(user);
+   const root=document.getElementById('conteudo'),list=[];
+   const nextFrame=()=>new Promise(r=>requestAnimationFrame(r));
+   async function navigate(hash,needle){
+     if(location.hash===hash)location.hash='#/hoje';
+     await nextFrame(); await nextFrame();
+     const start=performance.now();
+     window.App.ir(hash);
+     let tries=0;
+     while(tries++<180){
+       await nextFrame();
+       if(location.hash===hash && root.textContent.includes(needle)){
+         await nextFrame();
+         return +(performance.now()-start).toFixed(2);
+       }
+     }
+     throw Error('Navigation not rendered: '+hash+' needle='+needle+
+       ' current='+location.hash+' text='+root.textContent.slice(0,140));
+   }
+   for(let i=0;i<5;i++){
+     list.push({screen:'Painel',ms:await navigate('#/painel','Painel de decisão')});
+     list.push({screen:'Cockpit',ms:await navigate('#/op/op0','A_NEGOCIO_0')});
+     list.push({screen:'Pipeline',ms:await navigate('#/pipeline','A_NEGOCIO_')});
+   }
+   const out={};
+   for(const key of ['Painel','Cockpit','Pipeline']){
+     const vals=list.filter(x=>x.screen===key).map(x=>x.ms).slice(1).sort((a,b)=>a-b);
+     out[key]={samplesMs:vals,p50Ms:vals[Math.ceil(vals.length*.5)-1],
+       p95Ms:vals[Math.ceil(vals.length*.95)-1]};
+   }
+   return {routeTimings:out,passed:true};
+ });
+ console.log('PERF04_P2_NAVIGATION '+JSON.stringify(navBench));
+ fs.writeFileSync(path.join(root,'homolog-artifacts','perf04-p2-navigation.json'),
+   JSON.stringify({environment:'local Chromium headless, synthetic authenticated account, no production API',
+     measurement:'App.ir hashchange -> expected route content -> next animation frame',
+     ...navBench},null,2));
+
+
  // Evita abrir qualquer registro da outra empresa, mesmo com IDs falsos.
  const isolation=await page.evaluate(()=>{
    const A=window.IADAuth,S=window.IADStore;
