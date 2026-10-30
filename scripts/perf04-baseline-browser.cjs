@@ -353,6 +353,21 @@ async function main(){
      }finally{prev.forEach(x=>{x.o.nutricao=x.n;});}
      measure('painel',userB,'todos','todos','painel-outro-tenant',false);
      measure('revisao',userB,'todos','todos','revisao-outro-tenant',false);
+     // A carteira também serve o assistente de Conversas sem índice explícito.
+     // Garantir resultados iguais com fallback e índice calculado, por tenant.
+     for(const usuario of [userA,userB]){
+       A.abrirSessao(usuario);
+       const est=S.dados(),idx=Object.create(null),hoje=S.hoje();
+       for(const t of est.tarefas){
+         if(t.oportunidadeId==null||t.status!=='aberta'||!t.vencimento||!(t.vencimento<hoje))continue;
+         idx[t.oportunidadeId]=(idx[t.oportunidadeId]||0)+1;
+       }
+       const a=candidate.E.carteira(est.oportunidades);
+       const b=candidate.E.carteira(est.oportunidades,idx);
+       if(JSON.stringify(a)!==JSON.stringify(b))
+         throw Error('E.carteira sem índice difere do índice explícito: '+usuario.id);
+     }
+     A.abrirSessao(userA);
      const metrics={};
      for(const screen of ['painel','revisao']){
        const o=times[screen].old,c=times[screen].candidate;
