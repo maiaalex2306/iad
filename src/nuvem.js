@@ -213,7 +213,8 @@
     if (!id || !tenantId || !Number.isSafeInteger(revisao) || revisao < 0 ||
         !patch || typeof patch !== 'object' || Array.isArray(patch) ||
         !Object.keys(patch).length ||
-        Object.keys(patch).some(function(k) { return ['titulo','valor','etapa'].indexOf(k) < 0; })) {
+        Object.keys(patch).some(function(k) { return !/^[a-z][a-z0-9_]*$/.test(k) || 
+          ['id','tenant_id','dono_id','revisao','criado_em','atualizado_em'].indexOf(k)>=0; })) {
       return Promise.reject(new Error('Argumentos inválidos para atualização CAS.'));
     }
     return chamar('/rest/v1/rpc/iad_oportunidade_cas', {
@@ -263,8 +264,8 @@
         operationId:op.operationId,patch:op.patch
       });
       if (Object.keys(validada.patch).some(function(k) {
-        return ['titulo','valor','etapa'].indexOf(k)<0;
-      })) throw new Error('Campo ainda não habilitado no CAS SQL.');
+        return ['id','tenant_id','dono_id','revisao','criado_em','atualizado_em'].indexOf(k)>=0;
+      })) throw new Error('Campo protegido no CAS SQL.');
       const fila=filaCASDaSessao();
       fila.enqueue(validada);
       return fila.flush();
@@ -1464,9 +1465,10 @@
             for(const k of keys){
               if(ignorados.has(k)||k.charAt(0)==='_') continue;
               if(JSON.stringify(base[k])!==JSON.stringify(registro && registro[k])){
-                if(['titulo','valor','etapa'].indexOf(k)<0)
-                  return Promise.reject(new Error('CAS bloqueou alteração ainda não suportada no campo '+k+'. Seus dados locais foram preservados.'));
-                mudancas[k]=registro[k];
+                const coluna=paraColuna(k);
+                if(['id','tenant_id','dono_id','revisao','criado_em','atualizado_em'].indexOf(coluna)>=0)
+                  return Promise.reject(new Error('Campo protegido na atualização CAS: '+k));
+                mudancas[coluna]=registro[k]===undefined?null:registro[k];
               }
             }
             if(!Object.keys(mudancas).length) return Promise.resolve([]);
