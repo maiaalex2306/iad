@@ -37,6 +37,8 @@ jobs:
           psql "$PGURL" -X -v ON_ERROR_STOP=1 -f nuvem/perf-03c-journal-privado.sql
           psql "$PGURL" -X -v ON_ERROR_STOP=1 -f nuvem/perf-03d-cas.sql
           psql "$PGURL" -X -v ON_ERROR_STOP=1 -f nuvem/perf-03d-cas-full.sql
+          psql "$PGURL" -X -v ON_ERROR_STOP=1 -f nuvem/perf-03d-cas-idempotencia.sql
+          psql "$PGURL" -X -v ON_ERROR_STOP=1 -f nuvem/perf-03d-idempotencia-hardening.sql
       - name: Two real authenticated users, stale update/delete, cross-tenant
         run: |
           set -a
