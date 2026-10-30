@@ -46,3 +46,21 @@ test('deletion is refused locally if journal cannot be persisted',()=>{
  // Simulate storage quota via a replacement in a dedicated context below.
  assert.ok(s.obter().oportunidades.some(x=>x.id===o.id));
 });
+test('offline edited opportunity restores exact remote baseline after browser restart',()=>{
+ const disk=new Map();
+ let store=boot(disk);
+ const before={id:'opp-baseline',tenantId:TENANT,titulo:'Antes',valor:100,revisao:4};
+ store.obter().oportunidades.push(JSON.parse(JSON.stringify(before)));
+ store.memorizarRevisoesRemotas([before]);
+ store.obter().oportunidades[0].titulo='Depois offline';
+ const bases=store.exportarBasesRemotasPendentes();
+ assert.equal(bases.length,1);
+ assert.equal(bases[0].revisao,4);
+ assert.equal(bases[0].titulo,'Antes');
+ store=boot(disk);
+ store.obter().oportunidades.push({...before,titulo:'Depois offline'});
+ store.restaurarBasesRemotasPendentes(bases);
+ assert.equal(store.snapshotBaseRemoto(TENANT,before.id).titulo,'Antes');
+ assert.equal(store.revisaoBaseRemota(TENANT,before.id),4);
+ assert.equal(store.obter().oportunidades[0].titulo,'Depois offline');
+});
