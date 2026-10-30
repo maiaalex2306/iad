@@ -21,4 +21,4 @@ jobs:
           node-version: '22'
       - run: node --check src/cas.js
       - run: node --check src/cas-queue.js
-      - run: node --test nuvem/testes/perf-03d-cas.test.cjs nuvem/testes/perf-03d-outbox.test.cjs
+      - run: node --test nuvem/testes/perf-03d-cas.test.cjs nuvem/testes/perf-03d-outbox.test.cjs nuvem/testes/perf-03d-offline-delete.test.cjs
