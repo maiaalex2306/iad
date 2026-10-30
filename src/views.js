@@ -5503,6 +5503,13 @@
       casos.map(linha).join('') + '</div>';
   }
 
+  /* PERF-04 P1: os cartões de Revisão são apresentados em lotes.
+     A ordem original é mantida; Mostrar mais permite alcançar todos.
+     Estado não persistente e reiniciado na troca de usuário. */
+  const LOTE_REVISAO = 48;
+  let limiteRevisao = LOTE_REVISAO;
+  function maisRevisao() { limiteRevisao += LOTE_REVISAO; }
+  function reiniciarRevisao() { limiteRevisao = LOTE_REVISAO; }
   function revisao() {
     const est = Store.dados();
     const abertas = est.oportunidades.filter(function (o) { return !o.desfecho; });
@@ -5541,7 +5548,7 @@
     }
     if (!resumos.length) return '<h1>Revisão semanal</h1>' + filaNutricao + filaJuntar;
 
-    const cards = resumos.map(function (r) {
+    const cards = resumos.slice(0, limiteRevisao).map(function (r) {
       const d = r.delta;
       const comp = r.compromisso;
       return '<div class="card"><div class="row"><h3 style="margin:0">' + esc(r.op.titulo) + '</h3><span class="espaco"></span>' +
@@ -5564,7 +5571,12 @@
     }).join('');
 
     return '<h1>Revisão semanal</h1>' + filaNutricao + filaJuntar +
-      '<p class="muted small">Uma pergunta só, por negócio. Respostas que começam com “nós” não valem.</p>' + cards;
+      '<p class="muted small">Uma pergunta só, por negócio. Respostas que começam com “nós” não valem.</p>' + cards +
+      (resumos.length > limiteRevisao
+        ? '<div class="row perf04-revisao-paginacao" style="justify-content:center;margin:14px 0">' +
+          '<button class="btn alt" onclick="App.revisaoMais()">Mostrar mais ' +
+          Math.min(LOTE_REVISAO, resumos.length-limiteRevisao) + ' de ' +
+          resumos.length + ' negócios da revisão</button></div>' : '');
   }
 
   /* ---------------- Contas e contatos ---------------- */
@@ -10683,6 +10695,7 @@
   let donoDosFiltros = null;
 
   function zerarFiltros() {
+    reiniciarRevisao();
     filtroHoje = 'todos';
     paginaHoje = 1;
     filtroPeriodo = 'todos';
@@ -10749,7 +10762,9 @@
   global.IADViews = {
     semServidor,
     orientacaoFoco: blocosDaOrientacao,
-    hoje, painel, pipeline, tarefas, cockpit, revisao, contas, cadastros, nutricao, notasRapidas, playbook, dados, itemArquivo, listaLeads,
+    hoje, painel, pipeline, tarefas, cockpit, revisao, maisRevisao, reiniciarRevisao,
+    limiteRevisao: function () { return limiteRevisao; },
+    contas, cadastros, nutricao, notasRapidas, playbook, dados, itemArquivo, listaLeads,
     revisaoDaImportacao, recusaDoCliente, resumoDaLeitura, planoDaIA, definirPlano, planoGuardado,
     marcarLendo, estaLendo, revisaoDasNotas, respostaDaConversa,
     conversas, definirConversa, conversaAberta: function () { return conversaAberta; },
