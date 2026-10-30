@@ -269,6 +269,50 @@ async function main(){
      ...differential},null,2));
 
 
+ // PERF-04 P2: perfil de custos por função do Painel v275.
+ // Instrumentação temporária do benchmark; não envia dados do cliente.
+ const panelProfile=await page.evaluate(()=>{
+   const wrappers=[],counts={};
+   const targets=[
+     ['Store.dados',window.IADStore,'dados'],
+     ['Engine.carteira',window.IADEngine,'carteira'],
+     ['Engine.filtrar',window.IADEngine,'filtrar'],
+     ['Engine.evolucao',window.IADEngine,'evolucao'],
+     ['Engine.aprendizado',window.IADEngine,'aprendizado'],
+     ['Engine.porMes',window.IADEngine,'porMes'],
+     ['Engine.porEtapa',window.IADEngine,'porEtapa'],
+     ['Engine.porSegmento',window.IADEngine,'porSegmento'],
+     ['Engine.matrizDecisoes',window.IADEngine,'matrizDecisoes'],
+     ['Funis.tudo',window.IADFunis,'tudo'],
+     ['Grafico.colunas',window.IADGraficos,'colunasPorMes'],
+     ['Grafico.barras',window.IADGraficos,'barrasHorizontais'],
+     ['Grafico.matriz',window.IADGraficos,'matriz'],
+     ['Grafico.composicao',window.IADGraficos,'composicao']
+   ];
+   for(const [name,obj,key] of targets){
+     if(!obj||typeof obj[key]!=='function')continue;
+     const original=obj[key];counts[name]={calls:0,totalMs:0,maxMs:0};
+     wrappers.push([obj,key,original]);
+     obj[key]=function(...args){
+       const t=performance.now();
+       try{return original.apply(this,args);}
+       finally{const ms=performance.now()-t;const c=counts[name];
+         c.calls++;c.totalMs+=ms;c.maxMs=Math.max(c.maxMs,ms);}
+     };
+   }
+   const samples=[];
+   try{for(let i=0;i<5;i++){
+     const at=performance.now();window.IADViews.painel();
+     samples.push(+(performance.now()-at).toFixed(2));
+   }}finally{for(const [obj,key,fn] of wrappers)obj[key]=fn;}
+   return {samples,counts:Object.fromEntries(Object.entries(counts).map(([name,c])=>[
+     name,{calls:c.calls,totalMs:+c.totalMs.toFixed(2),maxMs:+c.maxMs.toFixed(2)}]))};
+ });
+ console.log('PERF04_P2_PANEL_PROFILE '+JSON.stringify(panelProfile));
+ fs.writeFileSync(path.join(root,'homolog-artifacts','perf04-p2-painel-profile.json'),
+   JSON.stringify({baselineVersion:'v275',dataset:'389 opportunities / 778 tasks synthetic',
+     ...panelProfile},null,2));
+
  // PERF-04 P1: differential v274 VS candidata em uma única página. A v274
  // é o commit de merge previamente publicado; ambos usam a mesma Store,
  // mesmo clock/tenant e mesmas funções globais de gráficos.
