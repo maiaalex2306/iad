@@ -21,7 +21,7 @@ jobs:
       - run: node --check src/engine.js && node --check scripts/perf04-p4-parity.cjs
       - name: Paridade byte a byte de indicadores 0 a 5000
         run: node scripts/perf04-p4-parity.cjs
-      - name: Verificar v276 preservada
+      - name: Verificar v277 preservada
         run: |
-          grep -q "numero: 'v276'" src/config.js
-          grep -q "iad-crm-v276" sw.js
+          grep -q "numero: 'v277'" src/config.js
+          grep -q "iad-crm-v277" sw.js
