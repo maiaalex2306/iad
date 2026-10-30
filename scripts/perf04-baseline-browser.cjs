@@ -312,7 +312,7 @@ async function main(){
         Normalizar SOMENTE esses IDs preserva atributos, textos e números. */
      const canonical=(html)=>{
        const seen=new Map();
-       return html.replace(/fnl\\d+/g,function(id){
+       return html.replace(/fnl\d+/g,function(id){
          if(!seen.has(id))seen.set(id,'fnlCANON'+seen.size);
          return seen.get(id);
        });
