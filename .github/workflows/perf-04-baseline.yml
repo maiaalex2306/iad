@@ -1,0 +1,103 @@
+name: PERF-04 — Baseline v273 e gates de paridade
+on:
+  push:
+    branches: [performance/iad-perf-04-instrumentacao]
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser-baseline:
+    name: Chromium — 12 telas e Nutrição diferencial
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Instalar navegador isolado
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Comparar v273 e candidato, paridade HTML e p95
+        run: timeout 150s node scripts/perf04-baseline-browser.cjs
+      - name: Evidência reproduzível por tela
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf04-baseline-v273-browser
+          path: |
+            homolog-artifacts/perf04-browser-baseline.json
+            homolog-artifacts/perf04-nutricao-differential.json
+            homolog-artifacts/perf04-pipeline-check.json
+            homolog-artifacts/perf04-pipeline.png
+          if-no-files-found: error
+  parity-sync:
+    name: Decision Engine, offline, delta e CAS — sem regressões
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verificar sintaxe e versão produtiva inalterada
+        run: |
+          node --check scripts/perf04-baseline-browser.cjs
+          node --check src/engine.js
+          node --check src/nuvem.js
+          node --check src/sincronia.js
+          node --check src/store.js
+          node --check src/performance.js
+          grep -q "numero: 'v274'" src/config.js
+          grep -q "iad-crm-v274" sw.js
+      - name: Paridade em 243, 1000 e 5000 oportunidades
+        run: node scripts/perf03a-scale-bench.cjs
+      - name: Decision Engine determinístico, caches e render
+        run: |
+          node --test nuvem/testes/perf-02-engine.test.cjs nuvem/testes/perf-02-cache.test.cjs nuvem/testes/perf-03a-pipeline.test.cjs nuvem/testes/perf-hoje-01.test.cjs
+      - name: Sync delta, RLS, CAS, restart offline, idempotência
+        run: |
+          node --test nuvem/testes/perf-03b.test.cjs nuvem/testes/perf-03c.test.cjs nuvem/testes/perf-03d-cas.test.cjs nuvem/testes/perf-03d-outbox.test.cjs nuvem/testes/perf-03d-offline-create.test.cjs nuvem/testes/perf-03d-offline-delete.test.cjs
+      - name: Evidências de paridade
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf04-decision-engine-parity
+          path: homolog-artifacts/scale-bench.json
+          if-no-files-found: error
+  gotrue-cas:
+    name: GoTrue real isolado — concorrência e tenant
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: supabase/setup-cli@v3
+      - name: Subir Supabase descartável
+        run: |
+          supabase init --force
+          supabase start -x studio,imgproxy,realtime,storage-api,edge-runtime,postgres-meta,mailpit,logflare,vector,supavisor
+      - name: Instalar esquema v273 somente local
+        run: |
+          sudo apt-get -qq update
+          sudo apt-get -qq install -y postgresql-client
+          export PGURL=postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          for f in nuvem/schema.sql nuvem/correcao-05-gestor.sql nuvem/perf-03b-journal.sql nuvem/perf-03c-journal-privado.sql nuvem/perf-03d-cas.sql nuvem/perf-03d-cas-full.sql nuvem/perf-03d-cas-idempotencia.sql nuvem/perf-03d-idempotencia-hardening.sql nuvem/perf-03d-excluir-idempotente.sql; do
+            psql "$PGURL" -X -v ON_ERROR_STOP=1 -f "$f"
+          done
+      - name: Dois tenants, três sessões e recibos idempotentes
+        run: |
+          set -a
+          source <(supabase status -o env)
+          set +a
+          export API_URL=http://127.0.0.1:54321
+          node scripts/perf03d-auth-cas-local.cjs

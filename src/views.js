@@ -5813,7 +5813,7 @@
   /* Um negócio passa pelo filtro? A mesma regra vale para as duas listas: o
      que a pessoa digitou vale nos dois lados, senão ela filtraria a carteira,
      olharia a nutrição e veria outra coisa. */
-  function passaNoFiltroDaNutricao(op) {
+  function passaNoFiltroDaNutricao(op, atrasadasIndex) {
     const conta = Store.conta(op.contaId);
     const texto = (nutri.busca || '').trim().toLowerCase();
     if (texto) {
@@ -5830,7 +5830,7 @@
     }
 
     if (nutri.saude !== 'todas') {
-      const r = E.resumo(op);
+      const r = E.resumo(op, atrasadasIndex);
       if (nutri.saude === 'zerado' && r.iad !== 0) return false;
       if (nutri.saude === 'ate4' && !(r.iad >= 1 && r.iad <= 4)) return false;
       if (nutri.saude === 'parado30' && !(r.evidenceAge >= 30)) return false;
@@ -5854,7 +5854,19 @@
     const posicaoDaFaixa = function (pot) {
       return pot ? P.FAIXAS_POTENCIAL.indexOf(pot.faixa) : 99;
     };
-    const filtradas = lista.filter(passaNoFiltroDaNutricao).slice().sort(function (a, b) {
+    /* PERF-04 P0-01 — antes cada E.resumo(op) varria Store.dados().tarefas.
+       Indexar somente tarefas visíveis nesta sessão e nesta data evita O(ops*tarefas),
+       sem mudar o cálculo do Decision Engine, os filtros ou o isolamento RLS. */
+    const atrasadasIndex = Object.create(null);
+    const hoje = Store.hoje();
+    (est.tarefas || []).forEach(function (t) {
+      if (t.oportunidadeId == null || t.status !== 'aberta' ||
+          !t.vencimento || !(t.vencimento < hoje)) return;
+      atrasadasIndex[t.oportunidadeId] = (atrasadasIndex[t.oportunidadeId] || 0) + 1;
+    });
+    const filtradas = lista.filter(function(op) {
+      return passaNoFiltroDaNutricao(op, atrasadasIndex);
+    }).slice().sort(function (a, b) {
       const pa = potencialDe(a), pb = potencialDe(b);
       return (posicaoDaFaixa(pa) - posicaoDaFaixa(pb)) ||
         ((pb ? pb.pontos : -1) - (pa ? pa.pontos : -1)) ||
@@ -5906,7 +5918,7 @@
 
     const linhas = filtradas.map(function (op) {
       const conta = Store.conta(op.contaId);
-      const r = E.resumo(op);
+      const r = E.resumo(op, atrasadasIndex);
       const dono = (est.usuarios || []).filter(function (u) { return u.id === op.dono; })[0];
       return '<tr' + (marcados[op.id] ? ' class="marcada"' : '') + '>' +
         '<td><input type="checkbox" id="n-' + lado + '-' + esc(op.id) + '"' +
