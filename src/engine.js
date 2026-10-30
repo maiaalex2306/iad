@@ -402,12 +402,15 @@
   /* PERF-02: índice de atrasos opcional por execução da fila. Os consumidores
      isolados de E.resumo continuam usando a rotina original, sem mudança. */
   function resumo(op, atrasadasIndex) {
+    /* PERF-04 P3: calcular a idade da evidência uma única vez.
+       Tanto o número quanto a faixa usam a mesma leitura de data. */
+    const idade = evidenceAge(op);
     return {
       op: op,
       conta: Store.conta(op.contaId),
       iad: iad(op),
-      evidenceAge: evidenceAge(op),
-      faixa: faixaEvidencia(evidenceAge(op)),
+      evidenceAge: idade,
+      faixa: faixaEvidencia(idade),
       velocity: decisionVelocity(op),
       coverage: coverage(op),
       gates: gates(op),
@@ -584,45 +587,49 @@
       });
     }
     const resumos = abertas.map(function (op) { return resumo(op, indice); });
-    const total = resumos.reduce(function (s, r) { return s + (r.op.valor || 0); }, 0);
-    const porGrupo = {};
-    resumos.forEach(function (r) {
-      const k = r.classe.id;
-      porGrupo[k] = porGrupo[k] || { rotulo: r.classe.rotulo, valor: 0, qtd: 0 };
-      porGrupo[k].valor += r.op.valor || 0;
-      porGrupo[k].qtd += 1;
+    /* PERF-04 P3: um percurso dos resumos acumula indicadores, grupos
+       e travas. As somas seguem exatamente a ordem original da carteira,
+       preservando as regras, o arredondamento e os valores exibidos. */
+    let total=0, somaIad=0, somaIdade=0, somaCoverage=0, somaProntidao=0;
+    let saudavel=0, emRisco=0, zumbi=0;
+    const porGrupo = {}, travas = {};
+    resumos.forEach(function(r) {
+      const valor = r.op.valor || 0, classe = r.classe.id;
+      total += valor;
+      const g=porGrupo[classe] || (porGrupo[classe]={
+        rotulo:r.classe.rotulo,valor:0,qtd:0
+      });
+      g.valor += valor;g.qtd += 1;
+      if(r.nbd.dimensao) {
+        const k=r.nbd.dimensao.id;
+        const t=travas[k] || (travas[k]={
+          nome:r.nbd.dimensao.nome,valor:0,qtd:0
+        });
+        t.valor += valor;t.qtd += 1;
+      }
+      somaIad += r.iad;
+      somaIdade += r.evidenceAge;
+      somaCoverage += r.coverage.percentual;
+      somaProntidao += r.gates.prontidao;
+      if(classe==='real'||classe==='oculto')saudavel += valor;
+      if(classe==='falso'||classe==='construcao')emRisco += valor;
+      if(classe==='zumbi')zumbi += valor;
     });
-
-    const travas = {};
-    resumos.forEach(function (r) {
-      if (!r.nbd.dimensao) return;
-      const k = r.nbd.dimensao.id;
-      travas[k] = travas[k] || { nome: r.nbd.dimensao.nome, valor: 0, qtd: 0 };
-      travas[k].valor += r.op.valor || 0;
-      travas[k].qtd += 1;
-    });
-
-    const media = function (fn) {
-      return resumos.length ? resumos.reduce(function (s, r) { return s + fn(r); }, 0) / resumos.length : 0;
-    };
-
+    const qtd=resumos.length;
     return {
       resumos: resumos,
       total: total,
-      qtd: resumos.length,
+      qtd: qtd,
       porGrupo: porGrupo,
       travas: Object.keys(travas).map(function (k) { return Object.assign({ id: k }, travas[k]); })
         .sort(function (a, b) { return b.valor - a.valor; }),
-      iadMedio: media(function (r) { return r.iad; }),
-      evidenceAgeMedio: media(function (r) { return r.evidenceAge; }),
-      coverageMedio: media(function (r) { return r.coverage.percentual; }),
-      prontidaoMedia: media(function (r) { return r.gates.prontidao; }),
-      saudavel: resumos.filter(function (r) { return r.classe.id === 'real' || r.classe.id === 'oculto'; })
-        .reduce(function (s, r) { return s + (r.op.valor || 0); }, 0),
-      emRisco: resumos.filter(function (r) { return r.classe.id === 'falso' || r.classe.id === 'construcao'; })
-        .reduce(function (s, r) { return s + (r.op.valor || 0); }, 0),
-      zumbi: resumos.filter(function (r) { return r.classe.id === 'zumbi'; })
-        .reduce(function (s, r) { return s + (r.op.valor || 0); }, 0)
+      iadMedio: qtd ? somaIad / qtd : 0,
+      evidenceAgeMedio: qtd ? somaIdade / qtd : 0,
+      coverageMedio: qtd ? somaCoverage / qtd : 0,
+      prontidaoMedia: qtd ? somaProntidao / qtd : 0,
+      saudavel: saudavel,
+      emRisco: emRisco,
+      zumbi: zumbi
     };
   }
 
