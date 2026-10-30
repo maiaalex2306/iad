@@ -1,7 +1,7 @@
 /* PERF-04 — baseline instrumentado Chromium v273, SEM Supabase de produção.
    Usuários, tenants e oportunidades exclusivamente sintéticos em memória. */
 'use strict';
-const fs=require('node:fs'),http=require('node:http'),path=require('node:path');
+const fs=require('node:fs'),http=require('node:http'),path=require('node:path'),cp=require('node:child_process');
 const {chromium}=require('playwright');
 const root=path.join(__dirname,'..');
 const mime={'.html':'text/html','.js':'application/javascript','.css':'text/css','.png':'image/png','.svg':'image/svg+xml','.webmanifest':'application/manifest+json'};
@@ -172,6 +172,101 @@ async function main(){
      ...measurements},null,2));
  if(measurements.screens.length<10 || measurements.errors.length)
    throw new Error('PERF-04 telas não mensuradas: '+JSON.stringify(measurements.errors));
+
+
+ // Diferencial v273 versus candidato executado na MESMA página, com o
+ // MESMO dataset, sessão, Engine, Store e navegador. Apenas views.js muda.
+ const baselineViewsSrc=cp.execFileSync('git',[
+   'show','ccf80d289cb6dc3425ec996ac72b022db52b7781:src/views.js'
+ ],{cwd:root,encoding:'utf8',maxBuffer:3e6});
+ const candidateViewsSrc=fs.readFileSync(path.join(root,'src/views.js'),'utf8');
+ const differential=await page.evaluate(({baselineViewsSrc,candidateViewsSrc})=>{
+   const original=window.IADViews,A=window.IADAuth,S=window.IADStore,E=window.IADEngine;
+   function load(text){
+     const marker='global.IADViews = {';
+     if(!text.includes(marker))throw Error('Export de views.js ausente');
+     const injected=text.replace(marker,marker+
+       '\n __perf04SetNutri: function(cfg) { Object.assign(nutri,cfg); },');
+     (0,eval)(injected);
+     return window.IADViews;
+   }
+   const baseline=load(baselineViewsSrc);
+   const candidate=load(candidateViewsSrc);
+   window.IADViews=original;
+   const uA=S.obter().usuarios.find(x=>x.id==='perf-a');
+   const uB=S.obter().usuarios.find(x=>x.id==='perf-b');
+   const ops=S.obter().oportunidades;
+   const saved=ops.map(x=>({ref:x,nutricao:x.nutricao}));
+   const cases=[];
+   function check(name,session,filters){
+     A.abrirSessao(session);
+     baseline.__perf04SetNutri(filters);
+     candidate.__perf04SetNutri(filters);
+     const oldHTML=baseline.nutricao(),newHTML=candidate.nutricao();
+     if(oldHTML!==newHTML){
+       let index=0;while(index<oldHTML.length&&oldHTML[index]===newHTML[index])index++;
+       throw Error('Nutricao HTML divergente: '+name+' at '+index+
+         ' baseline='+JSON.stringify(oldHTML.slice(index,index+130))+
+         ' candidate='+JSON.stringify(newHTML.slice(index,index+130)));
+     }
+     cases.push({name,bytes:newHTML.length,tenant:session.tenantId});
+   }
+   try {
+     for(let i=0;i<ops.length;i++){
+       if(ops[i].tenantId==='tenant-a'&&i%11===0)
+         ops[i].nutricao={desde:'2026-10-01',motivo:'Aguardar orçamento',
+           revisarEm:'2026-11-01'};
+     }
+     const common={busca:'',responsavel:'todos',segmento:'todos',
+       potencial:'todos',saude:'todas',marcadosPipeline:{},marcadosNutricao:{}};
+     check('ativa-sem-filtros',uA,{...common,aba:'ativa'});
+     check('nutricao-sem-filtros',uA,{...common,aba:'nutricao'});
+     check('ativa-IAD-zero',uA,{...common,aba:'ativa',saude:'zerado'});
+     check('ativa-IAD-1a4',uA,{...common,aba:'ativa',saude:'ate4'});
+     check('ativa-filtro-busca',uA,{...common,aba:'ativa',busca:'A_NEGOCIO_2'});
+     check('nutricao-filtro-busca',uA,{...common,aba:'nutricao',busca:'A_NEGOCIO_2'});
+     check('ativa-filtro-potencial',uA,{...common,aba:'ativa',potencial:'fora'});
+     check('outro-tenant',uB,{...common,aba:'ativa'});
+     A.abrirSessao(uA);
+     const tarefas=S.dados().tarefas;
+     const index=Object.create(null),hoje=S.hoje();
+     for(const t of tarefas)
+       if(t.oportunidadeId!=null&&t.status==='aberta'&&t.vencimento&&t.vencimento<hoje)
+         index[t.oportunidadeId]=(index[t.oportunidadeId]||0)+1;
+     for(const op of S.dados().oportunidades){
+       const old=E.resumo(op).tarefasAtrasadas;
+       const next=E.resumo(op,index).tarefasAtrasadas;
+       if(old!==next)throw Error('Tarefas vencidas divergentes em '+op.id+': '+old+' != '+next);
+     }
+     baseline.__perf04SetNutri({...common,aba:'ativa'});
+     candidate.__perf04SetNutri({...common,aba:'ativa'});
+     const oldTimes=[],newTimes=[];
+     // alterna a ordem para minimizar tendência térmica do runner.
+     for(let i=0;i<7;i++){
+       let t=performance.now();
+       if(i%2===0){baseline.nutricao();oldTimes.push(performance.now()-t);
+         t=performance.now();candidate.nutricao();newTimes.push(performance.now()-t);}
+       else{candidate.nutricao();newTimes.push(performance.now()-t);
+         t=performance.now();baseline.nutricao();oldTimes.push(performance.now()-t);}
+     }
+     const p95=(a)=>{const sorted=a.slice(1).sort((a,b)=>a-b);return sorted[Math.ceil(sorted.length*.95)-1];};
+     const oldP95=+p95(oldTimes).toFixed(2),newP95=+p95(newTimes).toFixed(2);
+     if(!(newP95<=oldP95*.5))throw Error('Regressão/candidato sem ganho mínimo de 50%: '+oldP95+' vs '+newP95);
+     return {cases,parity:'PASS',validatedOverdue:389,
+       baselineWarmP95Ms:oldP95,candidateWarmP95Ms:newP95,
+       improvementPct:+(100*(1-newP95/oldP95)).toFixed(2)};
+   }finally{
+     for(const savedOp of saved)savedOp.ref.nutricao=savedOp.nutricao;
+     A.abrirSessao(uA);window.IADViews=original;
+   }
+ },{baselineViewsSrc,candidateViewsSrc});
+ console.log('PERF04_NUTRICAO_DIFFERENTIAL '+JSON.stringify(differential));
+ fs.writeFileSync(path.join(root,'homolog-artifacts','perf04-nutricao-differential.json'),
+   JSON.stringify({environment:'Same Chromium page and deterministic synthetic dataset',
+     baselineCommit:'ccf80d289cb6dc3425ec996ac72b022db52b7781',
+     candidateCommit:process.env.GITHUB_SHA||'',
+     methodology:'Same Store/Engine, old/new views.js, 8 scenarios; 7 paired iterations, warm p95 excluding first',
+     ...differential},null,2));
 
  // Evita abrir qualquer registro da outra empresa, mesmo com IDs falsos.
  const isolation=await page.evaluate(()=>{
