@@ -172,7 +172,7 @@
   }
 
   /* ---------------- o funil DECLARADO: as etapas do CRM ---------------- */
-  function funilDaEtapa(ops) {
+  function funilDaEtapa(ops, memo) {
     const etapas = P.ETAPAS || [];
     const porEtapa = {};
     etapas.forEach(function (e) { porEtapa[e] = { etapa: e, qtd: 0, valor: 0, iad: 0, falsos: 0 }; });
@@ -182,8 +182,8 @@
       if (!e) return;
       e.qtd++;
       e.valor += op.valor || 0;
-      e.iad += E.iad(op);
-      if (ehFalsoAvancado(op)) e.falsos++;
+      e.iad += memo ? memo.iad(op) : E.iad(op);
+      if (memo ? memo.falso(op) : ehFalsoAvancado(op)) e.falsos++;
     });
 
     const lista = etapas.map(function (nome) {
@@ -314,7 +314,7 @@
      "Eficiente" não é quem trouxe mais lead: é quem trouxe lead que DECIDE.
      Uma campanha com cem leads e IAD médio 1 é mais cara do que uma com dez e
      IAD 12, porque as cem horas gastas nela saíram do mesmo dia. */
-  function agrupar(ops, chave, rotuloVazio) {
+  function agrupar(ops, chave, rotuloVazio, memo) {
     const por = {};
     ops.forEach(function (op) {
       const k = String(chave(op) || '').trim() || rotuloVazio;
@@ -323,7 +323,7 @@
       const g = por[k];
       g.qtd++;
       g.valor += op.valor || 0;
-      g.iad += E.iad(op);
+      g.iad += memo ? memo.iad(op) : E.iad(op);
       if (op.nutricao) g.emNutricao++;
       if ((op.eventos || []).some(function (e) { return e.tipo === 'decision'; })) g.comEvidencia++;
       if (op.desfecho) {
@@ -409,19 +409,33 @@
     });
     const hoje = global.IADStore ? global.IADStore.hoje() : '';
     const abertas = ops.filter(function (op) { return !op.desfecho && !op.nutricao; });
+    /* PERF-04 P3: cache somente durante ESTA chamada. Nenhuma referência
+       atravessa sessões/tenants, revisões ou renders. Os resultados de
+       E.iad/E.classificar continuam sendo a única fonte da verdade. */
+    const iadCache = new WeakMap(), falsoCache = new WeakMap();
+    const memo = {
+      iad: function(op) {
+        if (!iadCache.has(op)) iadCache.set(op, E.iad(op));
+        return iadCache.get(op);
+      },
+      falso: function(op) {
+        if (!falsoCache.has(op)) falsoCache.set(op, ehFalsoAvancado(op));
+        return falsoCache.get(op);
+      }
+    };
 
     return {
       ops: ops,
       qtd: ops.length,
       decisao: funilDaDecisao(abertas),
-      etapa: funilDaEtapa(abertas),
+      etapa: funilDaEtapa(abertas, memo),
       nutricao: funilDaNutricao(ops),
       semana: porDiaDaSemana(ops, tarefas),
-      campanhas: agrupar(ops, function (op) { return op.campanha; }, 'Sem campanha'),
-      sdrs: agrupar(ops, function (op) { return op.sdr; }, 'Sem SDR'),
+      campanhas: agrupar(ops, function (op) { return op.campanha; }, 'Sem campanha', memo),
+      sdrs: agrupar(ops, function (op) { return op.sdr; }, 'Sem SDR', memo),
       atrasos: atrasos(tarefas, hoje),
       ciclo: ciclo(ops),
-      falsos: abertas.filter(ehFalsoAvancado).length
+      falsos: abertas.filter(memo.falso).length
     };
   }
 
