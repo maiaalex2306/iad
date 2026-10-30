@@ -55,6 +55,23 @@ Benchmark do Pipeline da mesma execução: 389 oportunidades, primeiro render 36
 
 **IMPORTANTE:** os tempos abaixo do JSON medem somente a geração de HTML e inserção síncrona no DOM. Não substituem INP/LCP, custo de transporte autenticado, tempo de APIs nem primeiro login real. A próxima rodada precisa medir essas etapas em homologação autenticada, sem registrar conteúdo comercial.
 
+## Correção P0-01 implementada e medida — Nutrição
+
+**Alteração de código:** `src/views.js`, função `listaDaNutricao`: agrega uma vez as tarefas abertas vencidas do `est.tarefas` já restrito por sessão/tenant e passa `atrasadasIndex` para `E.resumo(op, atrasadasIndex)`, inclusive no filtro por saúde. Não altera `src/engine.js`, cálculo do IAD, política RLS nem operações CAS.
+
+**Teste diferencial simultâneo em Chromium, mesma base e runner:**
+- [PERF-04 execução #41041210680](https://github.com/maiaalex2306/iad/actions/runs/41041210680)
+- Código original v273 `ccf80d289cb6dc3425ec996ac72b022db52b7781`: **375,9 ms p95**
+- Código candidato: **8,7 ms p95**
+- Melhoria observada de processamento `nutricao()`: **97,69%**, equivalente a aproximadamente **43,2× mais rápido** nesse benchmark
+- **Paridade integral HTML: PASS** em oito cenários: carteira ativa sem filtros, aba Nutrição, saúde IAD=0, saúde IAD 1–4, busca ativa, busca Nutrição, filtro de potencial e usuário de outro tenant.
+- **Tarefas vencidas: PASS** (389 oportunidades verificadas frente ao cálculo original).
+- Benchmark realizado sobre **389 oportunidades sintéticas e 778 tarefas**, sem rede ou conta de produção, HTML gerado em Chromium no mesmo processo. Não confundir estes resultados com LCP, INP ou latência real.
+
+**Gate:** `scripts/perf04-baseline-browser.cjs` lê o `views.js` original da v273 com `git show`, injeta a versão original e a candidata em ambientes isolados dentro da mesma página e falha caso qualquer HTML divergir, contador vencido divergente ou redução p95 menor que 50%. Artefato JSON: `perf04-nutricao-differential.json` via GitHub Actions.
+
+**Situação:** correção P0-01 concluída na branch de homologação, **não publicada**. Para promover: 3 jobs PERF-04 e todos os workflows de regressão da branch precisam terminar em sucesso, incluindo GoTrue/Postgres descartável. Nenhum SQL de produção previsto nesta correção.
+
 ## Intervenções P0 — maior prioridade
 
 | Função / tela | Arquivos-alvo | Problema verificável | Intervenção proposta | Critério de aceite |
