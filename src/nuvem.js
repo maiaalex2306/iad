@@ -1914,6 +1914,17 @@
   function estadoCarga() { return Object.assign({},carga); }
 
   function puxarCompleto(forcar) {
+    /* Nunca substituir a carteira local enquanto há CAS sem ACK. A fila
+       persistente é a verdade sobre o trabalho ainda não confirmado. */
+    try {
+      const pending=filaCASDaSessao().pending();
+      if (pending.length)
+        return Promise.reject(new Error('Há edições CAS pendentes neste dispositivo. Conclua ou resolva os conflitos antes de baixar a carteira.'));
+    } catch(e) {
+      if (e.message && e.message.indexOf('Há edições CAS pendentes')===0)
+        return Promise.reject(e);
+      /* Sessão ausente: os guardas de autenticação do puxar continuam valendo. */
+    }
     notificarCarga({ativa:true,concluidas:0,total:TABELAS.length,erro:''});
     const buscas = TABELAS.map(function (t) {
       return baixarTabelaCompleta(t).then(
