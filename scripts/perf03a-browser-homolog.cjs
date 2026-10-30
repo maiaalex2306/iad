@@ -80,8 +80,13 @@ async function main(){
     renderedCards:data.cards,cache:data.total});
   console.log('PERF03A_BROWSER '+JSON.stringify(rows.at(-1)));
  }
+ /* O fixture injeta o Pipeline na div sem trocar a rota real do App.
+    Chamar App.pipelineMais() invoca render() da rota/login, limpando a div,
+    portanto o teste verificava zero mesmo com a paginação funcional.
+    Validar o mesmo handler de paginação da view e remontar o fixture. */
  await page.evaluate(()=>{
-   window.App.pipelineMais();
+   window.IADViews.maisPipeline();
+   document.getElementById('conteudo').innerHTML=window.IADViews.pipeline();
  });
  const after=await page.locator('#conteudo .lista > button.item').count();
  if(after!==96)throw new Error('Mostrar mais não trouxe 96 cartões: '+after);
@@ -107,4 +112,10 @@ async function main(){
  await browser.close();server.close();
  console.log('PERF03A_BROWSER_DONE');
 }
-main().catch(e=>{console.error('PERF03A_BROWSER_FAIL '+e.stack);server.close();process.exitCode=1});
+main().catch(e=>{
+ console.error('PERF03A_BROWSER_FAIL '+e.stack);
+ // Não deixar Chromium aberto segurando o runner por 20 minutos após falha.
+ server.closeAllConnections?.();
+ server.close();
+ process.exit(1);
+});

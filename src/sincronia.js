@@ -164,7 +164,8 @@
 
   function guardarFila() {
     const P = global.IADPendencias;
-    if (!P || !P.disponivel() || !Store || !Store.obter) return Promise.resolve();
+    if (!P || !Store || !Store.obter) return Promise.resolve();
+    if (!P.disponivel()) return Promise.reject(new Error('IndexedDB indisponível; não é seguro fechar a aba com alterações offline.'));
 
     const N = global.IADNuvem;
     if (N && N.haMudancas && !N.haMudancas()) return limparFila();
@@ -172,8 +173,11 @@
     const estado = Store.obter();
     if (!temMovimento(estado)) return Promise.resolve();
 
-    return P.guardar(estado, donoAtual()).then(function (ok) {
-      if (ok && !naFila) { naFila = true; avisar(); }
+    return P.guardar(estado, donoAtual(),
+      Store.exportarBasesRemotasPendentes ? Store.exportarBasesRemotasPendentes() : []
+    ).then(function (ok) {
+      if (!ok) throw new Error('O navegador não confirmou o armazenamento das alterações offline.');
+      if (!naFila) { naFila = true; avisar(); }
     });
   }
 
@@ -241,6 +245,7 @@
 
     guardarFila()
       .then(renovarSePreciso)
+      .then(function () { return N.retomarFilaCAS ? N.retomarFilaCAS() : null; })
       .then(function () { return N.empurrar(); })
       .then(function (r) {
         enviando = false;
@@ -262,9 +267,12 @@
   }
 
   function agendar() {
-    /* Fora da sessão não há alteração do vendedor para subir — e agendar
-       serviria só para marcar a hora de um erro que não interessa a ninguém. */
-    if (!temSessao()) { guardarFila(); return; }
+    /* Persistir IMEDIATAMENTE, antes do debounce de 600 ms: fechamentos de
+       aba antes do envio não devem descartar a oportunidade recém-criada. */
+    guardarFila().catch(function(e) {
+      definir('erro', 'Falha ao proteger alterações offline: ' + (e && e.message || 'armazenamento indisponível'));
+    });
+    if (!temSessao()) return;
     if (relogio) clearTimeout(relogio);
     relogio = setTimeout(function () { relogio = null; enviar(); }, ESPERA);
   }

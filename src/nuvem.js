@@ -206,6 +206,129 @@
 
   /* Edge Functions: o pedaço de servidor que o app tem. Existe para guardar
      o que não pode viver no navegador — hoje, a chave da IA. */
+  /* v273: transporte CAS opt-in para uma edição controlada.
+     Não substitui o envio tradicional até existir revisão-base para cada
+     oportunidade no Store. Falha fechada: conflito nunca vira upsert. */
+  function atualizarOportunidadeCAS(id, tenantId, revisao, patch) {
+    if (!id || !tenantId || !Number.isSafeInteger(revisao) || revisao < 0 ||
+        !patch || typeof patch !== 'object' || Array.isArray(patch) ||
+        !Object.keys(patch).length ||
+        Object.keys(patch).some(function(k) { return !/^[a-z][a-z0-9_]*$/.test(k) || 
+          ['id','tenant_id','dono_id','revisao','criado_em','atualizado_em'].indexOf(k)>=0; })) {
+      return Promise.reject(new Error('Argumentos inválidos para atualização CAS.'));
+    }
+    return chamar('/rest/v1/rpc/iad_oportunidade_cas', {
+      metodo: 'POST',
+      corpo: {p_id:id,p_tenant_id:tenantId,p_revisao:revisao,p_patch:patch}
+    }).then(function(resposta) {
+      const resultado = Array.isArray(resposta) ? resposta[0] : null;
+      if (!resultado || resultado.estado !== 'ok' || !Number.isSafeInteger(Number(resultado.revisao_atual))) {
+        const e = new Error('Conflito de versão ou acesso negado: edição local preservada.');
+        e.codigo = 'IAD_CAS_CONFLITO';
+        throw e;
+      }
+      return Number(resultado.revisao_atual);
+    });
+  }
+
+  /* v273 — entrada controlada para a fila CAS. A fila não é removida em
+     conflito, timeout ou falha de autenticação. É uma API opt-in; o envio
+     legado de todas as tabelas só poderá ser substituído após a migração
+     completa de todas as escritas de oportunidades para operações CAS. */
+  function filaCASDaSessao(tenantId) {
+    const atual = sessao();
+    const p = atual && atual.perfil;
+    const u = atual && atual.user;
+    if (!u || !u.id || !p || !p.tenant_id)
+      throw new Error('Sessão e empresa obrigatórias para fila CAS.');
+    const destino=tenantId || p.tenant_id;
+    if(destino!==p.tenant_id && p.papel!=='admin')
+      throw new Error('Fila CAS fora da empresa do usuário.');
+    if (!global.IADCASQueue || !global.IADCAS)
+      throw new Error('Módulos CAS v273 indisponíveis.');
+    return global.IADCASQueue.create(global.localStorage,
+      { userId:u.id, tenantId:destino },
+      function(op) {
+        return chamar('/rest/v1/rpc/iad_oportunidade_cas_idempotente', {
+          metodo:'POST',
+          corpo:{ p_id:op.recordId, p_tenant_id:op.tenantId,
+            p_revisao:op.expectedRevision, p_patch:op.patch,
+            p_operation_id:op.operationId }
+        }).then(function(r) { return Array.isArray(r) ? r[0] : null; });
+      });
+  }
+  function enfileirarEdicaoCAS(op) {
+    const s = sessao();
+    const p = s && s.perfil, u = s && s.user;
+    if (!p || !u) return Promise.reject(new Error('Sessão CAS ausente.'));
+    try {
+      const validada=global.IADCAS.operation({
+        tenantId:op.tenantId||p.tenant_id,userId:u.id,table:'oportunidades',
+        recordId:op.recordId,expectedRevision:op.expectedRevision,
+        operationId:op.operationId,patch:op.patch
+      });
+      if (Object.keys(validada.patch).some(function(k) {
+        return ['id','tenant_id','dono_id','revisao','criado_em','atualizado_em'].indexOf(k)>=0;
+      })) throw new Error('Campo protegido no CAS SQL.');
+      const fila=filaCASDaSessao(validada.tenantId);
+      fila.enqueue(validada);
+      return fila.flush();
+    } catch(e) { return Promise.reject(e); }
+  }
+  function tenantsComFilaCAS() {
+    const atual=sessao(),p=atual && atual.perfil,u=atual && atual.user;
+    if(!u||!u.id||!p||!p.tenant_id) throw Error('Sessão CAS ausente.');
+    const tenants=new Set([p.tenant_id]);
+    if(p.papel==='admin' && global.localStorage && typeof global.localStorage.key==='function') {
+      const prefix='iad-crm:cas:v273:',sufixo=':'+encodeURIComponent(String(u.id));
+      for(let i=0;i<global.localStorage.length;i++) {
+        const k=global.localStorage.key(i);
+        if(k&&k.startsWith(prefix)&&k.endsWith(sufixo)) {
+          const t=decodeURIComponent(k.slice(prefix.length,k.length-sufixo.length));
+          if(t)tenants.add(t);
+        }
+      }
+    }
+    return Array.from(tenants);
+  }
+  function retomarFilaCAS() {
+    try {
+      return tenantsComFilaCAS().reduce(function(anterior,tenant) {
+        return anterior.then(function(resumo) {
+          const fila=filaCASDaSessao(tenant),pendentes=fila.pending();
+          return fila.flush().then(function(r) {
+            if(r && (r.blocked||r.busy))
+              throw new Error('Conflito CAS ou fila ocupada: trabalho local preservado.');
+            const ack=(r && r.acks)||[];
+            return ack.reduce(function(p,x) {
+              return p.then(function() {
+                const op=pendentes.find(function(y){return y.operationId===x.operationId;});
+                if(!op) throw Error('Recibo CAS sem operação original.');
+                /* Reconstruir a base remota do ACK antes do envio normal.
+                   Após reload o Store não tem necessariamente revisão-base. */
+                return chamar('/rest/v1/oportunidades?select=*&id=eq.' +
+                  encodeURIComponent(op.recordId) + '&tenant_id=eq.' +
+                  encodeURIComponent(op.tenantId) + '&limit=1').then(function(rows) {
+                    if(!Array.isArray(rows)||rows.length!==1)
+                      throw Error('CAS confirmado, mas oportunidade não pode ser reconciliada.');
+                    const remote=paraApp(rows[0]);
+                    if(Store.memorizarRevisoesRemotas)Store.memorizarRevisoesRemotas([remote]);
+                    const local=(Store.obter().oportunidades||[]).find(function(z) {
+                      return z.id===op.recordId&&z.tenantId===op.tenantId;
+                    });
+                    if(local && Number.isSafeInteger(remote.revisao))local.revisao=remote.revisao;
+                  });
+              });
+            },Promise.resolve()).then(function() {
+              resumo.sent+=Number(r&&r.sent||0);
+              return resumo;
+            });
+          });
+        });
+      },Promise.resolve({sent:0,blocked:false}));
+    } catch(e) { return Promise.reject(e); }
+  }
+
   function chamarFuncao(nome, corpo) {
     return chamar('/functions/v1/' + nome, { metodo: 'POST', corpo: corpo || {} });
   }
@@ -1326,9 +1449,30 @@
     const paraApagar = Store.exclusoesPendentes();
     const exclusoes = paraApagar.length
       ? Promise.all(paraApagar.map(function (x) {
-          return chamar('/rest/v1/' + x.tabela + '?id=eq.' + encodeURIComponent(x.id), {
-            metodo: 'DELETE', cabecalhos: { Prefer: 'return=minimal' }
-          }).then(function () { return { ok: x }; }, function (e) { return { erro: e.message, tabela: x.tabela }; });
+          const eliminar = x.tabela !== 'oportunidades'
+            ? chamar('/rest/v1/' + x.tabela + '?id=eq.' + encodeURIComponent(x.id), {
+                metodo: 'DELETE', cabecalhos: { Prefer: 'return=minimal' }
+              })
+            : (function() {
+                const base = Store.snapshotBaseRemoto && Store.snapshotBaseRemoto(x.tenantId || perfil.tenant_id, x.id);
+                const tenant = x.tenantId || (base && base.tenantId);
+                const rev = Number.isSafeInteger(x.revisao) ? x.revisao : (base && base.revisao);
+                if (!tenant || !Number.isSafeInteger(rev))
+                  return Promise.reject(new Error('Exclusão protegida: revisão-base ausente; operação local preservada.'));
+                const assinatura=['delete',tenant,x.id,rev].join('|');
+                let h=2166136261;
+                for(let k=0;k<assinatura.length;k++){h^=assinatura.charCodeAt(k);h=Math.imul(h,16777619)>>>0;}
+                const operationId='del-'+h.toString(16)+'-'+String(x.id).slice(0,70);
+                return chamar('/rest/v1/rpc/iad_oportunidade_excluir_cas_idempotente', {
+                  metodo: 'POST',
+                  corpo:{p_id:x.id,p_tenant_id:tenant,p_revisao:rev,p_operation_id:operationId}
+                }).then(function(linhas) {
+                  if (!Array.isArray(linhas) || !linhas[0] || linhas[0].estado !== 'ok')
+                    throw new Error('Exclusão em conflito; operação local preservada.');
+                });
+              })();
+          return eliminar.then(function () { return { ok: x }; },
+            function(e) { return {erro:e.message,tabela:x.tabela}; });
         }))
       : Promise.resolve([]);
 
@@ -1359,9 +1503,97 @@
 
       if (!mudaram.length) return Promise.resolve({ tabela: t.remota, enviados: 0, local: t.local, guardar: true });
 
-      return Promise.all(porFormato(mudaram).map(function (lote) {
-        return enviarLote(t.remota, lote, []);
-      })).then(
+      /* PERF-03D: jamais executar upsert em oportunidade existente.
+         CAS inicial cobre título, valor e etapa; demais alterações existentes
+         falham fechadas, sem sobrescrever o servidor, até ampliação do SQL. */
+      const trabalho = t.remota !== 'oportunidades'
+        ? Promise.all(porFormato(mudaram).map(function(lote) {
+            return enviarLote(t.remota,lote,[]);
+          }))
+        : Promise.all(mudaram.map(function(linha) {
+            const registro=minhas.filter(function(r){return String(r.id)===String(linha.id);})[0];
+            const base=Store.snapshotBaseRemoto && Store.snapshotBaseRemoto(linha.tenant_id,linha.id);
+            if (!base) {
+              const nova=Object.assign({},linha);
+              delete nova.revisao;
+              const confirmarCriacao=function(remota) {
+                if (!remota || !global.IADCAS.sameRecord(nova,remota))
+                  throw Error('Oportunidade existente com dados divergentes; edição local preservada, sem sobrescrita.');
+                const servidor=paraApp(remota);
+                if (Store.memorizarRevisoesRemotas)
+                  Store.memorizarRevisoesRemotas([servidor]);
+                if(registro) {
+                  Object.keys(servidor).forEach(function(k) {
+                    if(!Object.prototype.hasOwnProperty.call(registro,k)) registro[k]=servidor[k];
+                  });
+                  if(Number.isSafeInteger(remota.revisao))registro.revisao=remota.revisao;
+                }
+                return [];
+              };
+              /* Uma criação pode ter sido confirmada pelo Postgres mas sua
+                 resposta de rede se perdeu. Na retentativa, ler a linha
+                 integral e aceitar ACK só se todos os campos forem iguais. */
+              return chamar('/rest/v1/oportunidades?select=*&id=eq.' +
+                encodeURIComponent(linha.id) + '&limit=1').then(function(encontradas) {
+                if (!Array.isArray(encontradas)) throw Error('Verificação de ID sem resposta válida.');
+                if (encontradas.length) return confirmarCriacao(encontradas[0]);
+                return chamar('/rest/v1/oportunidades',{
+                  metodo:'POST',cabecalhos:{Prefer:'return=representation'},corpo:nova
+                }).then(function(resultados) {
+                  if(!Array.isArray(resultados)||resultados.length!==1)
+                    throw Error('Criação sem ACK completo; estado local preservado.');
+                  return confirmarCriacao(resultados[0]);
+                });
+              });
+            }
+            /* No-op não deve confirmar mudanças em campos desconhecidos. */
+            if (base.tenantId !== linha.tenant_id)
+              return Promise.reject(new Error('Base CAS pertence a outra empresa.'));
+            if (!Number.isSafeInteger(base.revisao))
+              return Promise.reject(new Error('Revisão-base desconhecida: envio protegido bloqueado.'));
+            const ignorados=new Set(['revisao','atualizadoEm','donoId','_criadaAgora']);
+            const keys=new Set(Object.keys(base).concat(Object.keys(registro||{})));
+            const mudancas={};
+            for(const k of keys){
+              if(ignorados.has(k)||k.charAt(0)==='_') continue;
+              if(JSON.stringify(base[k])!==JSON.stringify(registro && registro[k])){
+                const coluna=paraColuna(k);
+                if(['id','tenant_id','dono_id','revisao','criado_em','atualizado_em'].indexOf(coluna)>=0)
+                  return Promise.reject(new Error('Campo protegido na atualização CAS: '+k));
+                mudancas[coluna]=registro[k]===undefined?null:registro[k];
+              }
+            }
+            if(!Object.keys(mudancas).length) return Promise.resolve([]);
+            /* O pedido entra no journal persistente ANTES do transporte. Em
+               falha de rede, a fila permanece; conflito não vira upsert. */
+            const assinatura=[linha.tenant_id,linha.id,base.revisao,JSON.stringify(mudancas)].join('|');
+            let hash=2166136261;
+            for(let i=0;i<assinatura.length;i++) {
+              hash^=assinatura.charCodeAt(i);
+              hash=Math.imul(hash,16777619)>>>0;
+            }
+            return enfileirarEdicaoCAS({
+              tenantId:linha.tenant_id,recordId:linha.id,expectedRevision:base.revisao,
+              operationId:'cas-'+hash.toString(16)+'-'+String(linha.id),
+              patch:mudancas
+            }).then(function(resultado){
+              if(!resultado || resultado.blocked || resultado.busy ||
+                  !Array.isArray(resultado.acks) || !resultado.acks.length)
+                throw new Error('CAS não confirmado; operação protegida na fila local.');
+              const ack=resultado.acks.filter(function(x){
+                return x.operationId==='cas-'+hash.toString(16)+'-'+String(linha.id);
+              })[0];
+              const novaRevisao=ack && Number(ack.revisaoAtual);
+              if(!Number.isSafeInteger(novaRevisao))
+                throw new Error('Confirmação CAS incompleta; sincronização requer revisão.');
+              if(registro) {
+                registro.revisao=novaRevisao;
+                if(Store.memorizarRevisoesRemotas) Store.memorizarRevisoesRemotas([registro]);
+              }
+              return [];
+            });
+          }));
+      return trabalho.then(
         function (foras) {
           const atrasadas = [];
           foras.forEach(function (lista) {
@@ -1665,6 +1897,9 @@
         Object.keys(novas).forEach(function (t) { est[t] = novas[t]; });
         Store.salvar();
       });
+      if (Store.memorizarRevisoesRemotas) {
+        partes.forEach(function(p) { if (p.local === 'oportunidades') Store.memorizarRevisoesRemotas(p.linhas); });
+      }
       const ultima = eventos.length ? Number(eventos[eventos.length-1].versao) : versaoInicial;
       /* Só confirmar checkpoint DEPOIS da gravação local e das marcas. */
       return marcarOQueDesceu().then(function () {
@@ -1755,6 +1990,17 @@
   function estadoCarga() { return Object.assign({},carga); }
 
   function puxarCompleto(forcar) {
+    /* Nunca substituir a carteira local enquanto há CAS sem ACK. A fila
+       persistente é a verdade sobre o trabalho ainda não confirmado. */
+    try {
+      const pending=tenantsComFilaCAS().some(function(t){return filaCASDaSessao(t).pending().length>0;});
+      if (pending)
+        return Promise.reject(new Error('Há edições CAS pendentes neste dispositivo. Conclua ou resolva os conflitos antes de baixar a carteira.'));
+    } catch(e) {
+      if (e.message && e.message.indexOf('Há edições CAS pendentes')===0)
+        return Promise.reject(e);
+      /* Sessão ausente: os guardas de autenticação do puxar continuam valendo. */
+    }
     notificarCarga({ativa:true,concluidas:0,total:TABELAS.length,erro:''});
     const buscas = TABELAS.map(function (t) {
       return baixarTabelaCompleta(t).then(
@@ -1798,6 +2044,7 @@
         Store.salvar();
       });
 
+      if (Store.memorizarRevisoesRemotas) Store.memorizarRevisoesRemotas(veio.oportunidades || []);
       const quantos = resultados.reduce(function (s, r) { return s + r.linhas.length; }, 0);
       return marcarOQueDesceu().then(function () { return quantos; });
     }).finally(function () { notificarCarga({ativa:false}); });
@@ -1893,6 +2140,8 @@
     emailsDaNuvem, vincularEmail, enfileirarEmail, marcarLidosEmail,
     marcarEmailAnalisado, contarTentativaDeAnalise,
     caixasDeEmail, salvarCaixaDeEmail, guardarSenhaDaCaixa, esquecerSenhaDaCaixa,
+    atualizarOportunidadeCAS,
+    enfileirarEdicaoCAS, retomarFilaCAS,
     empresaParecida, achatarNome, porFormato, explicarFalhas,
     adotarTokens,
     trocarMinhaSenha,

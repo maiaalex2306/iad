@@ -367,14 +367,40 @@
      Com o servidor mandando, a oportunidade excluída voltaria na primeira
      recarga. Ficam aqui, fora do estado, para não serem varridas quando a
      carteira é substituída pela do servidor. */
+  /* Exclusões devem sobreviver ao fechamento do navegador. Não descarte
+     valores corrompidos silenciosamente: falhar fechado evita perda. */
+  const EXCLUSOES_PERSISTIDAS = 'iad-crm:exclusoes-pendentes:v273';
   const exclusoes = [];
-
+  let falhaExclusoes = null;
+  try {
+    const raw = localStorage.getItem(EXCLUSOES_PERSISTIDAS);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) throw Error('Journal de exclusões inválido');
+      parsed.forEach(function(x) {
+        if (!x || !x.tabela || !x.id) throw Error('Exclusão incompleta');
+        exclusoes.push(x);
+      });
+    }
+  } catch(e) { falhaExclusoes=e; }
+  function persistirExclusoes() {
+    if (falhaExclusoes) throw falhaExclusoes;
+    localStorage.setItem(EXCLUSOES_PERSISTIDAS,JSON.stringify(exclusoes));
+  }
   function registrarExclusao(tabela, id) {
     if (!tabela || !id) return;
-    exclusoes.push({ tabela: tabela, id: String(id) });
+    const r={tabela:tabela,id:String(id)};
+    const atual=(estado[tabela]||[]).find(function(x){return String(x.id)===String(id);});
+    if (atual && atual.tenantId) r.tenantId=atual.tenantId;
+    if (tabela==='oportunidades') {
+      const b=Array.from(snapshotsBaseRemotos.values()).find(function(x){return String(x.id)===String(id) && (!r.tenantId || x.tenantId===r.tenantId);});
+      if (b) { r.tenantId=b.tenantId; r.revisao=b.revisao; }
+    }
+    exclusoes.push(r);
+    persistirExclusoes();
   }
 
-  function exclusoesPendentes() { return exclusoes.slice(); }
+  function exclusoesPendentes() { if (falhaExclusoes) throw falhaExclusoes; return exclusoes.slice(); }
 
   function esquecerExclusoes(quais) {
     (quais || []).forEach(function (x) {
@@ -382,6 +408,7 @@
         if (exclusoes[i].tabela === x.tabela && exclusoes[i].id === x.id) exclusoes.splice(i, 1);
       }
     });
+    persistirExclusoes();
   }
 
   /* ---------- a cópia de antes ----------
@@ -462,6 +489,52 @@
   function descartarCopiaDeSeguranca() {
     try { localStorage.removeItem(CHAVE_ANTES); } catch (e) { /* nada a fazer */ }
   }
+
+  /* PERF-03D — revisão-base observada no servidor, distinta da revisão
+     corrente que pode mudar no Store enquanto o usuário está editando.
+     Identidade da empresa faz parte da chave: nunca reaproveitar revisão
+     de outra carteira. Apenas dados efetivamente recebidos da nuvem
+     podem registrar bases; alterações locais não incrementam esta marca. */
+  const revisoesBaseRemotas = new Map();
+  const snapshotsBaseRemotos = new Map();
+  function memorizarRevisoesRemotas(linhas) {
+    (linhas || []).forEach(function(r) {
+      if (!r || !r.id || !r.tenantId || !Number.isSafeInteger(r.revisao) || r.revisao < 0) return;
+      const chave=String(r.tenantId)+'|'+String(r.id);
+      revisoesBaseRemotas.set(chave,r.revisao);
+      snapshotsBaseRemotos.set(chave,JSON.parse(JSON.stringify(r)));
+    });
+  }
+  function revisaoBaseRemota(tenantId,id) {
+    const k=String(tenantId)+'|'+String(id);
+    return revisoesBaseRemotas.has(k)?revisoesBaseRemotas.get(k):null;
+  }
+  function snapshotBaseRemoto(tenantId,id) {
+    const r=snapshotsBaseRemotos.get(String(tenantId)+'|'+String(id));
+    return r?JSON.parse(JSON.stringify(r)):null;
+  }
+  /* Só bases de oportunidades realmente alteradas são copiadas na caixa de
+     saída. Guardar a carteira remota inteira dobraria o armazenamento e
+     acabaria estourando a quota em bases de 5k/10k oportunidades. */
+  function exportarBasesRemotasPendentes() {
+    const atuais=new Map((estado.oportunidades||[]).map(function(r) {
+      return [String(r.tenantId)+'|'+String(r.id),r];
+    }));
+    const ignorados=new Set(['revisao','atualizadoEm','donoId','_criadaAgora']);
+    return Array.from(snapshotsBaseRemotos.entries()).filter(function(item) {
+      const b=item[1],local=atuais.get(item[0]);
+      if(!local) return false;
+      return Array.from(new Set(Object.keys(b).concat(Object.keys(local)))).some(function(k) {
+        if(ignorados.has(k)||k.charAt(0)==='_') return false;
+        return JSON.stringify(b[k])!==JSON.stringify(local[k]);
+      });
+    }).map(function(item) {return JSON.parse(JSON.stringify(item[1]));});
+  }
+  function restaurarBasesRemotasPendentes(bases) {
+    if(!Array.isArray(bases)) throw new Error('Bases CAS da fila offline inválidas.');
+    memorizarRevisoesRemotas(bases);
+  }
+  function limparRevisoesRemotas() { revisoesBaseRemotas.clear(); snapshotsBaseRemotos.clear(); }
 
   function inscrever(fn) { ouvintes.push(fn); }
   function obter() { return estado; }
@@ -2095,6 +2168,11 @@
   }
 
   function excluirOportunidade(id) {
+    /* Jornalizar antes da remoção protege contra falha de persistência:
+       se gravar falhar, o registro continua disponível na carteira. */
+    const existente=(estado.oportunidades || []).find(function(o) { return o.id===id; });
+    if (!existente) return;
+    registrarExclusao('oportunidades', id);
     estado.oportunidades = estado.oportunidades.filter(function (o) { return o.id !== id; });
     /* As tarefas do negócio saem junto, e cada uma precisa da própria ordem de
        apagar: o servidor não sabe que elas pertenciam a ele. */
@@ -2102,7 +2180,6 @@
       if (t.oportunidadeId === id) registrarExclusao('tarefas', t.id);
     });
     estado.tarefas = estado.tarefas.filter(function (t) { return t.oportunidadeId !== id; });
-    registrarExclusao('oportunidades', id);
     salvar();
   }
 
@@ -2126,6 +2203,8 @@
   global.IADStore = {
     uid, hoje, carregar, salvar, inscrever, obter, substituir, estadoVazio,
     revisao: function () { return revisaoDados; },
+    memorizarRevisoesRemotas, revisaoBaseRemota, snapshotBaseRemoto, limparRevisoesRemotas,
+    exportarBasesRemotasPendentes, restaurarBasesRemotasPendentes,
     guardarCopiaDeSeguranca, copiaDeSeguranca, restaurarCopiaDeSeguranca, descartarCopiaDeSeguranca,
     excluirContato,
     quandoMudar, semSincronizar, registrarExclusao, exclusoesPendentes, esquecerExclusoes,

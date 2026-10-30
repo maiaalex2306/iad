@@ -1257,6 +1257,11 @@
 
       S.marcarNaFila(true);
       Store.semSincronizar(function () { Store.substituir(fila.estado); });
+      /* A revisão-base recebida da nuvem deve sobreviver junto da edição
+         offline. Sem ela, um registro existente vira falsa tentativa de
+         criação após reiniciar o navegador e o CAS bloqueia a operação. */
+      if (Store.restaurarBasesRemotasPendentes)
+        Store.restaurarBasesRemotasPendentes(fila.basesCAS || []);
       return N.empurrar().then(function (r) {
         return S.limparFila().then(function () {
           /* ---------- SÓ FALA SE ALGUMA COISA SUBIU ----------

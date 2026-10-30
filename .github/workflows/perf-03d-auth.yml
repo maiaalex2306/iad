@@ -1,0 +1,55 @@
+name: PERF-03D v273 — real GoTrue CAS E2E
+on:
+  push:
+    branches: [performance/iad-perf-03d-v273]
+  pull_request:
+    paths:
+      - 'nuvem/perf-03d-cas*.sql'
+      - 'scripts/perf03d-auth-cas-local.cjs'
+      - 'src/nuvem.js'
+      - 'src/store.js'
+      - 'src/cas-queue.js'
+      - '.github/workflows/perf-03d-auth.yml'
+permissions:
+  contents: read
+jobs:
+  cas-authenticated:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: supabase/setup-cli@v3
+      - name: Start ephemeral Supabase (not production)
+        run: |
+          supabase init --force
+          supabase start -x studio,imgproxy,realtime,storage-api,edge-runtime,postgres-meta,mailpit,logflare,vector,supavisor
+      - name: Install app schema and CAS
+        run: |
+          sudo apt-get -qq update
+          sudo apt-get -qq install -y postgresql-client
+          export PGURL=postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          psql "$PGURL" -X -v ON_ERROR_STOP=1 -f nuvem/schema.sql
+          psql "$PGURL" -X -v ON_ERROR_STOP=1 -f nuvem/correcao-05-gestor.sql
+          psql "$PGURL" -X -v ON_ERROR_STOP=1 -f nuvem/perf-03b-journal.sql
+          psql "$PGURL" -X -v ON_ERROR_STOP=1 -f nuvem/perf-03c-journal-privado.sql
+          psql "$PGURL" -X -v ON_ERROR_STOP=1 -f nuvem/perf-03d-cas.sql
+          psql "$PGURL" -X -v ON_ERROR_STOP=1 -f nuvem/perf-03d-cas-full.sql
+          psql "$PGURL" -X -v ON_ERROR_STOP=1 -f nuvem/perf-03d-cas-idempotencia.sql
+          psql "$PGURL" -X -v ON_ERROR_STOP=1 -f nuvem/perf-03d-idempotencia-hardening.sql
+          psql "$PGURL" -X -v ON_ERROR_STOP=1 -f nuvem/perf-03d-excluir-idempotente.sql
+      - name: Two real authenticated users, stale update/delete, cross-tenant
+        run: |
+          set -a
+          source <(supabase status -o env)
+          set +a
+          export API_URL=http://127.0.0.1:54321
+          node scripts/perf03d-auth-cas-local.cjs
+      - name: Other regressions
+        run: |
+          node --check src/nuvem.js
+          node --check src/store.js
+          node --test nuvem/testes/perf-03d-cas.test.cjs nuvem/testes/perf-03d-outbox.test.cjs
+          node --test nuvem/testes/perf-03c.test.cjs
