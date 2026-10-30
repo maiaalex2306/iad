@@ -9,7 +9,7 @@ permissions:
   contents: read
 jobs:
   browser-baseline:
-    name: Chromium — PERF-04 P0/P1/P2 e Painel diferencial
+    name: Chromium — PERF-04 P0/P1/P2/P3 e paridade Engine/Funis
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -37,6 +37,7 @@ jobs:
             homolog-artifacts/perf04-p2-painel-profile.json
             homolog-artifacts/perf04-p2-painel-differential.json
             homolog-artifacts/perf04-p2-navigation.json
+            homolog-artifacts/perf04-p3-engine-funis.json
             homolog-artifacts/perf04-pipeline-check.json
             homolog-artifacts/perf04-pipeline.png
           if-no-files-found: error
