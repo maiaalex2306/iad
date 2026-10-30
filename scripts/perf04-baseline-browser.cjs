@@ -476,6 +476,112 @@ async function main(){
      methodology:'same browser/page/Store, original and new engine/views, 25 warmed alternating samples; synchronous HTML generation plus DOM innerHTML insertion, no network or paint',
      dataset:{opportunities:389,tasks:778},...p1},null,2));
 
+
+ // PERF-04 P2: compare v275 (producao) with P2 in the SAME browser,
+ // same synthetic records, same account, same viewport and same Store.
+ const v275='18a4e64d6372c43a20f46927deda3915cbd645b4';
+ const panelVersions={
+   old:cp.execFileSync('git',['show',v275+':src/views.js'],
+     {cwd:root,encoding:'utf8',maxBuffer:3e6}),
+   next:fs.readFileSync(path.join(root,'src/views.js'),'utf8')
+ };
+ const p2=await page.evaluate((scripts)=>{
+   const A=window.IADAuth,S=window.IADStore,V=window.IADViews;
+   const a=S.obter().usuarios.find(u=>u.id==='perf-a');
+   const b=S.obter().usuarios.find(u=>u.id==='perf-b');
+   const content=document.getElementById('conteudo');
+   const entries=[];
+   const load=(src)=>{
+     const mark='global.IADViews = {';
+     if(!src.includes(mark))throw Error('Views export missing');
+     (0,eval)(src.replace(mark,mark+
+       '\n __p2PanelFilters:function(period,segment){filtroPeriodo=period;filtroSegmento=segment;} ,'));
+     return window.IADViews;
+   };
+   const old=load(scripts.old),next=load(scripts.next);
+   const canonical=(html)=>{
+     const map=new Map();
+     return html.replace(/fnl\d+/g,id=>{
+       if(!map.has(id))map.set(id,'fnlNORMAL'+map.size);
+       return map.get(id);
+     });
+   };
+   const pct=(values,p)=>{
+     const z=[...values].sort((a,b)=>a-b);
+     return +(z[Math.max(0,Math.ceil(z.length*p)-1)]||0).toFixed(2);
+   };
+   const metrics={old:[],next:[]},cpu={old:[],next:[]},dom={old:[],next:[]};
+   const calls={old:[],next:[]};
+   const render=(v,period,segment)=>{v.__p2PanelFilters(period,segment);return v.painel();};
+   function sample(view,tag,period,segment,record){
+     const prior=S.dados,at=performance.now();
+     let n=0;
+     S.dados=function(){n++;return prior.apply(this,arguments);};
+     let html,generated;
+     try{html=render(view,period,segment);generated=performance.now();}
+     finally{S.dados=prior;}
+     content.innerHTML=html;
+     const completed=performance.now();
+     if(record){
+       metrics[tag].push(completed-at);
+       cpu[tag].push(generated-at);
+       dom[tag].push(completed-generated);
+       calls[tag].push(n);
+     }
+     return html;
+   }
+   try{
+     const scenarios=[
+       ['gestor-todos',a,'todos','todos'],
+       ['gestor-mes',a,'2026-10','todos'],
+       ['gestor-segmento',a,'todos','Sem segmento'],
+       ['outro-tenant',b,'todos','todos']
+     ];
+     for(const [name,user,period,segment] of scenarios){
+       A.abrirSessao(user);
+       const left=canonical(render(old,period,segment));
+       const right=canonical(render(next,period,segment));
+       if(left!==right){
+         let i=0;while(i<left.length&&left[i]===right[i])i++;
+         throw Error('P2 Painel output differs in '+name+' index='+i+
+           ' old='+JSON.stringify(left.slice(i,i+110))+
+           ' new='+JSON.stringify(right.slice(i,i+110)));
+       }
+       entries.push({name,tenant:user.tenantId,htmlBytes:right.length,equal:true});
+     }
+     A.abrirSessao(a);
+     render(old,'todos','todos');render(next,'todos','todos');
+     for(let i=0;i<42;i++){
+       const order=i%2===0?[[old,'old'],[next,'next']]:[[next,'next'],[old,'old']];
+       for(const [v,k] of order)sample(v,k,'todos','todos',i>1);
+     }
+     const report={};
+     for(const k of ['old','next']){
+       report[k]={
+         p50Ms:pct(metrics[k],.5),p95Ms:pct(metrics[k],.95),
+         htmlP95Ms:pct(cpu[k],.95),domP95Ms:pct(dom[k],.95),
+         storeReadsPerRender:[...new Set(calls[k])]
+       };
+     }
+     if(!report.old.storeReadsPerRender.every(n=>n===3)||
+        !report.next.storeReadsPerRender.every(n=>n===1))
+       throw Error('P2 Store read reduction failed: '+JSON.stringify(report));
+     // Avoid promoting a functional optimization with a consistent timing regression.
+     if(report.next.p50Ms>report.old.p50Ms*1.20)
+       throw Error('P2 Painel median regression >=20%: '+JSON.stringify(report));
+     return {scenarios:entries,metrics:report,
+       p95ImprovementPct:+(100*(1-report.next.p95Ms/report.old.p95Ms)).toFixed(2),
+       p50ImprovementPct:+(100*(1-report.next.p50Ms/report.old.p50Ms)).toFixed(2),
+       iterations:40,outputParity:'PASS',storeReads:'3 -> 1'};
+   }finally{A.abrirSessao(a);window.IADViews=V;}
+ },panelVersions);
+ console.log('PERF04_P2_PAINEL_DIFFERENTIAL '+JSON.stringify(p2));
+ fs.writeFileSync(path.join(root,'homolog-artifacts','perf04-p2-painel-differential.json'),
+   JSON.stringify({productionBaseline:v275,candidate:process.env.GITHUB_SHA||'',
+     environment:'same Chromium headless, 389 opportunities 778 tasks, no live network',
+     measurement:'40 paired warm samples HTML generation plus synchronous innerHTML, no LCP/INP',
+     ...p2},null,2));
+
  // Evita abrir qualquer registro da outra empresa, mesmo com IDs falsos.
  const isolation=await page.evaluate(()=>{
    const A=window.IADAuth,S=window.IADStore;
