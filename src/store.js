@@ -513,6 +513,27 @@
     const r=snapshotsBaseRemotos.get(String(tenantId)+'|'+String(id));
     return r?JSON.parse(JSON.stringify(r)):null;
   }
+  /* Só bases de oportunidades realmente alteradas são copiadas na caixa de
+     saída. Guardar a carteira remota inteira dobraria o armazenamento e
+     acabaria estourando a quota em bases de 5k/10k oportunidades. */
+  function exportarBasesRemotasPendentes() {
+    const atuais=new Map((estado.oportunidades||[]).map(function(r) {
+      return [String(r.tenantId)+'|'+String(r.id),r];
+    }));
+    const ignorados=new Set(['revisao','atualizadoEm','donoId','_criadaAgora']);
+    return Array.from(snapshotsBaseRemotos.entries()).filter(function(item) {
+      const b=item[1],local=atuais.get(item[0]);
+      if(!local) return false;
+      return Array.from(new Set(Object.keys(b).concat(Object.keys(local)))).some(function(k) {
+        if(ignorados.has(k)||k.charAt(0)==='_') return false;
+        return JSON.stringify(b[k])!==JSON.stringify(local[k]);
+      });
+    }).map(function(item) {return JSON.parse(JSON.stringify(item[1]));});
+  }
+  function restaurarBasesRemotasPendentes(bases) {
+    if(!Array.isArray(bases)) throw new Error('Bases CAS da fila offline inválidas.');
+    memorizarRevisoesRemotas(bases);
+  }
   function limparRevisoesRemotas() { revisoesBaseRemotas.clear(); snapshotsBaseRemotos.clear(); }
 
   function inscrever(fn) { ouvintes.push(fn); }
@@ -2183,6 +2204,7 @@
     uid, hoje, carregar, salvar, inscrever, obter, substituir, estadoVazio,
     revisao: function () { return revisaoDados; },
     memorizarRevisoesRemotas, revisaoBaseRemota, snapshotBaseRemoto, limparRevisoesRemotas,
+    exportarBasesRemotasPendentes, restaurarBasesRemotasPendentes,
     guardarCopiaDeSeguranca, copiaDeSeguranca, restaurarCopiaDeSeguranca, descartarCopiaDeSeguranca,
     excluirContato,
     quandoMudar, semSincronizar, registrarExclusao, exclusoesPendentes, esquecerExclusoes,
