@@ -56,5 +56,33 @@
     return { atualizar: atualizar, excluir: excluir, reconstruir: reconstruir,
       resultado: resultado, limpar: limpar };
   }
-  global.IADIncremental = { criar: criar };
+  /* Fachada escopada: falha fechada se identidade, tenant, filtros ou revisão
+     mudarem. Nunca usar uma instância antiga após troca de contexto. */
+  function criarEscopado(contextoAtual) {
+    if (typeof contextoAtual !== 'function') throw new Error('P5b: contexto obrigatório');
+    function assinatura() {
+      const c = contextoAtual();
+      if (!c || !c.usuarioId || !c.tenantId || !Number.isSafeInteger(c.revisao))
+        throw new Error('P5b: contexto incompleto');
+      return JSON.stringify([c.usuarioId, c.tenantId, c.papel || '',
+        c.filtroTenant || '', c.filtroUsuario || '', c.revisao]);
+    }
+    let inicial = assinatura(), revogado = false;
+    const motor = criar();
+    function exigir() {
+      if (revogado) throw new Error('P5b: instância revogada');
+      if (assinatura() !== inicial) {
+        motor.limpar(); revogado = true;
+        throw new Error('P5b: contexto alterado; reconstrução obrigatória');
+      }
+    }
+    return {
+      reconstruir: function (r) { exigir(); return motor.reconstruir(r); },
+      atualizar: function (r) { exigir(); return motor.atualizar(r); },
+      excluir: function (id) { exigir(); return motor.excluir(id); },
+      resultado: function () { exigir(); return motor.resultado(); },
+      revogar: function () { motor.limpar(); revogado = true; }
+    };
+  }
+  global.IADIncremental = { criar: criar, criarEscopado: criarEscopado };
 })(window);
