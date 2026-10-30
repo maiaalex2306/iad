@@ -139,6 +139,30 @@ async function main(){
      sizes:{opportunities:window.IADStore.dados().oportunidades.length,
        tasks:window.IADStore.dados().tarefas.length}};
  });
+ // Perfil de chamadas para localizar trabalho repetido na Nutrição.
+ // Mede em cenário isolado, restaura as funções após a única execução.
+ measurements.nutricaoCallProfile=await page.evaluate(()=>{
+   const E=window.IADEngine,V=window.IADViews;
+   const names=['potencial','baseDoPotencial','resumo','iad'];
+   const previous=new Map(),counts={};
+   for(const name of names) {
+     const original=E[name];if(typeof original!=='function')continue;
+     previous.set(name,original);
+     counts[name]={calls:0,totalMs:0};
+     E[name]=function(...args){
+       const at=performance.now();
+       try{return original.apply(this,args);}
+       finally {counts[name].calls++;counts[name].totalMs+=performance.now()-at;}
+     };
+   }
+   const started=performance.now();
+   try{V.nutricao();}
+   finally {for(const [name,original] of previous)E[name]=original;}
+   const totalMs=performance.now()-started;
+   for(const name of Object.keys(counts))counts[name].totalMs=+counts[name].totalMs.toFixed(2);
+   return {totalMs:+totalMs.toFixed(2),functions:counts};
+ });
+ console.log('PERF04_NUTRICAO_PROFILE '+JSON.stringify(measurements.nutricaoCallProfile));
  console.log('PERF04_BASELINE '+JSON.stringify(measurements));
  fs.mkdirSync(path.join(root,'homolog-artifacts'),{recursive:true});
  fs.writeFileSync(path.join(root,'homolog-artifacts','perf04-browser-baseline.json'),
