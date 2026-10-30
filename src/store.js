@@ -469,17 +469,24 @@
      de outra carteira. Apenas dados efetivamente recebidos da nuvem
      podem registrar bases; alterações locais não incrementam esta marca. */
   const revisoesBaseRemotas = new Map();
+  const snapshotsBaseRemotos = new Map();
   function memorizarRevisoesRemotas(linhas) {
     (linhas || []).forEach(function(r) {
       if (!r || !r.id || !r.tenantId || !Number.isSafeInteger(r.revisao) || r.revisao < 0) return;
-      revisoesBaseRemotas.set(String(r.tenantId)+'|'+String(r.id),r.revisao);
+      const chave=String(r.tenantId)+'|'+String(r.id);
+      revisoesBaseRemotas.set(chave,r.revisao);
+      snapshotsBaseRemotos.set(chave,JSON.parse(JSON.stringify(r)));
     });
   }
   function revisaoBaseRemota(tenantId,id) {
     const k=String(tenantId)+'|'+String(id);
     return revisoesBaseRemotas.has(k)?revisoesBaseRemotas.get(k):null;
   }
-  function limparRevisoesRemotas() { revisoesBaseRemotas.clear(); }
+  function snapshotBaseRemoto(tenantId,id) {
+    const r=snapshotsBaseRemotos.get(String(tenantId)+'|'+String(id));
+    return r?JSON.parse(JSON.stringify(r)):null;
+  }
+  function limparRevisoesRemotas() { revisoesBaseRemotas.clear(); snapshotsBaseRemotos.clear(); }
 
   function inscrever(fn) { ouvintes.push(fn); }
   function obter() { return estado; }
@@ -2144,7 +2151,7 @@
   global.IADStore = {
     uid, hoje, carregar, salvar, inscrever, obter, substituir, estadoVazio,
     revisao: function () { return revisaoDados; },
-    memorizarRevisoesRemotas, revisaoBaseRemota, limparRevisoesRemotas,
+    memorizarRevisoesRemotas, revisaoBaseRemota, snapshotBaseRemoto, limparRevisoesRemotas,
     guardarCopiaDeSeguranca, copiaDeSeguranca, restaurarCopiaDeSeguranca, descartarCopiaDeSeguranca,
     excluirContato,
     quandoMudar, semSincronizar, registrarExclusao, exclusoesPendentes, esquecerExclusoes,
