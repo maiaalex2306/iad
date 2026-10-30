@@ -1473,6 +1473,19 @@
       '</details>';
   }
 
+  /* PERF-04 P1: uma varredura das tarefas visíveis, em vez de uma por
+     oportunidade. O Store já aplica tenant, responsável e sessão em dados().
+     Não armazenar entre sessões: o índice vive somente durante o render. */
+  function indiceAtrasosDoRender(est) {
+    const atrasadas=Object.create(null),hoje=Store.hoje();
+    (est.tarefas || []).forEach(function(t) {
+      if(t.oportunidadeId==null||t.status!=='aberta'||
+         !t.vencimento||!(t.vencimento<hoje))return;
+      atrasadas[t.oportunidadeId]=(atrasadas[t.oportunidadeId]||0)+1;
+    });
+    return atrasadas;
+  }
+
   function painel() {
     const est = Store.dados();
     if (!est.oportunidades.length) return boasVindas();
@@ -1487,7 +1500,7 @@
     if (filtroSegmento !== 'todos' && segmentos.indexOf(filtroSegmento) === -1) filtroSegmento = 'todos';
 
     const selecionadas = E.filtrar(abertas, { periodo: filtroPeriodo, segmento: filtroSegmento });
-    const c = E.carteira(selecionadas);
+    const c = E.carteira(selecionadas, indiceAtrasosDoRender(est));
     const resumos = c.resumos;
 
     const filtros =
@@ -5497,10 +5510,12 @@
     /* Nutrição vencida entra na Revisão, e entra primeiro. Nutrição sem
        cobrança é esquecimento com nome bonito: a conta sai da previsão, a
        data combinada passa, e ninguém volta nela nunca. */
-    const vencidas = abertas.filter(function (o) { return E.nutricaoVencida(o); }).map(E.resumo);
+    const atrasadasIndex=indiceAtrasosDoRender(est);
+    const vencidas = abertas.filter(function (o) { return E.nutricaoVencida(o); })
+      .map(function(op){return E.resumo(op, atrasadasIndex);});
     const resumos = abertas
       .filter(function (o) { return !o.nutricao; })
-      .map(E.resumo)
+      .map(function(op){return E.resumo(op, atrasadasIndex);})
       .sort(function (a, b) { return b.evidenceAge - a.evidenceAge; });
 
     const filaNutricao = vencidas.length
