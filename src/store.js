@@ -352,9 +352,30 @@
     try { fn(); } finally { silencio = false; }
   }
 
+  /* P5d: eventos efêmeros para observadores de performance.
+     Uma escrita sem entidade explícita é FULL: jamais reaproveitar índice antigo. */
+  let eventoPendente = null;
+  const ouvintesMudanca = [];
+  function marcarMudancaOportunidade(tipo, id) {
+    eventoPendente = { tipo: tipo, id: String(id) };
+  }
+  function inscreverMudancas(fn) {
+    if (typeof fn !== 'function') throw new Error('P5d: observador inválido');
+    ouvintesMudanca.push(fn);
+    return function () {
+      const i = ouvintesMudanca.indexOf(fn);
+      if (i >= 0) ouvintesMudanca.splice(i, 1);
+    };
+  }
   function salvar() {
     /* Antes de notificar ouvintes: nunca entregar índice de dados anteriores. */
     revisaoDados++;
+    const mudanca = Object.assign({ tipo: 'full', id: null }, eventoPendente || {},
+      { revisao: revisaoDados });
+    eventoPendente = null;
+    ouvintesMudanca.forEach(function (fn) {
+      try { fn(mudanca); } catch (e) { console.warn('[P5d] observador:', e.message); }
+    });
     ouvintes.forEach(function (fn) { fn(estado); });
     if (!silencio && aoMudar) aoMudar();
   }
@@ -1155,6 +1176,7 @@
     }
 
     Object.assign(op, mudancas);
+    marcarMudancaOportunidade('atualizada', id);
     salvar();
     return op;
   }
@@ -2180,6 +2202,7 @@
       if (t.oportunidadeId === id) registrarExclusao('tarefas', t.id);
     });
     estado.tarefas = estado.tarefas.filter(function (t) { return t.oportunidadeId !== id; });
+    marcarMudancaOportunidade('excluida', id);
     salvar();
   }
 
@@ -2201,7 +2224,7 @@
   }
 
   global.IADStore = {
-    uid, hoje, carregar, salvar, inscrever, obter, substituir, estadoVazio,
+    uid, hoje, carregar, salvar, inscrever, inscreverMudancas, obter, substituir, estadoVazio,
     revisao: function () { return revisaoDados; },
     memorizarRevisoesRemotas, revisaoBaseRemota, snapshotBaseRemoto, limparRevisoesRemotas,
     exportarBasesRemotasPendentes, restaurarBasesRemotasPendentes,
