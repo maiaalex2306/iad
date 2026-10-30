@@ -307,11 +307,22 @@ async function main(){
        return type==='painel'?which.V.painel():which.V.revisao();
      };
      const a=choose(old),b=choose(candidate);
-     if(a!==b){
-       let index=0;while(index<a.length&&a[index]===b[index])index++;
+     /* Os SVGs de funil usam IDs gerados por contador global fnl1,fnl2...
+        Compartilhar a mesma página incrementa esse contador entre renders.
+        Normalizar SOMENTE esses IDs preserva atributos, textos e números. */
+     const canonical=(html)=>{
+       const seen=new Map();
+       return html.replace(/fnl\\d+/g,function(id){
+         if(!seen.has(id))seen.set(id,'fnlCANON'+seen.size);
+         return seen.get(id);
+       });
+     };
+     const ac=canonical(a),bc=canonical(b);
+     if(ac!==bc){
+       let index=0;while(index<ac.length&&ac[index]===bc[index])index++;
        throw Error('P1 HTML divergente '+label+' caractere '+index+
-         ' v274='+JSON.stringify(a.slice(index,index+140))+
-         ' candidata='+JSON.stringify(b.slice(index,index+140)));
+         ' v274='+JSON.stringify(ac.slice(index,index+140))+
+         ' candidata='+JSON.stringify(bc.slice(index,index+140)));
      }
      cases.push({label,screen:type,tenant:session.tenantId,bytes:b.length,parity:'PASS'});
      if(comparative){
