@@ -1604,8 +1604,8 @@
       '</div>' +
 
       riscosCriticos(resumos) +
-      evolucaoDaCarteira() +
-      aprendizado();
+      evolucaoDaCarteira(est) +
+      aprendizado(est);
   }
 
   function pill(valor, atual, acao, rotulo, ajuda) {
@@ -1761,8 +1761,8 @@
       '<div id="plano-desenvolvimento"></div></div>';
   }
 
-  function evolucaoDaCarteira() {
-    const est = Store.dados();
+  function evolucaoDaCarteira(estCompartilhado) {
+    const est = estCompartilhado || Store.dados();
     const ops = est.oportunidades.filter(function (o) { return true; });
     const ev = E.evolucao(ops, est.tarefas || [], semanasDoAprendizado);
 
@@ -1788,8 +1788,8 @@
   }
 
   /* O que a carteira fechada já ensinou. Com pouca amostra, diz que é pouca amostra. */
-  function aprendizado() {
-    const a = E.aprendizado(Store.dados().oportunidades);
+  function aprendizado(estCompartilhado) {
+    const a = E.aprendizado((estCompartilhado || Store.dados()).oportunidades);
     if (!a.total) {
       return '<div class="sec-titulo"><h2>Ganhos contra perdas</h2></div>' +
         '<div class="card"><div class="vazio small">Nenhum negócio encerrado ainda. Ao fechar uma oportunidade — ganha ou perdida — o app congela a foto das oito decisões daquele dia. É a comparação entre essas fotos que valida o modelo.</div></div>';

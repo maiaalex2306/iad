@@ -269,6 +269,50 @@ async function main(){
      ...differential},null,2));
 
 
+ // PERF-04 P2: perfil de custos por função do Painel v275.
+ // Instrumentação temporária do benchmark; não envia dados do cliente.
+ const panelProfile=await page.evaluate(()=>{
+   const wrappers=[],counts={};
+   const targets=[
+     ['Store.dados',window.IADStore,'dados'],
+     ['Engine.carteira',window.IADEngine,'carteira'],
+     ['Engine.filtrar',window.IADEngine,'filtrar'],
+     ['Engine.evolucao',window.IADEngine,'evolucao'],
+     ['Engine.aprendizado',window.IADEngine,'aprendizado'],
+     ['Engine.porMes',window.IADEngine,'porMes'],
+     ['Engine.porEtapa',window.IADEngine,'porEtapa'],
+     ['Engine.porSegmento',window.IADEngine,'porSegmento'],
+     ['Engine.matrizDecisoes',window.IADEngine,'matrizDecisoes'],
+     ['Funis.tudo',window.IADFunis,'tudo'],
+     ['Grafico.colunas',window.IADGraficos,'colunasPorMes'],
+     ['Grafico.barras',window.IADGraficos,'barrasHorizontais'],
+     ['Grafico.matriz',window.IADGraficos,'matriz'],
+     ['Grafico.composicao',window.IADGraficos,'composicao']
+   ];
+   for(const [name,obj,key] of targets){
+     if(!obj||typeof obj[key]!=='function')continue;
+     const original=obj[key];counts[name]={calls:0,totalMs:0,maxMs:0};
+     wrappers.push([obj,key,original]);
+     obj[key]=function(...args){
+       const t=performance.now();
+       try{return original.apply(this,args);}
+       finally{const ms=performance.now()-t;const c=counts[name];
+         c.calls++;c.totalMs+=ms;c.maxMs=Math.max(c.maxMs,ms);}
+     };
+   }
+   const samples=[];
+   try{for(let i=0;i<5;i++){
+     const at=performance.now();window.IADViews.painel();
+     samples.push(+(performance.now()-at).toFixed(2));
+   }}finally{for(const [obj,key,fn] of wrappers)obj[key]=fn;}
+   return {samples,counts:Object.fromEntries(Object.entries(counts).map(([name,c])=>[
+     name,{calls:c.calls,totalMs:+c.totalMs.toFixed(2),maxMs:+c.maxMs.toFixed(2)}]))};
+ });
+ console.log('PERF04_P2_PANEL_PROFILE '+JSON.stringify(panelProfile));
+ fs.writeFileSync(path.join(root,'homolog-artifacts','perf04-p2-painel-profile.json'),
+   JSON.stringify({baselineVersion:'v275',dataset:'389 opportunities / 778 tasks synthetic',
+     ...panelProfile},null,2));
+
  // PERF-04 P1: differential v274 VS candidata em uma única página. A v274
  // é o commit de merge previamente publicado; ambos usam a mesma Store,
  // mesmo clock/tenant e mesmas funções globais de gráficos.
@@ -431,6 +475,157 @@ async function main(){
    JSON.stringify({baselineCommit:v274,candidateCommit:process.env.GITHUB_SHA||'',
      methodology:'same browser/page/Store, original and new engine/views, 25 warmed alternating samples; synchronous HTML generation plus DOM innerHTML insertion, no network or paint',
      dataset:{opportunities:389,tasks:778},...p1},null,2));
+
+
+ // PERF-04 P2: compare v275 (producao) with P2 in the SAME browser,
+ // same synthetic records, same account, same viewport and same Store.
+ const v275='18a4e64d6372c43a20f46927deda3915cbd645b4';
+ const panelVersions={
+   old:cp.execFileSync('git',['show',v275+':src/views.js'],
+     {cwd:root,encoding:'utf8',maxBuffer:3e6}),
+   next:fs.readFileSync(path.join(root,'src/views.js'),'utf8')
+ };
+ const p2=await page.evaluate((scripts)=>{
+   const A=window.IADAuth,S=window.IADStore,V=window.IADViews;
+   const a=S.obter().usuarios.find(u=>u.id==='perf-a');
+   const b=S.obter().usuarios.find(u=>u.id==='perf-b');
+   const content=document.getElementById('conteudo');
+   const entries=[];
+   const load=(src)=>{
+     const mark='global.IADViews = {';
+     if(!src.includes(mark))throw Error('Views export missing');
+     (0,eval)(src.replace(mark,mark+
+       '\n __p2PanelFilters:function(period,segment){filtroPeriodo=period;filtroSegmento=segment;} ,'));
+     return window.IADViews;
+   };
+   const old=load(scripts.old),next=load(scripts.next);
+   const canonical=(html)=>{
+     const map=new Map();
+     return html.replace(/fnl\d+/g,id=>{
+       if(!map.has(id))map.set(id,'fnlNORMAL'+map.size);
+       return map.get(id);
+     });
+   };
+   const pct=(values,p)=>{
+     const z=[...values].sort((a,b)=>a-b);
+     return +(z[Math.max(0,Math.ceil(z.length*p)-1)]||0).toFixed(2);
+   };
+   const metrics={old:[],next:[]},cpu={old:[],next:[]},dom={old:[],next:[]};
+   const calls={old:[],next:[]};
+   const render=(v,period,segment)=>{v.__p2PanelFilters(period,segment);return v.painel();};
+   function sample(view,tag,period,segment,record){
+     const prior=S.dados,at=performance.now();
+     let n=0;
+     S.dados=function(){n++;return prior.apply(this,arguments);};
+     let html,generated;
+     try{html=render(view,period,segment);generated=performance.now();}
+     finally{S.dados=prior;}
+     content.innerHTML=html;
+     const completed=performance.now();
+     if(record){
+       metrics[tag].push(completed-at);
+       cpu[tag].push(generated-at);
+       dom[tag].push(completed-generated);
+       calls[tag].push(n);
+     }
+     return html;
+   }
+   try{
+     const scenarios=[
+       ['gestor-todos',a,'todos','todos'],
+       ['gestor-mes',a,'2026-10','todos'],
+       ['gestor-segmento',a,'todos','Sem segmento'],
+       ['outro-tenant',b,'todos','todos']
+     ];
+     for(const [name,user,period,segment] of scenarios){
+       A.abrirSessao(user);
+       const left=canonical(render(old,period,segment));
+       const right=canonical(render(next,period,segment));
+       if(left!==right){
+         let i=0;while(i<left.length&&left[i]===right[i])i++;
+         throw Error('P2 Painel output differs in '+name+' index='+i+
+           ' old='+JSON.stringify(left.slice(i,i+110))+
+           ' new='+JSON.stringify(right.slice(i,i+110)));
+       }
+       entries.push({name,tenant:user.tenantId,htmlBytes:right.length,equal:true});
+     }
+     A.abrirSessao(a);
+     render(old,'todos','todos');render(next,'todos','todos');
+     for(let i=0;i<42;i++){
+       const order=i%2===0?[[old,'old'],[next,'next']]:[[next,'next'],[old,'old']];
+       for(const [v,k] of order)sample(v,k,'todos','todos',i>1);
+     }
+     const report={};
+     for(const k of ['old','next']){
+       report[k]={
+         p50Ms:pct(metrics[k],.5),p95Ms:pct(metrics[k],.95),
+         htmlP95Ms:pct(cpu[k],.95),domP95Ms:pct(dom[k],.95),
+         storeReadsPerRender:[...new Set(calls[k])]
+       };
+     }
+     if(!report.old.storeReadsPerRender.every(n=>n===3)||
+        !report.next.storeReadsPerRender.every(n=>n===1))
+       throw Error('P2 Store read reduction failed: '+JSON.stringify(report));
+     // Avoid promoting a functional optimization with a consistent timing regression.
+     if(report.next.p50Ms>report.old.p50Ms*1.20)
+       throw Error('P2 Painel median regression >=20%: '+JSON.stringify(report));
+     return {scenarios:entries,metrics:report,
+       p95ImprovementPct:+(100*(1-report.next.p95Ms/report.old.p95Ms)).toFixed(2),
+       p50ImprovementPct:+(100*(1-report.next.p50Ms/report.old.p50Ms)).toFixed(2),
+       iterations:40,outputParity:'PASS',storeReads:'3 -> 1'};
+   }finally{A.abrirSessao(a);window.IADViews=V;}
+ },panelVersions);
+ console.log('PERF04_P2_PAINEL_DIFFERENTIAL '+JSON.stringify(p2));
+ fs.writeFileSync(path.join(root,'homolog-artifacts','perf04-p2-painel-differential.json'),
+   JSON.stringify({productionBaseline:v275,candidate:process.env.GITHUB_SHA||'',
+     environment:'same Chromium headless, 389 opportunities 778 tasks, no live network',
+     measurement:'40 paired warm samples HTML generation plus synchronous innerHTML, no LCP/INP',
+     ...p2},null,2));
+
+
+ // SPA navigation is measured in Chromium with synthetic authenticated
+ // sessions and local resources. This is not live-server LCP/INP.
+ const navBench=await page.evaluate(async()=>{
+   const A=window.IADAuth,S=window.IADStore;
+   const user=S.obter().usuarios.find(u=>u.id==='perf-a');
+   A.abrirSessao(user);
+   const root=document.getElementById('conteudo'),list=[];
+   const nextFrame=()=>new Promise(r=>requestAnimationFrame(r));
+   async function navigate(hash,needle){
+     if(location.hash===hash)location.hash='#/hoje';
+     await nextFrame(); await nextFrame();
+     const start=performance.now();
+     window.App.ir(hash);
+     let tries=0;
+     while(tries++<180){
+       await nextFrame();
+       if(location.hash===hash && root.textContent.includes(needle)){
+         await nextFrame();
+         return +(performance.now()-start).toFixed(2);
+       }
+     }
+     throw Error('Navigation not rendered: '+hash+' needle='+needle+
+       ' current='+location.hash+' text='+root.textContent.slice(0,140));
+   }
+   for(let i=0;i<5;i++){
+     list.push({screen:'Painel',ms:await navigate('#/painel','Painel de decisão')});
+     list.push({screen:'Cockpit',ms:await navigate('#/op/op0','A_NEGOCIO_0')});
+     list.push({screen:'Pipeline',ms:await navigate('#/pipeline','A_NEGOCIO_')});
+   }
+   const out={};
+   for(const key of ['Painel','Cockpit','Pipeline']){
+     const vals=list.filter(x=>x.screen===key).map(x=>x.ms).slice(1).sort((a,b)=>a-b);
+     out[key]={samplesMs:vals,p50Ms:vals[Math.ceil(vals.length*.5)-1],
+       p95Ms:vals[Math.ceil(vals.length*.95)-1]};
+   }
+   return {routeTimings:out,passed:true};
+ });
+ console.log('PERF04_P2_NAVIGATION '+JSON.stringify(navBench));
+ fs.writeFileSync(path.join(root,'homolog-artifacts','perf04-p2-navigation.json'),
+   JSON.stringify({environment:'local Chromium headless, synthetic authenticated account, no production API',
+     measurement:'App.ir hashchange -> expected route content -> next animation frame',
+     ...navBench},null,2));
+
 
  // Evita abrir qualquer registro da outra empresa, mesmo com IDs falsos.
  const isolation=await page.evaluate(()=>{

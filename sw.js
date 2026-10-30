@@ -3,7 +3,7 @@
    mesmo commit: um diz o que está guardado no aparelho, o outro o que está
    rodando, e é a discordância entre os dois que denuncia uma troca pela
    metade. */
-const CACHE = 'iad-crm-v275';
+const CACHE = 'iad-crm-v276';
 const ARQUIVOS = [
   './', './index.html', './recuperar.html', './manifest.webmanifest',
   './src/recuperacao.js',
