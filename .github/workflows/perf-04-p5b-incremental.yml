@@ -17,5 +17,5 @@ jobs:
         with:
           node-version: 22
       - run: node --check src/incremental.js && node --test nuvem/testes/perf-04-p5b-incremental.test.cjs
-      - name: Preservar v277 de produção nesta branch experimental
-        run: grep -q "numero: 'v277'" src/config.js
+      - name: Verificar baseline v278
+        run: grep -q "numero: 'v278'" src/config.js
