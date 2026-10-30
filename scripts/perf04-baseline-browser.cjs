@@ -304,6 +304,8 @@ async function main(){
      A.abrirSessao(session);
      const choose=(which)=>{
        which.V.__perf04PanelFilters(periodo,segmento);
+       if(type==='revisao' && which===candidate)
+         which.V.reiniciarRevisao();
        return type==='painel'?which.V.painel():which.V.revisao();
      };
      const a=choose(old),b=choose(candidate);
@@ -318,13 +320,39 @@ async function main(){
        });
      };
      const ac=canonical(a),bc=canonical(b);
-     if(ac!==bc){
-       let index=0;while(index<ac.length&&ac[index]===bc[index])index++;
-       throw Error('P1 HTML divergente '+label+' caractere '+index+
-         ' v274='+JSON.stringify(ac.slice(index,index+140))+
-         ' candidata='+JSON.stringify(bc.slice(index,index+140)));
+     if(type==='revisao') {
+       const marker='<div class="card"><div class="row"><h3 style="margin:0">';
+       const starts=[];let pos=0;
+       while((pos=ac.indexOf(marker,pos))!==-1){ starts.push(pos);pos+=marker.length; }
+       const footer='<div class="row perf04-revisao-paginacao"';
+       const cutoff=bc.indexOf(footer);
+       const initial=cutoff<0?bc:bc.slice(0,cutoff);
+       const expected=starts.length>48?ac.slice(0,starts[48]):ac;
+       if(initial!==expected)throw Error('Revisão: lote inicial diverge do prefixo v274 '+label);
+       if(starts.length>48 && (!bc.includes('App.revisaoMais()')||cutoff<0))
+         throw Error('Revisão: controle Mostrar mais indisponível '+label);
+       if(typeof window.App.revisaoMais!=='function')
+         throw Error('Revisão: App.revisaoMais não está conectado');
+       let steps=0;
+       while(candidate.V.limiteRevisao()<starts.length){
+         candidate.V.maisRevisao();
+         if(++steps>1000)throw Error('Revisão: expansão não termina');
+       }
+       const expanded=canonical(candidate.V.revisao());
+       if(expanded!==ac)throw Error('Revisão: HTML completo após Mostrar mais divergente '+label);
+       candidate.V.reiniciarRevisao();
+       cases.push({label,screen:type,tenant:session.tenantId,bytes:b.length,
+         totalCards:starts.length,initialCards:Math.min(48,starts.length),
+         expansionSteps:steps,fullParity:'PASS',parity:'PASS'});
+     }else{
+       if(ac!==bc){
+         let index=0;while(index<ac.length&&ac[index]===bc[index])index++;
+         throw Error('P1 HTML divergente '+label+' caractere '+index+
+           ' v274='+JSON.stringify(ac.slice(index,index+140))+
+           ' candidata='+JSON.stringify(bc.slice(index,index+140)));
+       }
+       cases.push({label,screen:type,tenant:session.tenantId,bytes:b.length,parity:'PASS'});
      }
-     cases.push({label,screen:type,tenant:session.tenantId,bytes:b.length,parity:'PASS'});
      if(comparative){
        // 1 aquecimento + 25 repetições alternando a ordem.
        // p95 de 7 amostras equivale quase ao máximo e é muito instável.
