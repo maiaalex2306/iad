@@ -173,7 +173,9 @@
     const estado = Store.obter();
     if (!temMovimento(estado)) return Promise.resolve();
 
-    return P.guardar(estado, donoAtual()).then(function (ok) {
+    return P.guardar(estado, donoAtual(),
+      Store.exportarBasesRemotasPendentes ? Store.exportarBasesRemotasPendentes() : []
+    ).then(function (ok) {
       if (!ok) throw new Error('O navegador não confirmou o armazenamento das alterações offline.');
       if (!naFila) { naFila = true; avisar(); }
     });
