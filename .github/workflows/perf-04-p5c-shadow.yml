@@ -1,7 +1,7 @@
 name: PERF-04 P5c — Integração shadow
 on:
   push:
-    branches: [performance/iad-perf-04-p5c-integration-v279]
+    branches: [performance/iad-perf-04-p5c-integration-v280]
   pull_request:
     branches: [claude/decisoes-estagios-vendas-eckjo0]
   workflow_dispatch:
@@ -26,5 +26,5 @@ jobs:
         run: |
           grep -q 'global.IAD_P5C_SHADOW === true' src/views.js
           ! grep -Eq 'IAD_P5C_SHADOW\s*=\s*true' index.html
-          grep -q "numero: 'v279'" src/config.js
-          grep -q "iad-crm-v279" sw.js
+          grep -q "numero: 'v280'" src/config.js
+          grep -q "iad-crm-v280" sw.js
