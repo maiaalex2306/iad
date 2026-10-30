@@ -584,45 +584,47 @@
       });
     }
     const resumos = abertas.map(function (op) { return resumo(op, indice); });
-    const total = resumos.reduce(function (s, r) { return s + (r.op.valor || 0); }, 0);
-    const porGrupo = {};
+    /* PERF-04 P4: uma única agregação por resumo, sem filtros e reduções
+       repetidos. Não reutilizar resultados entre tenants ou sessões. */
+    let total = 0, somaIad = 0, somaAge = 0, somaCoverage = 0, somaProntidao = 0;
+    let saudavel = 0, emRisco = 0, zumbi = 0;
+    const porGrupo = {}, travas = {};
     resumos.forEach(function (r) {
+      const valor = r.op.valor || 0;
+      total += valor;
+      somaIad += r.iad;
+      somaAge += r.evidenceAge;
+      somaCoverage += r.coverage.percentual;
+      somaProntidao += r.gates.prontidao;
       const k = r.classe.id;
       porGrupo[k] = porGrupo[k] || { rotulo: r.classe.rotulo, valor: 0, qtd: 0 };
-      porGrupo[k].valor += r.op.valor || 0;
+      porGrupo[k].valor += valor;
       porGrupo[k].qtd += 1;
+      if (r.nbd.dimensao) {
+        const d = r.nbd.dimensao.id;
+        travas[d] = travas[d] || { nome: r.nbd.dimensao.nome, valor: 0, qtd: 0 };
+        travas[d].valor += valor;
+        travas[d].qtd += 1;
+      }
+      if (k === 'real' || k === 'oculto') saudavel += valor;
+      if (k === 'falso' || k === 'construcao') emRisco += valor;
+      if (k === 'zumbi') zumbi += valor;
     });
-
-    const travas = {};
-    resumos.forEach(function (r) {
-      if (!r.nbd.dimensao) return;
-      const k = r.nbd.dimensao.id;
-      travas[k] = travas[k] || { nome: r.nbd.dimensao.nome, valor: 0, qtd: 0 };
-      travas[k].valor += r.op.valor || 0;
-      travas[k].qtd += 1;
-    });
-
-    const media = function (fn) {
-      return resumos.length ? resumos.reduce(function (s, r) { return s + fn(r); }, 0) / resumos.length : 0;
-    };
-
+    const qtd = resumos.length;
     return {
       resumos: resumos,
       total: total,
-      qtd: resumos.length,
+      qtd: qtd,
       porGrupo: porGrupo,
       travas: Object.keys(travas).map(function (k) { return Object.assign({ id: k }, travas[k]); })
         .sort(function (a, b) { return b.valor - a.valor; }),
-      iadMedio: media(function (r) { return r.iad; }),
-      evidenceAgeMedio: media(function (r) { return r.evidenceAge; }),
-      coverageMedio: media(function (r) { return r.coverage.percentual; }),
-      prontidaoMedia: media(function (r) { return r.gates.prontidao; }),
-      saudavel: resumos.filter(function (r) { return r.classe.id === 'real' || r.classe.id === 'oculto'; })
-        .reduce(function (s, r) { return s + (r.op.valor || 0); }, 0),
-      emRisco: resumos.filter(function (r) { return r.classe.id === 'falso' || r.classe.id === 'construcao'; })
-        .reduce(function (s, r) { return s + (r.op.valor || 0); }, 0),
-      zumbi: resumos.filter(function (r) { return r.classe.id === 'zumbi'; })
-        .reduce(function (s, r) { return s + (r.op.valor || 0); }, 0)
+      iadMedio: qtd ? somaIad / qtd : 0,
+      evidenceAgeMedio: qtd ? somaAge / qtd : 0,
+      coverageMedio: qtd ? somaCoverage / qtd : 0,
+      prontidaoMedia: qtd ? somaProntidao / qtd : 0,
+      saudavel: saudavel,
+      emRisco: emRisco,
+      zumbi: zumbi
     };
   }
 
