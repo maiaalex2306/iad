@@ -1,0 +1,27 @@
+name: PERF-04 P5b — V278 incremental shadow
+on:
+  push:
+    branches: [performance/iad-perf-04-p5b-v278-shadow]
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  incremental-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Sintaxe e testes incrementais
+        run: |
+          node --check src/incremental.js
+          node --check src/p5b-shadow.js
+          node --test nuvem/testes/perf-04-p5b-incremental.test.cjs nuvem/testes/perf-04-p5b-shadow.test.cjs
+      - name: Proteger baseline v278
+        run: |
+          grep -q "numero: 'v278'" src/config.js
+          grep -q "iad-crm-v278" sw.js
