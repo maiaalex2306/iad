@@ -1146,6 +1146,7 @@
     nova.stakeholders = semRepetir(nova.stakeholders);
 
     estado.oportunidades.push(nova);
+    marcarMudancaOportunidade('criada', nova.id);
     salvar();
     return nova;
   }
