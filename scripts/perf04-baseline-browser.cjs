@@ -268,6 +268,170 @@ async function main(){
      methodology:'Same Store/Engine, old/new views.js, 8 scenarios; 7 paired iterations, warm p95 excluding first',
      ...differential},null,2));
 
+
+ // PERF-04 P1: differential v274 VS candidata em uma única página. A v274
+ // é o commit de merge previamente publicado; ambos usam a mesma Store,
+ // mesmo clock/tenant e mesmas funções globais de gráficos.
+ const v274='d67ecd36de841ea225c68af370b69d1d66958089';
+ const filesP1={
+   oldEngine:cp.execFileSync('git',['show',v274+':src/engine.js'],
+       {cwd:root,encoding:'utf8',maxBuffer:3e6}),
+   oldViews:cp.execFileSync('git',['show',v274+':src/views.js'],
+       {cwd:root,encoding:'utf8',maxBuffer:3e6}),
+   newEngine:fs.readFileSync(path.join(root,'src/engine.js'),'utf8'),
+   newViews:fs.readFileSync(path.join(root,'src/views.js'),'utf8')
+ };
+ const p1=await page.evaluate((files)=>{
+   const previousViews=window.IADViews,previousEngine=window.IADEngine;
+   const A=window.IADAuth,S=window.IADStore;
+   const userA=S.obter().usuarios.find(u=>u.id==='perf-a');
+   const userB=S.obter().usuarios.find(u=>u.id==='perf-b');
+   function load(src){
+     (0,eval)(src.engine);
+     const marker='global.IADViews = {';
+     if(!src.views.includes(marker))throw Error('IADViews export ausente');
+     (0,eval)(src.views.replace(marker,marker+
+       '\n __perf04PanelFilters: function(periodo,segmento) { filtroPeriodo=periodo; filtroSegmento=segmento; },'));
+     return {V:window.IADViews,E:window.IADEngine};
+   }
+   const old=load({engine:files.oldEngine,views:files.oldViews});
+   const candidate=load({engine:files.newEngine,views:files.newViews});
+   const cases=[];
+   const times={painel:{old:[],candidate:[]},revisao:{old:[],candidate:[]}};
+   const domTimes={painel:{old:[],candidate:[]},revisao:{old:[],candidate:[]}};
+   const htmlTimes={painel:{old:[],candidate:[]},revisao:{old:[],candidate:[]}};
+   const content=document.getElementById('conteudo');
+   const median=(v)=>{const sorted=[...v].sort((a,b)=>a-b);return sorted[Math.floor(sorted.length/2)]};
+   const p95=(v)=>{const sorted=[...v].sort((a,b)=>a-b);return sorted[Math.ceil(sorted.length*.95)-1]};
+   function measure(type,session,periodo,segmento,label,comparative){
+     A.abrirSessao(session);
+     const choose=(which)=>{
+       which.V.__perf04PanelFilters(periodo,segmento);
+       if(type==='revisao' && which===candidate)
+         which.V.reiniciarRevisao();
+       return type==='painel'?which.V.painel():which.V.revisao();
+     };
+     const a=choose(old),b=choose(candidate);
+     /* Os SVGs de funil usam IDs gerados por contador global fnl1,fnl2...
+        Compartilhar a mesma página incrementa esse contador entre renders.
+        Normalizar SOMENTE esses IDs preserva atributos, textos e números. */
+     const canonical=(html)=>{
+       const seen=new Map();
+       return html.replace(/fnl\d+/g,function(id){
+         if(!seen.has(id))seen.set(id,'fnlCANON'+seen.size);
+         return seen.get(id);
+       });
+     };
+     const ac=canonical(a),bc=canonical(b);
+     if(type==='revisao') {
+       const marker='<div class="card"><div class="row"><h3 style="margin:0">';
+       const starts=[];let pos=0;
+       while((pos=ac.indexOf(marker,pos))!==-1){ starts.push(pos);pos+=marker.length; }
+       const footer='<div class="row perf04-revisao-paginacao"';
+       const cutoff=bc.indexOf(footer);
+       const initial=cutoff<0?bc:bc.slice(0,cutoff);
+       const expected=starts.length>48?ac.slice(0,starts[48]):ac;
+       if(initial!==expected)throw Error('Revisão: lote inicial diverge do prefixo v274 '+label);
+       if(starts.length>48 && (!bc.includes('App.revisaoMais()')||cutoff<0))
+         throw Error('Revisão: controle Mostrar mais indisponível '+label);
+       if(typeof window.App.revisaoMais!=='function')
+         throw Error('Revisão: App.revisaoMais não está conectado');
+       let steps=0;
+       while(candidate.V.limiteRevisao()<starts.length){
+         candidate.V.maisRevisao();
+         if(++steps>1000)throw Error('Revisão: expansão não termina');
+       }
+       const expanded=canonical(candidate.V.revisao());
+       if(expanded!==ac)throw Error('Revisão: HTML completo após Mostrar mais divergente '+label);
+       candidate.V.reiniciarRevisao();
+       cases.push({label,screen:type,tenant:session.tenantId,bytes:b.length,
+         totalCards:starts.length,initialCards:Math.min(48,starts.length),
+         expansionSteps:steps,fullParity:'PASS',parity:'PASS'});
+     }else{
+       if(ac!==bc){
+         let index=0;while(index<ac.length&&ac[index]===bc[index])index++;
+         throw Error('P1 HTML divergente '+label+' caractere '+index+
+           ' v274='+JSON.stringify(ac.slice(index,index+140))+
+           ' candidata='+JSON.stringify(bc.slice(index,index+140)));
+       }
+       cases.push({label,screen:type,tenant:session.tenantId,bytes:b.length,parity:'PASS'});
+     }
+     if(comparative){
+       // 1 aquecimento + 25 repetições alternando a ordem.
+       // p95 de 7 amostras equivale quase ao máximo e é muito instável.
+       for(let i=0;i<26;i++){
+         const seq=i%2===0?[[old,'old'],[candidate,'candidate']]:
+           [[candidate,'candidate'],[old,'old']];
+         for(const [which,name] of seq){
+           const t=performance.now();
+           const html=choose(which),generated=performance.now();
+           content.innerHTML=html;
+           const finished=performance.now();
+           if(i){
+             htmlTimes[type][name].push(generated-t);
+             domTimes[type][name].push(finished-generated);
+             times[type][name].push(finished-t);
+           }
+         }
+       }
+     }
+   }
+   try{
+     const all={periodo:'todos',segmento:'todos'};
+     measure('painel',userA,all.periodo,all.segmento,'painel-geral-A',true);
+     measure('revisao',userA,all.periodo,all.segmento,'revisao-geral-A',true);
+     const months=old.E.mesesDisponiveis(S.dados().oportunidades);
+     if(months.length)measure('painel',userA,months[0],'todos','painel-mes-A',false);
+     const allOps=S.obter().oportunidades,prev=allOps.map(o=>({o,n:o.nutricao}));
+     try{
+       allOps.forEach((o,i)=>{if(o.tenantId==='tenant-a'&&i%13===0)
+         o.nutricao={desde:'2026-10-01',motivo:'Ciclo orçamento',revisarEm:'2026-10-15'};
+       });
+       measure('revisao',userA,'todos','todos','revisao-nutricao-vencida',false);
+       measure('painel',userA,'todos','todos','painel-com-nutricao',false);
+     }finally{prev.forEach(x=>{x.o.nutricao=x.n;});}
+     measure('painel',userB,'todos','todos','painel-outro-tenant',false);
+     measure('revisao',userB,'todos','todos','revisao-outro-tenant',false);
+     // A carteira também serve o assistente de Conversas sem índice explícito.
+     // Garantir resultados iguais com fallback e índice calculado, por tenant.
+     for(const usuario of [userA,userB]){
+       A.abrirSessao(usuario);
+       const est=S.dados(),idx=Object.create(null),hoje=S.hoje();
+       for(const t of est.tarefas){
+         if(t.oportunidadeId==null||t.status!=='aberta'||!t.vencimento||!(t.vencimento<hoje))continue;
+         idx[t.oportunidadeId]=(idx[t.oportunidadeId]||0)+1;
+       }
+       const a=candidate.E.carteira(est.oportunidades);
+       const b=candidate.E.carteira(est.oportunidades,idx);
+       if(JSON.stringify(a)!==JSON.stringify(b))
+         throw Error('E.carteira sem índice difere do índice explícito: '+usuario.id);
+     }
+     A.abrirSessao(userA);
+     const metrics={};
+     for(const screen of ['painel','revisao']){
+       const o=times[screen].old,c=times[screen].candidate;
+       const baselineP95=+p95(o).toFixed(2),candidateP95=+p95(c).toFixed(2);
+       metrics[screen]={baselineP95Ms:baselineP95,candidateP95Ms:candidateP95,
+         improvementPct:+(100*(1-candidateP95/baselineP95)).toFixed(2),
+         baselineMedianMs:+median(o).toFixed(2),candidateMedianMs:+median(c).toFixed(2),
+         baselineHtmlP95Ms:+p95(htmlTimes[screen].old).toFixed(2),
+         candidateHtmlP95Ms:+p95(htmlTimes[screen].candidate).toFixed(2),
+         baselineDomP95Ms:+p95(domTimes[screen].old).toFixed(2),
+         candidateDomP95Ms:+p95(domTimes[screen].candidate).toFixed(2)};
+       if(!Number.isFinite(baselineP95)||candidateP95>baselineP95*1.20)
+         throw Error('Regressão P1 >=20% em '+screen+': '+JSON.stringify(metrics[screen]));
+     }
+     return {cases,metrics,parity:'PASS'};
+   }finally{
+     A.abrirSessao(userA);window.IADViews=previousViews;window.IADEngine=previousEngine;
+   }
+ },filesP1);
+ console.log('PERF04_P1_DIFFERENTIAL '+JSON.stringify(p1));
+ fs.writeFileSync(path.join(root,'homolog-artifacts','perf04-p1-revisao-painel.json'),
+   JSON.stringify({baselineCommit:v274,candidateCommit:process.env.GITHUB_SHA||'',
+     methodology:'same browser/page/Store, original and new engine/views, 25 warmed alternating samples; synchronous HTML generation plus DOM innerHTML insertion, no network or paint',
+     dataset:{opportunities:389,tasks:778},...p1},null,2));
+
  // Evita abrir qualquer registro da outra empresa, mesmo com IDs falsos.
  const isolation=await page.evaluate(()=>{
    const A=window.IADAuth,S=window.IADStore;

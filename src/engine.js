@@ -567,9 +567,23 @@
   }
 
   /* Carteira: onde está o dinheiro e qual decisão o está segurando. */
-  function carteira(oportunidades) {
+  function carteira(oportunidades, atrasadasIndex) {
     const abertas = oportunidades.filter(function (o) { return !o.desfecho; });
-    const resumos = abertas.map(resumo);
+    /* PERF-04 P1: consumidores podem fornecer o índice já calculado.
+       Sem ele (p.ex. Conversas), gerar UM índice das tarefas visíveis
+       evita varredura completa por oportunidade. Array.map(resumo) passava
+       indevidamente o índice numérico como segundo argumento de resumo. */
+    let indice=atrasadasIndex;
+    if (!indice) {
+      indice=Object.create(null);
+      const hoje=Store.hoje();
+      (Store.dados().tarefas||[]).forEach(function(t) {
+        if(t.oportunidadeId==null||t.status!=='aberta'||
+           !t.vencimento||!(t.vencimento<hoje))return;
+        indice[t.oportunidadeId]=(indice[t.oportunidadeId]||0)+1;
+      });
+    }
+    const resumos = abertas.map(function (op) { return resumo(op, indice); });
     const total = resumos.reduce(function (s, r) { return s + (r.op.valor || 0); }, 0);
     const porGrupo = {};
     resumos.forEach(function (r) {
