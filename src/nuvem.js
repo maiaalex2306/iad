@@ -1411,9 +1411,13 @@
                 const rev = Number.isSafeInteger(x.revisao) ? x.revisao : (base && base.revisao);
                 if (!tenant || !Number.isSafeInteger(rev))
                   return Promise.reject(new Error('Exclusão protegida: revisão-base ausente; operação local preservada.'));
-                return chamar('/rest/v1/rpc/iad_oportunidade_excluir_cas', {
+                const assinatura=['delete',tenant,x.id,rev].join('|');
+                let h=2166136261;
+                for(let k=0;k<assinatura.length;k++){h^=assinatura.charCodeAt(k);h=Math.imul(h,16777619)>>>0;}
+                const operationId='del-'+h.toString(16)+'-'+String(x.id).slice(0,70);
+                return chamar('/rest/v1/rpc/iad_oportunidade_excluir_cas_idempotente', {
                   metodo: 'POST',
-                  corpo:{p_id:x.id,p_tenant_id:tenant,p_revisao:rev}
+                  corpo:{p_id:x.id,p_tenant_id:tenant,p_revisao:rev,p_operation_id:operationId}
                 }).then(function(linhas) {
                   if (!Array.isArray(linhas) || !linhas[0] || linhas[0].estado !== 'ok')
                     throw new Error('Exclusão em conflito; operação local preservada.');
