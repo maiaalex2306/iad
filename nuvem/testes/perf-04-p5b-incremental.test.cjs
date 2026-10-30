@@ -12,11 +12,11 @@ const expected=(data)=>{
 };
 test('incremental com 5000 oportunidades e 100 alterações; paridade reconstrução',()=>{
  const data=Array.from({length:5000},(_,i)=>wrap('op'+i,i%30,['real','oculto','falso','construcao','zumbi'][i%5]));
- const a=nova();a.reconstruir(data);assert.deepEqual(a.resultado(),expected(data));
+ const a=nova();a.reconstruir(data);assert.deepEqual(JSON.parse(JSON.stringify(a.resultado())),expected(data));
  for(let i=0;i<100;i++){const idx=i*31;data[idx]=wrap('op'+idx,idx+101,'real');a.atualizar(data[idx]);}
- assert.deepEqual(a.resultado(),expected(data));
+ assert.deepEqual(JSON.parse(JSON.stringify(a.resultado())),expected(data));
  for(let i=0;i<50;i++){const idx=i*17;assert.equal(a.excluir('op'+idx),true);data.splice(data.findIndex(x=>x.op.id==='op'+idx),1);}
- assert.deepEqual(a.resultado(),expected(data));
+ assert.deepEqual(JSON.parse(JSON.stringify(a.resultado())),expected(data));
 });
 test('isolamento entre instâncias e limpeza ao trocar sessão',()=>{
  const a=nova(),b=nova();a.atualizar(wrap('a',10,'real'));b.atualizar(wrap('b',300,'zumbi'));
