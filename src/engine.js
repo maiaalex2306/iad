@@ -402,12 +402,15 @@
   /* PERF-02: índice de atrasos opcional por execução da fila. Os consumidores
      isolados de E.resumo continuam usando a rotina original, sem mudança. */
   function resumo(op, atrasadasIndex) {
+    /* PERF-04 P3: calcular a idade da evidência uma única vez.
+       Tanto o número quanto a faixa usam a mesma leitura de data. */
+    const idade = evidenceAge(op);
     return {
       op: op,
       conta: Store.conta(op.contaId),
       iad: iad(op),
-      evidenceAge: evidenceAge(op),
-      faixa: faixaEvidencia(evidenceAge(op)),
+      evidenceAge: idade,
+      faixa: faixaEvidencia(idade),
       velocity: decisionVelocity(op),
       coverage: coverage(op),
       gates: gates(op),
