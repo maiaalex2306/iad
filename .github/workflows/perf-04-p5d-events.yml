@@ -1,0 +1,27 @@
+name: PERF-04 P5d — Store event invalidation
+on:
+  push:
+    branches: [performance/iad-perf-04-p5d-v280-events]
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  event-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Sintaxe, invalidacao e regressões
+        run: |
+          node --check src/store.js
+          node --check src/p5d-events.js
+          node --test nuvem/testes/perf-04-p5d-events.test.cjs
+      - name: Preservar versão de produção
+        run: |
+          grep -q "numero: 'v279'" src/config.js
+          grep -q "iad-crm-v279" sw.js
