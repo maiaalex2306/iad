@@ -263,9 +263,12 @@
   }
 
   function agendar() {
-    /* Fora da sessão não há alteração do vendedor para subir — e agendar
-       serviria só para marcar a hora de um erro que não interessa a ninguém. */
-    if (!temSessao()) { guardarFila(); return; }
+    /* Persistir IMEDIATAMENTE, antes do debounce de 600 ms: fechamentos de
+       aba antes do envio não devem descartar a oportunidade recém-criada. */
+    guardarFila().catch(function(e) {
+      definir('erro', 'Falha ao proteger alterações offline: ' + (e && e.message || 'armazenamento indisponível'));
+    });
+    if (!temSessao()) return;
     if (relogio) clearTimeout(relogio);
     relogio = setTimeout(function () { relogio = null; enviar(); }, ESPERA);
   }
