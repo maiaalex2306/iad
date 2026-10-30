@@ -703,12 +703,39 @@ async function main(){
        compare(user.id+'-closed',input,{situacao:'ganhas'},undefined,false);
        compare(user.id+'-filter',input,{segmento:'Sem segmento'},undefined,false);
        if(user===ua){
-         for(const n of [1000,5000]){
+         for(const n of [1000,5000,10000]){
            const larger=build(input,n);
            compare(user.id+'-scale-'+n,larger,{},undefined,true);
          }
        }
      }
+     // Edge cases cover outcomes, maturity, nutrition and decision events:
+     // the initial synthetic base intentionally contains only open deals at IAD=0.
+     A.abrirSessao(ua);
+     const base=S.dados();
+     const dims=window.IADPlaybook.DIMENSOES.map(d=>d.id);
+     const edges=base.oportunidades.slice(0,48).map((src,i)=>{
+       const d=Object.fromEntries(dims.map((id,j)=>[id,((i+j)%4)]));
+       const out={...src,id:'perf04-p3-edge-'+i,valor:35000+i*100,
+         dims:d,eventos:i%3===0?[{
+           tipo:'decision',data:'2026-10-24',dimensao:dims[i%dims.length],
+           texto:'Comprovação registrada',autor:'perf-a'}]:[],
+         historicoNutricao:i%6===0?[{desde:'2026-09-15',
+           retomadaEm:'2026-10-20',motivo:'Aguardar decisão'}]:[]};
+       if(i%7===0)out.nutricao={
+         desde:'2026-10-01',motivo:'Orçamento',revisarEm:'2026-11-20'};
+       if(i%9===0)out.desfecho={
+         tipo:i%18===0?'ganho':'perdido_concorrente',
+         data:'2026-10-26',valorFinal:out.valor,
+         iadFinal:7,dimsFinal:d};
+       return out;
+     });
+     compare('mixed-decisions-outcomes-nutrition',
+       {...base,oportunidades:edges},{},undefined,true);
+     compare('mixed-filter-nutrition',
+       {...base,oportunidades:edges},{situacao:'nutricao'},undefined,false);
+     compare('empty-carteira',
+       {...base,oportunidades:[]},{},undefined,true);
      A.abrirSessao(ua);
      const est=S.dados();
      const idx=Object.create(null),date=S.hoje();
