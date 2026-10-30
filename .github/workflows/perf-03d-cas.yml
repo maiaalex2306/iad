@@ -1,0 +1,23 @@
+name: PERF-03D v273 — CAS contract
+on:
+  push:
+    branches:
+      - performance/iad-perf-03d-v273
+  pull_request:
+    paths:
+      - 'src/cas.js'
+      - 'nuvem/testes/perf-03d-cas.test.cjs'
+      - '.github/workflows/perf-03d-cas.yml'
+permissions:
+  contents: read
+jobs:
+  cas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check src/cas.js
+      - run: node --test nuvem/testes/perf-03d-cas.test.cjs
