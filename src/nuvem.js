@@ -1734,6 +1734,9 @@
         Object.keys(novas).forEach(function (t) { est[t] = novas[t]; });
         Store.salvar();
       });
+      if (Store.memorizarRevisoesRemotas) {
+        partes.forEach(function(p) { if (p.local === 'oportunidades') Store.memorizarRevisoesRemotas(p.linhas); });
+      }
       const ultima = eventos.length ? Number(eventos[eventos.length-1].versao) : versaoInicial;
       /* Só confirmar checkpoint DEPOIS da gravação local e das marcas. */
       return marcarOQueDesceu().then(function () {
