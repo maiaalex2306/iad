@@ -463,6 +463,24 @@
     try { localStorage.removeItem(CHAVE_ANTES); } catch (e) { /* nada a fazer */ }
   }
 
+  /* PERF-03D — revisão-base observada no servidor, distinta da revisão
+     corrente que pode mudar no Store enquanto o usuário está editando.
+     Identidade da empresa faz parte da chave: nunca reaproveitar revisão
+     de outra carteira. Apenas dados efetivamente recebidos da nuvem
+     podem registrar bases; alterações locais não incrementam esta marca. */
+  const revisoesBaseRemotas = new Map();
+  function memorizarRevisoesRemotas(linhas) {
+    (linhas || []).forEach(function(r) {
+      if (!r || !r.id || !r.tenantId || !Number.isSafeInteger(r.revisao) || r.revisao < 0) return;
+      revisoesBaseRemotas.set(String(r.tenantId)+'|'+String(r.id),r.revisao);
+    });
+  }
+  function revisaoBaseRemota(tenantId,id) {
+    const k=String(tenantId)+'|'+String(id);
+    return revisoesBaseRemotas.has(k)?revisoesBaseRemotas.get(k):null;
+  }
+  function limparRevisoesRemotas() { revisoesBaseRemotas.clear(); }
+
   function inscrever(fn) { ouvintes.push(fn); }
   function obter() { return estado; }
 
@@ -2126,6 +2144,7 @@
   global.IADStore = {
     uid, hoje, carregar, salvar, inscrever, obter, substituir, estadoVazio,
     revisao: function () { return revisaoDados; },
+    memorizarRevisoesRemotas, revisaoBaseRemota, limparRevisoesRemotas,
     guardarCopiaDeSeguranca, copiaDeSeguranca, restaurarCopiaDeSeguranca, descartarCopiaDeSeguranca,
     excluirContato,
     quandoMudar, semSincronizar, registrarExclusao, exclusoesPendentes, esquecerExclusoes,
