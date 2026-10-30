@@ -25,3 +25,26 @@ test('transport failures retain operation',async()=>{
  const q=Queue.create(storage(),id,async()=>{throw Error('offline')});
  q.enqueue(op);await assert.rejects(q.flush());assert.equal(q.pending().length,1);
 });
+test('lost ACK followed by reload/retry does not lose queued work',async()=>{
+ const disk=storage();
+ let committed=0;
+ const receipts=new Map();
+ const transport=async op=>{
+   const ack=receipts.get(op.operationId);
+   if(ack) return ack;
+   committed++;
+   const result={estado:'ok',revisao_atual:3};
+   receipts.set(op.operationId,result);
+   throw Error('Network interrupted after DB commit');
+ };
+ const q1=Queue.create(disk,id,transport);
+ q1.enqueue(op);
+ await assert.rejects(q1.flush(),/Network interrupted/);
+ assert.equal(q1.pending().length,1);
+ const q2=Queue.create(disk,id,async item=>receipts.get(item.operationId));
+ const res=await q2.flush();
+ assert.equal(res.sent,1);
+ assert.equal(res.acks[0].revisaoAtual,3);
+ assert.equal(q2.pending().length,0);
+ assert.equal(committed,1);
+});
