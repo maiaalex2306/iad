@@ -326,8 +326,9 @@ async function main(){
      }
      cases.push({label,screen:type,tenant:session.tenantId,bytes:b.length,parity:'PASS'});
      if(comparative){
-       // 1 aquecimento + 7 repetições alternando a ordem.
-       for(let i=0;i<8;i++){
+       // 1 aquecimento + 25 repetições alternando a ordem.
+       // p95 de 7 amostras equivale quase ao máximo e é muito instável.
+       for(let i=0;i<26;i++){
          const seq=i%2===0?[[old,'old'],[candidate,'candidate']]:
            [[candidate,'candidate'],[old,'old']];
          for(const [which,name] of seq){
@@ -386,7 +387,7 @@ async function main(){
  console.log('PERF04_P1_DIFFERENTIAL '+JSON.stringify(p1));
  fs.writeFileSync(path.join(root,'homolog-artifacts','perf04-p1-revisao-painel.json'),
    JSON.stringify({baselineCommit:v274,candidateCommit:process.env.GITHUB_SHA||'',
-     methodology:'same browser/page/Store, original and new engine/views, seven warmed alternating samples',
+     methodology:'same browser/page/Store, original and new engine/views, 25 warmed alternating samples',
      dataset:{opportunities:389,tasks:778},...p1},null,2));
 
  // Evita abrir qualquer registro da outra empresa, mesmo com IDs falsos.
