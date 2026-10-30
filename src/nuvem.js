@@ -275,12 +275,57 @@
       return fila.flush();
     } catch(e) { return Promise.reject(e); }
   }
+  function tenantsComFilaCAS() {
+    const atual=sessao(),p=atual && atual.perfil,u=atual && atual.user;
+    if(!u||!u.id||!p||!p.tenant_id) throw Error('Sessão CAS ausente.');
+    const tenants=new Set([p.tenant_id]);
+    if(p.papel==='admin' && global.localStorage && typeof global.localStorage.key==='function') {
+      const prefix='iad-crm:cas:v273:',sufixo=':'+encodeURIComponent(String(u.id));
+      for(let i=0;i<global.localStorage.length;i++) {
+        const k=global.localStorage.key(i);
+        if(k&&k.startsWith(prefix)&&k.endsWith(sufixo)) {
+          const t=decodeURIComponent(k.slice(prefix.length,k.length-sufixo.length));
+          if(t)tenants.add(t);
+        }
+      }
+    }
+    return Array.from(tenants);
+  }
   function retomarFilaCAS() {
     try {
-      return filaCASDaSessao().flush().then(function(r) {
-        if (r && r.blocked) throw new Error('Conflito CAS pendente: trabalho local preservado.');
-        return r;
-      });
+      return tenantsComFilaCAS().reduce(function(anterior,tenant) {
+        return anterior.then(function(resumo) {
+          const fila=filaCASDaSessao(tenant),pendentes=fila.pending();
+          return fila.flush().then(function(r) {
+            if(r && (r.blocked||r.busy))
+              throw new Error('Conflito CAS ou fila ocupada: trabalho local preservado.');
+            const ack=(r && r.acks)||[];
+            return ack.reduce(function(p,x) {
+              return p.then(function() {
+                const op=pendentes.find(function(y){return y.operationId===x.operationId;});
+                if(!op) throw Error('Recibo CAS sem operação original.');
+                /* Reconstruir a base remota do ACK antes do envio normal.
+                   Após reload o Store não tem necessariamente revisão-base. */
+                return chamar('/rest/v1/oportunidades?select=*&id=eq.' +
+                  encodeURIComponent(op.recordId) + '&tenant_id=eq.' +
+                  encodeURIComponent(op.tenantId) + '&limit=1').then(function(rows) {
+                    if(!Array.isArray(rows)||rows.length!==1)
+                      throw Error('CAS confirmado, mas oportunidade não pode ser reconciliada.');
+                    const remote=paraApp(rows[0]);
+                    if(Store.memorizarRevisoesRemotas)Store.memorizarRevisoesRemotas([remote]);
+                    const local=(Store.obter().oportunidades||[]).find(function(z) {
+                      return z.id===op.recordId&&z.tenantId===op.tenantId;
+                    });
+                    if(local && Number.isSafeInteger(remote.revisao))local.revisao=remote.revisao;
+                  });
+              });
+            },Promise.resolve()).then(function() {
+              resumo.sent+=Number(r&&r.sent||0);
+              return resumo;
+            });
+          });
+        });
+      },Promise.resolve({sent:0,blocked:false}));
     } catch(e) { return Promise.reject(e); }
   }
 
@@ -1948,8 +1993,8 @@
     /* Nunca substituir a carteira local enquanto há CAS sem ACK. A fila
        persistente é a verdade sobre o trabalho ainda não confirmado. */
     try {
-      const pending=filaCASDaSessao().pending();
-      if (pending.length)
+      const pending=tenantsComFilaCAS().some(function(t){return filaCASDaSessao(t).pending().length>0;});
+      if (pending)
         return Promise.reject(new Error('Há edições CAS pendentes neste dispositivo. Conclua ou resolva os conflitos antes de baixar a carteira.'));
     } catch(e) {
       if (e.message && e.message.indexOf('Há edições CAS pendentes')===0)
