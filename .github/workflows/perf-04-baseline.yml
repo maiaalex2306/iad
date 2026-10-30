@@ -9,7 +9,7 @@ permissions:
   contents: read
 jobs:
   browser-baseline:
-    name: Chromium — Nutrição P0 e Revisão/Painel P1
+    name: Chromium — PERF-04 P0/P1/P2 e Painel diferencial
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -34,6 +34,8 @@ jobs:
             homolog-artifacts/perf04-browser-baseline.json
             homolog-artifacts/perf04-nutricao-differential.json
             homolog-artifacts/perf04-p1-revisao-painel.json
+            homolog-artifacts/perf04-p2-painel-profile.json
+            homolog-artifacts/perf04-p2-painel-differential.json
             homolog-artifacts/perf04-pipeline-check.json
             homolog-artifacts/perf04-pipeline.png
           if-no-files-found: error
