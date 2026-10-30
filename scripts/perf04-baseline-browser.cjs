@@ -627,6 +627,146 @@ async function main(){
      ...navBench},null,2));
 
 
+
+ // PERF-04 P3: compare entire Decision Engine and funnel outputs against
+ // exactly the published v276, not previous intermediate prototypes.
+ const releaseP3='33f13f9a27d9111dd0c47be9ac1c28fc9b79ac2b';
+ const p3Sources={
+   oldEngine:cp.execFileSync('git',['show',releaseP3+':src/engine.js'],
+     {cwd:root,encoding:'utf8',maxBuffer:4e6}),
+   newEngine:fs.readFileSync(path.join(root,'src/engine.js'),'utf8'),
+   oldFunis:cp.execFileSync('git',['show',releaseP3+':src/funis.js'],
+     {cwd:root,encoding:'utf8',maxBuffer:4e6}),
+   newFunis:fs.readFileSync(path.join(root,'src/funis.js'),'utf8')
+ };
+ const p3=await page.evaluate((sources)=>{
+   const prevEngine=window.IADEngine,prevFunis=window.IADFunis;
+   const S=window.IADStore,A=window.IADAuth;
+   const ua=S.obter().usuarios.find(x=>x.id==='perf-a');
+   const ub=S.obter().usuarios.find(x=>x.id==='perf-b');
+   const keys=[];
+   const load=(engine,funis)=>{
+     (0,eval)(engine);
+     (0,eval)(funis);
+     return {E:window.IADEngine,F:window.IADFunis};
+   };
+   const old=load(sources.oldEngine,sources.oldFunis);
+   const next=load(sources.newEngine,sources.newFunis);
+   const canonical=(v)=>JSON.stringify(v);
+   const percentile=(vs,p)=>{
+     const a=[...vs].sort((x,y)=>x-y);
+     return +(a[Math.ceil(a.length*p)-1]||0).toFixed(2);
+   };
+   const metrics={funnel:{old:[],next:[]},carteira:{old:[],next:[]}};
+   function run(pair,fn,tag,sample){
+     const before=performance.now();
+     const result=fn(pair);
+     if(sample)metrics[tag][pair===old?'old':'next'].push(performance.now()-before);
+     return result;
+   }
+   function compare(label,est,filtro,index,doCarteira){
+     const a=run(old,x=>x.F.tudo(est,filtro),'funnel',false);
+     const b=run(next,x=>x.F.tudo(est,filtro),'funnel',false);
+     if(canonical(a)!==canonical(b))
+       throw Error('Funis mismatch '+label+' (published v276 vs candidate)');
+     let csize=0;
+     if(doCarteira){
+       const ac=run(old,x=>x.E.carteira(est.oportunidades,index),'carteira',false);
+       const bc=run(next,x=>x.E.carteira(est.oportunidades,index),'carteira',false);
+       csize=bc.resumos.length;
+       if(canonical(ac)!==canonical(bc))
+         throw Error('Decision Engine carteira mismatch '+label+' (published v276 vs candidate)');
+     }
+     keys.push({label,opportunities:est.oportunidades.length,
+       funnelParity:true,carteiraParity:doCarteira?'PASS':'not-requested',
+       carteiraItems:csize});
+   }
+   const build=(input,n)=>{
+     const out=input.oportunidades.slice();
+     if(n>out.length){
+       const originals=out.slice();
+       if(!originals.length)throw Error('No visible fixture opportunities');
+       for(let i=out.length;i<n;i++){
+         const src=originals[i%originals.length];
+         out.push({...src,id:'perf04-p3-'+i,
+           titulo:src.titulo+' #'+i});
+       }
+     }
+     return {...input,oportunidades:out};
+   };
+   try{
+     for(const user of [ua,ub]){
+       A.abrirSessao(user);
+       const input=S.dados();
+       compare(user.id+'-default',input,{},undefined,true);
+       compare(user.id+'-open',input,{situacao:'abertas'},undefined,true);
+       compare(user.id+'-closed',input,{situacao:'ganhas'},undefined,false);
+       compare(user.id+'-filter',input,{segmento:'Sem segmento'},undefined,false);
+       if(user===ua){
+         for(const n of [1000,5000]){
+           const larger=build(input,n);
+           compare(user.id+'-scale-'+n,larger,{},undefined,true);
+         }
+       }
+     }
+     A.abrirSessao(ua);
+     const est=S.dados();
+     const idx=Object.create(null),date=S.hoje();
+     for(const task of est.tarefas){
+       if(task.oportunidadeId!=null&&task.status==='aberta'&&
+          task.vencimento&&task.vencimento<date)
+         idx[task.oportunidadeId]=(idx[task.oportunidadeId]||0)+1;
+     }
+     compare('index-explicit',est,{},idx,true);
+
+     // The counters quantify repeated calls WITHOUT changing the scoring engine.
+     const counts={old:{iad:0,classificar:0},next:{iad:0,classificar:0}};
+     for(const [name,obj] of [['old',old],['next',next]]){
+       const origI=obj.E.iad,origC=obj.E.classificar;
+       obj.E.iad=(...args)=>{counts[name].iad++;return origI(...args);};
+       obj.E.classificar=(...args)=>{counts[name].classificar++;return origC(...args);};
+       try{obj.F.tudo(est,{});}
+       finally{obj.E.iad=origI;obj.E.classificar=origC;}
+     }
+     if(counts.next.iad>counts.old.iad ||
+        counts.next.classificar>counts.old.classificar)
+       throw Error('P3 recomputed more IAD/classification calls: '+JSON.stringify(counts));
+
+     // Same-session, alternating benchmark; warmed iteration omitted.
+     for(let i=0;i<23;i++){
+       const order=i%2===0?[old,next]:[next,old];
+       for(const which of order){
+         run(which,x=>x.F.tudo(est,{}),'funnel',i>0);
+         run(which,x=>x.E.carteira(est.oportunidades,idx),'carteira',i>0);
+       }
+     }
+     const result={};
+     for(const key of Object.keys(metrics)){
+       const a=metrics[key].old,b=metrics[key].next;
+       result[key]={baselineP50Ms:percentile(a,.5),
+         candidateP50Ms:percentile(b,.5),
+         baselineP95Ms:percentile(a,.95),
+         candidateP95Ms:percentile(b,.95)};
+       result[key].p50ChangePct=+(100*(1-result[key].candidateP50Ms/
+         result[key].baselineP50Ms)).toFixed(2);
+       if(!Number.isFinite(result[key].candidateP50Ms)||
+         result[key].candidateP50Ms>result[key].baselineP50Ms*1.20)
+         throw Error('P3 median timing regression >20% '+key+JSON.stringify(result[key]));
+     }
+     return {baselineVersion:'v276',cases:keys,counts,metrics:result,
+       parity:'PASS',measurementsPerVariant:22};
+   }finally{
+     A.abrirSessao(ua);
+     window.IADEngine=prevEngine;window.IADFunis=prevFunis;
+   }
+ },p3Sources);
+ console.log('PERF04_P3_ENGINE_FUNIS '+JSON.stringify(p3));
+ fs.writeFileSync(path.join(root,'homolog-artifacts','perf04-p3-engine-funis.json'),
+   JSON.stringify({baselineCommit:releaseP3,candidateCommit:process.env.GITHUB_SHA||'',
+     syntheticOnly:true,methodology:'22 warm alternating samples per variant, CPU-only, 389/1000/5000 opportunity parity',
+     ...p3},null,2));
+
+
  // Evita abrir qualquer registro da outra empresa, mesmo com IDs falsos.
  const isolation=await page.evaluate(()=>{
    const A=window.IADAuth,S=window.IADStore;
