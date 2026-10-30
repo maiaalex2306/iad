@@ -36,6 +36,7 @@ jobs:
             homolog-artifacts/perf04-p1-revisao-painel.json
             homolog-artifacts/perf04-p2-painel-profile.json
             homolog-artifacts/perf04-p2-painel-differential.json
+            homolog-artifacts/perf04-p2-navigation.json
             homolog-artifacts/perf04-pipeline-check.json
             homolog-artifacts/perf04-pipeline.png
           if-no-files-found: error
