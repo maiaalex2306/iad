@@ -241,6 +241,7 @@
 
     guardarFila()
       .then(renovarSePreciso)
+      .then(function () { return N.retomarFilaCAS ? N.retomarFilaCAS() : null; })
       .then(function () { return N.empurrar(); })
       .then(function (r) {
         enviando = false;
