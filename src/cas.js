@@ -38,5 +38,23 @@
     return Object.freeze({ tenantId, userId, table, recordId, expectedRevision,
       operationId, patch: Object.freeze(structuredClone(patch)) });
   }
-  return Object.freeze({ revision, conflict, operation });
+  /* A resposta POST de uma criação pode se perder APÓS commit. No retry,
+     só aceitar o registro existente como confirmação se TODOS os campos
+     enviados coincidirem; campo divergente é conflito, nunca sobrescrita. */
+  function sameRecord(sent,server) {
+    if (!sent || !server || !sent.id || !sent.tenant_id ||
+        sent.id!==server.id || sent.tenant_id!==server.tenant_id) return false;
+    function equal(a,b) {
+      if(Object.is(a,b)) return true;
+      if(!a||!b||typeof a!=='object'||typeof b!=='object') return false;
+      if(Array.isArray(a)!==Array.isArray(b))return false;
+      if(Array.isArray(a))
+        return a.length===b.length&&a.every((x,i)=>equal(x,b[i]));
+      const ka=Object.keys(a), kb=Object.keys(b);
+      return ka.length===kb.length && ka.every(k=>Object.hasOwn(b,k)&&equal(a[k],b[k]));
+    }
+    return Object.keys(sent).filter(k=>k!=='atualizado_em'&&k!=='revisao')
+      .every(k=>Object.hasOwn(server,k)&&equal(sent[k],server[k]));
+  }
+  return Object.freeze({ revision, conflict, operation, sameRecord });
 });
