@@ -1501,6 +1501,22 @@
 
     const selecionadas = E.filtrar(abertas, { periodo: filtroPeriodo, segmento: filtroSegmento });
     const c = E.carteira(selecionadas, indiceAtrasosDoRender(est));
+    /* P5c: comparação somente com opt-in explícito, sem alterar indicadores.
+       Escopo sempre derivado da sessão atual e da revisão real do Store. */
+    if (global.IAD_P5C_SHADOW === true && global.IADP5bShadow) {
+      const contextoAtual = function () {
+        const x = Store.contexto();
+        return { usuarioId: x.usuario && x.usuario.id, tenantId: x.tenantId,
+          papel: x.usuario && x.usuario.papel,
+          filtroTenant: x.filtros && x.filtros.tenant,
+          filtroUsuario: x.filtros && x.filtros.usuario,
+          revisao: Store.revisao() };
+      };
+      try {
+        const diff = global.IADP5bShadow.validar(c, contextoAtual);
+        if (!diff.valido) console.warn('[P5c] KPI divergente:', diff.divergencias);
+      } catch (e) { console.warn('[P5c] shadow indisponível:', e.message); }
+    }
     const resumos = c.resumos;
 
     const filtros =

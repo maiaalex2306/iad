@@ -21,5 +21,5 @@ jobs:
       - run: node --check src/engine.js && node --check scripts/perf04-p5-resumo-parity.cjs
       - run: node scripts/perf04-p5-resumo-parity.cjs
       - run: |
-          grep -q "numero: 'v278'" src/config.js
-          grep -q "iad-crm-v278" sw.js
+          grep -q "numero: 'v279'" src/config.js
+          grep -q "iad-crm-v279" sw.js
