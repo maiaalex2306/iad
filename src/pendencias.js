@@ -76,14 +76,15 @@
   /* Grava a fila. Nunca rejeita: se o IndexedDB falhar, o envio tem de
      continuar mesmo assim — uma fila que não pôde ser gravada é pior do que
      antes, mas travar o envio por causa dela seria pior ainda. */
-  function guardar(estado, donoId) {
+  function guardar(estado, donoId, basesCAS) {
     if (!disponivel() || !estado) return Promise.resolve(false);
     return abrir().then(function (db) {
       const tx = db.transaction([LOJA], 'readwrite');
       tx.objectStore(LOJA).put({
         id: CHAVE, quando: new Date().toISOString(),
         donoId: donoId || '', versao: (global.IADVersao || {}).numero || '',
-        estado: estado
+        estado: estado,
+        basesCAS: Array.isArray(basesCAS) ? basesCAS : []
       });
       return new Promise(function (resolve) {
         tx.oncomplete = function () { resolve(true); };
