@@ -1472,14 +1472,34 @@
               }
             }
             if(!Object.keys(mudancas).length) return Promise.resolve([]);
-            return atualizarOportunidadeCAS(linha.id,linha.tenant_id,base.revisao,mudancas)
-              .then(function(novaRevisao){
-                if(registro){
-                  registro.revisao=novaRevisao;
-                  if(Store.memorizarRevisoesRemotas) Store.memorizarRevisoesRemotas([registro]);
-                }
-                return [];
-              });
+            /* O pedido entra no journal persistente ANTES do transporte. Em
+               falha de rede, a fila permanece; conflito não vira upsert. */
+            const assinatura=[linha.tenant_id,linha.id,base.revisao,JSON.stringify(mudancas)].join('|');
+            let hash=2166136261;
+            for(let i=0;i<assinatura.length;i++) {
+              hash^=assinatura.charCodeAt(i);
+              hash=Math.imul(hash,16777619)>>>0;
+            }
+            return enfileirarEdicaoCAS({
+              recordId:linha.id,expectedRevision:base.revisao,
+              operationId:'cas-'+hash.toString(16)+'-'+String(linha.id),
+              patch:mudancas
+            }).then(function(resultado){
+              if(!resultado || resultado.blocked || resultado.busy ||
+                  !Array.isArray(resultado.acks) || !resultado.acks.length)
+                throw new Error('CAS não confirmado; operação protegida na fila local.');
+              const ack=resultado.acks.filter(function(x){
+                return x.operationId==='cas-'+hash.toString(16)+'-'+String(linha.id);
+              })[0];
+              const novaRevisao=ack && Number(ack.revisaoAtual);
+              if(!Number.isSafeInteger(novaRevisao))
+                throw new Error('Confirmação CAS incompleta; sincronização requer revisão.');
+              if(registro) {
+                registro.revisao=novaRevisao;
+                if(Store.memorizarRevisoesRemotas) Store.memorizarRevisoesRemotas([registro]);
+              }
+              return [];
+            });
           }));
       return trabalho.then(
         function (foras) {
