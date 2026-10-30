@@ -298,6 +298,9 @@ async function main(){
    const candidate=load({engine:files.newEngine,views:files.newViews});
    const cases=[];
    const times={painel:{old:[],candidate:[]},revisao:{old:[],candidate:[]}};
+   const domTimes={painel:{old:[],candidate:[]},revisao:{old:[],candidate:[]}};
+   const htmlTimes={painel:{old:[],candidate:[]},revisao:{old:[],candidate:[]}};
+   const content=document.getElementById('conteudo');
    const median=(v)=>{const sorted=[...v].sort((a,b)=>a-b);return sorted[Math.floor(sorted.length/2)]};
    const p95=(v)=>{const sorted=[...v].sort((a,b)=>a-b);return sorted[Math.ceil(sorted.length*.95)-1]};
    function measure(type,session,periodo,segmento,label,comparative){
@@ -360,8 +363,15 @@ async function main(){
          const seq=i%2===0?[[old,'old'],[candidate,'candidate']]:
            [[candidate,'candidate'],[old,'old']];
          for(const [which,name] of seq){
-           const t=performance.now();choose(which);const dt=performance.now()-t;
-           if(i)times[type][name].push(dt);
+           const t=performance.now();
+           const html=choose(which),generated=performance.now();
+           content.innerHTML=html;
+           const finished=performance.now();
+           if(i){
+             htmlTimes[type][name].push(generated-t);
+             domTimes[type][name].push(finished-generated);
+             times[type][name].push(finished-t);
+           }
          }
        }
      }
@@ -403,7 +413,11 @@ async function main(){
        const baselineP95=+p95(o).toFixed(2),candidateP95=+p95(c).toFixed(2);
        metrics[screen]={baselineP95Ms:baselineP95,candidateP95Ms:candidateP95,
          improvementPct:+(100*(1-candidateP95/baselineP95)).toFixed(2),
-         baselineMedianMs:+median(o).toFixed(2),candidateMedianMs:+median(c).toFixed(2)};
+         baselineMedianMs:+median(o).toFixed(2),candidateMedianMs:+median(c).toFixed(2),
+         baselineHtmlP95Ms:+p95(htmlTimes[screen].old).toFixed(2),
+         candidateHtmlP95Ms:+p95(htmlTimes[screen].candidate).toFixed(2),
+         baselineDomP95Ms:+p95(domTimes[screen].old).toFixed(2),
+         candidateDomP95Ms:+p95(domTimes[screen].candidate).toFixed(2)};
        if(!Number.isFinite(baselineP95)||candidateP95>baselineP95*1.20)
          throw Error('Regressão P1 >=20% em '+screen+': '+JSON.stringify(metrics[screen]));
      }
@@ -415,7 +429,7 @@ async function main(){
  console.log('PERF04_P1_DIFFERENTIAL '+JSON.stringify(p1));
  fs.writeFileSync(path.join(root,'homolog-artifacts','perf04-p1-revisao-painel.json'),
    JSON.stringify({baselineCommit:v274,candidateCommit:process.env.GITHUB_SHA||'',
-     methodology:'same browser/page/Store, original and new engine/views, 25 warmed alternating samples',
+     methodology:'same browser/page/Store, original and new engine/views, 25 warmed alternating samples; synchronous HTML generation plus DOM innerHTML insertion, no network or paint',
      dataset:{opportunities:389,tasks:778},...p1},null,2));
 
  // Evita abrir qualquer registro da outra empresa, mesmo com IDs falsos.
