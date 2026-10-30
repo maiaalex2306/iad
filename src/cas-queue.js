@@ -37,6 +37,7 @@
       if(running) return {busy:true};
       running=true;
       let sent=0;
+      const acks=[];
       try{
         let q=load();
         while(q.length){
@@ -45,10 +46,10 @@
           if(!res||res.estado!=='ok') return {sent,blocked:true,reason:res&&res.estado||'sem_confirmacao'};
           const latest=load();
           if(!latest.length||latest[0].operationId!==op.operationId) throw Error('Fila alterada durante o envio');
-          latest.shift();save(latest);sent++;
+          latest.shift();save(latest);sent++;acks.push({operationId:op.operationId,revisaoAtual:res.revisao_atual});
           q=latest;
         }
-        return {sent,blocked:false};
+        return {sent,blocked:false,acks};
       }finally{running=false;}
     }
     return Object.freeze({enqueue,flush,pending:()=>load().map(x=>JSON.parse(JSON.stringify(x)))});
