@@ -36,7 +36,15 @@ Execução original: [GitHub Actions #41000265989](https://github.com/maiaalex23
 | Configuração | 2,0 | 2,0 | 0,1 | P2 |
 | Notas | 0,1 | 0,0 | 0,1 | P2 |
 
-**Diagnóstico de código Nutrição:** `src/views.js` → `listaDaNutricao` ordena negócios chamando `potencialDe(a)` e `potencialDe(b)` a cada comparação do `sort`, e recalcula `potencialDe(op)` para cada linha. `potencialDe` executa `E.potencial`; a lista também chama `E.resumo` por linha. **Hipótese P0:** avaliações repetidas de potencial dominam o tempo; confirmar usando contador/profiler, memoizar potencial uma vez por oportunidade durante cada render e verificar paridade integral da ordem, pontuação, faixa e filtros. **Não alterar a regra de classificação.**
+**Causa principal confirmada por instrumentação adicional:** na execução [GitHub Actions #41000480451](https://github.com/maiaalex2306/iad/actions/runs/41000480451), `V.nutricao()` consumiu **763,6 ms** e o perfil contabilizou:
+- `E.resumo(op)`: **389 chamadas / 739,4 ms (~96,8% da duração)**;
+- `E.potencial(op)`: 1.165 chamadas / **5,5 ms (~0,7%)**;
+- `E.iad(op)`: 776 chamadas / 0,8 ms.
+Assim, a hipótese inicial sobre `potencialDe` **não se confirmou como gargalo principal**.
+
+**Mecanismo identificado no código:** `src/views.js` → `listaDaNutricao` chama `E.resumo(op)` uma vez por linha. Quando o parâmetro de índice está ausente, `src/engine.js` → `tarefasAtrasadas(op)` chama `Store.dados().tarefas.filter(...)` para cada oportunidade. Isso materializa recortes de dados e percorre tarefas repetidamente (até ~389 × 778 verificações sintéticas, além de custo de `Store.dados()`), em vez de um único agrupamento. `src/pipeline-performance.js` já implementa a estratégia correta: contabilizar tarefas vencidas uma vez e chamar `E.resumo(op, atrasadasIndex)`.
+
+**Correção P0-01 proposta (AINDA NÃO APLICADA):** calcular `atrasadasIndex` uma vez por revisão de tarefas e escopo; passar o índice a cada `E.resumo` em Nutrição; reutilizar os resumos no filtro de saúde, se ativado; validar paridade exata de todas as faixas, tarefas vencidas, seleção, ordenação e isolamento tenant. Apenas depois otimizar chamadas de potencial (ganho marginal).
 
 Benchmark do Pipeline da mesma execução: 389 oportunidades, primeiro render 36,7 ms, p50 após aquecimento 13,8 ms e p95 14,4 ms, 48 cartões iniciais. Valores não incluem rede/login e variam com a carga do runner; toda comparação posterior deve rodar com método idêntico.
 
@@ -51,7 +59,7 @@ Benchmark do Pipeline da mesma execução: 389 oportunidades, primeiro render 36
 
 | Função / tela | Arquivos-alvo | Problema verificável | Intervenção proposta | Critério de aceite |
 |---|---|---|---|---|
-| Nutrição — prioridade P0 absoluta | `src/views.js`, `src/engine.js` | p95 767,3 ms no baseline sintético; cálculo potencial repetido na ordenação | Calcular potencial/IAD uma vez por registro e reutilizar em sort/filtros/linhas | Mesmas pontuações, faixas, ordem e seleção; p95 menor comprovado no mesmo benchmark |
+| Nutrição — prioridade P0 absoluta | `src/views.js`, `src/engine.js` | p95 756–767 ms no baseline; E.resumo consome 739 ms por 389 chamadas com tarefasAtrasadas sem índice | Agrupar tarefas vencidas uma vez e passar índice a E.resumo; memoizar por revisão | Mesmo IAD, tarefas vencidas, ordem, seleção e tenant; p95 menor no mesmo benchmark |
 | Todas as rotas | `src/app.js`, `src/views.js` | Render centralizado e telas HTML grandes | Render seletivo; repintar bloco afetado e preservar foco/scroll | Melhorar p95 por tela vs JSON v273; nenhuma regressão E2E |
 | Pipeline | `src/views.js`, `src/pipeline-performance.js` | Resumos de todas as oportunidades antes dos 48 cartões visíveis | Memoização incremental por ID/revisão; indexação de filtros | Mesmos cartões, totais e filtros; menor p95 em 389/1k/5k |
 | Hoje | `src/perf-hoje.js`, `src/perf-02.js`, `src/views.js` | Recomputação global após edições não relacionadas | Revisões por entidade, cálculo só dos negócios alterados | Paridade exata de prioridade, urgência e orientação |
