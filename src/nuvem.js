@@ -206,6 +206,30 @@
 
   /* Edge Functions: o pedaço de servidor que o app tem. Existe para guardar
      o que não pode viver no navegador — hoje, a chave da IA. */
+  /* v273: transporte CAS opt-in para uma edição controlada.
+     Não substitui o envio tradicional até existir revisão-base para cada
+     oportunidade no Store. Falha fechada: conflito nunca vira upsert. */
+  function atualizarOportunidadeCAS(id, tenantId, revisao, patch) {
+    if (!id || !tenantId || !Number.isSafeInteger(revisao) || revisao < 0 ||
+        !patch || typeof patch !== 'object' || Array.isArray(patch) ||
+        !Object.keys(patch).length ||
+        Object.keys(patch).some(function(k) { return ['titulo','valor','etapa'].indexOf(k) < 0; })) {
+      return Promise.reject(new Error('Argumentos inválidos para atualização CAS.'));
+    }
+    return chamar('/rest/v1/rpc/iad_oportunidade_cas', {
+      metodo: 'POST',
+      corpo: {p_id:id,p_tenant_id:tenantId,p_revisao:revisao,p_patch:patch}
+    }).then(function(resposta) {
+      const resultado = Array.isArray(resposta) ? resposta[0] : null;
+      if (!resultado || resultado.estado !== 'ok' || !Number.isSafeInteger(Number(resultado.revisao_atual))) {
+        const e = new Error('Conflito de versão ou acesso negado: edição local preservada.');
+        e.codigo = 'IAD_CAS_CONFLITO';
+        throw e;
+      }
+      return Number(resultado.revisao_atual);
+    });
+  }
+
   function chamarFuncao(nome, corpo) {
     return chamar('/functions/v1/' + nome, { metodo: 'POST', corpo: corpo || {} });
   }
@@ -1893,6 +1917,7 @@
     emailsDaNuvem, vincularEmail, enfileirarEmail, marcarLidosEmail,
     marcarEmailAnalisado, contarTentativaDeAnalise,
     caixasDeEmail, salvarCaixaDeEmail, guardarSenhaDaCaixa, esquecerSenhaDaCaixa,
+    atualizarOportunidadeCAS,
     empresaParecida, achatarNome, porFormato, explicarFalhas,
     adotarTokens,
     trocarMinhaSenha,
