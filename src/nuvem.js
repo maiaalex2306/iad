@@ -1428,9 +1428,49 @@
 
       if (!mudaram.length) return Promise.resolve({ tabela: t.remota, enviados: 0, local: t.local, guardar: true });
 
-      return Promise.all(porFormato(mudaram).map(function (lote) {
-        return enviarLote(t.remota, lote, []);
-      })).then(
+      /* PERF-03D: jamais executar upsert em oportunidade existente.
+         CAS inicial cobre título, valor e etapa; demais alterações existentes
+         falham fechadas, sem sobrescrever o servidor, até ampliação do SQL. */
+      const trabalho = t.remota !== 'oportunidades'
+        ? Promise.all(porFormato(mudaram).map(function(lote) {
+            return enviarLote(t.remota,lote,[]);
+          }))
+        : Promise.all(mudaram.map(function(linha) {
+            const registro=minhas.filter(function(r){return String(r.id)===String(linha.id);})[0];
+            const base=Store.snapshotBaseRemoto && Store.snapshotBaseRemoto(linha.tenant_id,linha.id);
+            if (!base) {
+              /* Novo cadastro: INSERT puro, não UPSERT. Um ID já existente no
+                 servidor deve gerar conflito, nunca substituir o conteúdo. */
+              const nova=Object.assign({},linha);
+              delete nova.revisao;
+              return chamar('/rest/v1/oportunidades',{
+                metodo:'POST', cabecalhos:{Prefer:'return=minimal'}, corpo:nova
+              }).then(function(){return [];});
+            }
+            if (!Number.isSafeInteger(base.revisao))
+              return Promise.reject(new Error('Revisão-base desconhecida: envio protegido bloqueado.'));
+            const ignorados=new Set(['revisao','atualizadoEm','donoId','_criadaAgora']);
+            const keys=new Set(Object.keys(base).concat(Object.keys(registro||{})));
+            const mudancas={};
+            for(const k of keys){
+              if(ignorados.has(k)||k.charAt(0)==='_') continue;
+              if(JSON.stringify(base[k])!==JSON.stringify(registro && registro[k])){
+                if(['titulo','valor','etapa'].indexOf(k)<0)
+                  return Promise.reject(new Error('CAS bloqueou alteração ainda não suportada no campo '+k+'. Seus dados locais foram preservados.'));
+                mudancas[k]=registro[k];
+              }
+            }
+            if(!Object.keys(mudancas).length) return Promise.resolve([]);
+            return atualizarOportunidadeCAS(linha.id,linha.tenant_id,base.revisao,mudancas)
+              .then(function(novaRevisao){
+                if(registro){
+                  registro.revisao=novaRevisao;
+                  if(Store.memorizarRevisoesRemotas) Store.memorizarRevisoesRemotas([registro]);
+                }
+                return [];
+              });
+          }));
+      return trabalho.then(
         function (foras) {
           const atrasadas = [];
           foras.forEach(function (lista) {
