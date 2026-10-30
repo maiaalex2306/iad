@@ -45,11 +45,61 @@
     if (typeof console !== 'undefined' && console.table) console.table(resultado);
     return resultado;
   }
+  // PERF-04 P3: Web Vitals coletados apenas sob ativação explícita.
+  // Não persistir, transmitir, registrar nomes de oportunidades nem URLs.
+  let observers = [];
+  const vitals = { lcpMs: null, inpMs: null, cls: 0, amostrasINP: 0 };
+  function observarVital(tipo, callback) {
+    if (typeof global.PerformanceObserver !== 'function') return;
+    try {
+      const supported = global.PerformanceObserver.supportedEntryTypes || [];
+      if (!supported.includes(tipo)) return;
+      const observer = new global.PerformanceObserver(function (list) {
+        if (!ativo) return;
+        list.getEntries().forEach(callback);
+      });
+      observer.observe({ type: tipo, buffered: true });
+      observers.push(observer);
+    } catch (_) { /* Alguns navegadores não oferecem estas entradas. */ }
+  }
+  function iniciarVitals() {
+    ativo = true;
+    if (observers.length) return;
+    observarVital('largest-contentful-paint', function (entry) {
+      if (Number.isFinite(entry.startTime)) vitals.lcpMs = Math.round(entry.startTime);
+    });
+    observarVital('event', function (entry) {
+      if (!Number.isFinite(entry.duration) || !entry.interactionId) return;
+      vitals.inpMs = Math.max(vitals.inpMs || 0, Math.round(entry.duration));
+      vitals.amostrasINP++;
+    });
+    observarVital('layout-shift', function (entry) {
+      if (!entry.hadRecentInput && Number.isFinite(entry.value))
+        vitals.cls = Math.round((vitals.cls + entry.value) * 10000) / 10000;
+    });
+  }
+  function pararVitals() {
+    observers.forEach(function (observer) { observer.disconnect(); });
+    observers = [];
+    ativo = false;
+    return relatorioVitals();
+  }
+  function relatorioVitals() {
+    return { lcpMs: vitals.lcpMs, inpEstimadoMs: vitals.inpMs,
+      cls: vitals.cls, interacoesObservadas: vitals.amostrasINP,
+      metodologia: 'INP estimado (maior interação observada), não INP oficial do ciclo completo da página',
+      escopo: 'local; nenhuma transferência automática de dados' };
+  }
+  function limparVitals() {
+    vitals.lcpMs = null; vitals.inpMs = null; vitals.cls = 0; vitals.amostrasINP = 0;
+  }
   global.IADPerformance = {
     iniciar: function () { ativo = true; return 'Medição iniciada — não envia dados.'; },
     parar: function () { ativo = false; return relatorio(); },
     limpar: function () { Object.keys(amostras).forEach(function(k){delete amostras[k];}); },
     medir: medir, registrar: registrar, relatorio: relatorio,
-    ativo: function () { return ativo; }
+    ativo: function () { return ativo; },
+    iniciarVitals: iniciarVitals, pararVitals: pararVitals,
+    relatorioVitals: relatorioVitals, limparVitals: limparVitals
   };
 })(window);
