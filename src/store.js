@@ -367,14 +367,36 @@
      Com o servidor mandando, a oportunidade excluída voltaria na primeira
      recarga. Ficam aqui, fora do estado, para não serem varridas quando a
      carteira é substituída pela do servidor. */
+  /* Exclusões devem sobreviver ao fechamento do navegador. Não descarte
+     valores corrompidos silenciosamente: falhar fechado evita perda. */
+  const EXCLUSOES_PERSISTIDAS = 'iad-crm:exclusoes-pendentes:v273';
   const exclusoes = [];
-
+  let falhaExclusoes = null;
+  try {
+    const raw = localStorage.getItem(EXCLUSOES_PERSISTIDAS);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) throw Error('Journal de exclusões inválido');
+      parsed.forEach(function(x) {
+        if (!x || !x.tabela || !x.id) throw Error('Exclusão incompleta');
+        exclusoes.push(x);
+      });
+    }
+  } catch(e) { falhaExclusoes=e; }
+  function persistirExclusoes() {
+    if (falhaExclusoes) throw falhaExclusoes;
+    localStorage.setItem(EXCLUSOES_PERSISTIDAS,JSON.stringify(exclusoes));
+  }
   function registrarExclusao(tabela, id) {
     if (!tabela || !id) return;
-    exclusoes.push({ tabela: tabela, id: String(id) });
+    const r={tabela:tabela,id:String(id)};
+    const atual=(estado[tabela]||[]).find(function(x){return String(x.id)===String(id);});
+    if (atual && atual.tenantId) r.tenantId=atual.tenantId;
+    exclusoes.push(r);
+    persistirExclusoes();
   }
 
-  function exclusoesPendentes() { return exclusoes.slice(); }
+  function exclusoesPendentes() { if (falhaExclusoes) throw falhaExclusoes; return exclusoes.slice(); }
 
   function esquecerExclusoes(quais) {
     (quais || []).forEach(function (x) {
@@ -382,6 +404,7 @@
         if (exclusoes[i].tabela === x.tabela && exclusoes[i].id === x.id) exclusoes.splice(i, 1);
       }
     });
+    persistirExclusoes();
   }
 
   /* ---------- a cópia de antes ----------
