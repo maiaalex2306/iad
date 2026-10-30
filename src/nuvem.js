@@ -246,10 +246,11 @@
     return global.IADCASQueue.create(global.localStorage,
       { userId:u.id, tenantId:p.tenant_id },
       function(op) {
-        return chamar('/rest/v1/rpc/iad_oportunidade_cas', {
+        return chamar('/rest/v1/rpc/iad_oportunidade_cas_idempotente', {
           metodo:'POST',
           corpo:{ p_id:op.recordId, p_tenant_id:op.tenantId,
-            p_revisao:op.expectedRevision, p_patch:op.patch }
+            p_revisao:op.expectedRevision, p_patch:op.patch,
+            p_operation_id:op.operationId }
         }).then(function(r) { return Array.isArray(r) ? r[0] : null; });
       });
   }
