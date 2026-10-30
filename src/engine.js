@@ -567,9 +567,12 @@
   }
 
   /* Carteira: onde está o dinheiro e qual decisão o está segurando. */
-  function carteira(oportunidades) {
+  function carteira(oportunidades, atrasadasIndex) {
     const abertas = oportunidades.filter(function (o) { return !o.desfecho; });
-    const resumos = abertas.map(resumo);
+    /* PERF-04 P1: o índice é opcional, preservando consumidores legados.
+       Nunca deixar Array.map repassar o índice numérico como argumento
+       de E.resumo — ele representa uma tabela de atrasos, não a posição. */
+    const resumos = abertas.map(function (op) { return resumo(op, atrasadasIndex); });
     const total = resumos.reduce(function (s, r) { return s + (r.op.valor || 0); }, 0);
     const porGrupo = {};
     resumos.forEach(function (r) {
