@@ -273,8 +273,12 @@
     } catch(e) { return Promise.reject(e); }
   }
   function retomarFilaCAS() {
-    try { return filaCASDaSessao().flush(); }
-    catch(e) { return Promise.reject(e); }
+    try {
+      return filaCASDaSessao().flush().then(function(r) {
+        if (r && r.blocked) throw new Error('Conflito CAS pendente: trabalho local preservado.');
+        return r;
+      });
+    } catch(e) { return Promise.reject(e); }
   }
 
   function chamarFuncao(nome, corpo) {
