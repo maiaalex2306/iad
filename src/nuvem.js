@@ -1439,14 +1439,23 @@
             const registro=minhas.filter(function(r){return String(r.id)===String(linha.id);})[0];
             const base=Store.snapshotBaseRemoto && Store.snapshotBaseRemoto(linha.tenant_id,linha.id);
             if (!base) {
-              /* Novo cadastro: INSERT puro, não UPSERT. Um ID já existente no
-                 servidor deve gerar conflito, nunca substituir o conteúdo. */
-              const nova=Object.assign({},linha);
-              delete nova.revisao;
-              return chamar('/rest/v1/oportunidades',{
-                metodo:'POST', cabecalhos:{Prefer:'return=minimal'}, corpo:nova
-              }).then(function(){return [];});
+              /* Ausência de snapshot NÃO prova criação. Antes de inserir, buscar
+                 o ID com RLS: registros preexistentes sem baseline exigem
+                 download completo, evitando POST repetido e sobrescrita. */
+              return chamar('/rest/v1/oportunidades?select=id&id=eq.' +
+                encodeURIComponent(linha.id) + '&limit=1').then(function(encontradas) {
+                if (!Array.isArray(encontradas)) throw Error('Verificação de ID sem resposta válida.');
+                if (encontradas.length) throw Error('Oportunidade já existe no servidor; sincronize antes de editar.');
+                const nova=Object.assign({},linha);
+                delete nova.revisao;
+                return chamar('/rest/v1/oportunidades',{
+                  metodo:'POST',cabecalhos:{Prefer:'return=minimal'},corpo:nova
+                }).then(function(){return [];});
+              });
             }
+            /* No-op não deve confirmar mudanças em campos desconhecidos. */
+            if (base.tenantId !== linha.tenant_id)
+              return Promise.reject(new Error('Base CAS pertence a outra empresa.'));
             if (!Number.isSafeInteger(base.revisao))
               return Promise.reject(new Error('Revisão-base desconhecida: envio protegido bloqueado.'));
             const ignorados=new Set(['revisao','atualizadoEm','donoId','_criadaAgora']);
