@@ -1709,9 +1709,6 @@
         (revAntes !== null && Store.revisao() !== revAntes)) {
         throw new Error('Dados ou usuário mudaram durante a sincronização; repetir sem sobrescrever');
       }
-      if (Store.memorizarRevisoesRemotas) {
-        partes.forEach(function(p) { if (p.local === 'oportunidades') Store.memorizarRevisoesRemotas(p.linhas); });
-      }
       const est = Store.obter();
       const novas = {};
       partes.forEach(function (p) {
@@ -1862,8 +1859,6 @@
         throw e;
       }
 
-      if (Store.memorizarRevisoesRemotas) Store.memorizarRevisoesRemotas(veio.oportunidades || []);
-
       /* Escrever o que acabou de chegar não pode disparar um envio de volta:
          seria um laço, e um laço que reescreve o servidor com a cópia que ele
          mesmo mandou. */
@@ -1872,6 +1867,7 @@
         Store.salvar();
       });
 
+      if (Store.memorizarRevisoesRemotas) Store.memorizarRevisoesRemotas(veio.oportunidades || []);
       const quantos = resultados.reduce(function (s, r) { return s + r.linhas.length; }, 0);
       return marcarOQueDesceu().then(function () { return quantos; });
     }).finally(function () { notificarCarga({ativa:false}); });
