@@ -1855,6 +1855,7 @@
     paginaHoje: function (n) { V.definirPaginaHoje(n); window.scrollTo(0, 0); render(); },
     modoPipeline: function (modo) { V.definirModoPipeline(modo); render(); },
     pipelineMais: function () { V.maisPipeline(); render(); },
+    revisaoMais: function () { V.maisRevisao(); render(); },
     abaCadastro: function (aba) { V.definirAbaCadastro(aba); render(); window.scrollTo(0, 0); },
     /* Trocar de aba é trocar de lista: aí sim começa do topo. */
     abaNutricao: function (aba) { V.definirAbaNutricao(aba); render(); window.scrollTo(0, 0); },
