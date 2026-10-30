@@ -392,6 +392,10 @@
     const r={tabela:tabela,id:String(id)};
     const atual=(estado[tabela]||[]).find(function(x){return String(x.id)===String(id);});
     if (atual && atual.tenantId) r.tenantId=atual.tenantId;
+    if (tabela==='oportunidades') {
+      const b=Array.from(snapshotsBaseRemotos.values()).find(function(x){return String(x.id)===String(id) && (!r.tenantId || x.tenantId===r.tenantId);});
+      if (b) { r.tenantId=b.tenantId; r.revisao=b.revisao; }
+    }
     exclusoes.push(r);
     persistirExclusoes();
   }
