@@ -235,16 +235,19 @@
      conflito, timeout ou falha de autenticação. É uma API opt-in; o envio
      legado de todas as tabelas só poderá ser substituído após a migração
      completa de todas as escritas de oportunidades para operações CAS. */
-  function filaCASDaSessao() {
+  function filaCASDaSessao(tenantId) {
     const atual = sessao();
     const p = atual && atual.perfil;
     const u = atual && atual.user;
     if (!u || !u.id || !p || !p.tenant_id)
       throw new Error('Sessão e empresa obrigatórias para fila CAS.');
+    const destino=tenantId || p.tenant_id;
+    if(destino!==p.tenant_id && p.papel!=='admin')
+      throw new Error('Fila CAS fora da empresa do usuário.');
     if (!global.IADCASQueue || !global.IADCAS)
       throw new Error('Módulos CAS v273 indisponíveis.');
     return global.IADCASQueue.create(global.localStorage,
-      { userId:u.id, tenantId:p.tenant_id },
+      { userId:u.id, tenantId:destino },
       function(op) {
         return chamar('/rest/v1/rpc/iad_oportunidade_cas_idempotente', {
           metodo:'POST',
@@ -260,14 +263,14 @@
     if (!p || !u) return Promise.reject(new Error('Sessão CAS ausente.'));
     try {
       const validada=global.IADCAS.operation({
-        tenantId:p.tenant_id,userId:u.id,table:'oportunidades',
+        tenantId:op.tenantId||p.tenant_id,userId:u.id,table:'oportunidades',
         recordId:op.recordId,expectedRevision:op.expectedRevision,
         operationId:op.operationId,patch:op.patch
       });
       if (Object.keys(validada.patch).some(function(k) {
         return ['id','tenant_id','dono_id','revisao','criado_em','atualizado_em'].indexOf(k)>=0;
       })) throw new Error('Campo protegido no CAS SQL.');
-      const fila=filaCASDaSessao();
+      const fila=filaCASDaSessao(validada.tenantId);
       fila.enqueue(validada);
       return fila.flush();
     } catch(e) { return Promise.reject(e); }
@@ -1525,7 +1528,7 @@
               hash=Math.imul(hash,16777619)>>>0;
             }
             return enfileirarEdicaoCAS({
-              recordId:linha.id,expectedRevision:base.revisao,
+              tenantId:linha.tenant_id,recordId:linha.id,expectedRevision:base.revisao,
               operationId:'cas-'+hash.toString(16)+'-'+String(linha.id),
               patch:mudancas
             }).then(function(resultado){
