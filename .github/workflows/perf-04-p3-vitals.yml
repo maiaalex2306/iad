@@ -1,0 +1,27 @@
+name: PERF-04 P3 — Web Vitals opt-in
+on:
+  push:
+    branches: [performance/iad-perf-04-p3-web-vitals]
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  vitals-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Sintaxe e teste de métricas locais
+        run: |
+          node --check src/performance.js
+          node --check nuvem/testes/perf-04-p3-vitals.test.cjs
+          node --test nuvem/testes/perf-04-p3-vitals.test.cjs
+      - name: Versionamento produtivo preservado
+        run: |
+          grep -q "numero: 'v276'" src/config.js
+          grep -q "iad-crm-v276" sw.js
