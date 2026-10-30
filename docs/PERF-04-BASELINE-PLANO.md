@@ -15,6 +15,31 @@ Reduzir o custo de carregar, navegar e operar o CRM sem mudar nenhum número do 
 - Supabase Performance Advisors de produção (30/10/2026): **10 avisos auth_rls_initplan**, **11 chaves estrangeiras sem índice de suporte**, **23 índices sem utilização registrada**. Nenhum foi alterado; é necessário verificar `EXPLAIN (ANALYZE, BUFFERS)` antes de criar/remover índices.
 - Referência anterior: teste Chromium sintético de 243 oportunidades com primeiro render ~31,6 ms, p50 aquecido ~6,8 ms e p95 aquecido ~10,9 ms. **Não extrapolar** para outras telas ou navegação com autenticação.
 
+## Baseline executado — evidências da v273 (Chromium)
+
+Execução original: [GitHub Actions #41000265989](https://github.com/maiaalex2306/iad/actions/runs/41000265989), artefato `perf04-baseline-v273-browser`. Dataset **389 oportunidades, 778 tarefas**, usuário gestor sintético e segundo tenant sintético isolado. 12 telas mensuradas, 0 erros de JavaScript.
+
+**p95 aquecido** (5 repetições após a primeira, HTML + inserção síncrona no DOM), em ms:
+
+| Tela | p95 (ms) | HTML p95 (ms) | DOM p95 (ms) | Ordem de atenção |
+|---|---:|---:|---:|---|
+| Nutrição | **767,3** | 758,9 | 8,8 | **P0 — gargalo dominante** |
+| Revisão | 33,4 | 15,4 | 19,5 | P1 |
+| Painel | 29,6 | 27,3 | 2,5 | P1 |
+| Tarefas | 13,7 | 12,0 | 1,7 | P1 |
+| Pipeline | 10,7 | 6,6 | 4,2 | P1 |
+| Contas | 6,8 | 5,1 | 1,7 | P2 |
+| Cadastros | 4,9 | 3,0 | 2,0 | P2 |
+| Método | 4,6 | 0,5 | 4,1 | P2 |
+| Hoje | 4,0 | 2,8 | 1,2 | P2 |
+| Cockpit | 3,9 | 2,5 | 1,7 | P2 |
+| Configuração | 2,0 | 2,0 | 0,1 | P2 |
+| Notas | 0,1 | 0,0 | 0,1 | P2 |
+
+**Diagnóstico de código Nutrição:** `src/views.js` → `listaDaNutricao` ordena negócios chamando `potencialDe(a)` e `potencialDe(b)` a cada comparação do `sort`, e recalcula `potencialDe(op)` para cada linha. `potencialDe` executa `E.potencial`; a lista também chama `E.resumo` por linha. **Hipótese P0:** avaliações repetidas de potencial dominam o tempo; confirmar usando contador/profiler, memoizar potencial uma vez por oportunidade durante cada render e verificar paridade integral da ordem, pontuação, faixa e filtros. **Não alterar a regra de classificação.**
+
+Benchmark do Pipeline da mesma execução: 389 oportunidades, primeiro render 36,7 ms, p50 após aquecimento 13,8 ms e p95 14,4 ms, 48 cartões iniciais. Valores não incluem rede/login e variam com a carga do runner; toda comparação posterior deve rodar com método idêntico.
+
 ## Instrumentação entregue neste PR
 - `scripts/perf04-baseline-browser.cjs`: Chromium isolado; 389 oportunidades sintéticas; mede 12 telas, seis amostras por tela (uma primeira + cinco aquecidas); separa tempo de geração HTML do custo síncrono de inserção no DOM; registra p50/p95, heap disponível, cardinalidades e erros JS.
 - `.github/workflows/perf-04-baseline.yml`: publica artefato JSON, repete paridade do Decision Engine em 243/1000/5000 negócios, executa regressões de caches, CAS, offline e deltas, e testa concorrência com GoTrue/Postgres **descartável**.
@@ -26,6 +51,7 @@ Reduzir o custo de carregar, navegar e operar o CRM sem mudar nenhum número do 
 
 | Função / tela | Arquivos-alvo | Problema verificável | Intervenção proposta | Critério de aceite |
 |---|---|---|---|---|
+| Nutrição — prioridade P0 absoluta | `src/views.js`, `src/engine.js` | p95 767,3 ms no baseline sintético; cálculo potencial repetido na ordenação | Calcular potencial/IAD uma vez por registro e reutilizar em sort/filtros/linhas | Mesmas pontuações, faixas, ordem e seleção; p95 menor comprovado no mesmo benchmark |
 | Todas as rotas | `src/app.js`, `src/views.js` | Render centralizado e telas HTML grandes | Render seletivo; repintar bloco afetado e preservar foco/scroll | Melhorar p95 por tela vs JSON v273; nenhuma regressão E2E |
 | Pipeline | `src/views.js`, `src/pipeline-performance.js` | Resumos de todas as oportunidades antes dos 48 cartões visíveis | Memoização incremental por ID/revisão; indexação de filtros | Mesmos cartões, totais e filtros; menor p95 em 389/1k/5k |
 | Hoje | `src/perf-hoje.js`, `src/perf-02.js`, `src/views.js` | Recomputação global após edições não relacionadas | Revisões por entidade, cálculo só dos negócios alterados | Paridade exata de prioridade, urgência e orientação |
