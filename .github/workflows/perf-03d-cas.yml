@@ -20,4 +20,5 @@ jobs:
         with:
           node-version: '22'
       - run: node --check src/cas.js
-      - run: node --test nuvem/testes/perf-03d-cas.test.cjs
+      - run: node --check src/cas-queue.js
+      - run: node --test nuvem/testes/perf-03d-cas.test.cjs nuvem/testes/perf-03d-outbox.test.cjs
