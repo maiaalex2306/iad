@@ -36,3 +36,28 @@ test('atualização idempotente e exclusão inexistente',()=>{
  assert.equal(a.excluir('unknown'),false);assert.equal(a.excluir('x'),true);
  assert.equal(a.resultado().valor,0);
 });
+
+test('contexto autenticado: troca de tenant, filtro ou revisão revoga resultados',()=>{
+ const ctx={usuarioId:'u1',tenantId:'t1',papel:'gestor',filtroTenant:'t1',revisao:1};
+ const a=w.IADIncremental.criarEscopado(()=>ctx);
+ a.reconstruir([wrap('a',100,'real')]);
+ assert.equal(a.resultado().valor,100);
+ ctx.revisao=2;
+ assert.throws(()=>a.resultado(),/contexto alterado/);
+ ctx.revisao=1;
+ assert.throws(()=>a.resultado(),/revogada/);
+ const b=w.IADIncremental.criarEscopado(()=>ctx);
+ b.atualizar(wrap('a',100,'real'));
+ ctx.tenantId='t2';
+ assert.throws(()=>b.atualizar(wrap('b',200,'real')),/contexto alterado/);
+ const c=w.IADIncremental.criarEscopado(()=>ctx);
+ c.atualizar(wrap('c',50,'real'));
+ ctx.filtroUsuario='outro';
+ assert.throws(()=>c.resultado(),/contexto alterado/);
+});
+test('sem identidade/revisão não cria cache e revogação manual bloqueia leitura',()=>{
+ assert.throws(()=>w.IADIncremental.criarEscopado(()=>({usuarioId:'u1',tenantId:'t1'})),/contexto incompleto/);
+ const a=w.IADIncremental.criarEscopado(()=>({usuarioId:'u1',tenantId:'t1',revisao:1}));
+ a.atualizar(wrap('a',1,'real'));a.revogar();
+ assert.throws(()=>a.resultado(),/revogada/);
+});
