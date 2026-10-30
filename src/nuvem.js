@@ -1466,18 +1466,30 @@
             const registro=minhas.filter(function(r){return String(r.id)===String(linha.id);})[0];
             const base=Store.snapshotBaseRemoto && Store.snapshotBaseRemoto(linha.tenant_id,linha.id);
             if (!base) {
-              /* Ausência de snapshot NÃO prova criação. Antes de inserir, buscar
-                 o ID com RLS: registros preexistentes sem baseline exigem
-                 download completo, evitando POST repetido e sobrescrita. */
-              return chamar('/rest/v1/oportunidades?select=id&id=eq.' +
+              const nova=Object.assign({},linha);
+              delete nova.revisao;
+              const confirmarCriacao=function(remota) {
+                if (!remota || !global.IADCAS.sameRecord(nova,remota))
+                  throw Error('Oportunidade existente com dados divergentes; edição local preservada, sem sobrescrita.');
+                if (Store.memorizarRevisoesRemotas)
+                  Store.memorizarRevisoesRemotas([paraApp(remota)]);
+                if(registro && Number.isSafeInteger(remota.revisao))registro.revisao=remota.revisao;
+                return [];
+              };
+              /* Uma criação pode ter sido confirmada pelo Postgres mas sua
+                 resposta de rede se perdeu. Na retentativa, ler a linha
+                 integral e aceitar ACK só se todos os campos forem iguais. */
+              return chamar('/rest/v1/oportunidades?select=*&id=eq.' +
                 encodeURIComponent(linha.id) + '&limit=1').then(function(encontradas) {
                 if (!Array.isArray(encontradas)) throw Error('Verificação de ID sem resposta válida.');
-                if (encontradas.length) throw Error('Oportunidade já existe no servidor; sincronize antes de editar.');
-                const nova=Object.assign({},linha);
-                delete nova.revisao;
+                if (encontradas.length) return confirmarCriacao(encontradas[0]);
                 return chamar('/rest/v1/oportunidades',{
-                  metodo:'POST',cabecalhos:{Prefer:'return=minimal'},corpo:nova
-                }).then(function(){return [];});
+                  metodo:'POST',cabecalhos:{Prefer:'return=representation'},corpo:nova
+                }).then(function(resultados) {
+                  if(!Array.isArray(resultados)||resultados.length!==1)
+                    throw Error('Criação sem ACK completo; estado local preservado.');
+                  return confirmarCriacao(resultados[0]);
+                });
               });
             }
             /* No-op não deve confirmar mudanças em campos desconhecidos. */
