@@ -164,7 +164,8 @@
 
   function guardarFila() {
     const P = global.IADPendencias;
-    if (!P || !P.disponivel() || !Store || !Store.obter) return Promise.resolve();
+    if (!P || !Store || !Store.obter) return Promise.resolve();
+    if (!P.disponivel()) return Promise.reject(new Error('IndexedDB indisponível; não é seguro fechar a aba com alterações offline.'));
 
     const N = global.IADNuvem;
     if (N && N.haMudancas && !N.haMudancas()) return limparFila();
@@ -173,7 +174,8 @@
     if (!temMovimento(estado)) return Promise.resolve();
 
     return P.guardar(estado, donoAtual()).then(function (ok) {
-      if (ok && !naFila) { naFila = true; avisar(); }
+      if (!ok) throw new Error('O navegador não confirmou o armazenamento das alterações offline.');
+      if (!naFila) { naFila = true; avisar(); }
     });
   }
 
