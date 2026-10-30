@@ -230,6 +230,51 @@
     });
   }
 
+  /* v273 — entrada controlada para a fila CAS. A fila não é removida em
+     conflito, timeout ou falha de autenticação. É uma API opt-in; o envio
+     legado de todas as tabelas só poderá ser substituído após a migração
+     completa de todas as escritas de oportunidades para operações CAS. */
+  function filaCASDaSessao() {
+    const atual = sessao();
+    const p = atual && atual.perfil;
+    const u = atual && atual.user;
+    if (!u || !u.id || !p || !p.tenant_id)
+      throw new Error('Sessão e empresa obrigatórias para fila CAS.');
+    if (!global.IADCASQueue || !global.IADCAS)
+      throw new Error('Módulos CAS v273 indisponíveis.');
+    return global.IADCASQueue.create(global.localStorage,
+      { userId:u.id, tenantId:p.tenant_id },
+      function(op) {
+        return chamar('/rest/v1/rpc/iad_oportunidade_cas', {
+          metodo:'POST',
+          corpo:{ p_id:op.recordId, p_tenant_id:op.tenantId,
+            p_revisao:op.expectedRevision, p_patch:op.patch }
+        }).then(function(r) { return Array.isArray(r) ? r[0] : null; });
+      });
+  }
+  function enfileirarEdicaoCAS(op) {
+    const s = sessao();
+    const p = s && s.perfil, u = s && s.user;
+    if (!p || !u) return Promise.reject(new Error('Sessão CAS ausente.'));
+    try {
+      const validada=global.IADCAS.operation({
+        tenantId:p.tenant_id,userId:u.id,table:'oportunidades',
+        recordId:op.recordId,expectedRevision:op.expectedRevision,
+        operationId:op.operationId,patch:op.patch
+      });
+      if (Object.keys(validada.patch).some(function(k) {
+        return ['titulo','valor','etapa'].indexOf(k)<0;
+      })) throw new Error('Campo ainda não habilitado no CAS SQL.');
+      const fila=filaCASDaSessao();
+      fila.enqueue(validada);
+      return fila.flush();
+    } catch(e) { return Promise.reject(e); }
+  }
+  function retomarFilaCAS() {
+    try { return filaCASDaSessao().flush(); }
+    catch(e) { return Promise.reject(e); }
+  }
+
   function chamarFuncao(nome, corpo) {
     return chamar('/functions/v1/' + nome, { metodo: 'POST', corpo: corpo || {} });
   }
@@ -1918,6 +1963,7 @@
     marcarEmailAnalisado, contarTentativaDeAnalise,
     caixasDeEmail, salvarCaixaDeEmail, guardarSenhaDaCaixa, esquecerSenhaDaCaixa,
     atualizarOportunidadeCAS,
+    enfileirarEdicaoCAS, retomarFilaCAS,
     empresaParecida, achatarNome, porFormato, explicarFalhas,
     adotarTokens,
     trocarMinhaSenha,
