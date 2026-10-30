@@ -1471,9 +1471,15 @@
               const confirmarCriacao=function(remota) {
                 if (!remota || !global.IADCAS.sameRecord(nova,remota))
                   throw Error('Oportunidade existente com dados divergentes; edição local preservada, sem sobrescrita.');
+                const servidor=paraApp(remota);
                 if (Store.memorizarRevisoesRemotas)
-                  Store.memorizarRevisoesRemotas([paraApp(remota)]);
-                if(registro && Number.isSafeInteger(remota.revisao))registro.revisao=remota.revisao;
+                  Store.memorizarRevisoesRemotas([servidor]);
+                if(registro) {
+                  Object.keys(servidor).forEach(function(k) {
+                    if(!Object.prototype.hasOwnProperty.call(registro,k)) registro[k]=servidor[k];
+                  });
+                  if(Number.isSafeInteger(remota.revisao))registro.revisao=remota.revisao;
+                }
                 return [];
               };
               /* Uma criação pode ter sido confirmada pelo Postgres mas sua
