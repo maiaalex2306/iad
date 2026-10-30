@@ -47,10 +47,15 @@ async function success(path,method,token,body){
  assert.equal(outsider[0].estado,'conflito_ou_inacessivel');
  const saved=await success('/rest/v1/oportunidades?select=titulo,valor,revisao&id=eq.'+id,'GET',a);
  assert.equal(saved[0].titulo,'Primeiro autor');assert.equal(Number(saved[0].valor),200);assert.equal(Number(saved[0].revisao),2);
- const del='/rest/v1/rpc/iad_oportunidade_excluir_cas';
- const stale=await success(del,'POST',b,{p_id:id,p_tenant_id:ta,p_revisao:0});
+ const del='/rest/v1/rpc/iad_oportunidade_excluir_cas_idempotente';
+ const stale=await success(del,'POST',b,{p_id:id,p_tenant_id:ta,p_revisao:0,p_operation_id:'delete-stale-'+salt});
  assert.equal(stale[0].estado,'conflito_ou_inacessivel');
- const live=await success(del,'POST',a,{p_id:id,p_tenant_id:ta,p_revisao:2});
+ const delReq={p_id:id,p_tenant_id:ta,p_revisao:2,p_operation_id:'delete-ok-'+salt};
+ const live=await success(del,'POST',a,delReq);
  assert.equal(live[0].estado,'ok');
+ const again=await success(del,'POST',a,delReq);
+ assert.equal(again[0].estado,'ok','Lost deletion ACK must replay same receipt');
+ const other=await success(del,'POST',b,delReq);
+ assert.equal(other[0].estado,'conflito_ou_inacessivel','Other user cannot replay receipt');
  console.log('PERF03D_AUTH_CAS_PASS '+JSON.stringify({users:3,tenants:2,staleUpdateBlocked:true,crossTenantBlocked:true,staleDeleteBlocked:true,deleteConfirmed:true,productionModified:false}));
 })().catch(e=>{console.error('PERF03D_AUTH_CAS_FAILED',e.stack);process.exitCode=1});
