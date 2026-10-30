@@ -9,7 +9,7 @@ permissions:
   contents: read
 jobs:
   browser-baseline:
-    name: Chromium — baseline de 12 telas
+    name: Chromium — 12 telas e Nutrição diferencial
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -23,7 +23,7 @@ jobs:
         run: |
           npm install --no-save --no-package-lock playwright@1.56.1
           npx playwright install --with-deps chromium
-      - name: Medir v273 e validar isolamento
+      - name: Comparar v273 e candidato, paridade HTML e p95
         run: timeout 150s node scripts/perf04-baseline-browser.cjs
       - name: Evidência reproduzível por tela
         if: always()
@@ -32,6 +32,7 @@ jobs:
           name: perf04-baseline-v273-browser
           path: |
             homolog-artifacts/perf04-browser-baseline.json
+            homolog-artifacts/perf04-nutricao-differential.json
             homolog-artifacts/perf04-pipeline-check.json
             homolog-artifacts/perf04-pipeline.png
           if-no-files-found: error
