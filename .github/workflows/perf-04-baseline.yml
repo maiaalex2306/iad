@@ -55,8 +55,8 @@ jobs:
           node --check src/sincronia.js
           node --check src/store.js
           node --check src/performance.js
-          grep -q "numero: 'v273'" src/config.js
-          grep -q "iad-crm-v273" sw.js
+          grep -q "numero: 'v274'" src/config.js
+          grep -q "iad-crm-v274" sw.js
       - name: Paridade em 243, 1000 e 5000 oportunidades
         run: node scripts/perf03a-scale-bench.cjs
       - name: Decision Engine determinístico, caches e render
