@@ -1407,11 +1407,13 @@
               })
             : (function() {
                 const base = Store.snapshotBaseRemoto && Store.snapshotBaseRemoto(x.tenantId || perfil.tenant_id, x.id);
-                if (!base || !Number.isSafeInteger(base.revisao))
+                const tenant = x.tenantId || (base && base.tenantId);
+                const rev = Number.isSafeInteger(x.revisao) ? x.revisao : (base && base.revisao);
+                if (!tenant || !Number.isSafeInteger(rev))
                   return Promise.reject(new Error('Exclusão protegida: revisão-base ausente; operação local preservada.'));
                 return chamar('/rest/v1/rpc/iad_oportunidade_excluir_cas', {
                   metodo: 'POST',
-                  corpo:{p_id:x.id,p_tenant_id:base.tenantId,p_revisao:base.revisao}
+                  corpo:{p_id:x.id,p_tenant_id:tenant,p_revisao:rev}
                 }).then(function(linhas) {
                   if (!Array.isArray(linhas) || !linhas[0] || linhas[0].estado !== 'ok')
                     throw new Error('Exclusão em conflito; operação local preservada.');
