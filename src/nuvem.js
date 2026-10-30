@@ -1396,9 +1396,24 @@
     const paraApagar = Store.exclusoesPendentes();
     const exclusoes = paraApagar.length
       ? Promise.all(paraApagar.map(function (x) {
-          return chamar('/rest/v1/' + x.tabela + '?id=eq.' + encodeURIComponent(x.id), {
-            metodo: 'DELETE', cabecalhos: { Prefer: 'return=minimal' }
-          }).then(function () { return { ok: x }; }, function (e) { return { erro: e.message, tabela: x.tabela }; });
+          const eliminar = x.tabela !== 'oportunidades'
+            ? chamar('/rest/v1/' + x.tabela + '?id=eq.' + encodeURIComponent(x.id), {
+                metodo: 'DELETE', cabecalhos: { Prefer: 'return=minimal' }
+              })
+            : (function() {
+                const base = Store.snapshotBaseRemoto && Store.snapshotBaseRemoto(x.tenantId || perfil.tenant_id, x.id);
+                if (!base || !Number.isSafeInteger(base.revisao))
+                  return Promise.reject(new Error('Exclusão protegida: revisão-base ausente; operação local preservada.'));
+                return chamar('/rest/v1/rpc/iad_oportunidade_excluir_cas', {
+                  metodo: 'POST',
+                  corpo:{p_id:x.id,p_tenant_id:base.tenantId,p_revisao:base.revisao}
+                }).then(function(linhas) {
+                  if (!Array.isArray(linhas) || !linhas[0] || linhas[0].estado !== 'ok')
+                    throw new Error('Exclusão em conflito; operação local preservada.');
+                });
+              })();
+          return eliminar.then(function () { return { ok: x }; },
+            function(e) { return {erro:e.message,tabela:x.tabela}; });
         }))
       : Promise.resolve([]);
 
