@@ -27,5 +27,5 @@ jobs:
           path: perf10-p4-benchmark.jsonl
       - name: Assegurar baseline de produção
         run: |
-          grep -q "numero: 'v282'" src/config.js
-          grep -q 'iad-crm-v282' sw.js
+          grep -q "numero: 'v283'" src/config.js
+          grep -q 'iad-crm-v283' sw.js
