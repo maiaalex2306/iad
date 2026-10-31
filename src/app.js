@@ -1922,6 +1922,30 @@
 
        Aqui a busca acontece onde a pergunta é feita. É de graça quando não há
        nada, e a tela se repinta sozinha quando há. */
+    /* PERF-10 P8: carrega o corpo apenas quando o usuário expande
+       a seção. Preserva a geração integral das evidências e os botões. */
+    carregarDetalheCockpit: function (elemento) {
+      if (!elemento || !elemento.isConnected || !elemento.open) return;
+      const alvo = elemento.querySelector('[data-cockpit-pendente="1"]');
+      if (!alvo) return;
+      const opId = elemento.getAttribute('data-cockpit-op') || '';
+      const secao = elemento.getAttribute('data-cockpit-secao') || '';
+      if (!opId || location.hash !== '#/op/' + opId) return;
+      const p = global.IADPerformance;
+      const construir = function () { return V.conteudoDetalheCockpit(opId, secao); };
+      const html = p ? p.medir('perf10.cockpit.detalhe.' + secao, construir) : construir();
+      if (html === null) {
+        alvo.textContent = 'Não foi possível carregar este detalhe.';
+        return;
+      }
+      const aplicar = function () {
+        alvo.innerHTML = html;
+        alvo.removeAttribute('data-cockpit-pendente');
+      };
+      if (p) p.medir('perf10.cockpit.detalhe.dom.' + secao, aplicar);
+      else aplicar();
+    },
+
     abaCockpit: function (aba) {
       const medidorAbas = global.IADPerformance;
       const inicioAba = medidorAbas && medidorAbas.ativo() && global.performance
