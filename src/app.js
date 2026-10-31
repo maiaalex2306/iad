@@ -236,6 +236,7 @@
     if (hash.indexOf('#/op/') === 0) {
       const id = hash.slice(5);
       const perf = global.IADPerformance;
+      const inicioVisual = perf && perf.ativo() && global.performance ? global.performance.now() : null;
       const html = perf ? perf.medir('tela.cockpit', function () { return V.cockpit(id); }) : V.cockpit(id);
       if (perf) perf.medir('dom.cockpit', function () { conteudo.innerHTML = faixa + html; });
       else conteudo.innerHTML = faixa + html;
@@ -245,6 +246,12 @@
       else pintarArquivos(id);
       if (perf) perf.medir('perf10.cockpit.inicializar-quadro', pintarSoltaQuadro);
       else pintarSoltaQuadro();
+      /* Medida real de clique/rota até próximo frame (não equivale a paint confirmado). */
+      if (inicioVisual !== null && typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(function () {
+          perf.registrar('perf10.cockpit.proximo-frame', global.performance.now() - inicioVisual);
+        });
+      }
     } else {
       const rota = ROTAS.find(function (r) { return r.hash === hash; }) || ROTAS[0];
       const perf = global.IADPerformance;
@@ -1908,6 +1915,9 @@
        Aqui a busca acontece onde a pergunta é feita. É de graça quando não há
        nada, e a tela se repinta sozinha quando há. */
     abaCockpit: function (aba) {
+      const medidorAbas = global.IADPerformance;
+      const inicioAba = medidorAbas && medidorAbas.ativo() && global.performance
+        ? global.performance.now() : null;
       V.definirAbaCockpit(aba);
       const hash = location.hash || '';
       const id = hash.indexOf('#/op/') === 0 ? hash.slice(5) : '';
@@ -1934,6 +1944,11 @@
       } else render();
       if (aba === 'sinais') colherAberturas();
       if (aba === 'email') buscarNoServidorDeEmail(false);
+      if (inicioAba !== null && typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(function () {
+          medidorAbas.registrar('perf10.aba.proximo-frame', global.performance.now() - inicioAba);
+        });
+      }
     },
 
     /* A Configuração virou abas, e o diagnóstico foi para a última delas.
