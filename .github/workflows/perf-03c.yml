@@ -28,8 +28,8 @@ jobs:
           node --check src/views.js
           node --check scripts/build-homologacao.cjs
           node --check scripts/perf03c-supabase-local.cjs
-          grep -Eq "numero: 'v(27(2|3|4|5|6|7|8|9)|28(0|1|2|3|4|5))'" src/config.js
-          grep -Eq "iad-crm-v(27(2|3|4|5|6|7|8|9)|28(0|1|2|3|4|5))" sw.js
+          grep -Eq "numero: 'v(27(2|3|4|5|6|7|8|9)|28(0|1|2|3|4|5|6))'" src/config.js
+          grep -Eq "iad-crm-v(27(2|3|4|5|6|7|8|9)|28(0|1|2|3|4|5|6))" sw.js
       - name: Multiempresa, vendedor privado, exclusão, falhas, progresso e escala
         run: node --test nuvem/testes/perf-03c.test.cjs
       - name: Regressões v271 e build de homologação isolado
