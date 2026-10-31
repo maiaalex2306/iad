@@ -247,10 +247,13 @@
       if (perf) perf.medir('perf10.cockpit.inicializar-quadro', pintarSoltaQuadro);
       else pintarSoltaQuadro();
       /* Medida real de clique/rota até próximo frame (não equivale a paint confirmado). */
-      if (inicioVisual !== null && typeof requestAnimationFrame === 'function') {
-        requestAnimationFrame(function () {
-          perf.registrar('perf10.cockpit.proximo-frame', global.performance.now() - inicioVisual);
-        });
+      if (inicioVisual !== null) {
+        perf.medirDoisFrames('perf10.cockpit.dois-frames', inicioVisual);
+        if (typeof requestAnimationFrame === 'function') {
+          requestAnimationFrame(function () {
+            perf.registrar('perf10.cockpit.proximo-frame', global.performance.now() - inicioVisual);
+          });
+        }
       }
     } else {
       const rota = ROTAS.find(function (r) { return r.hash === hash; }) || ROTAS[0];
@@ -1944,10 +1947,13 @@
       } else render();
       if (aba === 'sinais') colherAberturas();
       if (aba === 'email') buscarNoServidorDeEmail(false);
-      if (inicioAba !== null && typeof requestAnimationFrame === 'function') {
-        requestAnimationFrame(function () {
-          medidorAbas.registrar('perf10.aba.proximo-frame', global.performance.now() - inicioAba);
-        });
+      if (inicioAba !== null) {
+        medidorAbas.medirDoisFrames('perf10.aba.dois-frames.' + aba, inicioAba);
+        if (typeof requestAnimationFrame === 'function') {
+          requestAnimationFrame(function () {
+            medidorAbas.registrar('perf10.aba.proximo-frame', global.performance.now() - inicioAba);
+          });
+        }
       }
     },
 
