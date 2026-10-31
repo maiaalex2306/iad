@@ -52,3 +52,18 @@ test('benchmarks p50/p95 com 243, 389, 1000 e 5000 oportunidades',()=>{
   console.log(JSON.stringify(row));assert.equal(x.cache.stats().ativos,n);x.cache.revogar();
  }
 });
+
+test('escrita concorrente durante resumo invalida cache e retorna ao motor integral',()=>{
+ const x=fixture(4);let disparou=false;
+ const original=x.engine.resumo;
+ x.engine.resumo=(op,idx)=>{
+   if(!disparou){disparou=true;x.event('full',null);}
+   return original(op,idx);
+ };
+ const a=x.cache.calcular(x.ops,{});
+ assert.equal(a.resumos.length,4);
+ assert.equal(x.cache.stats().ativos,0);
+ x.cache.calcular(x.ops,{});
+ assert.equal(x.cache.stats().ativos,4);
+ x.cache.revogar();
+});
