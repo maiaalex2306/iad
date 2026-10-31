@@ -24,4 +24,4 @@ jobs:
           grep -q 'IAD_P5E_PIPELINE_ENABLED === true' src/pipeline-performance.js
           grep -q 'est.oportunidades.every' src/pipeline-performance.js
           ! grep -Eq 'IAD_P5E_ENABLED\s*=\s*true' index.html
-          grep -q "numero: 'v280'" src/config.js
+          grep -q "numero: 'v281'" src/config.js
