@@ -33,11 +33,13 @@
     Object.keys(amostras).forEach(function (nome) {
       const o = amostras[nome];
       const vals = o.ultimasMs.slice().sort(function (a,b) { return a-b; });
+      const p50 = vals.length ? vals[Math.ceil(vals.length * .50)-1] : 0;
       const p95 = vals.length ? vals[Math.ceil(vals.length * .95)-1] : 0;
       resultado[nome] = {
         chamadas: o.chamadas,
         totalMs: +o.totalMs.toFixed(1),
         mediaMs: +(o.totalMs / o.chamadas).toFixed(1),
+        p50Ultimas100Ms: +p50.toFixed(1),
         p95Ultimas100Ms: +p95.toFixed(1),
         maxMs: +o.maxMs.toFixed(1)
       };
