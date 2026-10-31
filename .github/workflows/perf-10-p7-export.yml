@@ -1,0 +1,19 @@
+name: PERF-10 P7 — Exportação de métricas
+on:
+  push:
+    branches: [performance/perf-10-p7-export-benchmark-v284]
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+permissions:
+  contents: read
+jobs:
+  p7:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check src/performance.js && node --test nuvem/testes/perf-10-p7-export.test.cjs
+      - run: node --test nuvem/testes/perf-10-p5-frames.test.cjs
