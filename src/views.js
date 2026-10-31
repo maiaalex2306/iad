@@ -3001,7 +3001,10 @@
 
   /* PERF-03B: a mesma negociação não muda de decisão quando o vendedor
      apenas alterna a aba. Memoizar pelo Store + dia + identidade/recorte. */
-  let cockpitMemo = null;
+  /* PERF-10: LRU de até 64 cards. Chave inclui revisão, data,
+     usuário, tenant e filtros; evita reaproveitamento entre escopos. */
+  const cockpitMemo = new Map();
+  const COCKPIT_MEMO_LIMITE = 64;
   function chaveDeVisao(opId) {
     const ctx = Store.contexto();
     const u = ctx && ctx.usuario;
@@ -3012,7 +3015,12 @@
   }
   function resumoNoCockpit(op) {
     const chave = chaveDeVisao(op.id);
-    if (chave && cockpitMemo && cockpitMemo.chave === chave) return cockpitMemo.resumo;
+    if (chave && cockpitMemo.has(chave)) {
+      const salvo = cockpitMemo.get(chave);
+      cockpitMemo.delete(chave);
+      cockpitMemo.set(chave, salvo);
+      return salvo;
+    }
     const atrasos = Object.create(null);
     const hoje = Store.hoje();
     atrasos[op.id] = Store.tarefasDaOportunidade(op.id).filter(function (t) {
@@ -3021,13 +3029,21 @@
     const perf = global.IADPerformance;
     const calcular = function () { return E.resumo(op, atrasos); };
     const resumo = perf ? perf.medir('perf03b.cockpit-resumo', calcular) : calcular();
-    cockpitMemo = chave ? { chave: chave, resumo: resumo } : null;
+    if (chave) {
+      cockpitMemo.set(chave, resumo);
+      while (cockpitMemo.size > COCKPIT_MEMO_LIMITE) {
+        cockpitMemo.delete(cockpitMemo.keys().next().value);
+      }
+    }
     return resumo;
   }
   function cockpit(id) {
     const op = Store.oportunidade(id);
     if (!op || !Store.visivel(op, true)) return '<div class="vazio">Oportunidade não encontrada.</div>';
-    const r = resumoNoCockpit(op);
+    const perfCockpit = global.IADPerformance;
+    const r = perfCockpit
+      ? perfCockpit.medir('perf10.cockpit.resumo', function () { return resumoNoCockpit(op); })
+      : resumoNoCockpit(op);
     const conta = r.conta;
 
     /* Trocar de negócio volta para a aba da Decisão. Guardar a aba entre
@@ -3257,7 +3273,11 @@
     if (!op || !Store.visivel(op, true)) return null;
     const necessitaResumo = abaCockpit === 'decisao';
     const r = necessitaResumo ? resumoNoCockpit(op) : null;
-    return { abas: abasDoCockpit(op), corpo: corpoDaAba(op, r) };
+    const p = global.IADPerformance;
+    return {
+      abas: p ? p.medir('perf10.cockpit.abas.cabecalho', function () { return abasDoCockpit(op); }) : abasDoCockpit(op),
+      corpo: p ? p.medir('perf10.cockpit.aba.conteudo', function () { return corpoDaAba(op, r); }) : corpoDaAba(op, r)
+    };
   }
 
   function corpoDaAba(op, r) {
@@ -3266,7 +3286,9 @@
       whatsapp: abaWhatsapp, sinais: abaSinais, email: abaEmail, propostas: abaPropostas,
       produtos: abaProdutos, arquivos: abaArquivos
     }[abaCockpit] || abaDecisao;
-    return f(op, r);
+    const perfAba = global.IADPerformance;
+    const renderizar = function () { return f(op, r); };
+    return perfAba ? perfAba.medir('perf10.aba.' + abaCockpit, renderizar) : renderizar();
   }
 
   function abaDecisao(op, r) {
@@ -3283,7 +3305,10 @@
   }
 
   function abaHistorico(op) { return blocoHistorico(op); }
-  function abaTarefas(op) { return painelTarefas(op); }
+  function abaTarefas(op) {
+    const p = global.IADPerformance;
+    return p ? p.medir('perf10.cockpit.tarefas.render', function () { return painelTarefas(op); }) : painelTarefas(op);
+  }
   function abaArquivos(op) { return blocoArquivos(op); }
 
   /* ---------------- A aba dos Sinais ----------------
@@ -4762,15 +4787,20 @@
 
   function painelTarefas(op) {
     const hoje = Store.hoje();
-    const todas = Store.tarefasDaOportunidade(op.id)
-      .sort(function (a, b) { return a.vencimento.localeCompare(b.vencimento); });
-
-    const abertas = todas.filter(function (t) { return t.status === 'aberta'; });
-    const atrasadas = abertas.filter(function (t) { return t.vencimento < hoje; });
-    const concluidas = todas.filter(function (t) { return t.status !== 'aberta'; });
-    const semRelato = concluidas.filter(function (t) { return t.semRegistro; });
-
-    const visiveis = todas.filter(function (t) {
+    /* PERF-10: Store já tem índice por oportunidade. Evitar ordenação de
+       tarefas que o filtro não exibirá e evitar múltiplas varreduras. */
+    const todas = Store.tarefasDaOportunidade(op.id);
+    const abertas = [], atrasadas = [], concluidas = [], semRelato = [];
+    const visiveis = [];
+    todas.forEach(function (t) {
+      if (t.status === 'aberta') {
+        abertas.push(t);
+        if (t.vencimento < hoje) atrasadas.push(t);
+      } else {
+        concluidas.push(t);
+        if (t.semRegistro) semRelato.push(t);
+      }
+      const mostrar = (function () {
       /* Para a tarefa feita, o que situa no tempo é quando foi feita, não
          quando venceria. Filtrar "esta semana" pelo vencimento esconderia
          justamente o que se concluiu esta semana. */
@@ -4780,7 +4810,10 @@
       if (filtroTarefas === 'concluidas') return t.status !== 'aberta';
       if (filtroTarefas === 'sem-relato') return t.status !== 'aberta' && t.semRegistro;
       return true;
+      })();
+      if (mostrar) visiveis.push(t);
     });
+    visiveis.sort(function (a, b) { return a.vencimento.localeCompare(b.vencimento); });
 
     const pill = function (chave, rotulo, ativo, acao) {
       return '<button class="pill' + (ativo ? ' orange' : '') + '" onclick="App.' + acao +

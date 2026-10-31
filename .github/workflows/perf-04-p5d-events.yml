@@ -1,7 +1,7 @@
 name: PERF-04 P5d — Store event invalidation
 on:
   push:
-    branches: [performance/iad-perf-04-p5d-v281-events]
+    branches: [performance/iad-perf-04-p5d-v282-events]
   pull_request:
     branches: [claude/decisoes-estagios-vendas-eckjo0]
   workflow_dispatch:
@@ -23,5 +23,5 @@ jobs:
           node --test nuvem/testes/perf-04-p5d-events.test.cjs
       - name: Preservar versão de produção
         run: |
-          grep -q "numero: 'v281'" src/config.js
-          grep -q "iad-crm-v281" sw.js
+          grep -q "numero: 'v282'" src/config.js
+          grep -q "iad-crm-v282" sw.js
