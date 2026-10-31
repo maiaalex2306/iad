@@ -21,7 +21,7 @@
    const novaAssinatura=assinatura(),hoje=store.hoje(),r=store.revisao();
    const abertas=ops.filter(o=>!o.desfecho);
    const chaves=abertas.map(o=>String(o.id));
-   const conjunto=chaves.slice().sort().join('\u0001');
+   const conjunto=JSON.stringify(chaves.slice().sort());
    if(!novaAssinatura || novaAssinatura!==escopo || r!==revisao ||
       hoje!==dia || conjunto!==ids) completo=true;
    if(completo) { entradas.clear(); alterados.clear(); miss+=abertas.length; }
@@ -32,6 +32,11 @@
      entradas.set(k,resumo);if(!completo)miss++;
      return resumo;
    });
+   /* Não conservar resultado se escrita/tenant mudou DURANTE o cálculo. */
+   if (store.revisao() !== r || assinatura() !== novaAssinatura || store.hoje() !== hoje) {
+     entradas.clear(); alterados.clear(); completo=true; escopo=null;
+     return engine.carteira(abertas,atrasos);
+   }
    const carteira=engine.carteira(abertas,atrasos,resumos);
    escopo=novaAssinatura;revisao=r;dia=hoje;ids=conjunto;completo=false;alterados.clear();
    return carteira;
