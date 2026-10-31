@@ -1516,7 +1516,23 @@
     if (filtroSegmento !== 'todos' && segmentos.indexOf(filtroSegmento) === -1) filtroSegmento = 'todos';
 
     const selecionadas = E.filtrar(abertas, { periodo: filtroPeriodo, segmento: filtroSegmento });
-    const c = E.carteira(selecionadas, indiceAtrasosDoRender(est));
+    const atrasosPainel = indiceAtrasosDoRender(est);
+    /* P5e opt-in; falha retorna sempre ao motor oficial. */
+    let c;
+    if (global.IAD_P5E_ENABLED === true && global.IADP5e) {
+      try {
+        if (!global.__iadP5ePainel) global.__iadP5ePainel = global.IADP5e.criar(Store, E);
+        c = global.__iadP5ePainel.calcular(selecionadas, atrasosPainel);
+      } catch (err) {
+        console.warn('[P5e] fallback integral:', err.message);
+        if (global.__iadP5ePainel) global.__iadP5ePainel.revogar();
+        global.__iadP5ePainel = null;
+      }
+    } else if (global.__iadP5ePainel) {
+      global.__iadP5ePainel.revogar();
+      global.__iadP5ePainel = null;
+    }
+    if (!c) c = E.carteira(selecionadas, atrasosPainel);
     /* P5d somente instrumentação: sem substituir cálculos ou dados. */
     const alteracoesP5d = mudancasP5d();
     if (alteracoesP5d && global.IADPerformance && typeof global.IADPerformance.medir === 'function') {
