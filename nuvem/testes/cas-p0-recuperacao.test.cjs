@@ -1,0 +1,37 @@
+'use strict';
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const Queue=require('../../src/cas-queue.js');
+test('fila CAS não perde trabalho em conflito ou falha de rede',async()=>{
+ const values=new Map();
+ const storage={getItem:k=>values.get(k)||null,setItem:(k,v)=>values.set(k,v)};
+ const op={tenantId:'tenant-a',userId:'user-a',recordId:'op-a',table:'oportunidades',expectedRevision:7,operationId:'id-a',patch:{etapa:'Proposta'}};
+ const c=Queue.create(storage,{userId:'user-a',tenantId:'tenant-a'},async()=>({estado:'conflito'}));
+ c.enqueue(op);
+ const r=await c.flush();
+ assert.equal(r.blocked,true);
+ assert.equal(c.pending().length,1);
+ const e=Queue.create(storage,{userId:'user-a',tenantId:'tenant-a'},async()=>{throw Error('sem rede')});
+ await assert.rejects(e.flush(),/sem rede/);
+ assert.equal(e.pending().length,1);
+ const ok=Queue.create(storage,{userId:'user-a',tenantId:'tenant-a'},async()=>({estado:'ok',revisao_atual:8}));
+ const ack=await ok.flush();
+ assert.equal(ack.sent,1);
+ assert.equal(ok.pending().length,0);
+});
+test('P0 exige retomada antes do download e oferece cópia local',()=>{
+ const app=fs.readFileSync('src/app.js','utf8');
+ const nuvem=fs.readFileSync('src/nuvem.js','utf8');
+ const views=fs.readFileSync('src/views.js','utf8');
+ const inicio=app.indexOf('function baixarDoServidor()');
+ const trecho=app.slice(inicio,inicio+1400);
+ assert.ok(trecho.indexOf('N.retomarFilaCAS')<trecho.indexOf('N.puxar()'));
+ assert.match(app,/baixarCopiaPendenciasCAS: function/);
+ assert.match(app,/recuperarPendenciasCAS: function/);
+ assert.match(views,/Edições pendentes de sincronização/);
+ assert.match(views,/App\.baixarCopiaPendenciasCAS\(\)/);
+ assert.match(nuvem,/retomarFilaCAS: retomarFilaCASSeguro/);
+ assert.match(nuvem,/function exportarPendenciasCAS\(\)/);
+ assert.match(nuvem,/if \(pending\)[\s\S]{0,150}Promise\.reject/);
+});
