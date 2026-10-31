@@ -6,6 +6,22 @@
   const esc = U.esc;
 
   /* ---------------- Acesso: login, primeiro acesso e confirmação ---------------- */
+  /* P5d: ponte desativada por padrão; nunca reutilizar entre sessões.
+     A visualização permanece com o Decision Engine como fonte oficial. */
+  let ponteP5d = null;
+  function mudancasP5d() {
+    if (global.IAD_P5D_SHADOW !== true || !global.IADP5dEventos) {
+      if (ponteP5d) { ponteP5d.revogar(); ponteP5d = null; }
+      return null;
+    }
+    if (!ponteP5d) ponteP5d = global.IADP5dEventos.criar(Store, function () {
+      const c=Store.contexto(),f=c.filtros||{};
+      return { usuarioId:c.usuario&&c.usuario.id,tenantId:c.tenantId,
+        papel:c.usuario&&c.usuario.papel,filtroTenant:f.tenant,
+        filtroUsuario:f.usuario,revisao:Store.revisao() };
+    });
+    return ponteP5d.consumir();
+  }
   let telaAcesso = 'login';
   let primeiraEmpresa = false;   /* nenhuma empresa no servidor: quem entra monta a casa */
   let pendente = null;      /* usuário no meio do primeiro acesso */
@@ -1501,6 +1517,11 @@
 
     const selecionadas = E.filtrar(abertas, { periodo: filtroPeriodo, segmento: filtroSegmento });
     const c = E.carteira(selecionadas, indiceAtrasosDoRender(est));
+    /* P5d somente instrumentação: sem substituir cálculos ou dados. */
+    const alteracoesP5d = mudancasP5d();
+    if (alteracoesP5d && global.IADPerformance && typeof global.IADPerformance.medir === 'function') {
+      global.IADPerformance.medir('p5d.eventos', function () { return alteracoesP5d.ids.length; });
+    }
     /* P5c: comparação somente com opt-in explícito, sem alterar indicadores.
        Escopo sempre derivado da sessão atual e da revisão real do Store. */
     if (global.IAD_P5C_SHADOW === true && global.IADP5bShadow) {
