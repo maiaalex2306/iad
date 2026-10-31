@@ -3257,7 +3257,11 @@
     if (!op || !Store.visivel(op, true)) return null;
     const necessitaResumo = abaCockpit === 'decisao';
     const r = necessitaResumo ? resumoNoCockpit(op) : null;
-    return { abas: abasDoCockpit(op), corpo: corpoDaAba(op, r) };
+    const p = global.IADPerformance;
+    return {
+      abas: p ? p.medir('perf10.cockpit.abas.cabecalho', function () { return abasDoCockpit(op); }) : abasDoCockpit(op),
+      corpo: p ? p.medir('perf10.cockpit.aba.conteudo', function () { return corpoDaAba(op, r); }) : corpoDaAba(op, r)
+    };
   }
 
   function corpoDaAba(op, r) {
@@ -3283,7 +3287,10 @@
   }
 
   function abaHistorico(op) { return blocoHistorico(op); }
-  function abaTarefas(op) { return painelTarefas(op); }
+  function abaTarefas(op) {
+    const p = global.IADPerformance;
+    return p ? p.medir('perf10.cockpit.tarefas.render', function () { return painelTarefas(op); }) : painelTarefas(op);
+  }
   function abaArquivos(op) { return blocoArquivos(op); }
 
   /* ---------------- A aba dos Sinais ----------------
