@@ -17,5 +17,5 @@ jobs:
       - run: node --check src/app.js && node --check src/performance.js
       - run: node --test nuvem/testes/perf-10-p5-frames.test.cjs
       - run: |
-          grep -q "numero: 'v282'" src/config.js
-          grep -q 'iad-crm-v282' sw.js
+          grep -q "numero: 'v283'" src/config.js
+          grep -q 'iad-crm-v283' sw.js
