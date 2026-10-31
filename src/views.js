@@ -49,6 +49,21 @@
      mais honesto — e evita a pior das telas, a que mostra menu, pipeline
      vazio e nenhuma explicação. */
   function semServidor(motivo) {
+    /* Um conflito de revisão não é indisponibilidade do servidor.
+       A fila continua guardada até ACK; nunca oferecer limpar cache. */
+    if (/\\bCAS\\b|edições CAS pendentes/i.test(String(motivo || ''))) {
+      return '<div class="card" style="max-width:640px;margin:40px auto">' +
+        '<h1 style="margin-top:0">Edições pendentes de sincronização</h1>' +
+        '<p>Há alterações neste navegador que ainda precisam de confirmação do servidor. ' +
+        'A carteira não será substituída para evitar perda de dados.</p>' +
+        '<p class="small muted">Detalhe: ' + esc(motivo || 'conflito de revisão') + '</p>' +
+        '<div class="row" style="margin-top:14px;gap:8px;flex-wrap:wrap">' +
+        '<button class="btn" onclick="App.recuperarPendenciasCAS()">Conciliar e tentar novamente</button>' +
+        '<button class="btn ghost" onclick="App.baixarCopiaPendenciasCAS()">Salvar cópia das edições</button></div>' +
+        '<p class="tiny muted" style="margin-top:14px">Se continuar bloqueado, ' +
+        'guarde a cópia no seu computador e procure suporte. Não apague dados do site nem descarte ' +
+        'as alterações. A cópia contém informações comerciais: não a compartilhe publicamente.</p></div>';
+    }
     return '<div class="card" style="max-width:640px;margin:40px auto">' +
       '<h1 style="margin-top:0">Sem conexão com o servidor</h1>' +
       '<p>O IAD guarda a carteira no servidor, e não neste computador. Sem falar com ele ' +
