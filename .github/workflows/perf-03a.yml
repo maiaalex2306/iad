@@ -1,0 +1,42 @@
+name: PERF-03A — Pipeline e integridade Supabase
+on:
+  pull_request:
+    branches:
+      - claude/decisoes-estagios-vendas-eckjo0
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  perf-03a:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Conferir sintaxe e versão
+        run: |
+          node --check src/store.js
+          node --check src/engine.js
+          node --check src/pipeline-performance.js
+          node --check src/views.js
+          node --check src/app.js
+          node --check src/nuvem.js
+          node --check sw.js
+          node --check scripts/build-homologacao.cjs
+          node -e "const fs=require('fs'); const conf=fs.readFileSync('src/config.js','utf8').match(/numero: '(v[0-9]+)'/);const sw=fs.readFileSync('sw.js','utf8').match(/const CACHE = 'iad-crm-(v[0-9]+)'/);if(!conf||!sw||conf[1]!==sw[1]){throw Error('Versão config/SW divergente')}console.log('Versão consistente:',conf[1]);"
+      - name: P0 integridade, paginação e cache
+        run: node --test nuvem/testes/perf-03a-integridade.test.cjs
+      - name: P1 Pipeline e regressão diferencial v269
+        run: node --test nuvem/testes/perf-03a-pipeline.test.cjs
+      - name: Regressões PERF-01 e PERF-02
+        run: |
+          node --test nuvem/testes/perf-02-cache.test.cjs
+          node --test nuvem/testes/perf-02-engine.test.cjs
+          node --test nuvem/testes/perf-hoje-01.test.cjs
+      - name: Homologação e segurança existente
+        run: |
+          node --test nuvem/testes/build-homologacao.test.cjs
+          node --test nuvem/testes/recuperacao-isolada.test.cjs
+          node --test nuvem/testes/sessao-refresh-invalido.test.cjs
+          node --test nuvem/testes/pipeline-localidades.test.cjs

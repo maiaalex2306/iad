@@ -1,0 +1,84 @@
+/* PERF-01: métricas locais, sem envio de dados ao servidor.
+   Ative no Console: IADPerformance.iniciar()
+   Após navegar: IADPerformance.relatorio();  Desative: IADPerformance.parar()
+   Coleta somente duração e contagem, nunca conteúdo dos registros. */
+(function (global) {
+  'use strict';
+  let ativo = false;
+  const amostras = Object.create(null);
+  const agora = function () {
+    return global.performance && typeof global.performance.now === 'function'
+      ? global.performance.now() : Date.now();
+  };
+  function registrar(nome, ms) {
+    if (!ativo) return;
+    const o = amostras[nome] || (amostras[nome] = {
+      chamadas: 0, totalMs: 0, maxMs: 0, ultimasMs: []
+    });
+    const v = Math.max(0, Number(ms) || 0);
+    o.chamadas++;
+    o.totalMs += v;
+    o.maxMs = Math.max(o.maxMs, v);
+    o.ultimasMs.push(v);
+    if (o.ultimasMs.length > 100) o.ultimasMs.shift();
+  }
+  function medir(nome, funcao) {
+    if (!ativo) return funcao();
+    const inicio = agora();
+    try { return funcao(); }
+    finally { registrar(nome, agora() - inicio); }
+  }
+  /* PERF-10 P5: dois frames são aproximação do próximo paint,
+     não prova de pixels apresentados. Medição opcional, somente leitura. */
+  function medirDoisFrames(nome, inicio) {
+    if (!ativo || typeof global.requestAnimationFrame !== 'function') return false;
+    const t0 = Number(inicio);
+    if (!Number.isFinite(t0)) return false;
+    global.requestAnimationFrame(function () {
+      global.requestAnimationFrame(function () {
+        registrar(nome, agora() - t0);
+      });
+    });
+    return true;
+  }
+  function relatorio(silencioso) {
+    const resultado = {};
+    Object.keys(amostras).forEach(function (nome) {
+      const o = amostras[nome];
+      const vals = o.ultimasMs.slice().sort(function (a,b) { return a-b; });
+      const p50 = vals.length ? vals[Math.ceil(vals.length * .50)-1] : 0;
+      const p95 = vals.length ? vals[Math.ceil(vals.length * .95)-1] : 0;
+      resultado[nome] = {
+        chamadas: o.chamadas,
+        amostrasPercentis: vals.length,
+        totalMs: +o.totalMs.toFixed(1),
+        mediaMs: +(o.totalMs / o.chamadas).toFixed(1),
+        p50Ultimas100Ms: +p50.toFixed(1),
+        p95Ultimas100Ms: +p95.toFixed(1),
+        maxMs: +o.maxMs.toFixed(1)
+      };
+    });
+    if (!silencioso && typeof console !== 'undefined' && console.table) console.table(resultado);
+    return resultado;
+  }
+  /* Exportação local auditável: somente nomes técnicos de métricas e durações.
+     O resultado não contém IDs, nomes, e-mails, conteúdo ou dados de cliente. */
+  function exportarJSON() {
+    return JSON.stringify({
+      formato: 'iad-perf-10-p7',
+      versaoEsquema: 1,
+      escopo: 'esta-sessao',
+      metodologia: 'p50 e p95 das últimas 100 amostras por métrica; dois frames não garantem paint',
+      metricas: relatorio(true)
+    }, null, 2);
+  }
+  global.IADPerformance = {
+    iniciar: function () { ativo = true; return 'Medição iniciada — não envia dados.'; },
+    parar: function () { ativo = false; return relatorio(); },
+    limpar: function () { Object.keys(amostras).forEach(function(k){delete amostras[k];}); },
+    medir: medir, registrar: registrar, relatorio: relatorio,
+    medirDoisFrames: medirDoisFrames, agora: agora,
+    exportarJSON: exportarJSON,
+    ativo: function () { return ativo; }
+  };
+})(window);

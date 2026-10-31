@@ -1,0 +1,114 @@
+name: PERF-03B — Cockpit e Sync Delta Seguro
+on:
+  pull_request:
+    branches:
+      - claude/decisoes-estagios-vendas-eckjo0
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regressao:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Sintaxe do novo código e política PWA
+        run: |
+          node --check src/nuvem.js
+          node --check src/app.js
+          node --check src/views.js
+          node --check scripts/build-homologacao.cjs
+          node --check scripts/perf03b-browser-homolog.cjs
+          node -e "const fs=require('fs');const a=fs.readFileSync('src/config.js','utf8').match(/numero: '(v[0-9]+)'/);const b=fs.readFileSync('sw.js','utf8').match(/const CACHE = 'iad-crm-(v[0-9]+)'/);if(!a||!b||a[1]!==b[1])throw Error('Version config/SW divergent');console.log('PWA',a[1]);"
+      - name: Delta, exclusões, integridade, cockpit
+        run: node --test nuvem/testes/perf-03b.test.cjs
+      - name: Não regredir PERF-03A, PERF-02 e login
+        run: |
+          node --test nuvem/testes/perf-03a-integridade.test.cjs
+          node --test nuvem/testes/perf-03a-pipeline.test.cjs
+          node --test nuvem/testes/perf-02-cache.test.cjs
+          node --test nuvem/testes/perf-02-engine.test.cjs
+          node --test nuvem/testes/perf-hoje-01.test.cjs
+          node --test nuvem/testes/build-homologacao.test.cjs
+          node --test nuvem/testes/sessao-refresh-invalido.test.cjs
+          node --test nuvem/testes/pipeline-localidades.test.cjs
+
+  chromium:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Playwright Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Pipeline cockpit tarefas
+        run: timeout 140s node scripts/perf03b-browser-homolog.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: perf03b-browser
+          path: homolog-artifacts/perf03b-*
+          if-no-files-found: ignore
+
+  postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: supabase/setup-cli@v3
+      - name: Subir Supabase local descartável
+        run: |
+          supabase init --force
+          supabase start -x studio,imgproxy,realtime,storage-api,edge-runtime,postgres-meta,mailpit,logflare,vector,supavisor
+      - name: Esquema + journal somente no DB local
+        run: |
+          sudo apt-get -qq update
+          sudo apt-get -qq install -y postgresql-client
+          psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -X -v ON_ERROR_STOP=1 -f nuvem/schema.sql
+          psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -X -v ON_ERROR_STOP=1 -f nuvem/correcao-05-gestor.sql
+          psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -X -v ON_ERROR_STOP=1 -f nuvem/perf-03b-journal.sql
+          psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -X -v ON_ERROR_STOP=1 -f nuvem/perf-03b-journal.sql
+      - name: RLS e autenticação real no Supabase local
+        run: |
+          set -a
+          source <(supabase status -o env)
+          set +a
+          export API_URL=http://127.0.0.1:54321
+          node scripts/perf03a-supabase-local.cjs
+      - name: Executar cliente real do IAD contra Supabase local e verificar delta
+        run: |
+          set -a
+          source <(supabase status -o env)
+          set +a
+          export API_URL=http://127.0.0.1:54321
+          node scripts/perf03b-local-e2e.cjs
+      - name: Conferir consistência de eventos SQL
+        run: |
+          psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -X -v ON_ERROR_STOP=1 -c "
+          DO \$\$
+          DECLARE incoerentes int;
+          BEGIN
+            SELECT COUNT(*) INTO incoerentes
+            FROM public.iad_sync_versoes v
+            WHERE v.versao <> (SELECT COUNT(*) FROM public.iad_sync_eventos e WHERE e.tenant_id=v.tenant_id);
+            IF incoerentes <> 0 THEN RAISE EXCEPTION 'Revisões e eventos divergentes: %',incoerentes; END IF;
+          END \$\$;"
+      - name: Evidência de integração delta
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf03b-real-delta
+          path: homolog-artifacts/perf03b-e2e.json
+          if-no-files-found: ignore
