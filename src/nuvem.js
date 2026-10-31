@@ -329,6 +329,29 @@
     } catch(e) { return Promise.reject(e); }
   }
 
+  /* CAS P0: reenvios simultâneos da entrada e do agendador não podem
+     concorrer contra a mesma fila local. Uma promessa por aba/identidade
+     conserva a ordem e evita respostas ACK duplicadas. */
+  let retomadaCASEmCurso = null;
+  function retomarFilaCASSeguro() {
+    if (retomadaCASEmCurso) return retomadaCASEmCurso;
+    let tentativa;
+    try { tentativa = retomarFilaCAS(); }
+    catch(e) { return Promise.reject(e); }
+    retomadaCASEmCurso = Promise.resolve(tentativa).finally(function() { retomadaCASEmCurso = null; });
+    return retomadaCASEmCurso;
+  }
+  /* Cópia local explícita. Nunca limpa fila e nunca envia operações.
+     Conteúdo sensível: é exclusivamente para arquivo baixado pelo usuário. */
+  function exportarPendenciasCAS() {
+    const operacoes = [];
+    tenantsComFilaCAS().forEach(function(tenant) {
+      filaCASDaSessao(tenant).pending().forEach(function(op) { operacoes.push(op); });
+    });
+    return { formato:'iad-cas-pendencias-v1', geradoEm:new Date().toISOString(),
+      quantidade:operacoes.length, operacoes:operacoes };
+  }
+
   function chamarFuncao(nome, corpo) {
     return chamar('/functions/v1/' + nome, { metodo: 'POST', corpo: corpo || {} });
   }
@@ -2141,7 +2164,8 @@
     marcarEmailAnalisado, contarTentativaDeAnalise,
     caixasDeEmail, salvarCaixaDeEmail, guardarSenhaDaCaixa, esquecerSenhaDaCaixa,
     atualizarOportunidadeCAS,
-    enfileirarEdicaoCAS, retomarFilaCAS,
+    enfileirarEdicaoCAS, retomarFilaCAS: retomarFilaCASSeguro,
+    exportarPendenciasCAS,
     empresaParecida, achatarNome, porFormato, explicarFalhas,
     adotarTokens,
     trocarMinhaSenha,
