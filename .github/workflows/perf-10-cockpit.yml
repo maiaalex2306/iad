@@ -1,7 +1,7 @@
 name: PERF-10 — Cockpit e Tarefas
 on:
   push:
-    branches: [performance/perf-10-cockpit-fast-tabs-v283]
+    branches: [performance/perf-10-cockpit-fast-tabs-v284]
   pull_request:
     branches: [claude/decisoes-estagios-vendas-eckjo0]
   workflow_dispatch:
@@ -20,5 +20,5 @@ jobs:
       - run: node --test nuvem/testes/perf-10-cockpit.test.cjs nuvem/testes/perf-10-percentis.test.cjs
       - name: Garantir versão de produção inalterada
         run: |
-          grep -q "numero: 'v283'" src/config.js
-          grep -q 'iad-crm-v283' sw.js
+          grep -q "numero: 'v284'" src/config.js
+          grep -q 'iad-crm-v284' sw.js
