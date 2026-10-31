@@ -26,5 +26,5 @@ jobs:
         run: |
           grep -q 'global.IAD_P5C_SHADOW === true' src/views.js
           ! grep -Eq 'IAD_P5C_SHADOW\s*=\s*true' index.html
-          grep -q "numero: 'v281'" src/config.js
-          grep -q "iad-crm-v281" sw.js
+          grep -q "numero: 'v282'" src/config.js
+          grep -q "iad-crm-v282" sw.js
