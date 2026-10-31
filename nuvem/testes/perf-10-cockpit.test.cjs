@@ -22,3 +22,15 @@ test('seleção e ordenação de tarefas mantém paridade para 243,389,1000,5000
   }
  }
 });
+
+test('PERF-10 cobre todos os cards e nove abas sem hardcode de empresa',()=>{
+ assert.match(src,/const cockpitMemo = new Map\(\)/);
+ assert.match(src,/COCKPIT_MEMO_LIMITE = 64/);
+ assert.match(src,/cockpitMemo\.has\(chave\)/);
+ assert.match(src,/Store\.revisao\(\),Store\.hoje\(\),u\.id/);
+ assert.match(src,/perf10\.aba\.' \+ abaCockpit/);
+ for(const aba of ['decisao','historico','tarefas','whatsapp','sinais','email','propostas','produtos','arquivos']){
+   assert.ok(src.includes("['"+aba+"'"),"aba:"+aba);
+ }
+ assert.doesNotMatch(src,/Cacau Show/);
+});
