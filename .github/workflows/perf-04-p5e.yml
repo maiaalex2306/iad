@@ -1,0 +1,25 @@
+name: PERF-04 P5e — incremental parity and benchmark
+on:
+  push:
+    branches: [performance/iad-perf-04-p5e-v281]
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  incremental:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --check src/p5e-cache.js && node --check src/views.js && node --check src/engine.js
+      - run: node --test nuvem/testes/perf-04-p5e-cache.test.cjs
+      - name: Garantir flag desativada por padrão
+        run: |
+          grep -q 'IAD_P5E_ENABLED === true' src/views.js
+          ! grep -Eq 'IAD_P5E_ENABLED\s*=\s*true' index.html
+          grep -q "numero: 'v280'" src/config.js
