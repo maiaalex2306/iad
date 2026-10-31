@@ -3313,10 +3313,10 @@
       blocoInsight(op, r) +
       blocoProximoPasso(op, r) +
       blocoAlertas(r) +
-      detalhe('As 8 decisões', 'pontue aqui', blocoDimensoes(op)) +
+      detalheDiferido('As 8 decisões', 'pontue aqui', op, 'dimensoes') +
       detalhe('Proposal Gate', r.gates.prontidao + '% de prontidão', blocoGate(op, r)) +
-      detalhe('Buying group', r.coverage.mapeados + ' pessoa(s) · ' + r.coverage.percentual + '% dos papéis críticos', blocoGrupo(op, r)) +
-      detalhe('Evolução da decisão', 'a curva do IAD', curvaIAD(op));
+      detalheDiferido('Buying group', r.coverage.mapeados + ' pessoa(s) · ' + r.coverage.percentual + '% dos papéis críticos', op, 'grupo') +
+      detalheDiferido('Evolução da decisão', 'a curva do IAD', op, 'curva');
   }
 
   function abaHistorico(op) { return blocoHistorico(op); }
@@ -4298,6 +4298,26 @@
     return '<details class="bloco"><summary><span class="tit">' + esc(titulo) + '</span>' +
       '<span class="resumo">' + esc(resumo) + '</span></summary>' +
       '<div class="corpo">' + conteudo + '</div></details>';
+  }
+
+  /* PERF-10 P8: o conteúdo de um <details> fechado não precisa ser
+     construído nem inserido no DOM. Na HEINEKEN, os históricos por dimensão
+     e o buying group podem ser grandes. Carregar SOMENTE ao expandir. */
+  function detalheDiferido(titulo, resumo, op, secao) {
+    return '<details class="bloco" data-cockpit-op="' + esc(op.id) +
+      '" data-cockpit-secao="' + esc(secao) +
+      '" ontoggle="if(this.open)App.carregarDetalheCockpit(this)">' +
+      '<summary><span class="tit">' + esc(titulo) + '</span>' +
+      '<span class="resumo">' + esc(resumo) + '</span></summary>' +
+      '<div class="corpo" data-cockpit-pendente="1"></div></details>';
+  }
+  function conteudoDetalheCockpit(opId, secao) {
+    const op = Store.oportunidade(opId);
+    if (!op || !Store.visivel(op, true)) return null;
+    if (secao === 'dimensoes') return blocoDimensoes(op);
+    if (secao === 'grupo') return blocoGrupo(op, resumoNoCockpit(op));
+    if (secao === 'curva') return curvaIAD(op);
+    return null;
   }
 
   /* As linhas com rótulo vão no atributo, em JSON, e o balão flutuante as
@@ -10968,6 +10988,7 @@
     listaDeCampanha: listaDeCampanha, filtroDeCampanha: filtroDeCampanha,
     definirAbaCockpit: definirAbaCockpit,
     painelDaAbaCockpit: painelDaAbaCockpit,
+    conteudoDetalheCockpit: conteudoDetalheCockpit,
     definirBuscaCadastro: function (b) { buscaCadastro = b; },
     definirPeriodo: function (f) { filtroPeriodo = f; },
     definirSegmento: function (f) { filtroSegmento = f; }
