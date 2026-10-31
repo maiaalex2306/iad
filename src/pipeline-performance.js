@@ -42,7 +42,7 @@
     };
     /* P5e: reutilização opcional dos resumos do Pipeline.
        O mecanismo original permanece fallback e fonte de verdade. */
-    if (global.IAD_P5E_PIPELINE_ENABLED === true && global.IADP5e && cacheavel) {
+    if (global.IAD_P5E_PIPELINE_ENABLED === true && global.IADP5e && cacheavel && est.oportunidades.every(function(o) { return !o.desfecho; })) {
       try {
         if (!global.__iadP5ePipeline) global.__iadP5ePipeline = global.IADP5e.criar(S, E);
         const indice = Object.create(null), hojeLocal = S.hoje();
