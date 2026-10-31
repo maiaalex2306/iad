@@ -17,7 +17,7 @@ jobs:
         with:
           node-version: 22
       - run: node --check src/p5e-cache.js && node --check src/views.js && node --check src/engine.js && node --check src/pipeline-performance.js
-      - run: node --test nuvem/testes/perf-04-p5e-cache.test.cjs
+      - run: node --test nuvem/testes/perf-04-p5e-cache.test.cjs nuvem/testes/perf-04-p5e-pipeline.test.cjs
       - name: Garantir flag desativada por padrão
         run: |
           grep -q 'IAD_P5E_ENABLED === true' src/views.js
