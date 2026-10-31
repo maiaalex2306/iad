@@ -570,7 +570,7 @@
   }
 
   /* Carteira: onde está o dinheiro e qual decisão o está segurando. */
-  function carteira(oportunidades, atrasadasIndex) {
+  function carteira(oportunidades, atrasadasIndex, resumosProntos) {
     const abertas = oportunidades.filter(function (o) { return !o.desfecho; });
     /* PERF-04 P1: consumidores podem fornecer o índice já calculado.
        Sem ele (p.ex. Conversas), gerar UM índice das tarefas visíveis
@@ -586,7 +586,7 @@
         indice[t.oportunidadeId]=(indice[t.oportunidadeId]||0)+1;
       });
     }
-    const resumos = abertas.map(function (op) { return resumo(op, indice); });
+    const resumos = resumosProntos || abertas.map(function (op) { return resumo(op, indice); });
     /* PERF-04 P4: uma única agregação por resumo, sem filtros e reduções
        repetidos. Não reutilizar resultados entre tenants ou sessões. */
     let total = 0, somaIad = 0, somaAge = 0, somaCoverage = 0, somaProntidao = 0;

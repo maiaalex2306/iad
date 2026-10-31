@@ -40,6 +40,28 @@
       });
       return est.oportunidades.map(function (o) { return E.resumo(o, atrasadas); });
     };
+    /* P5e: reutilização opcional dos resumos do Pipeline.
+       O mecanismo original permanece fallback e fonte de verdade. */
+    if (global.IAD_P5E_PIPELINE_ENABLED === true && global.IADP5e && cacheavel && est.oportunidades.every(function(o) { return !o.desfecho; })) {
+      try {
+        if (!global.__iadP5ePipeline) global.__iadP5ePipeline = global.IADP5e.criar(S, E);
+        const indice = Object.create(null), hojeLocal = S.hoje();
+        est.tarefas.forEach(function(t) {
+          if (t.oportunidadeId == null || t.status !== 'aberta' ||
+              !t.vencimento || !(t.vencimento < hojeLocal)) return;
+          indice[t.oportunidadeId] = (indice[t.oportunidadeId] || 0) + 1;
+        });
+        const saidaIncremental = global.__iadP5ePipeline.calcular(est.oportunidades, indice).resumos;
+        return saidaIncremental.slice();
+      } catch (erro) {
+        console.warn('[P5e pipeline] fallback:', erro.message);
+        if (global.__iadP5ePipeline) global.__iadP5ePipeline.revogar();
+        global.__iadP5ePipeline = null;
+      }
+    } else if (global.__iadP5ePipeline) {
+      global.__iadP5ePipeline.revogar();
+      global.__iadP5ePipeline = null;
+    }
     const perf = global.IADPerformance;
     const saida = perf ? perf.medir('perf03.pipeline-resumos-miss', calcular) : calcular();
     atual = cacheavel && S.revisao() === revisao && S.hoje() === dia &&
