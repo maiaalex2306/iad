@@ -239,10 +239,12 @@
       const html = perf ? perf.medir('tela.cockpit', function () { return V.cockpit(id); }) : V.cockpit(id);
       if (perf) perf.medir('dom.cockpit', function () { conteudo.innerHTML = faixa + html; });
       else conteudo.innerHTML = faixa + html;
-      pintarArquivos(id);
-      /* A área de soltar arquivo do quadro financeiro nasce com a aba e precisa
-         ser religada a cada repintura: o HTML é refeito, os ouvintes não. */
-      pintarSoltaQuadro();
+      /* PERF-10: isolar o custo dos inicializadores da abertura do card.
+         Não mudar sem provar que os widgets são dispensáveis nessa rota. */
+      if (perf) perf.medir('perf10.cockpit.inicializar-arquivos', function () { pintarArquivos(id); });
+      else pintarArquivos(id);
+      if (perf) perf.medir('perf10.cockpit.inicializar-quadro', pintarSoltaQuadro);
+      else pintarSoltaQuadro();
     } else {
       const rota = ROTAS.find(function (r) { return r.hash === hash; }) || ROTAS[0];
       const perf = global.IADPerformance;
@@ -1914,10 +1916,16 @@
       if (id && atual && corpo && A.atual()) {
         const perf = global.IADPerformance;
         const atualizar = function () {
-          const partes = V.painelDaAbaCockpit(id);
+          const partes = perf
+            ? perf.medir('perf10.aba.gerar-html', function () { return V.painelDaAbaCockpit(id); })
+            : V.painelDaAbaCockpit(id);
           if (!partes) { render(); return; }
-          atual.outerHTML = partes.abas;
-          corpo.innerHTML = partes.corpo;
+          const pintar = function () {
+            atual.outerHTML = partes.abas;
+            corpo.innerHTML = partes.corpo;
+          };
+          if (perf) perf.medir('perf10.aba.atualizar-dom', pintar);
+          else pintar();
         };
         if (perf) perf.medir('perf03b.trocar-aba', atualizar);
         else atualizar();
