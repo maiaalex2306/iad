@@ -1,0 +1,25 @@
+name: PERF-04 P5 — Resumo paridade
+on:
+  push:
+    branches: [performance/iad-perf-04-p5-resumo-single-evidence]
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  resumo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --check src/engine.js && node --check scripts/perf04-p5-resumo-parity.cjs
+      - run: node scripts/perf04-p5-resumo-parity.cjs
+      - run: |
+          grep -q "numero: 'v285'" src/config.js
+          grep -q "iad-crm-v285" sw.js

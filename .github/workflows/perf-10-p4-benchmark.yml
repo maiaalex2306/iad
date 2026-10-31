@@ -1,0 +1,31 @@
+name: PERF-10 P4 — Benchmark isolado e paridade
+on:
+  push:
+    branches: [performance/perf-10-p4-benchmark-v285]
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Sintaxe dos arquivos relevantes
+        run: node --check src/views.js && node --check src/app.js && node --check nuvem/testes/perf-10-p4-benchmark.cjs
+      - name: Microbenchmark e paridade em 243, 389, 1000 e 5000 tarefas
+        run: node nuvem/testes/perf-10-p4-benchmark.cjs | tee perf10-p4-benchmark.jsonl
+      - name: Publicar resultados brutos
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf10-p4-microbench-node22
+          path: perf10-p4-benchmark.jsonl
+      - name: Assegurar baseline de produção
+        run: |
+          grep -q "numero: 'v285'" src/config.js
+          grep -q 'iad-crm-v285' sw.js

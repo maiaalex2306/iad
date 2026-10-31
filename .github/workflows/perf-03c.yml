@@ -1,0 +1,101 @@
+name: PERF-03C — v272 Multiempresa, RLS Privado e Bootstrap
+on:
+  pull_request:
+    branches:
+      - claude/decisoes-estagios-vendas-eckjo0
+  push:
+    branches:
+      - performance/iad-perf-03c
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  node:
+    name: Regressões JavaScript, paridade 243/1k/5k/10k
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Sintaxe e versão da candidata
+        run: |
+          node --check src/nuvem.js
+          node --check src/app.js
+          node --check src/views.js
+          node --check scripts/build-homologacao.cjs
+          node --check scripts/perf03c-supabase-local.cjs
+          grep -Eq "numero: 'v(27(2|3|4|5|6|7|8|9)|28(0|1|2|3|4|5))'" src/config.js
+          grep -Eq "iad-crm-v(27(2|3|4|5|6|7|8|9)|28(0|1|2|3|4|5))" sw.js
+      - name: Multiempresa, vendedor privado, exclusão, falhas, progresso e escala
+        run: node --test nuvem/testes/perf-03c.test.cjs
+      - name: Regressões v271 e build de homologação isolado
+        run: |
+          node --test nuvem/testes/perf-03b.test.cjs
+          node --test nuvem/testes/perf-03a-integridade.test.cjs
+          node --test nuvem/testes/perf-03a-pipeline.test.cjs
+          node --test nuvem/testes/perf-02-cache.test.cjs
+          node --test nuvem/testes/perf-02-engine.test.cjs
+          node --test nuvem/testes/perf-hoje-01.test.cjs
+          node --test nuvem/testes/build-homologacao.test.cjs
+          node --test nuvem/testes/sessao-refresh-invalido.test.cjs
+  chromium:
+    name: Chromium real Pipeline > Oportunidade > Tarefas
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Instalar Playwright Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Testar navegação v272 sem vazamento de sessão
+        run: timeout 140s node scripts/perf03b-browser-homolog.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: perf03c-chromium
+          path: homolog-artifacts/perf03b-*
+          if-no-files-found: ignore
+  postgres:
+    name: GoTrue + PostgREST real (5 usuários, 2 empresas, RLS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: supabase/setup-cli@v3
+      - name: Iniciar Supabase LOCAL descartável
+        run: |
+          supabase init --force
+          supabase start -x studio,imgproxy,realtime,storage-api,edge-runtime,postgres-meta,mailpit,logflare,vector,supavisor
+      - name: Instalar base, RLS, journal v271 e jornal privado v272
+        run: |
+          sudo apt-get -qq update
+          sudo apt-get -qq install -y postgresql-client
+          psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -X -v ON_ERROR_STOP=1 -f nuvem/schema.sql
+          psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -X -v ON_ERROR_STOP=1 -f nuvem/correcao-05-gestor.sql
+          psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -X -v ON_ERROR_STOP=1 -f nuvem/perf-03b-journal.sql
+          psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -X -v ON_ERROR_STOP=1 -f nuvem/perf-03c-journal-privado.sql
+          psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -X -v ON_ERROR_STOP=1 -f nuvem/perf-03c-journal-privado.sql
+      - name: Auth/RLS/IDOR real, transferências e tombstones
+        run: |
+          set -a
+          source <(supabase status -o env)
+          set +a
+          export API_URL=http://127.0.0.1:54321
+          node scripts/perf03c-supabase-local.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: perf03c-auth-rls
+          path: homolog-artifacts/perf03c-auth-rls.json
+          if-no-files-found: ignore
