@@ -1,7 +1,7 @@
 name: PERF-10 P4 — Benchmark isolado e paridade
 on:
   push:
-    branches: [performance/perf-10-p4-benchmark-v284]
+    branches: [performance/perf-10-p4-benchmark-v285]
   pull_request:
     branches: [claude/decisoes-estagios-vendas-eckjo0]
   workflow_dispatch:
@@ -27,5 +27,5 @@ jobs:
           path: perf10-p4-benchmark.jsonl
       - name: Assegurar baseline de produção
         run: |
-          grep -q "numero: 'v284'" src/config.js
-          grep -q 'iad-crm-v284' sw.js
+          grep -q "numero: 'v285'" src/config.js
+          grep -q 'iad-crm-v285' sw.js

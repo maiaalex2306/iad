@@ -1,7 +1,7 @@
 name: PERF-04 P5e — incremental parity and benchmark
 on:
   push:
-    branches: [performance/iad-perf-04-p5e-v284]
+    branches: [performance/iad-perf-04-p5e-v285]
   pull_request:
     branches: [claude/decisoes-estagios-vendas-eckjo0]
   workflow_dispatch:
@@ -24,4 +24,4 @@ jobs:
           grep -q 'IAD_P5E_PIPELINE_ENABLED === true' src/pipeline-performance.js
           grep -q 'est.oportunidades.every' src/pipeline-performance.js
           ! grep -Eq 'IAD_P5E_ENABLED\s*=\s*true' index.html
-          grep -q "numero: 'v284'" src/config.js
+          grep -q "numero: 'v285'" src/config.js
