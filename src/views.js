@@ -51,7 +51,7 @@
   function semServidor(motivo) {
     /* Um conflito de revisão não é indisponibilidade do servidor.
        A fila continua guardada até ACK; nunca oferecer limpar cache. */
-    if (/\\bCAS\\b|edições CAS pendentes/i.test(String(motivo || ''))) {
+    if (/CAS|edições pendentes/i.test(String(motivo || ''))) {
       return '<div class="card" style="max-width:640px;margin:40px auto">' +
         '<h1 style="margin-top:0">Edições pendentes de sincronização</h1>' +
         '<p>Há alterações neste navegador que ainda precisam de confirmação do servidor. ' +
