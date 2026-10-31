@@ -1,0 +1,21 @@
+name: PERF-10 P5 — Frames e navegação
+on:
+  push:
+    branches: [performance/perf-10-p5-frames-v283]
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+permissions:
+  contents: read
+jobs:
+  frames:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check src/app.js && node --check src/performance.js
+      - run: node --test nuvem/testes/perf-10-p5-frames.test.cjs
+      - run: |
+          grep -q "numero: 'v282'" src/config.js
+          grep -q 'iad-crm-v282' sw.js

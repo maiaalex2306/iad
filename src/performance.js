@@ -28,6 +28,19 @@
     try { return funcao(); }
     finally { registrar(nome, agora() - inicio); }
   }
+  /* PERF-10 P5: dois frames são aproximação do próximo paint,
+     não prova de pixels apresentados. Medição opcional, somente leitura. */
+  function medirDoisFrames(nome, inicio) {
+    if (!ativo || typeof global.requestAnimationFrame !== 'function') return false;
+    const t0 = Number(inicio);
+    if (!Number.isFinite(t0)) return false;
+    global.requestAnimationFrame(function () {
+      global.requestAnimationFrame(function () {
+        registrar(nome, agora() - t0);
+      });
+    });
+    return true;
+  }
   function relatorio() {
     const resultado = {};
     Object.keys(amostras).forEach(function (nome) {
@@ -52,6 +65,7 @@
     parar: function () { ativo = false; return relatorio(); },
     limpar: function () { Object.keys(amostras).forEach(function(k){delete amostras[k];}); },
     medir: medir, registrar: registrar, relatorio: relatorio,
+    medirDoisFrames: medirDoisFrames, agora: agora,
     ativo: function () { return ativo; }
   };
 })(window);
