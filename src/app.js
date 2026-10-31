@@ -1374,7 +1374,12 @@
       if (barra) { barra.max=p.total; barra.value=p.concluidas; }
     }) : function () {};
     espelharEmpresaDoServidor();
-    return resgatarFilaPendente().then(function () { return N.puxar(); }).then(function () {
+    return Promise.resolve().then(function () {
+      /* Não baixar enquanto o CAS local não recebeu ACK ou foi conciliado.
+         Se houver conflito, preservar toda a fila e mostrar o bloqueio. */
+      return N.retomarFilaCAS ? N.retomarFilaCAS() : null;
+    }).then(function () { return resgatarFilaPendente(); })
+      .then(function () { return N.puxar(); }).then(function () {
       deixarDeObservar();
       semServidor = '';
       render();
@@ -5697,10 +5702,38 @@
       global.IADSincronia.descartarERecarregar();
     },
 
+    /* Recuperação CAS explícita sem limpar cache ou filas. */
+    recuperarPendenciasCAS: function () {
+      if (baixando) return;
+      baixarDoServidor();
+    },
+
+    /* Download local, por clique, das operações ainda sem ACK.
+       NUNCA compartilhar este arquivo em chats: pode conter dados comerciais. */
+    baixarCopiaPendenciasCAS: function () {
+      try {
+        const pacote = global.IADNuvem.exportarPendenciasCAS();
+        if (!pacote.quantidade) { alert('Não há edições CAS pendentes neste perfil.'); return; }
+        const blob = new Blob([JSON.stringify(pacote, null, 2)], {type:'application/json'});
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'iad-cas-pendencias-' + new Date().toISOString().slice(0,10) + '.json';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+      } catch (e) {
+        alert('Não foi possível exportar as edições pendentes: ' + e.message);
+      }
+    },
+
     tentarBaixarDeNovo: function () {
       definirAviso('Baixando de novo…', { tom: 'ok' });
       render();
-      global.IADNuvem.puxar().then(function () {
+      global.IADNuvem.retomarFilaCAS().then(function () {
+        return global.IADNuvem.puxar();
+      }).then(function () {
         definirAviso('');
         render();
       }, function (e) {
