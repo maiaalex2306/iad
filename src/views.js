@@ -4762,15 +4762,20 @@
 
   function painelTarefas(op) {
     const hoje = Store.hoje();
-    const todas = Store.tarefasDaOportunidade(op.id)
-      .sort(function (a, b) { return a.vencimento.localeCompare(b.vencimento); });
-
-    const abertas = todas.filter(function (t) { return t.status === 'aberta'; });
-    const atrasadas = abertas.filter(function (t) { return t.vencimento < hoje; });
-    const concluidas = todas.filter(function (t) { return t.status !== 'aberta'; });
-    const semRelato = concluidas.filter(function (t) { return t.semRegistro; });
-
-    const visiveis = todas.filter(function (t) {
+    /* PERF-10: Store já tem índice por oportunidade. Evitar ordenação de
+       tarefas que o filtro não exibirá e evitar múltiplas varreduras. */
+    const todas = Store.tarefasDaOportunidade(op.id);
+    const abertas = [], atrasadas = [], concluidas = [], semRelato = [];
+    const visiveis = [];
+    todas.forEach(function (t) {
+      if (t.status === 'aberta') {
+        abertas.push(t);
+        if (t.vencimento < hoje) atrasadas.push(t);
+      } else {
+        concluidas.push(t);
+        if (t.semRegistro) semRelato.push(t);
+      }
+      const mostrar = (function () {
       /* Para a tarefa feita, o que situa no tempo é quando foi feita, não
          quando venceria. Filtrar "esta semana" pelo vencimento esconderia
          justamente o que se concluiu esta semana. */
@@ -4780,7 +4785,10 @@
       if (filtroTarefas === 'concluidas') return t.status !== 'aberta';
       if (filtroTarefas === 'sem-relato') return t.status !== 'aberta' && t.semRegistro;
       return true;
+      })();
+      if (mostrar) visiveis.push(t);
     });
+    visiveis.sort(function (a, b) { return a.vencimento.localeCompare(b.vencimento); });
 
     const pill = function (chave, rotulo, ativo, acao) {
       return '<button class="pill' + (ativo ? ' orange' : '') + '" onclick="App.' + acao +
