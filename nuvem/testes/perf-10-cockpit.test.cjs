@@ -34,3 +34,11 @@ test('PERF-10 cobre todos os cards e nove abas sem hardcode de empresa',()=>{
  }
  assert.doesNotMatch(src,/Cacau Show/);
 });
+
+test('instrumentação cobre próximo frame de qualquer card e aba',()=>{
+ const app=fs.readFileSync('src/app.js','utf8');
+ assert.match(app,/perf10\.cockpit\.proximo-frame/);
+ assert.match(app,/perf10\.aba\.proximo-frame/);
+ assert.match(app,/requestAnimationFrame/);
+ assert.match(app,/perf\.ativo\(\)/);
+});
