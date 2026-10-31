@@ -3001,7 +3001,10 @@
 
   /* PERF-03B: a mesma negociação não muda de decisão quando o vendedor
      apenas alterna a aba. Memoizar pelo Store + dia + identidade/recorte. */
-  let cockpitMemo = null;
+  /* PERF-10: LRU de até 64 cards. Chave inclui revisão, data,
+     usuário, tenant e filtros; evita reaproveitamento entre escopos. */
+  const cockpitMemo = new Map();
+  const COCKPIT_MEMO_LIMITE = 64;
   function chaveDeVisao(opId) {
     const ctx = Store.contexto();
     const u = ctx && ctx.usuario;
@@ -3012,7 +3015,12 @@
   }
   function resumoNoCockpit(op) {
     const chave = chaveDeVisao(op.id);
-    if (chave && cockpitMemo && cockpitMemo.chave === chave) return cockpitMemo.resumo;
+    if (chave && cockpitMemo.has(chave)) {
+      const salvo = cockpitMemo.get(chave);
+      cockpitMemo.delete(chave);
+      cockpitMemo.set(chave, salvo);
+      return salvo;
+    }
     const atrasos = Object.create(null);
     const hoje = Store.hoje();
     atrasos[op.id] = Store.tarefasDaOportunidade(op.id).filter(function (t) {
@@ -3021,13 +3029,21 @@
     const perf = global.IADPerformance;
     const calcular = function () { return E.resumo(op, atrasos); };
     const resumo = perf ? perf.medir('perf03b.cockpit-resumo', calcular) : calcular();
-    cockpitMemo = chave ? { chave: chave, resumo: resumo } : null;
+    if (chave) {
+      cockpitMemo.set(chave, resumo);
+      while (cockpitMemo.size > COCKPIT_MEMO_LIMITE) {
+        cockpitMemo.delete(cockpitMemo.keys().next().value);
+      }
+    }
     return resumo;
   }
   function cockpit(id) {
     const op = Store.oportunidade(id);
     if (!op || !Store.visivel(op, true)) return '<div class="vazio">Oportunidade não encontrada.</div>';
-    const r = resumoNoCockpit(op);
+    const perfCockpit = global.IADPerformance;
+    const r = perfCockpit
+      ? perfCockpit.medir('perf10.cockpit.resumo', function () { return resumoNoCockpit(op); })
+      : resumoNoCockpit(op);
     const conta = r.conta;
 
     /* Trocar de negócio volta para a aba da Decisão. Guardar a aba entre
@@ -3270,7 +3286,9 @@
       whatsapp: abaWhatsapp, sinais: abaSinais, email: abaEmail, propostas: abaPropostas,
       produtos: abaProdutos, arquivos: abaArquivos
     }[abaCockpit] || abaDecisao;
-    return f(op, r);
+    const perfAba = global.IADPerformance;
+    const renderizar = function () { return f(op, r); };
+    return perfAba ? perfAba.medir('perf10.aba.' + abaCockpit, renderizar) : renderizar();
   }
 
   function abaDecisao(op, r) {
