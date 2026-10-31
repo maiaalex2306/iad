@@ -67,3 +67,20 @@ test('escrita concorrente durante resumo invalida cache e retorna ao motor integ
  assert.equal(x.cache.stats().ativos,4);
  x.cache.revogar();
 });
+
+test('tarefa, evidência, conta e sincronização sem id exigem cálculo integral',()=>{
+ const x=fixture(12),idx={};x.cache.calcular(x.ops,idx);
+ for (const origem of ['tarefa','evidencia','conta','sincronizacao']) {
+   x.event('full',null);
+   x.cache.calcular(x.ops,idx);
+ }
+ assert.equal(x.calls,60);
+ x.cache.revogar();
+});
+test('ordem e conjunto de oportunidades impedem índices cruzados',()=>{
+ const x=fixture(12);x.cache.calcular(x.ops,{});
+ x.ops[0]={id:'op-inédito',valor:10};
+ x.cache.calcular(x.ops,{});
+ assert.equal(x.calls,24);
+ x.cache.revogar();
+});
