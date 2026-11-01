@@ -37,6 +37,10 @@ test('rollback protege linhas não sintéticas e rejeita contagens divergentes',
  assert.match(rollback,/WHERE tenant_id=v_tenant AND id LIKE '__perf11k_op_%'/);
  assert.match(rollback,/WHERE tenant_id=v_tenant AND id LIKE '__perf11k_acc_%'/);
  assert.match(rollback,/nome='PERF11K_SINTETICO_PERFORMANCE'/);
+ assert.match(rollback,/a\.attname='tenant_id'/);
+ assert.match(rollback,/c\.relname NOT IN \('tenants','contas','oportunidades'\)/);
+ assert.match(rollback,/Tenant PERF11K referenciado/);
+
  assert.doesNotMatch(rollback,/DELETE FROM auth\.users|DROP TABLE|TRUNCATE/i);
 });
 test('portão pós-fixture melhora duas condições mas continua bloqueando Auth ausente',()=>{

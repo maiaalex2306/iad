@@ -20,13 +20,13 @@ Esses testes simulam papéis no banco e não substituem logins independentes pel
 
 ## Comparação Chromium
 
-Execução final GitHub Actions: 3 jobs aprovados, **171/171 testes**, 13 assinaturas HTML exatamente iguais. P95 de trabalho JavaScript + DOM:
+Execução final GitHub Actions: 3 jobs aprovados, **171/171 testes**, 13 assinaturas HTML exatamente iguais. P95 de trabalho JavaScript + DOM, **100 amostras úteis por operação principal e 10 aquecimentos**:
 
 | Operação | Ordem v286 primeiro | Ordem candidata primeiro |
 |---|---:|---:|
-| Pipeline | 28,7 → 22,3 ms (−22,3%) | 20,9 → 16,4 ms (−21,5%) |
-| Busca seletiva | 24,2 → 1,8 ms (−92,6%) | 16,5 → 1,7 ms (−89,7%) |
-| Cockpit complexo | 4,9 → 1,8 ms (−63,3%) | 3,1 → 1,4 ms (−54,8%) |
+| Pipeline | 28,4 → 21,6 ms (−23,9%) | 29,0 → 20,6 ms (−29,0%) |
+| Busca seletiva | 17,8 → 2,0 ms (−88,8%) | 17,7 → 2,1 ms (−88,1%) |
+| Cockpit complexo | 7,3 → 2,0 ms (−72,6%) | 7,2 → 2,2 ms (−69,4%) |
 
 Os testes Chromium usam código do CRM e carteira artificial local de 389 oportunidades. **Não são testes de login, Supabase ou latência de rede**.
 
@@ -41,3 +41,11 @@ Pré-requisitos agora atendidos: dois tenants, 389 oportunidades, duas tabelas p
 **Quatro requisitos permanecem pendentes:** quantidade de contas de autenticação, quantidade de perfis, um gestor e dois vendedores de teste. O portão PERF-11I retorna corretamente **BLOQUEADO**.
 
 Próxima etapa: criar três identidades adicionais pelo Supabase Auth oficial no ambiente de homologação; testar sessões simultâneas, CAS, sincronização, isolamento, anexos e P95 ponta a ponta. Sem alteração no ambiente de produção ou publicação da v287.
+
+## Estabilidade do benchmark e fail-closed
+
+Uma execução de 30 amostras da ordem candidata-primeiro falhou legitimamente no requisito de cockpit: apenas **9,7% de redução do P95** (mínimo exigido: 15%), embora a mediana tenha melhorado. A falha permaneceu no histórico de CI.
+
+Amostragem aumentada para **100 amostras e 10 aquecimentos por cenário principal**, sem alterar os thresholds. Ambas as ordens passaram: pesquisa acima de 30% de melhora no P95, cockpit acima de 15%, Pipeline sem regressão maior que 20%. A coleta de 100 medições reduz a sensibilidade a picos isolados, mas não é garantia universal de desempenho. O relatório JSON é exportado como artefato para cada job.
+
+**Segurança adicional da reversão:** o rollback passou a verificar todas as tabelas públicas com `tenant_id`. Caso existam perfis, tarefas ou quaisquer outras dependências associadas ao tenant sintético, a limpeza é bloqueada em vez de apagar registros criados posteriormente por outros testes.
