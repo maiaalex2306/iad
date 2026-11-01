@@ -75,7 +75,7 @@ test('não agrega município de outras UFs no fallback; tolera siglas',()=>{
 });
 test('oportunidades filtradas pela UF e cidade da CONTA, sem vazamento de outras empresas',()=>{
  const {api}=criarAmbiente();
- const begin=views.search(/  function passaNoFiltroPipeline\\(r, f(?:, usuarioAtual)?\\) \\{/);
+ const begin=views.search(/  function passaNoFiltroPipeline\(r, f(?:, usuarioAtual)?\) \{/);
  const end=views.indexOf('\n  function ordenarPipeline(',begin);
  assert.ok(begin>=0&&end>begin);
  const code=views.slice(begin,end)+'\nreturn passaNoFiltroPipeline;';
