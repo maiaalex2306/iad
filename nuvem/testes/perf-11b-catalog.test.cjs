@@ -3,11 +3,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const fs = require('node:fs');
+const cp = require('node:child_process');
 const uuidA='11111111-1111-4111-8111-111111111111';
 const uuidB='22222222-2222-4222-8222-222222222222';
 const playbook = fs.readFileSync('src/playbook.js','utf8');
 const source = fs.readFileSync('src/store.js','utf8');
-function criar(tenant, papel='usuario') {
+const baseline = cp.execFileSync('git',['show','a844883082340fef513dac53f984d4143b88cc27:src/store.js'],{encoding:'utf8',maxBuffer:2*1024*1024});
+function criar(tenant, papel='usuario',codigo=source) {
   const window = {
     console,
     IADAuth:{
@@ -18,7 +20,7 @@ function criar(tenant, papel='usuario') {
   const localStorage={getItem:()=>null,removeItem(){},setItem(){}};
   const ctx={window,console,localStorage,Math,Date,Map,Set,JSON};
   vm.runInNewContext(playbook,ctx,{filename:'playbook.js'});
-  vm.runInNewContext(source,ctx,{filename:'store.js'});
+  vm.runInNewContext(codigo,ctx,{filename:'store.js'});
   const S=window.IADStore;
   function aplicar(custom) {
     const e=S.estadoVazio();
@@ -107,4 +109,18 @@ test('fontes antigas sem empresa só são adotadas se o lote for monoempresa',()
       origem:'Feira industrial',eventos:[],snapshots:[],dims:{}}]});
   assert.equal(est.oportunidades[0].fonteId,'fnt_antiga');
   assert.equal(est.fontes[0].tenantId,uuidA);
+});
+
+test('prova diferencial: v286 recriava IDs distintos; PERF-11B mantém os mesmos',()=>{
+  const antigo=criar(uuidA,'usuario',baseline);
+  const antigos1=catalogos(antigo.aplicar());
+  const antigos2=catalogos(antigo.aplicar());
+  assert.notDeepEqual(antigos2.tipos.map(x=>x.id),antigos1.tipos.map(x=>x.id),
+    'a versão antiga precisa reproduzir o defeito dos IDs aleatórios');
+  assert.notDeepEqual(antigos2.fontes.map(x=>x.id),antigos1.fontes.map(x=>x.id));
+  const novo=criar(uuidA,'usuario');
+  const novos1=catalogos(novo.aplicar());
+  const novos2=catalogos(novo.aplicar());
+  assert.deepEqual(novos2.tipos.map(x=>x.id),novos1.tipos.map(x=>x.id));
+  assert.deepEqual(novos2.fontes.map(x=>x.id),novos1.fontes.map(x=>x.id));
 });
