@@ -222,7 +222,29 @@ async function main(){
   for(const aba of Object.keys(baseline.tabHashes))
     assert.equal(candidate.tabHashes[aba],baseline.tabHashes[aba],
       'DOM da aba '+aba+' divergiu');
-  const result={type:'PERF-11F Playwright Chromium real, HTML e RAF',samples:30,
+  /* PERF-11G: smoke test no Chromium REAL, ativação local sem login nem rede,
+     após as medições principais para não contaminar o benchmark. */
+  const telemetria=await current.page.evaluate(()=>{
+    const perf=window.IADPerformance;
+    if(perf.ativo())throw Error('telemetria não estava desligada por padrão');
+    perf.iniciar();
+    for(let i=0;i<24;i++)perf.registrar('tela.cockpit',i%2?80:300);
+    perf.registrar('tela.#/op/opp_HEINEKEN_SEGREDO',123);
+    const diagnostico=perf.avaliar();
+    const exportacao=perf.exportarJSON();
+    if(exportacao.includes('HEINEKEN_SEGREDO'))
+      throw Error('relatório local incluiu ID comercial');
+    if(diagnostico.metricas['tela.cockpit'].situacao!=='acima-do-limite')
+      throw Error('portão P95 deveria detectar 12 durações acima de 250 ms');
+    if(!JSON.parse(exportacao).metricas['tela.outra-rota'])
+      throw Error('rota anônima não encontrada');
+    perf.parar();
+    if(perf.ativo())throw Error('coleta não parou');
+    return {ativoDepois:perf.ativo(),status:diagnostico.metricas['tela.cockpit'].situacao,
+      anonimo:!exportacao.includes('HEINEKEN_SEGREDO')};
+  });
+  assert.equal(telemetria.anonimo,true);
+  const result={type:'PERF-11F Playwright Chromium real, HTML e RAF',samples:30,telemetria,
     reference:'v286 '+BASE,head:process.env.GITHUB_SHA||'local',order,
     scenario:'dados sintéticos; sem login no CRM/Supabase; app boot substituído por harness',
     baseline,candidate,
