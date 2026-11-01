@@ -11,6 +11,10 @@ jobs:
   chromium:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        order: [baseline-first, candidate-first]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -25,6 +29,8 @@ jobs:
       - name: Instalar Chromium para Playwright
         run: npx playwright install --with-deps chromium
       - name: Browser baseline v286 versus candidata
+        env:
+          PERF11F_ORDER: ${{ matrix.order }}
         run: node scripts/perf11f-browser.cjs
       - name: Testes CJS completos
         run: node --test nuvem/testes/*.test.cjs
@@ -35,6 +41,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: perf11f-chromium-metrics
+          name: perf11f-chromium-metrics-${{ matrix.order }}
           path: perf11f-results/
           if-no-files-found: ignore

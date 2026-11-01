@@ -135,6 +135,11 @@ async function measure(scenario){
   const w=window,V=w.IADViews,P=w.IADPipelinePerf;
   const container=document.getElementById('conteudo');
   const data={};
+  const domHash=async()=>{
+   const bytes=new TextEncoder().encode(container.innerHTML);
+   const digest=await crypto.subtle.digest('SHA-256',bytes);
+   return [...new Uint8Array(digest)].map(v=>v.toString(16).padStart(2,'0')).join('');
+  };
   const pct=(a,p)=>a.slice().sort((x,y)=>x-y)[Math.ceil(a.length*p)-1];
   const bench=async(fn,n=35)=>{
    const samples=[],work=[];
@@ -158,25 +163,29 @@ async function measure(scenario){
   P.limpar();
   const first=w.__renderPipeline();
   data.pipelineFull={titleFound:first.includes('CONTA SINTÉTICA'),htmlBytes:container.innerHTML.length,
-     cards:container.querySelectorAll('.card').length};
+     domHash:await domHash()};
   data.pipelineFullLatency=await bench(()=>{P.limpar();w.__renderPipeline();},30);
   V.pipelineFiltrar({busca:'HEINEKEN'});
   P.limpar();
   const filtered=w.__renderPipeline();
   data.search={found:filtered.includes('HEINEKEN'),
-     containsSuzano:filtered.includes('SUZANO'),htmlBytes:container.innerHTML.length};
+     containsSuzano:filtered.includes('SUZANO'),htmlBytes:container.innerHTML.length,
+     domHash:await domHash()};
   data.searchLatency=await bench(()=>{P.limpar();w.__renderPipeline();},30);
   V.pipelineFiltrar({busca:''});
   w.__activeOp='o0';
   const firstCockpit=w.__renderCockpit('o0');
-  data.cockpit={found:firstCockpit.includes('HEINEKEN'),htmlBytes:container.innerHTML.length};
+  data.cockpit={found:firstCockpit.includes('HEINEKEN'),htmlBytes:container.innerHTML.length,
+     domHash:await domHash()};
   data.cockpitLatency=await bench(()=>w.__renderCockpit('o0'),30);
-  data.tabTimes={};
+  data.tabTimes={};data.tabHashes={};
   for(const tab of ['decisao','historico','tarefas','whatsapp','sinais','email','propostas','produtos','arquivos']){
     data.tabTimes[tab]=await bench(()=>w.__renderAba(tab),15);
+    data.tabHashes[tab]=await domHash();
   }
   w.__renderCockpit('o1');
-  data.suzano={found:container.textContent.includes('SUZANO'),htmlBytes:container.innerHTML.length};
+  data.suzano={found:container.textContent.includes('SUZANO'),htmlBytes:container.innerHTML.length,
+    domHash:await domHash()};
   data.pipelineFilterCount=P.estatisticas();
   return data;
  });
@@ -200,11 +209,21 @@ async function main(){
  const port=server.address().port;
  const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
  try{
+  const order=process.env.PERF11F_ORDER||'baseline-first';
+  assert.ok(['baseline-first','candidate-first'].includes(order));
   const old=await createBrowserScenario(browser,port,'v286',fixture);
   const current=await createBrowserScenario(browser,port,'candidate',fixture);
-  const baseline=await measure(old),candidate=await measure(current);
+  let baseline,candidate;
+  if(order==='candidate-first'){candidate=await measure(current);baseline=await measure(old);}
+  else{baseline=await measure(old);candidate=await measure(current);}
+  for(const k of ['pipelineFull','search','cockpit','suzano'])
+    assert.equal(candidate[k].domHash,baseline[k].domHash,
+      'DOM alterado inesperadamente no cenário '+k);
+  for(const aba of Object.keys(baseline.tabHashes))
+    assert.equal(candidate.tabHashes[aba],baseline.tabHashes[aba],
+      'DOM da aba '+aba+' divergiu');
   const result={type:'PERF-11F Playwright Chromium real, HTML e RAF',samples:30,
-    reference:'v286 '+BASE,head:process.env.GITHUB_SHA||'local',
+    reference:'v286 '+BASE,head:process.env.GITHUB_SHA||'local',order,
     scenario:'dados sintéticos; sem login no CRM/Supabase; app boot substituído por harness',
     baseline,candidate,
     diff:{
