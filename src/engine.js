@@ -16,7 +16,14 @@
     return Math.max(0, Math.floor((b - a) / 86400000));
   }
 
+  /* PERF-11D: cache transitório exclusivamente durante UM resumo síncrono. */
+  let resumoContexto = null;
   function eventosDeDecisao(op) {
+    if (resumoContexto && resumoContexto.op === op) {
+      if (!resumoContexto.decisoes) resumoContexto.decisoes =
+        (op.eventos || []).filter(function (e) { return e.tipo === 'decision'; });
+      return resumoContexto.decisoes;
+    }
     return (op.eventos || []).filter(function (e) { return e.tipo === 'decision'; });
   }
 
@@ -101,6 +108,11 @@
   }
 
   function stakeholdersDaOp(op) {
+    if (resumoContexto && resumoContexto.op === op) {
+      if (!resumoContexto.pessoas) resumoContexto.pessoas =
+        (op.stakeholders || []).map(function (id) { return Store.contato(id); }).filter(Boolean);
+      return resumoContexto.pessoas;
+    }
     return (op.stakeholders || []).map(function (id) { return Store.contato(id); }).filter(Boolean);
   }
 
@@ -402,10 +414,12 @@
   /* PERF-02: índice de atrasos opcional por execução da fila. Os consumidores
      isolados de E.resumo continuam usando a rotina original, sem mudança. */
   function resumo(op, atrasadasIndex) {
-    /* PERF-04 P5: idade da evidência calculada uma única vez por resumo.
-       Não cachear entre renders, revisões, usuários ou empresas. */
-    const idade = evidenceAge(op);
-    return {
+    /* Restaura o contexto mesmo se um indicador lançar exceção. */
+    const anterior = resumoContexto;
+    resumoContexto = { op: op, decisoes: null, pessoas: null };
+    try {
+      const idade = evidenceAge(op);
+      return {
       op: op,
       conta: Store.conta(op.contaId),
       iad: iad(op),
@@ -424,7 +438,10 @@
       delta: deltaSemana(op),
       autoria: autoria(op),
       tarefasAtrasadas: atrasadasIndex ? (atrasadasIndex[op.id] || 0) : tarefasAtrasadas(op)
-    };
+      };
+    } finally {
+      resumoContexto = anterior;
+    }
   }
 
   /* Tarefa aberta com vencimento no passado.
