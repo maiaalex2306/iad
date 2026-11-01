@@ -1,0 +1,30 @@
+name: PERF-11G — Telemetria local segura e sem regressao
+on:
+  push:
+    branches: ['performance/perf-11g-local-observability']
+  pull_request:
+    branches: ['performance/perf-11f-browser-p95-v287']
+permissions:
+  contents: read
+jobs:
+  telemetry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Sintaxe e privacidade
+        run: |
+          node --check src/performance.js
+          node --check nuvem/testes/perf-11g-observability.test.cjs
+          node --test nuvem/testes/perf-11g-observability.test.cjs
+      - name: Suite integral
+        run: node --test nuvem/testes/*.test.cjs
+      - name: Manter configuracao e PWA atual de producao
+        run: |
+          grep -q "numero: 'v286'" src/config.js
+          grep -q 'iad-crm-v286' sw.js
