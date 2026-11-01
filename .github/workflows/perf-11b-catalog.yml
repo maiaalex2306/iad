@@ -1,0 +1,29 @@
+name: PERF-11B — Catálogos idempotentes
+on:
+  push:
+    branches: [performance/perf-11b-catalog-idempotent]
+  pull_request:
+    branches: [performance/perf-11-pipeline-indices-v287-candidate]
+permissions:
+  contents: read
+jobs:
+  catalogs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Sintaxe
+        run: node --check src/store.js && node --check nuvem/testes/perf-11b-catalog.test.cjs
+      - name: Idempotência e isolamentos de catálogos
+        run: node --test nuvem/testes/perf-11b-catalog.test.cjs
+      - name: Suíte completa e paridade de performance
+        run: node --test nuvem/testes/*.test.cjs
+      - name: Garantir mesma versão de produção
+        run: |
+          grep -q "numero: 'v286'" src/config.js
+          grep -q "iad-crm-v286" sw.js

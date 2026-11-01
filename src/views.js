@@ -2128,10 +2128,9 @@
     return u ? (u.nome || u.email || u.login) : '';
   }
 
-  function passaNoFiltroPipeline(r, f) {
+  function passaNoFiltroPipeline(r, f, usuarioAtual) {
     const op = r.op, conta = r.conta;
-    const A = global.IADAuth;
-    const eu = A.atual();
+    const eu = arguments.length >= 3 ? usuarioAtual : global.IADAuth.atual();
 
     if (f.responsavel === 'meu') { if (op.donoId && eu && op.donoId !== eu.id) return false; }
     else if (f.responsavel !== 'todos') { if (op.donoId !== f.responsavel) return false; }
@@ -2216,9 +2215,11 @@
   /* PERF-11: restrições de cadastro dispensam executar o Decision Engine
      nos cards já excluídos. Critérios derivados (IAD, gate, saúde,
      esfriamento) permanecem na avaliação completa abaixo. */
-  function passaNoPrefiltroPipeline(op, f) {
-    const A = global.IADAuth;
-    const eu = A.atual();
+  function passaNoPrefiltroPipeline(op, f, usuarioAtual) {
+    /* A autenticação é constante durante um snapshot. O terceiro argumento
+       evita consultar A.atual() centenas de vezes no mesmo render; chamadas
+       externas de dois argumentos mantêm a semântica original. */
+    const eu = arguments.length >= 3 ? usuarioAtual : global.IADAuth.atual();
     if (f.responsavel === 'meu') {
       if (op.donoId && eu && op.donoId !== eu.id) return false;
     } else if (f.responsavel !== 'todos' && op.donoId !== f.responsavel) return false;
@@ -2226,18 +2227,27 @@
     if (f.status === 'ganhas' && (!op.desfecho || op.desfecho.tipo !== 'ganho')) return false;
     if (f.status === 'perdidas' && (!op.desfecho || op.desfecho.tipo === 'ganho')) return false;
     if (f.conta && op.contaId !== f.conta) return false;
+    /* UF, município e segmento são dados já carregados. Filtrá-los antes
+       do E.resumo economiza principalmente em carteiras multirregionais.
+       Mesma regra de comparação do filtro original. */
+    const conta = f.uf || f.municipio || f.busca ? Store.conta(op.contaId) : null;
+    if (f.uf || f.municipio) {
+      const L = global.IADLocalidades;
+      if (f.uf && (!conta || L.sigla(conta.uf) !== f.uf)) return false;
+      if (f.municipio && (!conta || L.normalizar(conta.cidade) !== L.normalizar(f.municipio))) return false;
+    }
+    if (f.segmento && E.segmentoDe(op) !== f.segmento) return false;
     if (f.etapa && op.etapa !== f.etapa) return false;
     if (f.origem && (op.origem || 'Manual') !== f.origem) return false;
     if (f.sdr && op.sdr !== f.sdr) return false;
-    if (f.produto && !(op.itens || []).some(function(i){return i.produtoId === f.produto;})) return false;
+    if (f.produto && !(op.itens || []).some(function (i) { return i.produtoId === f.produto; })) return false;
     if (f.busca) {
-      const conta = Store.conta(op.contaId);
       const texto = [op.titulo, conta && conta.nome, op.campanha, op.sdr, op.concorrentes]
         .filter(Boolean).join(' ').toLowerCase();
       if (texto.indexOf(f.busca.toLowerCase()) === -1) return false;
     }
     if (f.semCompromisso && op.proximoCompromisso && op.proximoCompromisso.data) return false;
-    const numero = function(v){return v === '' || v == null ? null : Number(v);};
+    const numero = function (v) { return v === '' || v == null ? null : Number(v); };
     const minimo = numero(f.valorMin), maximo = numero(f.valorMax);
     if (minimo != null && (op.valor || 0) < minimo) return false;
     if (maximo != null && (op.valor || 0) > maximo) return false;
@@ -2247,14 +2257,15 @@
   }
   function resumosDoPipeline(est) {
     const f = pipelineFiltro;
+    const usuarioAtual = global.IADAuth.atual();
     const elegiveis = est.oportunidades.filter(function(op){
-      return passaNoPrefiltroPipeline(op, f);
+      return passaNoPrefiltroPipeline(op, f, usuarioAtual);
     });
     const base = global.IADPipelinePerf && global.IADPipelinePerf.resumosElegiveis
       ? global.IADPipelinePerf.resumosElegiveis(est, elegiveis)
       : elegiveis.map(E.resumo);
     return ordenarPipeline(
-      base.filter(function (r) { return passaNoFiltroPipeline(r, f); })
+      base.filter(function (r) { return passaNoFiltroPipeline(r, f, usuarioAtual); })
         /* "Todos" não inclui nutrição, de propósito. Nutrição é o que saiu da
            previsão: deixá-la no total faria o contador e a soma em reais
            prometerem receita que ninguém está perseguindo — que é exatamente
@@ -2330,7 +2341,7 @@
     return c.join('');
   }
 
-  function barraDoPipeline(resumos, total) {
+  function barraDoPipeline(resumos, total, est) {
     const A = global.IADAuth;
     const f = pipelineFiltro;
     const pessoas = pessoasDoFiltro();
@@ -2371,7 +2382,9 @@
 
        Só aparece quando há mais de um segmento na carteira — um select com uma
        opção só é ruído. */
-    const segmentos = E.segmentosDisponiveis(Store.dados().oportunidades);
+    /* A tela já capturou a carteira filtrada. Repetir Store.dados() aqui
+       refazia a filtragem de dez coleções somente para montar um seletor. */
+    const segmentos = E.segmentosDisponiveis(est.oportunidades);
     const doSegmento = segmentos.length < 2 ? ''
       : seletor('Segmento', 'App.pipelineCampo(\'segmento\', this.value)',
           [{ valor: '', rotulo: 'Todos' }].concat(segmentos.map(function (x) {
@@ -2523,7 +2536,7 @@
        ninguém confia. */
     const selecao = modoPipeline === 'lista' ? barraDeSelecao(resumos) : '';
 
-    return cabecalhoPipeline(filtros) + barraDoPipeline(resumos, total) + corpo +
+    return cabecalhoPipeline(filtros) + barraDoPipeline(resumos, total, est) + corpo +
       faixaMaisPipeline(resumos.length) + selecao;
   }
 
@@ -3122,8 +3135,12 @@
 
   function outrasAbertasDaConta(op) {
     if (!op || !op.contaId) return [];
-    return Store.dados().oportunidades.filter(function (o) {
-      return o.contaId === op.contaId && o.id !== op.id && !o.desfecho;
+    /* PERF-11: abertura de um card não precisa filtrar dez coleções do Store
+       só para descobrir se há outra negociação da mesma empresa.
+       Conservar a checagem de visibilidade por oportunidade é obrigatório. */
+    return (Store.obter().oportunidades || []).filter(function (o) {
+      return o.contaId === op.contaId && o.id !== op.id && !o.desfecho &&
+        Store.visivel(o, true);
     });
   }
 

@@ -44,12 +44,41 @@
      pontuação — porque foi digitado à mão e vem escrito de cinco jeitos. O
      que não casar com nada vira fonte nova em vez de virar traço: a lista
      nasce do que a pessoa já usava, e não de uma lista que eu inventei. */
+  /* PERF-11B: um catálogo padrão precisa ter o MESMO ID em logins e
+     dispositivos distintos da mesma empresa. IDs aleatórios no bootstrap,
+     seguidos de upsert, geravam dezenas de cópias para cada nome.
+     Nunca reescrever IDs existentes: apenas novas sementes usam o contrato. */
+  function tenantDoCatalogoPadrao(dados) {
+    const A = global.IADAuth;
+    const u = A && typeof A.atual === 'function' ? A.atual() : null;
+    if (u && u.papel !== 'admin' && u.tenantId) return String(u.tenantId);
+    if (u && u.papel === 'admin' && A && typeof A.filtros === 'function') {
+      const f = A.filtros();
+      if (f && f.tenant && f.tenant !== 'todas') return String(f.tenant);
+    }
+    const empresas = (dados && dados.tenants) || [];
+    return empresas.length === 1 && empresas[0].id ? String(empresas[0].id) : '';
+  }
+  function idCatalogoPadrao(prefixo, nome, tenant) {
+    if (!tenant) return uid(prefixo); /* nunca igualar catálogos de empresas desconhecidas */
+    const assinatura = String(tenant) + '|' + prefixo + '|' + achatar(nome);
+    let a = 2166136261, b = 2246822519;
+    for (let i = 0; i < assinatura.length; i++) {
+      a = Math.imul(a ^ assinatura.charCodeAt(i), 16777619) >>> 0;
+      b = Math.imul(b ^ assinatura.charCodeAt(assinatura.length - 1 - i), 16777619) >>> 0;
+    }
+    return prefixo + '_pad_' + a.toString(36) + '_' + b.toString(36);
+  }
   function semearFontes(dados) {
     dados.fontes = dados.fontes || [];
     if (dados.fontes.length) return;
     const padrao = (global.IADPlaybook && global.IADPlaybook.FONTES_PADRAO) || [];
+    const tenant = tenantDoCatalogoPadrao(dados);
     dados.fontes = padrao.map(function (f) {
-      return { id: uid('fnt'), nome: f.nome, categoria: f.categoria, ativo: true, criadoEm: hoje() };
+      return { id: idCatalogoPadrao('fnt', f.nome, tenant), nome: f.nome,
+        categoria: f.categoria, ativo: true, criadoEm: hoje(),
+        /* sem contexto, manter a adoção legada posterior */
+        ...(tenant ? { tenantId: tenant } : {}) };
     });
   }
 
@@ -60,19 +89,40 @@
 
   function amarrarFontes(dados) {
     dados.fontes = dados.fontes || [];
-    const porNome = {};
-    dados.fontes.forEach(function (f) { porNome[achatar(f.nome)] = f; });
+    /* PERF-11B: a fonte é da EMPRESA. Uma chave apenas por nome vinculava
+       a oportunidade de outro tenant à fonte homônima da primeira empresa. */
+    const chave = function (tenant, nome) { return String(tenant || '') + '|' + achatar(nome); };
+    const porNome = new Map();
+    dados.fontes.forEach(function (f) {
+      const k = chave(f.tenantId, f.nome);
+      if (!porNome.has(k)) porNome.set(k, f);
+    });
+    const tenantsComOportunidades = new Set((dados.oportunidades || [])
+      .map(function (op) { return op.tenantId; }).filter(Boolean));
 
     (dados.oportunidades || []).forEach(function (op) {
       if (op.fonteId) return;
       const texto = String(op.origem || '').trim();
       if (!texto) return;
-      let f = porNome[achatar(texto)];
+      const tenant = op.tenantId || tenantDoCatalogoPadrao(dados);
+      const k = chave(tenant, texto);
+      let f = porNome.get(k);
+      /* Compatibilidade de importações antigas SEM tenant: só adotar
+         a fonte legada se todo o lote pertence à mesma empresa. */
+      if (!f && tenant && tenantsComOportunidades.size === 1) {
+        const legada = porNome.get(chave('', texto));
+        if (legada && !legada.tenantId) {
+          legada.tenantId = tenant;
+          f = legada;
+          porNome.set(k, f);
+        }
+      }
       if (!f) {
-        f = { id: uid('fnt'), nome: texto, categoria: 'outra', ativo: true, criadoEm: hoje(),
-              tenantId: op.tenantId };
+        f = { id: idCatalogoPadrao('fnt', texto, tenant),
+          nome: texto, categoria: 'outra', ativo: true, criadoEm: hoje(),
+          tenantId: tenant };
         dados.fontes.push(f);
-        porNome[achatar(texto)] = f;
+        porNome.set(k, f);
       }
       op.fonteId = f.id;
     });
@@ -211,7 +261,9 @@
     dados.tiposTarefa.forEach(function (t) { tem[t.nome] = true; });
     global.IADPlaybook.TIPOS_TAREFA.forEach(function (nome) {
       if (tem[nome]) return;
-      dados.tiposTarefa.push({ id: uid('tpt'), nome: nome, ativo: true });
+      const tenant = tenantDoCatalogoPadrao(dados);
+      dados.tiposTarefa.push({ id: idCatalogoPadrao('tpt', nome, tenant),
+        nome: nome, ativo: true, ...(tenant ? { tenantId: tenant } : {}) });
       mudou = true;
     });
     return mudou;
@@ -257,8 +309,10 @@
       });
     }
     if (!dados.tiposTarefa || !dados.tiposTarefa.length) {
+      const tenant = tenantDoCatalogoPadrao(dados);
       dados.tiposTarefa = (global.IADPlaybook ? global.IADPlaybook.TIPOS_TAREFA : ['Reunião'])
-        .map(function (nome) { return { id: uid('tpt'), nome: nome, ativo: true }; });
+        .map(function (nome) { return { id: idCatalogoPadrao('tpt', nome, tenant),
+          nome: nome, ativo: true, ...(tenant ? { tenantId: tenant } : {}) }; });
     } else {
       padronizarTiposTarefa(dados);
     }
