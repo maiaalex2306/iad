@@ -80,3 +80,31 @@ test('fontes livres geradas para origem são estáveis entre reinicializações'
       origem:'Feira industrial',eventos:[],snapshots:[],dims:{}}]});
   assert.equal(segunda.oportunidades[0].fonteId,f1);
 });
+
+test('origens homônimas de duas empresas nunca compartilham o mesmo fonteId',()=>{
+  const m=criar(uuidA);
+  const origens=[
+    {id:'oA',tenantId:uuidA,donoId:'u1',contaId:'cA',origem:'Feira industrial',
+      eventos:[],snapshots:[],dims:{}},
+    {id:'oB',tenantId:uuidB,donoId:'u2',contaId:'cB',origem:'Feira industrial',
+      eventos:[],snapshots:[],dims:{}}
+  ];
+  const est=m.aplicar({tenants:[{id:uuidA,nome:'A'},{id:uuidB,nome:'B'}],
+    contas:[{id:'cA',tenantId:uuidA,nome:'A'},{id:'cB',tenantId:uuidB,nome:'B'}],
+    oportunidades:origens,
+    fontes:[{id:'fnt_A',tenantId:uuidA,nome:'Feira industrial',ativo:true}]
+  });
+  const a=est.oportunidades.find(x=>x.id==='oA');
+  const b=est.oportunidades.find(x=>x.id==='oB');
+  assert.equal(a.fonteId,'fnt_A');
+  assert.ok(b.fonteId && b.fonteId!=='fnt_A');
+  assert.equal(est.fontes.find(x=>x.id===b.fonteId).tenantId,uuidB);
+});
+test('fontes antigas sem empresa só são adotadas se o lote for monoempresa',()=>{
+  const m=criar(uuidA);
+  const est=m.aplicar({fontes:[{id:'fnt_antiga',nome:'Feira industrial',ativo:true}],
+    oportunidades:[{id:'oA',tenantId:uuidA,donoId:'u1',contaId:'acc1',
+      origem:'Feira industrial',eventos:[],snapshots:[],dims:{}}]});
+  assert.equal(est.oportunidades[0].fonteId,'fnt_antiga');
+  assert.equal(est.fontes[0].tenantId,uuidA);
+});

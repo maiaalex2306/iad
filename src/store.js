@@ -89,20 +89,40 @@
 
   function amarrarFontes(dados) {
     dados.fontes = dados.fontes || [];
-    const porNome = {};
-    dados.fontes.forEach(function (f) { porNome[achatar(f.nome)] = f; });
+    /* PERF-11B: a fonte é da EMPRESA. Uma chave apenas por nome vinculava
+       a oportunidade de outro tenant à fonte homônima da primeira empresa. */
+    const chave = function (tenant, nome) { return String(tenant || '') + '|' + achatar(nome); };
+    const porNome = new Map();
+    dados.fontes.forEach(function (f) {
+      const k = chave(f.tenantId, f.nome);
+      if (!porNome.has(k)) porNome.set(k, f);
+    });
+    const tenantsComOportunidades = new Set((dados.oportunidades || [])
+      .map(function (op) { return op.tenantId; }).filter(Boolean));
 
     (dados.oportunidades || []).forEach(function (op) {
       if (op.fonteId) return;
       const texto = String(op.origem || '').trim();
       if (!texto) return;
-      let f = porNome[achatar(texto)];
+      const tenant = op.tenantId || tenantDoCatalogoPadrao(dados);
+      const k = chave(tenant, texto);
+      let f = porNome.get(k);
+      /* Compatibilidade de importações antigas SEM tenant: só adotar
+         a fonte legada se todo o lote pertence à mesma empresa. */
+      if (!f && tenant && tenantsComOportunidades.size === 1) {
+        const legada = porNome.get(chave('', texto));
+        if (legada && !legada.tenantId) {
+          legada.tenantId = tenant;
+          f = legada;
+          porNome.set(k, f);
+        }
+      }
       if (!f) {
-        f = { id: idCatalogoPadrao('fnt', texto, op.tenantId || tenantDoCatalogoPadrao(dados)),
+        f = { id: idCatalogoPadrao('fnt', texto, tenant),
           nome: texto, categoria: 'outra', ativo: true, criadoEm: hoje(),
-          tenantId: op.tenantId };
+          tenantId: tenant };
         dados.fontes.push(f);
-        porNome[achatar(texto)] = f;
+        porNome.set(k, f);
       }
       op.fonteId = f.id;
     });
