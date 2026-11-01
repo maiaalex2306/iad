@@ -1,0 +1,27 @@
+name: PERF-11J — Regressao staging sync privado e RLS
+on:
+  push:
+    branches: ['performance/perf-11j-staging-private-sync']
+  pull_request:
+    branches: ['performance/perf-11i-release-readiness-gate']
+permissions:
+  contents: read
+jobs:
+  staging-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Validar testes e SQL com protecao
+        run: |
+          node --check nuvem/testes/perf-11j-sync-contract.test.cjs
+          node --test nuvem/testes/perf-11j-sync-contract.test.cjs
+      - name: Regressao integral sem alterar staging nem producao
+        run: node --test nuvem/testes/*.test.cjs
+      - name: Publicacao ainda bloqueada (v286)
+        run: |
+          grep -q "numero: 'v286'" src/config.js
+          grep -q 'iad-crm-v286' sw.js
