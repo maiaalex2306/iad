@@ -2213,13 +2213,48 @@
     return String(data).replace(/\d/g, function (d) { return String(9 - Number(d)); });
   }
 
+  /* PERF-11: restrições de cadastro dispensam executar o Decision Engine
+     nos cards já excluídos. Critérios derivados (IAD, gate, saúde,
+     esfriamento) permanecem na avaliação completa abaixo. */
+  function passaNoPrefiltroPipeline(op, f) {
+    const A = global.IADAuth;
+    const eu = A.atual();
+    if (f.responsavel === 'meu') {
+      if (op.donoId && eu && op.donoId !== eu.id) return false;
+    } else if (f.responsavel !== 'todos' && op.donoId !== f.responsavel) return false;
+    if (f.status === 'abertas' && op.desfecho) return false;
+    if (f.status === 'ganhas' && (!op.desfecho || op.desfecho.tipo !== 'ganho')) return false;
+    if (f.status === 'perdidas' && (!op.desfecho || op.desfecho.tipo === 'ganho')) return false;
+    if (f.conta && op.contaId !== f.conta) return false;
+    if (f.etapa && op.etapa !== f.etapa) return false;
+    if (f.origem && (op.origem || 'Manual') !== f.origem) return false;
+    if (f.sdr && op.sdr !== f.sdr) return false;
+    if (f.produto && !(op.itens || []).some(function(i){return i.produtoId === f.produto;})) return false;
+    if (f.busca) {
+      const conta = Store.conta(op.contaId);
+      const texto = [op.titulo, conta && conta.nome, op.campanha, op.sdr, op.concorrentes]
+        .filter(Boolean).join(' ').toLowerCase();
+      if (texto.indexOf(f.busca.toLowerCase()) === -1) return false;
+    }
+    if (f.semCompromisso && op.proximoCompromisso && op.proximoCompromisso.data) return false;
+    const numero = function(v){return v === '' || v == null ? null : Number(v);};
+    const minimo = numero(f.valorMin), maximo = numero(f.valorMax);
+    if (minimo != null && (op.valor || 0) < minimo) return false;
+    if (maximo != null && (op.valor || 0) > maximo) return false;
+    if (f.previsaoDe && (!op.fechamentoPrevisto || op.fechamentoPrevisto < f.previsaoDe)) return false;
+    if (f.previsaoAte && (!op.fechamentoPrevisto || op.fechamentoPrevisto > f.previsaoAte)) return false;
+    return true;
+  }
   function resumosDoPipeline(est) {
     const f = pipelineFiltro;
+    const elegiveis = est.oportunidades.filter(function(op){
+      return passaNoPrefiltroPipeline(op, f);
+    });
+    const base = global.IADPipelinePerf && global.IADPipelinePerf.resumosElegiveis
+      ? global.IADPipelinePerf.resumosElegiveis(est, elegiveis)
+      : elegiveis.map(E.resumo);
     return ordenarPipeline(
-      (global.IADPipelinePerf
-        ? global.IADPipelinePerf.resumos(est)
-        : est.oportunidades.map(E.resumo))
-        .filter(function (r) { return passaNoFiltroPipeline(r, f); })
+      base.filter(function (r) { return passaNoFiltroPipeline(r, f); })
         /* "Todos" não inclui nutrição, de propósito. Nutrição é o que saiu da
            previsão: deixá-la no total faria o contador e a soma em reais
            prometerem receita que ninguém está perseguindo — que é exatamente

@@ -1523,6 +1523,9 @@
         if (!marca || antes[r.id] !== marca) mudaram.push(paraBanco(r, dono, donoId));
       });
       marcasNovas[t.local] = agora;
+      const minhasPorId = t.remota === 'oportunidades' && mudaram.length
+        ? new Map(minhas.map(function (r) { return [String(r.id), r]; }))
+        : null;
 
       if (!mudaram.length) return Promise.resolve({ tabela: t.remota, enviados: 0, local: t.local, guardar: true });
 
@@ -1534,7 +1537,7 @@
             return enviarLote(t.remota,lote,[]);
           }))
         : Promise.all(mudaram.map(function(linha) {
-            const registro=minhas.filter(function(r){return String(r.id)===String(linha.id);})[0];
+            const registro=minhasPorId.get(String(linha.id));
             const base=Store.snapshotBaseRemoto && Store.snapshotBaseRemoto(linha.tenant_id,linha.id);
             if (!base) {
               const nova=Object.assign({},linha);
