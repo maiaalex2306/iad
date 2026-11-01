@@ -1,0 +1,29 @@
+name: PERF-11E — Cockpit oito decisoes sem calculos redundantes
+on:
+  push:
+    branches: ['performance/perf-11e-cockpit-dimensions']
+  pull_request:
+    branches: ['performance/perf-11b-catalog-idempotent']
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Syntax
+        run: |
+          node --check src/views.js
+          node --check nuvem/testes/perf-11e-cockpit-dimensions.test.cjs
+      - name: Strict HTML parity and 200-sample benchmark
+        run: node --test nuvem/testes/perf-11e-cockpit-dimensions.test.cjs
+      - name: Full existing regression suite
+        run: node --test nuvem/testes/*.test.cjs
+      - name: Version remains unchanged
+        run: |
+          grep -q "numero: 'v286'" src/config.js
+          grep -q 'iad-crm-v286' sw.js
