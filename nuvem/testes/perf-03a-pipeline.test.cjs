@@ -86,7 +86,7 @@ test('o Pipeline monta no máximo 48 cartões por lote sem modificar totais',()=
  assert.match(v,/const TAMANHO_LOTE_PIPELINE = 48/);
  assert.match(v,/const visiveis = resumos.slice\(0, limitePipeline\)/);
  assert.match(v,/kanban\(visiveis, resumos\)/);
- assert.match(v,/barraDoPipeline\(resumos, total\)/);
+ assert.match(v,/barraDoPipeline\(resumos, total(?:, est)?\)/);
  assert.match(v,/faixaMaisPipeline\(resumos.length\)/);
  assert.match(v,/const completos = todos.filter/);
  assert.match(app,/pipelineMais: function/);
