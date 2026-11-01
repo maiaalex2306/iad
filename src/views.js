@@ -2128,10 +2128,9 @@
     return u ? (u.nome || u.email || u.login) : '';
   }
 
-  function passaNoFiltroPipeline(r, f) {
+  function passaNoFiltroPipeline(r, f, usuarioAtual) {
     const op = r.op, conta = r.conta;
-    const A = global.IADAuth;
-    const eu = A.atual();
+    const eu = arguments.length >= 3 ? usuarioAtual : global.IADAuth.atual();
 
     if (f.responsavel === 'meu') { if (op.donoId && eu && op.donoId !== eu.id) return false; }
     else if (f.responsavel !== 'todos') { if (op.donoId !== f.responsavel) return false; }
@@ -2266,7 +2265,7 @@
       ? global.IADPipelinePerf.resumosElegiveis(est, elegiveis)
       : elegiveis.map(E.resumo);
     return ordenarPipeline(
-      base.filter(function (r) { return passaNoFiltroPipeline(r, f); })
+      base.filter(function (r) { return passaNoFiltroPipeline(r, f, usuarioAtual); })
         /* "Todos" não inclui nutrição, de propósito. Nutrição é o que saiu da
            previsão: deixá-la no total faria o contador e a soma em reais
            prometerem receita que ninguém está perseguindo — que é exatamente
@@ -2342,7 +2341,7 @@
     return c.join('');
   }
 
-  function barraDoPipeline(resumos, total) {
+  function barraDoPipeline(resumos, total, est) {
     const A = global.IADAuth;
     const f = pipelineFiltro;
     const pessoas = pessoasDoFiltro();
@@ -2383,7 +2382,9 @@
 
        Só aparece quando há mais de um segmento na carteira — um select com uma
        opção só é ruído. */
-    const segmentos = E.segmentosDisponiveis(Store.dados().oportunidades);
+    /* A tela já capturou a carteira filtrada. Repetir Store.dados() aqui
+       refazia a filtragem de dez coleções somente para montar um seletor. */
+    const segmentos = E.segmentosDisponiveis(est.oportunidades);
     const doSegmento = segmentos.length < 2 ? ''
       : seletor('Segmento', 'App.pipelineCampo(\'segmento\', this.value)',
           [{ valor: '', rotulo: 'Todos' }].concat(segmentos.map(function (x) {
@@ -2535,7 +2536,7 @@
        ninguém confia. */
     const selecao = modoPipeline === 'lista' ? barraDeSelecao(resumos) : '';
 
-    return cabecalhoPipeline(filtros) + barraDoPipeline(resumos, total) + corpo +
+    return cabecalhoPipeline(filtros) + barraDoPipeline(resumos, total, est) + corpo +
       faixaMaisPipeline(resumos.length) + selecao;
   }
 
