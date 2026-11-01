@@ -22,7 +22,7 @@ const scripts=[
 const html='<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">'+
  '<link rel="stylesheet" href="assets/styles.css">'+
  '</head><body><div class="app"><main id="conteudo"></main></div>'+
- '<script>window.IADNuvem={mandaNoAcesso:()=>false,sessao:()=>({})};</script>'+
+ '<script>window.IADNuvem={mandaNoAcesso:()=>false,sessao:()=>({}),conectado:()=>false};</script>'+
  scripts.map(s=>'<script src="'+s+'"></script>').join('')+
  '</body></html>';
 const files=new Map();
