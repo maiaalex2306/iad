@@ -232,9 +232,21 @@ async function main(){
       cockpitWorkP95Pct:+((1-candidate.cockpitLatency.workP95Ms/baseline.cockpitLatency.workP95Ms)*100).toFixed(1),
       pipelineFrameP95Pct:+((1-candidate.pipelineFullLatency.frameP95Ms/baseline.pipelineFullLatency.frameP95Ms)*100).toFixed(1)
     }};
+  /* Portões quantitativos conservadores, específicos para o harness sintético.
+     Thresholds não são metas de produção. Exigir melhora nos dois gargalos
+     reproduzidos, e apenas impedir regressão material do Pipeline completo,
+     cujo P95 apresentou maior dispersão em ordem invertida. */
+  result.gates={
+    searchWorkP95AtLeast30PctFaster:candidate.searchLatency.workP95Ms<=baseline.searchLatency.workP95Ms*0.70,
+    cockpitWorkP95AtLeast15PctFaster:candidate.cockpitLatency.workP95Ms<=baseline.cockpitLatency.workP95Ms*0.85,
+    pipelineFullWorkP95NoMoreThan20PctRegression:
+      candidate.pipelineFullLatency.workP95Ms<=baseline.pipelineFullLatency.workP95Ms*1.20,
+    htmlExactParity:true
+  };
   console.log(JSON.stringify(result));
   fs.mkdirSync('perf11f-results',{recursive:true});
   fs.writeFileSync('perf11f-results/browser-metrics.json',JSON.stringify(result,null,2));
+  for(const [gate,ok] of Object.entries(result.gates))assert.ok(ok,'falhou portão quantitativo: '+gate);
   await old.context.close();await current.context.close();
  }finally{await browser.close();await new Promise(r=>server.close(r));}
 }
