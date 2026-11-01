@@ -1,0 +1,29 @@
+name: PERF-11I — Release readiness gate sem credenciais
+on:
+  push:
+    branches: ['performance/perf-11i-release-readiness-gate']
+  pull_request:
+    branches: ['performance/perf-11h-browser-idb-permissions']
+permissions:
+  contents: read
+jobs:
+  verify-gate-logic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Validar sintaxe
+        run: |
+          node --check scripts/perf11i-readiness.cjs
+          node --check nuvem/testes/perf-11i-readiness.test.cjs
+      - name: Verificar fail-closed em ambiente incompleto e matriz completa
+        run: node --test nuvem/testes/perf-11i-readiness.test.cjs
+      - name: Suite completa e regresoes
+        run: node --test nuvem/testes/*.test.cjs
+      - name: Preservar versionamento da producao
+        run: |
+          grep -q "numero: 'v286'" src/config.js
+          grep -q 'iad-crm-v286' sw.js
