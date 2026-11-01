@@ -13,6 +13,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
       - uses: actions/setup-node@v4
         with: {node-version: '22'}
       - name: Contrato, isolamento e integridade da instrumentacao
@@ -32,6 +33,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
       - uses: actions/setup-node@v4
         with: {node-version: '22'}
       - name: Quatro logins Auth reais, RLS por dono e empresa, P95 HTTP (somente leitura)
