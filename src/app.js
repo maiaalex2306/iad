@@ -383,6 +383,9 @@
        A regra do `render` vale aqui também, e pelo mesmo motivo: carteira que
        vive no servidor não se mostra a quem não está dentro. */
     if (!A.atual()) return false;
+    /* PERF-11: uma repintura parcial não pode mostrar carteira sem sessão
+       remota; o render completo realiza a transição segura para login. */
+    if (global.IADNuvem.mandaNoAcesso() && !global.IADNuvem.sessao()) return false;
 
     const conteudo = document.getElementById('conteudo');
     if (!conteudo) return false;
@@ -1752,7 +1755,10 @@
   const App = {
     ir: function (hash) { location.hash = hash; },
     abrir: function (id) { location.hash = '#/op/' + id; },
-    filtrar: function (grupo) { V.definirFiltro(grupo); render(); },
+    filtrar: function (grupo) {
+      V.definirFiltro(grupo);
+      if (!repintarPipeline()) render();
+    },
     filtrarHistorico: function (tipo) { V.definirFiltroHistorico(tipo); render(); },
     filtrarHoje: function (chave) { V.definirFiltroHoje(chave); render(); },
     porPaginaHoje: function (n) { V.definirPorPaginaHoje(n); render(); },
@@ -4074,7 +4080,9 @@
       const m = {};
       m[campo] = valor;
       V.pipelineFiltrar(m);
-      render();
+      /* Filtro local altera só o conteúdo do Pipeline; navegação e shell
+         permanecem. Rota inválida/sessão expirada usa render completo. */
+      if (!repintarPipeline()) render();
     },
 
     /* Digitar não pode redesenhar a tela a cada tecla: o campo perderia o foco
@@ -4082,7 +4090,9 @@
     pipelineBusca: function (v) {
       V.pipelineFiltrar({ busca: v });
       clearTimeout(App._buscaPipeline);
-      App._buscaPipeline = setTimeout(function () { repintarPipeline(); }, 220);
+      App._buscaPipeline = setTimeout(function () {
+        if (!repintarPipeline()) render();
+      }, 220);
     },
 
     /* Sugestões IBGE: não redesenhar a gaveta enquanto a pessoa digita.
@@ -4223,7 +4233,10 @@
         V.pipelineFiltrar(m);
       }
       U.fecharDialogos();
-      render();
+      /* Filtro global altera o escopo de segurança; manter render completo.
+         Apenas filtros locais usam a atualização parcial. */
+      if (alvo === 'tenant' || alvo === 'usuarioAdmin' ||
+          (alvo === 'tudo' && A.ehAdmin()) || !repintarPipeline()) render();
     },
 
     /* A gaveta é uma janela modal encostada na direita: abre, responde a
@@ -4234,7 +4247,10 @@
       dlg.className = 'gaveta';
       dlg.innerHTML = V.gavetaDeFiltros();
       document.body.appendChild(dlg);
-      dlg.addEventListener('close', function () { dlg.remove(); render(); });
+      dlg.addEventListener('close', function () {
+        dlg.remove();
+        if (!repintarPipeline()) render();
+      });
       dlg.showModal();
       if (V.pipelineEstado().uf) App.pipelineLocalidadeCarregar();
     },
