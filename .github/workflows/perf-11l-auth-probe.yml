@@ -1,0 +1,57 @@
+name: PERF-11L — Auth/RLS real e P95 HTTP em homologacao
+on:
+  push:
+    branches: ['performance/perf-11l-auth-network-trace']
+  pull_request:
+    branches: ['performance/perf-11k-staging-parity-fixture']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  safety-and-mock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Contrato, isolamento e integridade da instrumentacao
+        run: |
+          node --check scripts/perf11l-auth-probe.cjs
+          node --test nuvem/testes/perf-11l-auth-probe.test.cjs
+      - name: Suite de regressao completa
+        run: node --test nuvem/testes/*.test.cjs
+      - name: Producao preservada
+        run: |
+          grep -q "numero: 'v286'" src/config.js
+          grep -q 'iad-crm-v286' sw.js
+  live-staging-only:
+    if: github.event_name == 'workflow_dispatch'
+    needs: safety-and-mock
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Quatro logins Auth reais, RLS por dono e empresa, P95 HTTP (somente leitura)
+        env:
+          PERF11L_ENABLE: '1'
+          PERF11L_STAGING_KEY: ${{ secrets.PERF11L_STAGING_KEY }}
+          PERF11L_ADMIN_EMAIL: ${{ secrets.PERF11L_ADMIN_EMAIL }}
+          PERF11L_ADMIN_PASSWORD: ${{ secrets.PERF11L_ADMIN_PASSWORD }}
+          PERF11L_GESTOR_EMAIL: ${{ secrets.PERF11L_GESTOR_EMAIL }}
+          PERF11L_GESTOR_PASSWORD: ${{ secrets.PERF11L_GESTOR_PASSWORD }}
+          PERF11L_VENDEDOR1_EMAIL: ${{ secrets.PERF11L_VENDEDOR1_EMAIL }}
+          PERF11L_VENDEDOR1_PASSWORD: ${{ secrets.PERF11L_VENDEDOR1_PASSWORD }}
+          PERF11L_VENDEDOR2_EMAIL: ${{ secrets.PERF11L_VENDEDOR2_EMAIL }}
+          PERF11L_VENDEDOR2_PASSWORD: ${{ secrets.PERF11L_VENDEDOR2_PASSWORD }}
+        run: node scripts/perf11l-auth-probe.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: perf11l-rls-api-sanitized
+          path: perf11l-results/api-rls.json
+          if-no-files-found: ignore
