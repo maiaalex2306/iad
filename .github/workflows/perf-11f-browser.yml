@@ -1,0 +1,40 @@
+name: PERF-11F — Chromium real P95 comparativo v286 x candidata
+on:
+  push:
+    branches: ['performance/perf-11f-browser-p95-v287']
+  pull_request:
+    branches: ['performance/perf-11e-cockpit-dimensions']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  chromium:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validar sintaxe do runner
+        run: node --check scripts/perf11f-browser.cjs
+      - name: Instalar Playwright sem alterar package.json
+        run: npm install --no-save --no-package-lock playwright@1.56.1
+      - name: Instalar Chromium para Playwright
+        run: npx playwright install --with-deps chromium
+      - name: Browser baseline v286 versus candidata
+        run: node scripts/perf11f-browser.cjs
+      - name: Testes CJS completos
+        run: node --test nuvem/testes/*.test.cjs
+      - name: Verificar que a producao fica em v286
+        run: |
+          grep -q "numero: 'v286'" src/config.js
+          grep -q "iad-crm-v286" sw.js
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: perf11f-chromium-metrics
+          path: perf11f-results/
+          if-no-files-found: ignore
