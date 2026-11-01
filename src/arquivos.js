@@ -4,7 +4,7 @@
   'use strict';
 
   const BANCO = 'iad-crm-arquivos';
-  const VERSAO = 1;
+  const VERSAO = 2;
   const META = 'meta';
   const DADOS = 'dados';
 
@@ -17,13 +17,26 @@
       const req = indexedDB.open(BANCO, VERSAO);
       req.onupgradeneeded = function () {
         const db = req.result;
-        if (!db.objectStoreNames.contains(META)) {
-          const loja = db.createObjectStore(META, { keyPath: 'id' });
-          loja.createIndex('oportunidadeId', 'oportunidadeId', { unique: false });
-        }
+        const loja = db.objectStoreNames.contains(META)
+          ? req.transaction.objectStore(META)
+          : db.createObjectStore(META, { keyPath: 'id' });
+        ['oportunidadeId', 'contaId', 'tarefaId'].forEach(function (campo) {
+          if (!loja.indexNames.contains(campo))
+            loja.createIndex(campo, campo, { unique: false });
+        });
         if (!db.objectStoreNames.contains(DADOS)) db.createObjectStore(DADOS, { keyPath: 'id' });
       };
-      req.onsuccess = function () { bancoAberto = req.result; resolve(bancoAberto); };
+      req.onsuccess = function () {
+        bancoAberto = req.result;
+        bancoAberto.onversionchange = function () {
+          bancoAberto.close();
+          bancoAberto = null;
+        };
+        resolve(bancoAberto);
+      };
+      req.onblocked = function () {
+        reject(new Error('Feche outras abas do IaD CRM para atualizar os índices de anexos.'));
+      };
       req.onerror = function () { reject(req.error); };
     });
   }
@@ -76,7 +89,12 @@
       : filtro;
     return abrir().then(function (db) {
       const loja = transacao(db, [META], 'readonly').objectStore(META);
-      return promessa(loja.getAll()).then(function (todos) {
+      const chave = ['oportunidadeId', 'contaId', 'tarefaId'].find(function (k) {
+        return por && por[k];
+      });
+      const leitura = chave && loja.indexNames.contains(chave)
+        ? loja.index(chave).getAll(por[chave]) : loja.getAll();
+      return promessa(leitura).then(function (todos) {
         const lista = todos.filter(function (a) {
           if (por.oportunidadeId && a.oportunidadeId !== por.oportunidadeId) return false;
           if (por.contaId && a.contaId !== por.contaId) return false;
@@ -109,7 +127,7 @@
     if (!deOpId || !paraOpId || deOpId === paraOpId) return Promise.resolve(0);
     return abrir().then(function (db) {
       const loja = transacao(db, [META], 'readonly').objectStore(META);
-      return promessa(loja.getAll());
+      return promessa(loja.index('oportunidadeId').getAll(deOpId));
     }).then(function (todos) {
       const meus = (todos || []).filter(function (a) { return a.oportunidadeId === deOpId; });
       if (!meus.length) return 0;
