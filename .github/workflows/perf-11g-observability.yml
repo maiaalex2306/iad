@@ -28,3 +28,32 @@ jobs:
         run: |
           grep -q "numero: 'v286'" src/config.js
           grep -q 'iad-crm-v286' sw.js
+
+  chromium:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        order: [baseline-first, candidate-first]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar Chromium e Playwright
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Comparar DOM e P95 com v286; testar diagnóstico local opt-in
+        env:
+          PERF11F_ORDER: ${{ matrix.order }}
+        run: node scripts/perf11f-browser.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: perf11g-browser-${{ matrix.order }}
+          path: perf11f-results/
+          if-no-files-found: ignore
