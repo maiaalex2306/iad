@@ -36,7 +36,7 @@ function montar(code,role,tenant,filters){
  const dados=w.IADStore.dados();
  return {dados:JSON.parse(JSON.stringify(dados)),metrics,S:w.IADStore};
 }
-test('3919 registros sintéticos: mesmos resultados da v286 em todos os escopos',()=>{
+test('3009 registros sintéticos: mesmos resultados da v286 em todos os escopos',()=>{
  const casos=[
    ['admin','a',{tenant:'todas',usuario:'todos'}],
    ['admin','a',{tenant:'a',usuario:'todos'}],

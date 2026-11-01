@@ -8,11 +8,13 @@
 - Cache parcial exclusivamente em memória, com chave por revisão, dia e escopo de acesso; o caminho P5e opcional conserva o algoritmo integral.
 - Busca indexada dos metadados IndexedDB, upgrade v1→v2 não destrutivo, anexos preservados.
 - Sincronização: mapa de oportunidade por ID na reconciliação CAS, em lugar de varredura linear repetida.
+- Store: um contexto de autorização por leitura síncrona da carteira, evitando reconstruir identidade e filtros para milhares de registros; sem cache persistente de escopo.
 - **RLS somente no projeto de homologação Supabase**: 4 políticas com initplan; SQL com rollback explícito. Nenhuma tabela ou dado de produção alterado.
 
 ## Evidências
 
-- GitHub Actions: testes sintáticos, regressões, comparação de filtros, casos sintéticos de 389 oportunidades, cache, anexos, CAS e cockpit.
+- GitHub Actions: testes sintáticos, 123 testes CJS aprovados, comparação diferencial Store v286 em admin/gestor/vendedor/sem sessão, comparação de filtros, casos sintéticos de 389 oportunidades, cache, anexos, CAS e cockpit.
+- Homologação RLS em transações revertidas: 243 oportunidades / 243 contas / 486 tarefas / 486 contatos visíveis ao perfil autorizado; zero registros nas quatro tabelas a um usuário sem perfil; papel original restaurado.
 - Supabase homolog (`bvlfzeblpewlqhssprpv`), consulta autenticada `SELECT COUNT(*) FROM oportunidades` via `EXPLAIN ANALYZE` sobre 243 oportunidades: **37,078 ms → 0,489 ms** de execução SQL (**-98,7%**). Comparação de duas execuções individuais, não é medição P95 nem prova de UX; sujeita a cache/carga.
 - Alertas do advisor RLS `auth_rls_initplan`: **10 → 6** após otimizar as quatro políticas; avisos remanescentes fora do escopo.
 
