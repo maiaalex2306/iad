@@ -38,6 +38,10 @@ jobs:
           node --test nuvem/testes/perf-04-p5e-pipeline.test.cjs
           node --test nuvem/testes/perf-10-cockpit.test.cjs
           node --test nuvem/testes/perf-10-p8-lazy.test.cjs
+      - name: Benchmark sintético 389, 1000, 5000, 10000 (sem metas absolutas)
+        run: |
+          node --check scripts/perf11-bench.cjs
+          node scripts/perf11-bench.cjs
       - name: Proibir alteração de versão antes de homologação
         run: |
           grep -q "numero: 'v286'" src/config.js
