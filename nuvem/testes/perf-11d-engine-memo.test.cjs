@@ -106,3 +106,29 @@ test('benchmark independente de 30 amostras: Engine integral v286 vs otimizado',
  // Comparação quantitativa reportada, não afirmar melhoria universal de P95.
  assert.ok(result.p95AntigoMs>0&&result.p95NovoMs>0);
 });
+
+test('benchmark de 200 amostras para cards complexos HEINEKEN/Suzano',()=>{
+ const a=preparar(anterior),b=preparar(otimizado);
+ const antigo=[],novo=[];
+ const executar=x=>{
+  const opp=x.est.oportunidades;
+  return x.E.resumo(opp[0],{}).iad+x.E.resumo(opp[1],{}).iad;
+ };
+ for(let i=0;i<220;i++){
+  let va,vb,ta,tb;
+  if(i%2){
+   let t=performance.now();va=executar(a);ta=performance.now()-t;
+   t=performance.now();vb=executar(b);tb=performance.now()-t;
+  }else{
+   let t=performance.now();vb=executar(b);tb=performance.now()-t;
+   t=performance.now();va=executar(a);ta=performance.now()-t;
+  }
+  assert.equal(va,vb);
+  if(i>=20){antigo.push(ta);novo.push(tb);}
+ }
+ console.log(JSON.stringify({tipo:'PERF-11D duas oportunidades complexas',
+  amostras:200,cenarios:['HEINEKEN sintética','Suzano sintética'],
+  p50AntesMs:+percentil(antigo,.5).toFixed(4),p95AntesMs:+percentil(antigo,.95).toFixed(4),
+  p50NovoMs:+percentil(novo,.5).toFixed(4),p95NovoMs:+percentil(novo,.95).toFixed(4),
+  nota:'motor real, dados sintéticos e tempo CPU Node sem navegador'}));
+});
