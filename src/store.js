@@ -656,8 +656,8 @@
      Aqui é o reflexo: sem isto a tela mostraria o que a cópia local tem, que é
      o que o servidor já entregou filtrado — mas quem trabalha offline continua
      precisando do filtro certo. */
-  function visivel(registro, comDono) {
-    const ctx = contexto();
+  function visivel(registro, comDono, contextoFixo) {
+    const ctx = contextoFixo || contexto();
     if (!ctx.usuario) return false;
 
     if (ctx.admin) {
@@ -804,8 +804,13 @@
 
   /* Mesma forma do estado, já filtrado. As telas leem daqui, nunca de obter(). */
   function dados() {
-    const porTenant = function (lista) { return (lista || []).filter(function (r) { return visivel(r, false); }); };
-    const porDono = function (lista) { return (lista || []).filter(function (r) { return visivel(r, true); }); };
+    /* PERF-11: obter a identidade de autorização uma vez por snapshot.
+       O filtro anterior recriava A.atual()/A.filtros() para cada registro,
+       mesmo numa única leitura síncrona. Não há cache entre chamadas:
+       troca de usuário/empresa e invalidação continuam instantâneas. */
+    const ctx = contexto();
+    const porTenant = function (lista) { return (lista || []).filter(function (r) { return visivel(r, false, ctx); }); };
+    const porDono = function (lista) { return (lista || []).filter(function (r) { return visivel(r, true, ctx); }); };
     return {
       tenants: estado.tenants,
       usuarios: estado.usuarios,
@@ -824,7 +829,9 @@
       /* Nem por empresa nem por dono: só minhas. `porDono` deixaria o gestor
          ler o caderninho da equipe, que é exatamente o que esta tela promete
          não fazer. */
-      notas: ordenarNotas((estado.notas || []).filter(minhaNota)),
+      notas: ordenarNotas((estado.notas || []).filter(function (n) {
+        return !!ctx.usuario && String(n.donoId || '') === String(ctx.usuario.id);
+      })),
       config: estado.config
     };
   }
