@@ -1,0 +1,30 @@
+name: PERF-11D — Decision Engine sem recalculos repetidos
+on:
+  push:
+    branches: ['performance/perf-11d-engine-invocation-memo']
+  pull_request:
+    branches: ['performance/perf-11b-catalog-idempotent']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  engine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Sintaxe do motor e teste diferencial
+        run: |
+          node --check src/engine.js
+          node --check nuvem/testes/perf-11d-engine-memo.test.cjs
+      - name: Paridade v286 e benchmark de 389 oportunidades
+        run: node --test nuvem/testes/perf-11d-engine-memo.test.cjs
+      - name: Regressao integral incluindo 11A, 11B e 11C
+        run: node --test nuvem/testes/*.test.cjs
+      - name: Manter versao e cache PWA da producao intactos
+        run: |
+          grep -q "numero: 'v286'" src/config.js
+          grep -q "iad-crm-v286" sw.js
