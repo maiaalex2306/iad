@@ -11,7 +11,7 @@
   /* Apenas nomes técnicos conhecidos; nenhum ID, nome comercial ou parâmetro
      enviado por telas pode se tornar chave de relatório. */
   const CHAVES_FIXAS = new Set([
-    'dom.cockpit', 'hoje.fila', 'hoje.cartoes', 'p5d.eventos', 'teste',
+    'dom.cockpit', 'hoje.fila', 'hoje.cartoes', 'p5d.eventos', 'teste', 'fila',
     'perf03b.cockpit-resumo', 'perf03b.trocar-aba', 'perf10.tarefa',
     'perf10.cockpit.resumo', 'perf10.cockpit.dois-frames',
     'perf10.cockpit.proximo-frame', 'perf10.cockpit.inicializar-arquivos',
