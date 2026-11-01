@@ -137,15 +137,22 @@ async function measure(scenario){
   const data={};
   const pct=(a,p)=>a.slice().sort((x,y)=>x-y)[Math.ceil(a.length*p)-1];
   const bench=async(fn,n=35)=>{
-   const samples=[];
+   const samples=[],work=[];
    for(let i=0;i<n+5;i++){
     const start=performance.now();
     fn();
+    const workMs=performance.now()-start;
     await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
-    const ms=performance.now()-start;
-    if(i>=5)samples.push(ms);
+    const frameMs=performance.now()-start;
+    if(i>=5){samples.push(frameMs);work.push(workMs);}
    }
-   return {p50Ms:+pct(samples,.5).toFixed(2),p95Ms:+pct(samples,.95).toFixed(2),count:samples.length};
+   return {
+     workP50Ms:+pct(work,.5).toFixed(3),
+     workP95Ms:+pct(work,.95).toFixed(3),
+     frameP50Ms:+pct(samples,.5).toFixed(2),
+     frameP95Ms:+pct(samples,.95).toFixed(2),
+     count:samples.length
+   };
   };
   V.pipelineFiltrar({busca:''});
   P.limpar();
@@ -201,9 +208,10 @@ async function main(){
     scenario:'dados sintéticos; sem login no CRM/Supabase; app boot substituído por harness',
     baseline,candidate,
     diff:{
-      pipelineFullP95Pct:+((1-candidate.pipelineFullLatency.p95Ms/baseline.pipelineFullLatency.p95Ms)*100).toFixed(1),
-      searchP95Pct:+((1-candidate.searchLatency.p95Ms/baseline.searchLatency.p95Ms)*100).toFixed(1),
-      cockpitP95Pct:+((1-candidate.cockpitLatency.p95Ms/baseline.cockpitLatency.p95Ms)*100).toFixed(1)
+      pipelineWorkP95Pct:+((1-candidate.pipelineFullLatency.workP95Ms/baseline.pipelineFullLatency.workP95Ms)*100).toFixed(1),
+      searchWorkP95Pct:+((1-candidate.searchLatency.workP95Ms/baseline.searchLatency.workP95Ms)*100).toFixed(1),
+      cockpitWorkP95Pct:+((1-candidate.cockpitLatency.workP95Ms/baseline.cockpitLatency.workP95Ms)*100).toFixed(1),
+      pipelineFrameP95Pct:+((1-candidate.pipelineFullLatency.frameP95Ms/baseline.pipelineFullLatency.frameP95Ms)*100).toFixed(1)
     }};
   console.log(JSON.stringify(result));
   fs.mkdirSync('perf11f-results',{recursive:true});
