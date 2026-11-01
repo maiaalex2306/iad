@@ -143,13 +143,13 @@ async function measure(scenario){
   const pct=(a,p)=>a.slice().sort((x,y)=>x-y)[Math.ceil(a.length*p)-1];
   const bench=async(fn,n=35)=>{
    const samples=[],work=[];
-   for(let i=0;i<n+5;i++){
+   for(let i=0;i<n+10;i++){
     const start=performance.now();
     fn();
     const workMs=performance.now()-start;
     await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
     const frameMs=performance.now()-start;
-    if(i>=5){samples.push(frameMs);work.push(workMs);}
+    if(i>=10){samples.push(frameMs);work.push(workMs);}
    }
    return {
      workP50Ms:+pct(work,.5).toFixed(3),
@@ -164,20 +164,20 @@ async function measure(scenario){
   const first=w.__renderPipeline();
   data.pipelineFull={titleFound:first.includes('CONTA SINTÉTICA'),htmlBytes:container.innerHTML.length,
      domHash:await domHash()};
-  data.pipelineFullLatency=await bench(()=>{P.limpar();w.__renderPipeline();},30);
+  data.pipelineFullLatency=await bench(()=>{P.limpar();w.__renderPipeline();},100);
   V.pipelineFiltrar({busca:'HEINEKEN'});
   P.limpar();
   const filtered=w.__renderPipeline();
   data.search={found:filtered.includes('HEINEKEN'),
      containsSuzano:filtered.includes('SUZANO'),htmlBytes:container.innerHTML.length,
      domHash:await domHash()};
-  data.searchLatency=await bench(()=>{P.limpar();w.__renderPipeline();},30);
+  data.searchLatency=await bench(()=>{P.limpar();w.__renderPipeline();},100);
   V.pipelineFiltrar({busca:''});
   w.__activeOp='o0';
   const firstCockpit=w.__renderCockpit('o0');
   data.cockpit={found:firstCockpit.includes('HEINEKEN'),htmlBytes:container.innerHTML.length,
      domHash:await domHash()};
-  data.cockpitLatency=await bench(()=>w.__renderCockpit('o0'),30);
+  data.cockpitLatency=await bench(()=>w.__renderCockpit('o0'),100);
   data.tabTimes={};data.tabHashes={};
   for(const tab of ['decisao','historico','tarefas','whatsapp','sinais','email','propostas','produtos','arquivos']){
     data.tabTimes[tab]=await bench(()=>w.__renderAba(tab),15);
@@ -244,7 +244,7 @@ async function main(){
       anonimo:!exportacao.includes('HEINEKEN_SEGREDO')};
   });
   assert.equal(telemetria.anonimo,true);
-  const result={type:'PERF-11F Playwright Chromium real, HTML e RAF',samples:30,telemetria,
+  const result={type:'PERF-11F Playwright Chromium real, HTML e RAF',samples:100,telemetria,
     reference:'v286 '+BASE,head:process.env.GITHUB_SHA||'local',order,
     scenario:'dados sintéticos; sem login no CRM/Supabase; app boot substituído por harness',
     baseline,candidate,
