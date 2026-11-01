@@ -3122,8 +3122,12 @@
 
   function outrasAbertasDaConta(op) {
     if (!op || !op.contaId) return [];
-    return Store.dados().oportunidades.filter(function (o) {
-      return o.contaId === op.contaId && o.id !== op.id && !o.desfecho;
+    /* PERF-11: abertura de um card não precisa filtrar dez coleções do Store
+       só para descobrir se há outra negociação da mesma empresa.
+       Conservar a checagem de visibilidade por oportunidade é obrigatório. */
+    return (Store.obter().oportunidades || []).filter(function (o) {
+      return o.contaId === op.contaId && o.id !== op.id && !o.desfecho &&
+        Store.visivel(o, true);
     });
   }
 
