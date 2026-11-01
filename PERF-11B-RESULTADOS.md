@@ -25,6 +25,8 @@ O teste diferencial executou o bootstrap **duas vezes** com a mesma empresa:
 - Fontes homônimas de empresas diferentes não compartilham a mesma referência.
 - Fontes legadas sem tenant só são adotadas automaticamente quando a origem do lote é inequivocamente monoempresa.
 - IDs legados são preservados; nenhuma exclusão, consolidação ou reatribuição foi feita.
+- Cockpit: a verificação de outras oportunidades abertas da mesma empresa não reconstrói mais todas as dez coleções do `Store.dados()`; utiliza somente oportunidades e revalida `Store.visivel(o, true)`.
+- Testes diferenciais do cockpit demonstraram a mesma lista de negócios visíveis nos sete cenários de autorização exercitados.
 
 A prevenção não elimina os duplicados já gravados. A reconciliação histórica permanece uma operação independente, exigindo mapeamento de dependências e validação de integridade.
 
@@ -38,10 +40,10 @@ Microbenchmark Node.js com **5 aquecimentos + 30 medições** de cada cenário; 
 | P50 | 20,60 ms | 1,37 ms |
 | P95 | 34,29 ms | 3,51 ms |
 
-**Resultado:** redução aproximada de 89,8% no P95 **do processamento isolado**. Não representa o tempo de carregamento de produção ou o desempenho real da UI. Os dois resumos selecionados foram comparados integralmente e permaneceram idênticos aos correspondentes do cálculo completo.
+**Resultado:** redução aproximada de 89,8% no P95 **do processamento isolado** na execução registrada; outra execução independente mediu P95 de 23,78 ms contra 1,61 ms, ilustrando a variabilidade de JIT/ambiente. Não representa o tempo de carregamento de produção ou o desempenho real da UI. Os dois resumos selecionados foram comparados integralmente e permaneceram idênticos aos correspondentes do cálculo completo.
 
 ## Testes e segurança
-- 132 testes CJS aprovados, 0 falhas, incluindo paridade exata do Decision Engine, idempotência, teste diferencial da v286, isolamento multiempresa, cache, anexos e regressões preexistentes.
+- 134 testes CJS aprovados, 0 falhas, incluindo paridade exata do Decision Engine, idempotência, teste diferencial da v286, isolamento multiempresa, cache, anexos e regressões preexistentes.
 - O teste autenticado GoTrue/CAS da PERF-11A foi aprovado e é requisito para este PR.
 - SQL de produção: **nenhum executado**. Dados e permissões de produção preservados.
 
