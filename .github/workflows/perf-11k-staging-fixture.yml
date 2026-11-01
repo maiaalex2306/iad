@@ -1,0 +1,54 @@
+name: PERF-11K — Dataset staging parity e release gate
+on:
+  push:
+    branches: ['performance/perf-11k-staging-parity-fixture']
+  pull_request:
+    branches: ['performance/perf-11j-staging-private-sync']
+permissions:
+  contents: read
+jobs:
+  fixture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Contratos de fixture e rollback
+        run: |
+          node --check nuvem/testes/perf-11k-parity-fixture.test.cjs
+          node --test nuvem/testes/perf-11k-parity-fixture.test.cjs
+      - name: Regressão completa sem acesso a bancos remotos
+        run: node --test nuvem/testes/*.test.cjs
+      - name: Produção e PWA continuam v286
+        run: |
+          grep -q "numero: 'v286'" src/config.js
+          grep -q 'iad-crm-v286' sw.js
+
+  chromium-comparison:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        order: [baseline-first, candidate-first]
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Playwright no Chromium headless real
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: P95 e paridade de HTML na candidata integrada
+        env:
+          PERF11F_ORDER: ${{ matrix.order }}
+        run: node scripts/perf11f-browser.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: perf11k-chromium-${{ matrix.order }}
+          path: perf11f-results/
+          if-no-files-found: ignore
