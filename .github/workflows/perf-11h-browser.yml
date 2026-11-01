@@ -1,0 +1,41 @@
+name: PERF-11H — Chromium real IndexedDB v1-v2 e perfis
+on:
+  push:
+    branches: ['performance/perf-11h-browser-idb-permissions']
+  pull_request:
+    branches: ['performance/perf-11g-local-observability']
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Sintaxe dos scripts reais
+        run: |
+          node --check scripts/perf11h-browser.cjs
+          node --check src/arquivos.js
+          node --check src/store.js
+          node --check src/auth.js
+      - name: Playwright e Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: IndexedDB migracao, duas abas, offline, visibilidade por tenant
+        run: node scripts/perf11h-browser.cjs
+      - name: Suite de regressao integral
+        run: node --test nuvem/testes/*.test.cjs
+      - name: Bloquear publicacao prematura
+        run: |
+          grep -q "numero: 'v286'" src/config.js
+          grep -q 'iad-crm-v286' sw.js
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: perf11h-browser-evidence
+          path: perf11h-results/
+          if-no-files-found: ignore
