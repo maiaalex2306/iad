@@ -414,12 +414,23 @@
   /* PERF-02: índice de atrasos opcional por execução da fila. Os consumidores
      isolados de E.resumo continuam usando a rotina original, sem mudança. */
   function resumo(op, atrasadasIndex) {
-    /* Restaura o contexto mesmo se um indicador lançar exceção. */
+    /* A maior parte da carteira tem poucos eventos. Evitar objetos e
+       try/finally extras em cards leves mantém o caminho rápido anterior.
+       Qualquer negócio com histórico extenso recebe a memoização local. */
+    if ((op.eventos || []).length < 16 && (op.stakeholders || []).length < 8) {
+      return resumoCalcular(op, atrasadasIndex);
+    }
     const anterior = resumoContexto;
     resumoContexto = { op: op, decisoes: null, pessoas: null };
     try {
-      const idade = evidenceAge(op);
-      return {
+      return resumoCalcular(op, atrasadasIndex);
+    } finally {
+      resumoContexto = anterior;
+    }
+  }
+  function resumoCalcular(op, atrasadasIndex) {
+    const idade = evidenceAge(op);
+    return {
       op: op,
       conta: Store.conta(op.contaId),
       iad: iad(op),
@@ -438,10 +449,7 @@
       delta: deltaSemana(op),
       autoria: autoria(op),
       tarefasAtrasadas: atrasadasIndex ? (atrasadasIndex[op.id] || 0) : tarefasAtrasadas(op)
-      };
-    } finally {
-      resumoContexto = anterior;
-    }
+    };
   }
 
   /* Tarefa aberta com vencimento no passado.
