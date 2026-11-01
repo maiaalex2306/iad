@@ -20,6 +20,21 @@ BEGIN
     OR EXISTS (SELECT 1 FROM public.contas
                 WHERE tenant_id=v_tenant AND id NOT LIKE '__perf11k_acc_%')
   THEN RAISE EXCEPTION 'Tenant sintético divergente: revisão manual necessária.'; END IF;
+  -- A própria carga gera EXATAMENTE 287 eventos no journal comum
+  -- (141 contas + 146 oportunidades) e uma linha de versão. Confirmar a
+  -- origem exclusivamente sintética antes de permitir ON DELETE CASCADE.
+  IF (SELECT count(*) FROM public.iad_sync_eventos WHERE tenant_id=v_tenant) <> 287
+    OR (SELECT count(*) FROM public.iad_sync_versoes WHERE tenant_id=v_tenant) <> 1
+    OR EXISTS (
+      SELECT 1 FROM public.iad_sync_eventos
+       WHERE tenant_id=v_tenant AND NOT (
+         (tabela='contas' AND registro_id LIKE '__perf11k_acc_%' AND operacao='I')
+         OR (tabela='oportunidades' AND registro_id LIKE '__perf11k_op_%' AND operacao='I')
+       )
+    )
+  THEN
+    RAISE EXCEPTION 'Journal PERF11K divergente; exclusão bloqueada.';
+  END IF;
   -- Falha fechada: não excluir o tenant caso novos usuários, tarefas,
   -- eventos ou qualquer outro dado passem a utilizá-lo após os testes.
   -- Abrange todas as tabelas públicas com tenant_id, inclusive futuras.
@@ -30,7 +45,7 @@ BEGIN
       JOIN pg_attribute a ON a.attrelid=c.oid
      WHERE n.nspname='public' AND c.relkind IN ('r','p')
        AND a.attname='tenant_id' AND a.attnum>0 AND NOT a.attisdropped
-       AND c.relname NOT IN ('tenants','contas','oportunidades')
+       AND c.relname NOT IN ('tenants','contas','oportunidades','iad_sync_eventos','iad_sync_versoes')
   LOOP
     EXECUTE format('SELECT EXISTS (SELECT 1 FROM public.%I WHERE tenant_id=$1)',v_tabela)
       INTO v_possui_dependencias USING v_tenant;

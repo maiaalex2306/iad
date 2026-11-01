@@ -38,7 +38,7 @@ test('rollback protege linhas não sintéticas e rejeita contagens divergentes',
  assert.match(rollback,/WHERE tenant_id=v_tenant AND id LIKE '__perf11k_acc_%'/);
  assert.match(rollback,/nome='PERF11K_SINTETICO_PERFORMANCE'/);
  assert.match(rollback,/a\.attname='tenant_id'/);
- assert.match(rollback,/c\.relname NOT IN \('tenants','contas','oportunidades'\)/);
+ assert.match(rollback,/c\.relname NOT IN \('tenants','contas','oportunidades','iad_sync_eventos','iad_sync_versoes'\)/);
  assert.match(rollback,/Tenant PERF11K referenciado/);
 
  assert.doesNotMatch(rollback,/DELETE FROM auth\.users|DROP TABLE|TRUNCATE/i);
@@ -54,4 +54,12 @@ test('portão pós-fixture melhora duas condições mas continua bloqueando Auth
  assert.equal(result.status,'BLOQUEADO');
  assert.deepEqual(result.falhas.map(x=>x.codigo).sort(),
   ['auth_users','profiles','managers','sellers'].sort());
+});
+
+test('rollback exige journal exatamente da carga sintética e bloqueia alterações posteriores',()=>{
+ assert.match(rollback,/public\.iad_sync_eventos WHERE tenant_id=v_tenant\) <> 287/);
+ assert.match(rollback,/public\.iad_sync_versoes WHERE tenant_id=v_tenant\) <> 1/);
+ assert.match(rollback,/tabela='contas' AND registro_id LIKE '__perf11k_acc_%' AND operacao='I'/);
+ assert.match(rollback,/tabela='oportunidades' AND registro_id LIKE '__perf11k_op_%' AND operacao='I'/);
+ assert.match(rollback,/Journal PERF11K divergente/);
 });
