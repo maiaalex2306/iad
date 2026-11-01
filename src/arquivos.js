@@ -9,12 +9,18 @@
   const DADOS = 'dados';
 
   let bancoAberto = null;
+  let aberturaEmAndamento = null;
 
   function abrir() {
     if (bancoAberto) return Promise.resolve(bancoAberto);
-    return new Promise(function (resolve, reject) {
+    /* PERF-11H: chamadas simultâneas de listar/uso/salvar não podem abrir
+       conexões paralelas. A anterior, rejeitada em onblocked, podia abrir
+       tardiamente e ficar órfã; a próxima migração travava outra vez. */
+    if (aberturaEmAndamento) return aberturaEmAndamento;
+    const tentativa = new Promise(function (resolve, reject) {
       if (!global.indexedDB) return reject(new Error('Este navegador não guarda anexos.'));
       const req = indexedDB.open(BANCO, VERSAO);
+      let bloqueado = false;
       req.onupgradeneeded = function () {
         const db = req.result;
         const loja = db.objectStoreNames.contains(META)
@@ -27,17 +33,29 @@
         if (!db.objectStoreNames.contains(DADOS)) db.createObjectStore(DADOS, { keyPath: 'id' });
       };
       req.onsuccess = function () {
-        bancoAberto = req.result;
-        bancoAberto.onversionchange = function () {
-          bancoAberto.close();
-          bancoAberto = null;
+        const db = req.result;
+        /* onblocked já avisou/rejeitou a chamada. Se a aba antiga fechou
+           mais tarde, NÃO reter uma conexão de uma tentativa abandonada. */
+        if (bloqueado) { db.close(); return; }
+        bancoAberto = db;
+        db.onversionchange = function () {
+          /* Fechar exatamente ESTA conexão, mesmo que outra já esteja ativa. */
+          db.close();
+          if (bancoAberto === db) bancoAberto = null;
         };
-        resolve(bancoAberto);
+        resolve(db);
       };
       req.onblocked = function () {
+        bloqueado = true;
         reject(new Error('Feche outras abas do IaD CRM para atualizar os índices de anexos.'));
       };
       req.onerror = function () { reject(req.error); };
+    });
+    aberturaEmAndamento = tentativa;
+    /* finally não consome o erro. O chamador ainda recebe a rejeição original
+       e uma nova tentativa poderá começar depois de fechar outras abas. */
+    return tentativa.finally(function () {
+      if (aberturaEmAndamento === tentativa) aberturaEmAndamento = null;
     });
   }
 
