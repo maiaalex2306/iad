@@ -4689,8 +4689,8 @@
      E aparece em toda decisão abaixo de 2, não só nas vazias. Uma decisão em
      1 é o caso mais comum e era o menos servido: a tela dizia o que já tinha
      e nada sobre o que ainda faltava para fechar. */
-  function oQueFaltaNaDimensao(op, d) {
-    const lacuna = E.lacunas(op).filter(function (l) {
+  function oQueFaltaNaDimensao(op, d, lacunasDoPainel) {
+    const lacuna = (lacunasDoPainel || E.lacunas(op)).filter(function (l) {
       return l.dimensao && l.dimensao.id === d.id &&
         (l.tipo === 'dimensao' || l.tipo === 'comprovacao');
     })[0];
@@ -4720,17 +4720,23 @@
   }
 
   function blocoDimensoes(op) {
+    /* PERF-11E: o mesmo conjunto de lacunas alimenta as oito dimensões.
+       A análise é síncrona e limitada a este HTML, sem cache entre usuários
+       ou entre revisões da oportunidade. */
+    const lacunasDoPainel = E.lacunas(op);
     const dims = P.DIMENSOES.map(function (d) {
       const v = op.dims[d.id] || 0;
       const provas = E.evidenciasDaDimensao(op, d.id);
       const pode = E.podeComprovar(op, d.id, 3);
+      const pode4 = E.podeComprovar(op, d.id, 4);
       /* Cinco degraus, e o bloqueio agora acompanha o degrau: 3 exige evidência
          confirmada, 4 exige documentada. O título do botão traz o critério
          objetivo daquele degrau nesta decisão — é onde o vendedor lê o que
          precisa acontecer, sem sair da tela. */
       const notas = P.NIVEIS_DA_ESCADA.map(function (nivel) {
         const n = nivel.n;
-        const bloqueado = n >= 3 && !E.podeComprovar(op, d.id, n);
+        const bloqueado = n >= 3 && !(n === 3 ? pode :
+          n === 4 ? pode4 : E.podeComprovar(op, d.id, n));
         return '<button class="' + (v === n ? 'on' + n : '') + (bloqueado ? ' bloqueado' : '') + '" ' +
           'onclick="App.pontuar(\'' + op.id + '\',\'' + d.id + '\',' + n + ')" ' +
           'title="' + esc(nivel.rotulo + ' — ' + d.niveis[n] +
@@ -4756,7 +4762,7 @@
       const detalhe = '<details class="provas"><summary>' +
         (provas.length ? provas.length + ' registro(s) · ' : '') +
         (v < 2 ? 'ver o que falta' : 'ver de onde veio a nota') + '</summary>' +
-        jaTem + oQueFaltaNaDimensao(op, d) + '</details>';
+        jaTem + oQueFaltaNaDimensao(op, d, lacunasDoPainel) + '</details>';
 
       return '<div class="dim"><div class="cab"><span class="nome">' + esc(d.nome) + '</span><div class="notas">' + notas + '</div></div>' +
         '<div class="small muted" style="margin-top:4px">' + esc(d.pergunta) + '</div>' +
