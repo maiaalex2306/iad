@@ -242,8 +242,19 @@
       else conteudo.innerHTML = faixa + html;
       /* PERF-10: isolar o custo dos inicializadores da abertura do card.
          Não mudar sem provar que os widgets são dispensáveis nessa rota. */
-      if (perf) perf.medir('perf10.cockpit.inicializar-arquivos', function () { pintarArquivos(id); });
-      else pintarArquivos(id);
+      /* PERF-12B: a lista de anexos não pode concorrer com a primeira pintura.
+         Só agenda quando a aba possui o destino no DOM. */
+      if (document.getElementById('lista-arquivos')) {
+        const destinoArquivos = document.getElementById('lista-arquivos');
+        const iniciarArquivos = function () {
+          if (document.getElementById('lista-arquivos') !== destinoArquivos ||
+              location.hash !== '#/op/' + id) return;
+          if (perf) perf.medir('perf10.cockpit.inicializar-arquivos', function () { pintarArquivos(id); });
+          else pintarArquivos(id);
+        };
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(iniciarArquivos);
+        else setTimeout(iniciarArquivos, 0);
+      }
       if (perf) perf.medir('perf10.cockpit.inicializar-quadro', pintarSoltaQuadro);
       else pintarSoltaQuadro();
       /* Medida real de clique/rota até próximo frame (não equivale a paint confirmado). */
@@ -926,7 +937,7 @@
     }
     Arq.listar(opId).then(function (lista) {
       const destino = document.getElementById('lista-arquivos');
-      if (!destino) return;
+      if (!destino || destino !== alvo || location.hash !== '#/op/' + opId) return;
       destino.innerHTML = lista.length
         ? lista.map(V.itemArquivo).join('')
         : '<div class="vazio small">Nenhum anexo.</div>';
