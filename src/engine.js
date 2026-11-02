@@ -140,8 +140,10 @@
       engajados: engajados.length,
       temEconomicBuyer: papeisPresentes.has('Decisor econômico'),
       temChampion: papeisPresentes.has('Champion / Mobilizer'),
-      mobilizadores: mobilizadores(op).length,
-      bloqueadores: bloqueadores(op).length,
+      mobilizadores: pessoas.filter(function (p) {
+        return P.PERFIS_MOBILIZADORES.indexOf(p.perfil) !== -1;
+      }).length,
+      bloqueadores: pessoas.filter(function (p) { return p.perfil === 'bloqueador'; }).length,
       naoClassificados: pessoas.filter(function (p) { return !p.perfil || p.perfil === 'nao_classificado'; }).length,
       faltando: P.PAPEIS_CRITICOS.filter(function (papel) { return !papeisPresentes.has(papel); })
     };
@@ -170,11 +172,11 @@
   function depoisDaProposta(op) { return indiceEtapa(op) >= ORDEM_ETAPAS.indexOf('Proposta'); }
 
   /* Saúde: etapa não entra na conta. Só decisão, movimento e consenso. */
-  function saude(op) {
-    const pontos = iad(op);
-    const idade = evidenceAge(op);
-    const cob = coverage(op);
-    const g = gates(op);
+  function saude(op, base) {
+    const pontos = base ? base.iad : iad(op);
+    const idade = base ? base.evidenceAge : evidenceAge(op);
+    const cob = base ? base.coverage : coverage(op);
+    const g = base ? base.gates : gates(op);
 
     let score = (pontos / P.IAD_MAXIMO) * 45;
     score += Math.max(0, 25 - idade) / 25 * 20;
@@ -186,10 +188,10 @@
   }
 
   /* Os quatro grupos que aparecem quando se separa etapa de decisão. */
-  function classificar(op) {
-    const pontos = iad(op);
-    const idade = evidenceAge(op);
-    const cob = coverage(op);
+  function classificar(op, base) {
+    const pontos = base ? base.iad : iad(op);
+    const idade = base ? base.evidenceAge : evidenceAge(op);
+    const cob = base ? base.coverage : coverage(op);
     /* Nutrição antes de tudo, inclusive de Zumbi.
 
        Um negócio em nutrição fica meses sem evidência por definição — é o
@@ -202,7 +204,7 @@
     }
     if (idade > 30) return { id: 'zumbi', rotulo: 'Zumbi', desc: 'Sem evidência nova do comprador há mais de 30 dias.' };
     /* Etapa adiantada não é avanço: sem maturidade, sem gate ou sem decisor econômico, é falso avanço. */
-    if (depoisDaProposta(op) && (pontos < P.IAD_MADURO || !gates(op).liberado || !cob.temEconomicBuyer)) {
+    if (depoisDaProposta(op) && (pontos < P.IAD_MADURO || !(base ? base.gates : gates(op)).liberado || !cob.temEconomicBuyer)) {
       return { id: 'falso', rotulo: 'Falso avançado', desc: 'Etapa adiantada, decisão imatura.' };
     }
     if (!depoisDaProposta(op) && pontos >= P.IAD_MADURO) return { id: 'oculto', rotulo: 'Oculto promissor', desc: 'Decisão madura antes da etapa indicar.' };
@@ -224,8 +226,8 @@
      A ordem importa — problema antes de impacto, stakeholders antes de consenso. */
   const ORDEM_DECISAO = ['problema', 'prioridade', 'impacto', 'stakeholders', 'criterios', 'processo', 'consenso', 'risco'];
 
-  function nextBestDecision(op) {
-    const cob = coverage(op);
+  function nextBestDecision(op, base) {
+    const cob = base ? base.coverage : coverage(op);
 
     if (depoisDaProposta(op) && !cob.temEconomicBuyer) {
       const dim = P.DIMENSOES.find(function (d) { return d.id === 'stakeholders'; });
@@ -239,7 +241,7 @@
       };
     }
 
-    const idade = evidenceAge(op);
+    const idade = base ? base.evidenceAge : evidenceAge(op);
     const alvo = ORDEM_DECISAO.find(function (id) { return (op.dims[id] || 0) < 2; });
     if (!alvo) {
       return {
@@ -331,11 +333,11 @@
     };
   }
 
-  function alertas(op) {
+  function alertas(op, base) {
     const lista = [];
-    const idade = evidenceAge(op);
-    const cob = coverage(op);
-    const g = gates(op);
+    const idade = base ? base.evidenceAge : evidenceAge(op);
+    const cob = base ? base.coverage : coverage(op);
+    const g = base ? base.gates : gates(op);
     const f = faixaEvidencia(idade);
 
     if (idade > 14) lista.push({ tipo: 'evidencia', nivel: idade > 30 ? 'alto' : 'medio', texto: idade + ' dias sem evidência do comprador (' + f.rotulo + ').' });
@@ -405,21 +407,28 @@
     /* PERF-04 P5: idade da evidência calculada uma única vez por resumo.
        Não cachear entre renders, revisões, usuários ou empresas. */
     const idade = evidenceAge(op);
+    const pontos = iad(op);
+    const cobertura = coverage(op);
+    const proposta = gates(op);
+    /* PERF-13D: cada resumo compartilha dependencias SOMENTE nesta chamada.
+       Nenhum cache sobrevive a edicoes, revisoes, troca de usuario ou tenant.
+       Os metodos publicos continuam independentes quando chamados sem base. */
+    const base = { iad: pontos, evidenceAge: idade, coverage: cobertura, gates: proposta };
     return {
       op: op,
       conta: Store.conta(op.contaId),
-      iad: iad(op),
+      iad: pontos,
       evidenceAge: idade,
       faixa: faixaEvidencia(idade),
       velocity: decisionVelocity(op),
-      coverage: coverage(op),
-      gates: gates(op),
-      saude: saude(op),
-      classe: classificar(op),
-      nbd: nextBestDecision(op),
-      alertas: alertas(op),
+      coverage: cobertura,
+      gates: proposta,
+      saude: saude(op, base),
+      classe: classificar(op, base),
+      nbd: nextBestDecision(op, base),
+      alertas: alertas(op, base),
       compromisso: compromisso(op),
-      lacunas: lacunas(op),
+      lacunas: lacunas(op, base),
       tempoNaEtapa: tempoNaEtapa(op),
       delta: deltaSemana(op),
       autoria: autoria(op),
@@ -780,9 +789,9 @@
 
   /* O que falta, em ordem, com o caminho para resolver cada item.
      Responde à pergunta que o vendedor faz olhando a tela: e agora? */
-  function lacunas(op) {
+  function lacunas(op, base) {
     const lista = [];
-    const cob = coverage(op);
+    const cob = base ? base.coverage : coverage(op);
 
     ORDEM_DECISAO.forEach(function (id) {
       const d = P.DIMENSOES.find(function (x) { return x.id === id; });

@@ -28,6 +28,6 @@ test('copy da interface nao afirma mais leitura de email automatica',()=>{
  assert.match(views,/nenhuma análise automática em segundo plano/);
 });
 test('config e PWA possuem a mesma versao',()=>{
- assert.match(config,/numero: 'v286\.7'/);
- assert.match(sw,/iad-crm-v286\.7/);
+ assert.match(config,/numero: 'v286\.8'/);
+ assert.match(sw,/iad-crm-v286\.8/);
 });
