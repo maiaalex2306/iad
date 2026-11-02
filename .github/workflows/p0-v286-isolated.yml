@@ -1,0 +1,21 @@
+name: P0 — v286 isolated AI autostart hotfix
+on:
+  push:
+    branches: ['hotfix/p0-ai-autostart-v286-only']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: node --check src/app.js
+      - run: node --test nuvem/testes/p0-ai-v286.test.cjs
+      - run: node --test nuvem/testes/*.test.cjs
+      - run: |
+          grep -q "numero: 'v286'" src/config.js
+          grep -q 'iad-crm-v286' sw.js
