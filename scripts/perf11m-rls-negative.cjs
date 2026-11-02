@@ -28,19 +28,24 @@ async function verificarProvas({fixture,consultar}){
   validarFixture(fixture);
   assert.equal(typeof consultar,'function');
   let positivas=0,negativas=0;
+  const porPapel=[];
   for(const u of fixture.identidades){
+    let positivasUsuario=0,negativasUsuario=0;
     for(const r of fixture.registros){
       const rows=await consultar({tabela:r.tabela,id:r.id,token:u.token});
       assert.ok(Array.isArray(rows),'Resposta nao verificavel');
       assert.ok(rows.every(row=>row.id===r.id),'API retornou ID inesperado');
       if(permitido(u,r)){
-        assert.equal(rows.length,1,'Registro permitido ausente');positivas++;
+        assert.equal(rows.length,1,'Registro permitido ausente');positivas++;positivasUsuario++;
       }else{
-        assert.equal(rows.length,0,'Acesso proibido retornou registro');negativas++;
+        assert.equal(rows.length,0,'Acesso proibido retornou registro');negativas++;negativasUsuario++;
       }
     }
+    assert.ok(positivasUsuario>0,'Perfil sem registro permitido conhecido');
+    if(u.papel!=='admin')assert.ok(negativasUsuario>0,'Perfil sem registro proibido conhecido');
+    porPapel.push({papel:u.papel,positivas:positivasUsuario,negativas:negativasUsuario});
   }
   assert.ok(positivas>0 && negativas>0,'Provas positivas e negativas obrigatorias');
-  return {estado:'PASS_RLS_NEGATIVE',positivas,negativas,provaBrowser:false,provaCAS:false,provaP95E2E:false};
+  return {estado:'PASS_RLS_NEGATIVE',positivas,negativas,porPapel,provaBrowser:false,provaCAS:false,provaP95E2E:false};
 }
 module.exports={validarFixture,permitido,verificarProvas};
