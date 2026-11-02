@@ -52,7 +52,7 @@
           q=latest;
         }
         return {sent,blocked:false,acks};
-      }
+      } finally { /* limpeza de inflight no encerramento da promessa */ }
       })();
       return inflight.finally(function(){ inflight=null; });
     }
