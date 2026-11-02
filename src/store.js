@@ -803,10 +803,18 @@
   }
 
   /* Mesma forma do estado, já filtrado. As telas leem daqui, nunca de obter(). */
+  /* PERF-12C: snapshot de listas visiveis. A chave inclui identidade,
+     escopo e referencia de estado, evitando reutilizacao entre sessoes. */
+  let snapshotVisivel = null;
   function dados() {
+    const ctx = contexto(), filtros = ctx.filtros || {};
+    const chave = JSON.stringify([revisaoDados, ctx.usuario && ctx.usuario.id,
+      ctx.usuario && ctx.usuario.papel, ctx.tenantId, filtros.tenant, filtros.usuario]);
+    if (snapshotVisivel && snapshotVisivel.chave === chave &&
+        snapshotVisivel.estado === estado) return snapshotVisivel.dados;
     const porTenant = function (lista) { return (lista || []).filter(function (r) { return visivel(r, false); }); };
     const porDono = function (lista) { return (lista || []).filter(function (r) { return visivel(r, true); }); };
-    return {
+    const resultado = {
       tenants: estado.tenants,
       usuarios: estado.usuarios,
       contas: porDono(estado.contas),
@@ -827,6 +835,8 @@
       notas: ordenarNotas((estado.notas || []).filter(minhaNota)),
       config: estado.config
     };
+    snapshotVisivel = { chave: chave, estado: estado, dados: resultado };
+    return resultado;
   }
 
   /* ---------- notas rápidas ----------
