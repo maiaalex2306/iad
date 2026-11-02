@@ -1,0 +1,17 @@
+name: P0 — CAS concurrent flush no data loss
+on:
+  push:
+    branches: ['hotfix/cas-p0-join-inflight']
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: node --check src/cas-queue.js
+      - run: node --test nuvem/testes/cas-p0-concurrent-flush.test.cjs
+      - run: node --test nuvem/testes/*.test.cjs
