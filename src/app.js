@@ -8271,7 +8271,8 @@
       /* A análise vem depois do render: a tela aparece na hora e o assistente
          trabalha no fundo. `analisandoAgora` evita o laço — pintarEmails é
          chamado de novo no fim da análise. */
-      if (!analisandoAgora()) analisarEmailsNovos(false);
+      /* Hotfix P0: carregar emails nao autoriza analisar com IA.
+         Analise permanece acionavel explicitamente pelo usuario. */
     }, function (e) {
       console.warn('Não consegui buscar os e-mails:', e);
     });
