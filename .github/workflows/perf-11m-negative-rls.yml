@@ -1,0 +1,28 @@
+name: PERF-11M — RLS provas negativas sem segredos
+on:
+  push:
+    branches: ['performance/perf-11m-negative-rls-contract']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Sintaxe e casos RLS deterministas
+        run: |
+          node --check scripts/perf11m-rls-negative.cjs
+          node --test nuvem/testes/perf-11m-rls-negative.test.cjs
+      - name: Suite completa de contratos
+        run: node --test nuvem/testes/*.test.cjs
+      - name: Producao permanece v286
+        run: |
+          grep -q "numero: 'v286'" src/config.js
+          grep -q 'iad-crm-v286' sw.js
