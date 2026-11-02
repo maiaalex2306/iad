@@ -1,0 +1,17 @@
+name: PERF-12B — defer attachment initialization
+on:
+  push:
+    branches: ['performance/perf-12b-defer-file-init-v2863']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: node --check src/app.js
+      - run: node --test nuvem/testes/perf-12b-defer-files.test.cjs
+      - run: node --test nuvem/testes/*.test.cjs

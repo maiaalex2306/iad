@@ -35,4 +35,4 @@ window.IADConfig = {
    do cache, que é o que está GUARDADO no aparelho; aqui é o que está RODANDO.
    Quando os dois discordam, o navegador está no meio de uma troca, e saber
    disso vale mais do que a coincidência dos dois números. */
-window.IADVersao = { numero: 'v286.2', data: '2026-11-02' };
+window.IADVersao = { numero: 'v286.3', data: '2026-11-02' };
