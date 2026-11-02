@@ -56,7 +56,7 @@ test('389 resumos e fila integral equivalentes ao motor publicado, incluindo oit
  }
  // Validate no retained results: mutate a decision and recompute without a Store revision.
  const prior=JSON.stringify(next.E.resumo(next.ops[0]));
- next.ops[0].dims[PICKS(next).id]=0;
+ next.ops[0].dims[PICKS(next).id]=4;
  assert.notEqual(JSON.stringify(next.E.resumo(next.ops[0])),prior);
 });
 function PICKS(x){return x.E.ORDEM_DECISAO.length?{id:x.E.ORDEM_DECISAO[0]}:{id:'problema'};}
