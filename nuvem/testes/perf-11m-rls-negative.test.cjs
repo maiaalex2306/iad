@@ -43,3 +43,24 @@ test('nao retorna tokens nem identificadores ao relatorio',async()=>{
  const dump=JSON.stringify(result);
  assert.ok(!dump.includes('token-')&&!dump.includes('a1')&&!dump.includes('v1'));
 });
+
+test('cada papel nao-admin exige cobertura negativa e positiva propria',async()=>{
+ const records=[
+  {tabela:'oportunidades',id:'a1',tenant_id:'a',dono_id:'v1'},
+  {tabela:'contas',id:'b1',tenant_id:'b',dono_id:'mgr'},
+  {tabela:'tarefas',id:'b2',tenant_id:'b',dono_id:'mgr'},
+  {tabela:'oportunidades',id:'b3',tenant_id:'b',dono_id:'mgr'}
+ ];
+ const altered={identidades:pessoas,registros:records};
+ const mock=async ({id,token})=>{
+  const u=pessoas.find(x=>x.token===token),r=records.find(x=>x.id===id);
+  return permitido(u,r)?[{id}]:[];
+ };
+ await assert.rejects(()=>verificarProvas({fixture:altered,consultar:mock}),/Perfil sem registro permitido conhecido/);
+});
+test('relatorio discrimina cobertura por papel, sem expor IDs',async()=>{
+ const r=await verificarProvas({fixture,consultar});
+ assert.equal(r.porPapel.length,4);
+ assert.ok(r.porPapel.every(x=>x.positivas>0));
+ assert.ok(r.porPapel.filter(x=>x.papel!=='admin').every(x=>x.negativas>0));
+});
