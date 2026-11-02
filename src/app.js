@@ -304,15 +304,10 @@
        depois do render, nunca antes: abrir um diálogo modal sobre uma tela
        ainda em branco assusta e não dá contexto nenhum. O setTimeout é isso,
        e nada mais. */
-    if (!jaFalouHoje(logado.id)) {
-      /* Marcado aqui, e não lá dentro: render roda a cada troca de tela, e
-         duas navegações rápidas abririam duas caixas antes de a primeira
-         chegar a marcar o dia. */
-      marcarQueFalou(logado.id);
-      setTimeout(function () { App.conversar(); }, 400);
-    }
+    /* PERF-13B: abrir a sessao ou a tela Hoje NAO deve disparar modal nem
+       varredura de IA. A acao explicita App.analisarPendencias permanece ativa,
+       assim como o assistente de conversa acionado pelo usuario. */
 
-    if (hash === '#/hoje') varrerOrientacoesDoDia();
   }
 
   /* ---------------- a varredura diária, disparada pela tela ----------------
