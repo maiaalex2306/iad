@@ -1,0 +1,17 @@
+name: PERF-12C — Snapshot de visibilidade
+on:
+  push:
+    branches: ['performance/perf-12c-visible-snapshot']
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: node --check src/store.js
+      - run: node --test nuvem/testes/perf-12c-visible-snapshot.test.cjs
+      - run: node --test nuvem/testes/*.test.cjs
