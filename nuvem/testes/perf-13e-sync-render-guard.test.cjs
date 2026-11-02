@@ -19,7 +19,7 @@ function build(){
    IADSincronia:{aoMudar:fn=>observer=fn}},
   A:{atual:()=>user,filtros:()=>filters},Store:{revisao:()=>revision},
   location:{get hash(){return route}},faixaDeAviso:()=>banner,
-  vigiarGravacao:()=>notices,requestAnimationFrame:fn=>{raf.push(fn);},
+  vigiarGravacao:()=>{notices++;},requestAnimationFrame:fn=>{raf.push(fn);},
   setTimeout:fn=>{raf.push(fn);},JSON
  });
  // State normally lives elsewhere in app.js; emulate it explicitly here.
