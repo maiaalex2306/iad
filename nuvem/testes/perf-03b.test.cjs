@@ -136,7 +136,9 @@ test('Cockpit muda somente a aba: paridade de entradas e invalidação após gra
  const bloco=app.slice(app.indexOf('abaCockpit: function (aba) {'),app.indexOf('verDiagnostico: function ()'));
  assert.match(bloco,/corpo\.innerHTML = partes\.corpo/);
  assert.match(bloco,/atual\.outerHTML = partes\.abas/);
- assert.match(bloco,/if \(aba === 'arquivos'\) pintarArquivos\(id\)/);
+ assert.match(bloco,/if \(aba === 'arquivos'\) \{/);
+ assert.match(bloco,/requestAnimationFrame\(iniciar\)/);
+ assert.match(bloco,/pintarArquivos\(id\)/);
  assert.match(bloco,/if \(aba === 'propostas'\) pintarSoltaQuadro\(\)/);
 });
 test('SQL jornal de mudanças exige RLS, marcador por tenant e triggers para tabelas comerciais',()=>{
