@@ -10,6 +10,6 @@ test('nao dispara analise IA ao carregar email',()=>{
 });
 test('mantem analise manual',()=>assert.match(app,/App\.analisarEmails\s*=\s*function\s*\(\)\s*\{\s*analisarEmailsNovos\(true\)/));
 test('cache e app preservam versao 286.2',()=>{
- assert.match(config,/numero: 'v286\.5'/);
- assert.match(sw,/iad-crm-v286\.5/);
+ assert.match(config,/numero: 'v286\.6'/);
+ assert.match(sw,/iad-crm-v286\.6/);
 });

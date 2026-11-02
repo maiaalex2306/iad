@@ -943,7 +943,7 @@
         : '<div class="vazio small">Nenhum anexo.</div>';
     }).catch(function (e) {
       const destino = document.getElementById('lista-arquivos');
-      if (destino) destino.innerHTML = '<div class="tiny muted">Não foi possível ler os anexos: ' + U.esc(e.message) + '</div>';
+      if (destino && destino === alvo && location.hash === '#/op/' + opId) destino.innerHTML = '<div class="tiny muted">Não foi possível ler os anexos: ' + U.esc(e.message) + '</div>';
     });
   }
 
@@ -1982,7 +1982,18 @@
         };
         if (perf) perf.medir('perf03b.trocar-aba', atualizar);
         else atualizar();
-        if (aba === 'arquivos') pintarArquivos(id);
+        if (aba === 'arquivos') {
+          /* PERF-12D: renderizar a aba antes de iniciar leitura do IndexedDB.
+             Descartar a tarefa se usuario navegar a outro card/aba. */
+          const listaAtiva = document.getElementById('lista-arquivos');
+          const iniciar = function () {
+            if (!listaAtiva || document.getElementById('lista-arquivos') !== listaAtiva ||
+                location.hash !== '#/op/' + id) return;
+            pintarArquivos(id);
+          };
+          if (typeof requestAnimationFrame === 'function') requestAnimationFrame(iniciar);
+          else setTimeout(iniciar, 0);
+        }
         if (aba === 'propostas') pintarSoltaQuadro();
       } else render();
       if (aba === 'sinais') colherAberturas();
