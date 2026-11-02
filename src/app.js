@@ -109,6 +109,24 @@
      velha — não existe carteira velha. É a tela inteira. */
   let semServidor = '';
 
+  /* PERF-13E: assinatura da tela, nao do estado operacional da sincronizacao.
+     Somente dados, escopo, rota e FAIXA visual podem exigir nova renderizacao.
+     Fila CAS / ACK nunca sao alterados por esta otimizacao. */
+  let ultimaAssinaturaSync = null;
+  function assinaturaDaTelaParaSync() {
+    const usuario = A.atual();
+    const nuvem = global.IADNuvem;
+    if (!usuario || !nuvem || (nuvem.mandaNoAcesso() && !nuvem.sessao()) ||
+        baixando || semServidor || typeof Store.revisao !== 'function') return null;
+    const filtros = A.filtros() || {};
+    return JSON.stringify([
+      usuario.id, usuario.papel, usuario.tenantId || '',
+      Store.revisao(), location.hash || '#/hoje',
+      filtros.tenant || '', filtros.usuario || '',
+      faixaDeAviso()
+    ]);
+  }
+
   function render() {
     const conteudo = document.getElementById('conteudo');
     let logado = A.atual();
@@ -299,6 +317,7 @@
       window.scrollTo(0, ehTelaDeLista(hash) ? (ondeParei[hash] || 0) : 0);
     }
     rolagemAnterior = hash;
+    ultimaAssinaturaSync = assinaturaDaTelaParaSync();
 
     /* A IaD aparece uma vez por dia, na primeira tela depois do login — e
        depois do render, nunca antes: abrir um diálogo modal sobre uma tela
@@ -11248,6 +11267,10 @@
         ? requestAnimationFrame : function (fn) { return setTimeout(fn, 0); };
       agendar(function () {
         renderSyncPendente = false;
+        /* Estado 'salvando/ocioso' sem dados alterados nao precisa reconstruir
+           Pipeline/HEINEKEN; erros e avisos continuam pintados integralmente. */
+        const assinatura = assinaturaDaTelaParaSync();
+        if (assinatura && assinatura === ultimaAssinaturaSync) return;
         render();
       });
     });
