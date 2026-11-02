@@ -22,7 +22,7 @@
       return parsed;
     }
     function save(queue){storage.setItem(key,JSON.stringify(queue));}
-    let running=false;
+    let inflight=null;
     function enqueue(op){
       if(!op||op.userId!==user||op.tenantId!==tenant||!op.operationId) throw Error('Operação CAS de outra sessão');
       const q=load();
@@ -33,9 +33,11 @@
       }
       q.push(JSON.parse(JSON.stringify(op)));save(q);return q.length;
     }
-    async function flush(){
-      if(running) return {busy:true};
-      running=true;
+    function flush(){
+      /* Reentrada compartilha o ACK da tentativa corrente. Não declarar
+         busy como conflito nem criar um segundo envio para a mesma fila. */
+      if(inflight) return inflight;
+      inflight=(async function(){
       let sent=0;
       const acks=[];
       try{
@@ -50,7 +52,9 @@
           q=latest;
         }
         return {sent,blocked:false,acks};
-      }finally{running=false;}
+      }
+      })();
+      return inflight.finally(function(){ inflight=null; });
     }
     return Object.freeze({enqueue,flush,pending:()=>load().map(x=>JSON.parse(JSON.stringify(x)))});
   }
