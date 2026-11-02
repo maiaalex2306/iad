@@ -3747,7 +3747,7 @@
         [['Diferença do botão de cima', 'O de cima lê só esta negociação e o relatório fala deste cliente. Este varre a carteira.'],
          ['Quando usar', 'Depois de uns dias sem abrir o app, para pôr tudo em dia de uma vez.'],
          ['De cinco em cinco', 'Vai em lotes para não estourar o limite do provedor. Se sobrar, o aviso diz quantos faltam.'],
-         ['Sozinho', 'Ele já roda ao abrir o app, no fundo, sem avisar.']]) + '>Analisar agora</button>';
+         ['Sozinho', 'Somente quando você pedir: nenhuma análise automática em segundo plano.']]) + '>Analisar agora</button>';
 
     if (a.erro) {
       return '<div class="aviso" style="margin-top:10px">O assistente falhou: ' + esc(a.erro) +
