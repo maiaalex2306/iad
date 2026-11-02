@@ -11220,7 +11220,20 @@
     /* Cada alteração passa a subir sozinha, e o estado do envio aparece na
        tela sem ninguém precisar perguntar. */
     global.IADSincronia.ligar();
-    global.IADSincronia.aoMudar(function (sinc) { vigiarGravacao(sinc); render(); });
+    /* PERF-12A: a fila pode emitir varias transicoes no mesmo frame.
+       O aviso de erro continua imediato; a tela e repintada uma vez por frame. */
+    let renderSyncPendente = false;
+    global.IADSincronia.aoMudar(function (sinc) {
+      vigiarGravacao(sinc);
+      if (renderSyncPendente) return;
+      renderSyncPendente = true;
+      const agendar = typeof requestAnimationFrame === 'function'
+        ? requestAnimationFrame : function (fn) { return setTimeout(fn, 0); };
+      agendar(function () {
+        renderSyncPendente = false;
+        render();
+      });
+    });
     global.IADAjuda.ligar();
     /* O balão que conta o que a IA está fazendo. Ligado uma vez, aqui, porque
        ele escuta o barramento do IADIA — não a tela. Todo pedido nasce
