@@ -1,0 +1,20 @@
+name: PERF-13C — RLS predicate parity
+on:
+  push:
+    branches: ['performance/perf-13c-rls-initplan-prod']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test nuvem/testes/perf-13c-rls-initplan.test.cjs
+      - run: node --test nuvem/testes/*.test.cjs
