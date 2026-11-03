@@ -3,11 +3,11 @@
    mesmo commit: um diz o que está guardado no aparelho, o outro o que está
    rodando, e é a discordância entre os dois que denuncia uma troca pela
    metade. */
-const CACHE = 'iad-crm-v286.9';
+const CACHE = 'iad-crm-v286.10';
 const ARQUIVOS = [
   './', './index.html', './recuperar.html', './manifest.webmanifest',
   './src/recuperacao.js',
-  './assets/styles.css',
+  './assets/styles.css', './assets/paleta-acp.css',
   './src/config.js', './src/performance.js', './src/localidades.js',
   './src/incremental.js', './src/p5b-shadow.js', './src/p5d-events.js', './src/p5e-cache.js', './src/playbook.js', './src/store.js', './src/auth.js', './src/engine.js', './src/perf-02.js', './src/pipeline-performance.js',
   './src/funis.js', './src/orientacao.js', './src/conferencia.js', './src/arquivos.js', './src/pendencias.js', './src/csv.js', './src/graficos.js', './src/integracoes.js', './src/cas.js', './src/cas-queue.js', './src/nuvem.js', './src/sincronia.js', './src/ia.js', './src/documentos.js', './src/quadro.js',
@@ -47,18 +47,24 @@ self.addEventListener('fetch', function (e) {
   /* Um único objeto de cache para a rota, inclusive com parâmetros UTM.
      Não armazenar dados de usuário nem páginas de recuperação com tokens. */
   const chave = new URL(url.pathname, self.location.origin).href;
+  /* PERF-13F: o install atomico baixa todo o app shell com cache:reload.
+     Revalidar cada um dos 38 scripts a cada abertura anulava o ganho do PWA.
+     Consultar SOMENTE o cache da versao ativa: caches.match global poderia
+     devolver arquivo de uma versao antiga durante a ativacao de um novo SW.
+     URLs de APIs, terceiros e parametros sensiveis nunca entram neste fluxo. */
   e.respondWith(
-    fetch(new Request(e.request, { cache: 'no-cache' })).then(function (resposta) {
-      const controle = resposta.headers.get('cache-control') || '';
-      if (resposta.ok && resposta.type === 'basic' &&
-          !/no-store|private/i.test(controle)) {
-        const copia = resposta.clone();
-        caches.open(CACHE).then(function (c) { return c.put(chave, copia); }).catch(function () {});
-      }
-      return resposta;
-    }).catch(function () {
-      return caches.match(chave).then(function (guardado) {
-        return guardado || Response.error();
+    caches.open(CACHE).then(function (c) {
+      return c.match(chave).then(function (guardado) {
+        if (guardado) return guardado;
+        return fetch(new Request(e.request, { cache: 'no-cache' })).then(function (resposta) {
+          const controle = resposta.headers.get('cache-control') || '';
+          if (resposta.ok && resposta.type === 'basic' &&
+              !/no-store|private/i.test(controle)) {
+            const copia = resposta.clone();
+            e.waitUntil(c.put(chave, copia).catch(function () {}));
+          }
+          return resposta;
+        });
       });
     })
   );
