@@ -5190,11 +5190,11 @@
     if (f.tipos.length) f.tipos = f.tipos.filter(function (t) { return tipos.indexOf(t) !== -1; });
   }
 
-  function tarefasFiltradas() {
+  function tarefasFiltradas(linhasComContexto) {
     sanearFiltrosDeTarefa();
     const f = tarefasFiltro;
     const eu = global.IADAuth.atual();
-    const lista = tarefasComContexto().filter(function (l) { return tarefaPassaNoFiltro(l, f, eu); });
+    const lista = (linhasComContexto || tarefasComContexto()).filter(function (l) { return tarefaPassaNoFiltro(l, f, eu); });
 
     const chave = function (l) {
       if (f.ordem === 'valor') return (l.op && l.op.valor) || 0;
@@ -5250,7 +5250,7 @@
 
   /* O resumo da semana existe para responder, antes de qualquer filtro, a
      pergunta com que o vendedor abre a tela: em que pé eu estou? */
-  function resumoDaSemana() {
+  function resumoDaSemana(linhasComContexto) {
     const eu = global.IADAuth.atual();
     const hoje = Store.hoje();
     const limite = new Date(); limite.setDate(limite.getDate() + 7);
@@ -5265,7 +5265,7 @@
        o número grande em cima continuava dizendo 93 — que se lê, com toda a
        razão, como "o filtro não funcionou". */
     const carteira = tarefasFiltro.carteira;
-    const minhas = tarefasComContexto().filter(function (l) {
+    const minhas = (linhasComContexto || tarefasComContexto()).filter(function (l) {
       return (!l.t.donoId || !eu || l.t.donoId === eu.id) && naCarteira(l, carteira);
     });
     const atrasadas = minhas.filter(function (l) { return statusDaTarefa(l.t) === 'atrasada'; });
@@ -5342,24 +5342,29 @@
 
   /* O que esta tarefa deveria destravar. É a ponte entre a lista e o método:
      sem ela a tela vira agenda, e agenda não faz conta andar. */
-  function faltaNaLinha(linha) {
+  function faltaNaLinha(linha, lacunasPorOp) {
     if (!linha.op) return '<span class="tiny muted">sem negócio</span>';
     const alvo = P.DIMENSOES.filter(function (d) { return d.id === linha.t.decisaoAlvo; })[0];
-    const lacunas = E.lacunas(linha.op);
-    const primeira = lacunas[0];
+    /* Quando a decisao-alvo e conhecida, nenhuma lacuna precisa ser calculada. */
     if (alvo) {
       const nota = linha.op.dims[alvo.id] || 0;
       return '<span class="tiny">' + esc(alvo.nome) + ' <span class="muted">' + nota + '/2</span></span>';
     }
+    /* O mesmo negocio pode aparecer em varias tarefas da pagina. */
+    const id = linha.op.id;
+    if (!Object.prototype.hasOwnProperty.call(lacunasPorOp, id)) {
+      lacunasPorOp[id] = E.lacunas(linha.op);
+    }
+    const primeira = lacunasPorOp[id][0];
     if (!primeira) return '<span class="tiny muted">nada em aberto</span>';
     return '<span class="tiny muted">falta: ' + esc(primeira.dimensao ? primeira.dimensao.nome : primeira.tipo) + '</span>';
   }
 
-  function linhaDeTarefa(linha) {
+  function linhaDeTarefa(linha, donosPorId, lacunasPorOp) {
     const t = linha.t, op = linha.op, conta = linha.conta;
     const situacao = statusDaTarefa(t);
     const rot = ROTULO_STATUS[situacao];
-    const dono = global.IADAuth.usuarios().filter(function (u) { return u.id === t.donoId; })[0];
+    const dono = donosPorId[t.donoId];
     const quando = t.status === 'aberta' ? t.vencimento : (t.concluidaEm || t.vencimento);
     const marcada = !!tarefasMarcadas[t.id];
 
@@ -5387,7 +5392,7 @@
           '<span class="tiny muted">' + esc(conta ? conta.nome : '') + '</span>'
         : '<span class="tiny muted">—</span>') + '</td>' +
 
-      '<td>' + faltaNaLinha(linha) + '</td>' +
+      '<td>' + faltaNaLinha(linha, lacunasPorOp) + '</td>' +
       '<td class="right nowrap">' + U.moeda(op ? op.valor : 0) + '</td>' +
       '<td class="nowrap">' +
       (t.status === 'aberta' && op
@@ -5421,7 +5426,9 @@
   function tarefas() {
     const eu = global.IADAuth.atual();
     const f = tarefasFiltro;
-    const lista = tarefasFiltradas();
+    /* PERF-32: uma unica fotografia do contexto durante toda a renderizacao. */
+    const todasAsLinhas = tarefasComContexto();
+    const lista = tarefasFiltradas(todasAsLinhas);
     const paginas = Math.max(1, Math.ceil(lista.length / f.porPagina));
     const pagina = Math.min(f.pagina, paginas);
     const daPagina = lista.slice((pagina - 1) * f.porPagina, pagina * f.porPagina);
@@ -5439,7 +5446,7 @@
     /* Só as empresas que têm tarefa: filtro que oferece cem empresas onde
        noventa não têm nada é ruído com cara de opção. */
     const comTarefa = {};
-    tarefasComContexto().forEach(function (l) { if (l.conta) comTarefa[l.conta.id] = l.conta; });
+    todasAsLinhas.forEach(function (l) { if (l.conta) comTarefa[l.conta.id] = l.conta; });
     const empresas = Object.keys(comTarefa).map(function (k) { return comTarefa[k]; })
       .sort(function (a, b) { return String(a.nome).localeCompare(String(b.nome)); });
 
@@ -5470,8 +5477,7 @@
        ZERO. Aí a resposta deixa de ser "o filtro falhou" e passa a ser
        "nenhum destes negócios foi para nutrição ainda", que é outra
        conversa, e a verdadeira. */
-    const souEu = global.IADAuth.atual();
-    const todasAsLinhas = tarefasComContexto();
+    const souEu = eu;
     const contaDaCarteira = {};
     CARTEIRA_TAREFA.forEach(function (cx) {
       contaDaCarteira[cx[0]] = todasAsLinhas.filter(function (l) {
@@ -5503,7 +5509,12 @@
         (ativo ? (f.crescente ? ' ▲' : ' ▼') : '') + '</button></th>';
     };
 
-    const corpo = daPagina.map(linhaDeTarefa).join('') ||
+    const donosPorId = Object.create(null);
+    usuarios.forEach(function (u) { donosPorId[u.id] = u; });
+    const lacunasPorOp = Object.create(null);
+    const corpo = daPagina.map(function (linha) {
+      return linhaDeTarefa(linha, donosPorId, lacunasPorOp);
+    }).join('') ||
       '<tr><td colspan="9"><div class="vazio small">Nenhuma tarefa neste filtro.</div></td></tr>';
 
     return '<div class="row" style="align-items:center">' +
@@ -5543,7 +5554,7 @@
 
       '<div class="row chips">' + chipsDoFiltro() + '</div>' +
 
-      resumoDaSemana() +
+      resumoDaSemana(todasAsLinhas) +
 
       barraDeLote(lista.length) +
 
@@ -6239,10 +6250,14 @@
   }
 
   function listaCatalogo(est, nome) {
-    const usos = function (item) {
-      if (nome === 'segmentos') return est.contas.filter(function (c) { return c.segmento === item.nome; }).length;
-      return est.tarefas.filter(function (t) { return t.tipo === item.nome; }).length;
-    };
+    /* PERF-32: a contagem e montada uma vez (O(registros + itens)). */
+    const contagens = Object.create(null);
+    const chave = nome === 'segmentos' ? 'segmento' : 'tipo';
+    (nome === 'segmentos' ? est.contas : est.tarefas).forEach(function (registro) {
+      const k = registro[chave];
+      contagens[k] = (contagens[k] || 0) + 1;
+    });
+    const usos = function (item) { return contagens[item.nome] || 0; };
     /* A busca do segmento vale para os três campos novos: procurar
        "frigorífico" e não achar Alimentos seria pior do que não ter busca. */
     const cabe = function (i) {
@@ -6263,8 +6278,9 @@
 
     if (nome === 'segmentos') {
       const linhas = itens.map(function (i) {
+        const quantidade = usos(i);
         return '<tr><td style="min-width:150px"><strong>' + esc(i.nome) + '</strong>' +
-          '<span class="tiny muted">' + usos(i) + ' conta' + (usos(i) === 1 ? '' : 's') + '</span></td>' +
+          '<span class="tiny muted">' + quantidade + ' conta' + (quantidade === 1 ? '' : 's') + '</span></td>' +
           '<td>' + etiquetas(i.subsegmentos) + '</td>' +
           '<td>' + etiquetas(i.oportunidades) + '</td>' +
           '<td>' + etiquetas(i.personas) + '</td>' +
