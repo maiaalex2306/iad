@@ -6012,10 +6012,15 @@
           !t.vencimento || !(t.vencimento < hoje)) return;
       atrasadasIndex[t.oportunidadeId] = (atrasadasIndex[t.oportunidadeId] || 0) + 1;
     });
+    /* PERF-14: calcular potencial uma vez por oportunidade, não a cada
+       comparação do sort (O(n log n)); preservar desempate pelo IAD. */
+    const potenciais = new Map();
     const filtradas = lista.filter(function(op) {
       return passaNoFiltroDaNutricao(op, atrasadasIndex);
-    }).slice().sort(function (a, b) {
-      const pa = potencialDe(a), pb = potencialDe(b);
+    });
+    filtradas.forEach(function(op) { potenciais.set(op, potencialDe(op)); });
+    filtradas.sort(function (a, b) {
+      const pa = potenciais.get(a), pb = potenciais.get(b);
       return (posicaoDaFaixa(pa) - posicaoDaFaixa(pb)) ||
         ((pb ? pb.pontos : -1) - (pa ? pa.pontos : -1)) ||
         (E.iad(b) - E.iad(a));
@@ -6064,10 +6069,16 @@
         '</div></div>';
     }
 
+    /* Reutilizar primeiro usuário por id, preservando o comportamento
+       anterior de filter(...)[0] inclusive com ids duplicados. */
+    const donosPorId = new Map();
+    (est.usuarios || []).forEach(function(u) {
+      if (!donosPorId.has(u.id)) donosPorId.set(u.id, u);
+    });
     const linhas = filtradas.map(function (op) {
       const conta = Store.conta(op.contaId);
       const r = E.resumo(op, atrasadasIndex);
-      const dono = (est.usuarios || []).filter(function (u) { return u.id === op.dono; })[0];
+      const dono = donosPorId.get(op.dono);
       return '<tr' + (marcados[op.id] ? ' class="marcada"' : '') + '>' +
         '<td><input type="checkbox" id="n-' + lado + '-' + esc(op.id) + '"' +
         (marcados[op.id] ? ' checked' : '') +
@@ -6076,7 +6087,7 @@
         '<div class="tiny muted">' + esc((conta && conta.nome) || 'sem empresa') +
         (op.campanha ? ' · ' + esc(op.campanha) : '') +
         (dono ? ' · ' + esc(dono.nome) : '') + '</div></td>' +
-        '<td style="white-space:nowrap">' + pilulaDoPotencial(potencialDe(op), 'mini') + '</td>' +
+        '<td style="white-space:nowrap">' + pilulaDoPotencial(potenciais.get(op), 'mini') + '</td>' +
         '<td style="white-space:nowrap"><span class="pill ' + r.faixa.classe + ' mini">IAD ' + r.iad + '</span></td>' +
         '<td class="tiny muted" style="white-space:nowrap">' + r.evidenceAge + 'd sem evidência</td>' +
         '<td class="tiny muted">' +
