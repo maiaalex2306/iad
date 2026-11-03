@@ -570,7 +570,15 @@
     if (analise) return analise;
     try {
       const g = JSON.parse(localStorage.getItem(CHAVE_ANALISE) || 'null');
-      if (g && g.em && String(g.em).slice(0, 10) === Store.hoje()) analise = g;
+      if (g && g.em && String(g.em).slice(0, 10) === Store.hoje()) {
+        /* A pagina recarregada nao possui mais a Promise da IA.
+           Uma marca de espera persistida nao pode bloquear os botoes para sempre. */
+        if (g.pendenteIA) {
+          g.pendenteIA = false;
+          g.interrompida = true;
+        }
+        analise = g;
+      }
     } catch (e) { analise = null; }
     return analise;
   }
@@ -677,6 +685,8 @@
 
     const daIa = a.pendenteIA
       ? '<p class="small muted">Panorama concluído. A interpretação da IA está em andamento; você pode continuar trabalhando.</p>'
+      : a.interrompida
+      ? '<p class="small muted">A página foi recarregada durante a interpretação da IA. O panorama continua válido para a carteira exibida; refaça se quiser o texto interpretativo.</p>'
       : ia
       ? (ia.leitura ? '<p class="leitura-carteira">' + esc(ia.leitura) + '</p>' : '') +
         '<div class="orienta">' +
