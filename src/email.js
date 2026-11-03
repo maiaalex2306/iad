@@ -142,6 +142,41 @@
 
   function minhasCaixas() { return caixas || []; }
 
+  /* PERF-28: índices EFÊMEROS para uma única leitura de conversas.
+     Nunca são guardados entre chamadas; autenticação, tenant, alterações de
+     contato/conta, logout e sincronização são avaliados novamente na próxima.
+     Conservam a PRIMEIRA correspondência da busca linear original. */
+  function indiceCasamento() {
+    const dados = Store.dados();
+    const contatosPorEndereco = new Map();
+    const contatosPorDominio = new Map();
+    const contasPorSite = new Map();
+    const abertasPorConta = new Map();
+    (dados.contatos || []).forEach(function (c) {
+      [limpo(c.email), limpo(c.emailPessoal)].forEach(function (e) {
+        if (e && !contatosPorEndereco.has(e)) contatosPorEndereco.set(e, c);
+      });
+      [dominio(c.email), dominio(c.emailPessoal)].forEach(function (d) {
+        if (d && !contatosPorDominio.has(d)) contatosPorDominio.set(d, c);
+      });
+    });
+    (dados.contas || []).forEach(function (c) {
+      const d = String(c.site || c.dominio || '').toLowerCase()
+        .replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '');
+      if (d && !contasPorSite.has(d)) contasPorSite.set(d, c);
+    });
+    (dados.oportunidades || []).forEach(function (op) {
+      if (op.desfecho) return;
+      if (!abertasPorConta.has(op.contaId)) abertasPorConta.set(op.contaId, []);
+      abertasPorConta.get(op.contaId).push(op);
+    });
+    return {
+      contatosPorEndereco: contatosPorEndereco, contatosPorDominio: contatosPorDominio,
+      contasPorSite: contasPorSite, abertasPorConta: abertasPorConta,
+      casa: new Set(dominiosDaCasa()), oportunidadesEscolhidas: new Map()
+    };
+  }
+
   /* ---------------- o casamento ----------------
 
      Em camadas, da mais forte para a mais fraca, e cada uma diz o que sabe:
@@ -155,16 +190,22 @@
 
      Nunca há camada 4. Mensagem que não casou fica sem dono e visível, o que é
      honesto; adivinhar seria pôr conversa na carteira errada. */
-  function contatoDoEndereco(e) {
+  function contatoDoEndereco(e, indice) {
     const alvo = endereco(e);
     if (!alvo) return null;
+    if (indice) return indice.contatosPorEndereco.get(alvo) || null;
     return (Store.dados().contatos || []).filter(function (c) {
       return limpo(c.email) === alvo || limpo(c.emailPessoal) === alvo;
     })[0] || null;
   }
 
-  function contaDoDominio(d) {
+  function contaDoDominio(d, indice) {
     if (!d || ehGratuito(d)) return null;
+    if (indice) {
+      const contato = indice.contatosPorDominio.get(d);
+      if (contato) return Store.conta(contato.contaId) || null;
+      return indice.contasPorSite.get(d) || null;
+    }
     const contatos = Store.dados().contatos || [];
     const achado = contatos.filter(function (c) {
       return dominio(c.email) === d || dominio(c.emailPessoal) === d;
@@ -184,15 +225,18 @@
   /* A negociação que recebe a conversa. Uma aberta é sem dúvida. Mais de uma é
      ambiguidade, e aí a mais madura ganha — é onde a evidência está e onde
      quem lê vai procurar. Zero aberta devolve nada, e a mensagem espera. */
-  function negociacaoDaConta(contaId) {
+  function negociacaoDaConta(contaId, indice) {
     if (!contaId) return null;
+    if (indice && indice.oportunidadesEscolhidas.has(contaId))
+      return indice.oportunidadesEscolhidas.get(contaId);
     const E = global.IADEngine;
-    const abertas = (Store.dados().oportunidades || []).filter(function (o) {
+    const abertas = indice ? (indice.abertasPorConta.get(contaId) || []) : (Store.dados().oportunidades || []).filter(function (o) {
       return o.contaId === contaId && !o.desfecho;
     });
-    if (!abertas.length) return null;
-    if (abertas.length === 1) return abertas[0];
-    return abertas.slice().sort(function (a, b) { return E.iad(b) - E.iad(a); })[0];
+    const escolhido = !abertas.length ? null : abertas.length === 1 ? abertas[0]
+      : abertas.slice().sort(function (a, b) { return E.iad(b) - E.iad(a); })[0];
+    if (indice) indice.oportunidadesEscolhidas.set(contaId, escolhido);
+    return escolhido;
   }
 
   /* O outro lado da conversa: numa mensagem recebida é quem mandou; numa
@@ -202,12 +246,12 @@
     return m.direcao === 'saida' ? endereco(m.para) : endereco(m.de);
   }
 
-  function casar(m) {
+  function casar(m, indice) {
     /* Antes de qualquer camada: se o outro lado é da casa, isto é e-mail
        interno. Não tem dono de cliente, e não vai para negociação nenhuma.
        Vem primeiro de propósito — inclusive antes do casamento GRAVADO à mão,
        porque foi exatamente o casamento errado que criou o problema. */
-    if (ehDaCasa(doOutroLado(m))) {
+    if (indice ? indice.casa.has(dominio(doOutroLado(m))) : ehDaCasa(doOutroLado(m))) {
       return { contato: null, conta: null, op: null, como: 'interno' };
     }
 
@@ -217,21 +261,21 @@
       const conta = gravadoContato ? Store.conta(gravadoContato.contaId)
         : (gravadaOp ? Store.conta(gravadaOp.contaId) : null);
       return { contato: gravadoContato, conta: conta,
-               op: (gravadaOp && !gravadaOp.desfecho) ? gravadaOp : negociacaoDaConta(conta && conta.id),
+               op: (gravadaOp && !gravadaOp.desfecho) ? gravadaOp : negociacaoDaConta(conta && conta.id, indice),
                como: 'gravado' };
     }
 
     const alvo = doOutroLado(m);
-    const contato = contatoDoEndereco(alvo);
+    const contato = contatoDoEndereco(alvo, indice);
     if (contato) {
       const conta = Store.conta(contato.contaId);
-      return { contato: contato, conta: conta, op: negociacaoDaConta(contato.contaId),
+      return { contato: contato, conta: conta, op: negociacaoDaConta(contato.contaId, indice),
                como: 'endereco' };
     }
 
-    const conta = contaDoDominio(dominio(alvo));
+    const conta = contaDoDominio(dominio(alvo), indice);
     if (conta) {
-      return { contato: null, conta: conta, op: negociacaoDaConta(conta.id), como: 'dominio' };
+      return { contato: null, conta: conta, op: negociacaoDaConta(conta.id, indice), como: 'dominio' };
     }
 
     return { contato: null, conta: null, op: null, como: '' };
@@ -257,6 +301,7 @@
       if (!c.ultima || String(m.enviada_em) > String(c.ultima.enviada_em)) c.ultima = m;
     });
 
+    const indice = indiceCasamento();
     return Object.keys(por).map(function (k) {
       const c = por[k];
       c.mensagens.sort(function (a, b) {
@@ -267,7 +312,7 @@
          que sai o endereço do cliente. Numa conversa só de saída, a primeira
          serve. */
       const base = c.mensagens.filter(function (m) { return m.direcao === 'entrada'; })[0] || c.mensagens[0];
-      const dono = casar(base);
+      const dono = casar(base, indice);
       c.contato = dono.contato;
       c.conta = dono.conta;
       c.op = dono.op;
@@ -318,9 +363,10 @@
       if (!m.lida) grupo.naoLidas++;
     });
     let total = 0;
+    const indice = indiceCasamento();
     grupos.forEach(function (grupo) {
       if (!grupo.naoLidas || !grupo.primeiraEntrada) return;
-      const dono = casar(grupo.primeiraEntrada);
+      const dono = casar(grupo.primeiraEntrada, indice);
       if (dono.op && dono.op.id === opId) total += grupo.naoLidas;
     });
     return total;
