@@ -25,5 +25,4 @@ jobs:
           node --test nuvem/testes/perf-24-inapp-diagnostics.test.cjs
       - name: Coordinated release version
         run: |
-          grep -q "numero: 'v286.29'" src/config.js
-          grep -q 'iad-crm-v286.29' sw.js
+          node scripts/verificar-versao-shell.cjs
