@@ -141,6 +141,7 @@
   let contasPorId = new Map();
   let oportunidadesPorId = new Map();
   let contatosPorId = new Map();
+  let contatosPorConta = new Map();
   let tarefasPorOportunidade = new Map();
   let sinaisDiretos = new Map();
   let sinaisPorContatoSemOp = new Map();
@@ -156,6 +157,7 @@
     contasPorId = new Map();
     oportunidadesPorId = new Map();
     contatosPorId = new Map();
+    contatosPorConta = new Map();
     tarefasPorOportunidade = new Map();
     sinaisDiretos = new Map();
     sinaisPorContatoSemOp = new Map();
@@ -169,6 +171,10 @@
     });
     (estado.contatos || []).forEach(function (r) {
       if (!contatosPorId.has(r.id)) contatosPorId.set(r.id, r);
+      /* Map com chave original: conserva a igualdade estrita do filtro antigo,
+         inclusive chaves numéricas, nulas e contatos com IDs duplicados. */
+      if (!contatosPorConta.has(r.contaId)) contatosPorConta.set(r.contaId, []);
+      contatosPorConta.get(r.contaId).push(r);
     });
     (estado.tarefas || []).forEach(function (r) {
       adicionarIndice(tarefasPorOportunidade, r.oportunidadeId, r);
@@ -1029,7 +1035,10 @@
   function oportunidade(id) { reconstruirIndices(); return oportunidadesPorId.get(id); }
   function tarefa(id) { return estado.tarefas.find(function (t) { return t.id === id; }); }
   function contatosDaConta(contaId) {
-    return estado.contatos.filter(function (c) { return c.contaId === contaId && visivel(c, true); });
+    reconstruirIndices();
+    return (contatosPorConta.get(contaId) || []).filter(function (c) {
+      return visivel(c, true);
+    });
   }
   function tarefasDaOportunidade(opId) {
     reconstruirIndices();
