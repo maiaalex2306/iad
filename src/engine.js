@@ -1297,7 +1297,7 @@
       return true;
     }).map(function (op) {
       const r = resumo(op, atrasadasIndex);
-      const mom = momento(op);
+      const mom = momento(op, r.evidenceAge);
       const vencidas = (porOp[op.id] || []).filter(function (t) { return t.vencimento && t.vencimento < hoje; });
 
       /* ---------- O PRÓXIMO PASSO JÁ MARCADO ----------
