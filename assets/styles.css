@@ -627,10 +627,15 @@ td .tiny { display: block; }
 @media (min-width: 940px) {
   .acesso { grid-template-columns: 1.02fr .98fr; }
   .acesso-painel {
-    display: flex; flex-direction: column; justify-content: center; gap: 22px;
-    padding: 48px 5vw; background: var(--navy); color: #fff;
-    max-height: 100dvh; overflow-y: auto;   /* texto longo em tela baixa rola */
+    /* UI-01: o centro vertical em um painel com overflow deixava o topo
+       inacessivel em janelas baixas. O fluxo comeca no topo e rola inteiro. */
+    display: flex; flex-direction: column; justify-content: flex-start; gap: 20px;
+    padding: 40px clamp(22px, 4vw, 72px); background: var(--navy); color: #fff;
+    min-height: 0; max-height: 100dvh; overflow-x: hidden; overflow-y: auto;
   }
+  /* Os filhos nao podem encolher antes de os chips quebrarem linha:
+     isso fazia as duas linhas de chips sobreporem o primeiro titulo. */
+  .acesso-painel > * { flex: 0 0 auto; min-width: 0; }
   .acesso-painel .marca-acesso { font-size: 1.9rem; color: #fff; }
   .acesso-painel .lema { font-size: 1rem; opacity: .8; margin: 6px 0 0; max-width: 34ch; }
 
@@ -641,21 +646,36 @@ td .tiny { display: block; }
   }
 
   /* As oito, por extenso: torna concreto o que "oito decisões" quer dizer. */
-  .acesso-painel .chips { display: flex; flex-wrap: wrap; gap: 6px; max-width: 46ch; }
+  .acesso-painel .chips {
+    display: flex; flex-wrap: wrap; align-items: flex-start; align-content: flex-start;
+    flex: 0 0 auto; min-height: max-content; max-width: 100%; gap: 8px; margin: 0;
+  }
   .acesso-painel .chip {
+    display: inline-flex; flex: 0 0 auto; align-items: center;
     font-size: .72rem; font-weight: 600; letter-spacing: .01em;
-    padding: 4px 10px; border-radius: 999px;
+    line-height: 1.35; white-space: normal; overflow-wrap: anywhere;
+    padding: 5px 10px; border-radius: 999px;
     background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.14);
   }
 
-  .acesso-painel ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 15px; max-width: 46ch; }
-  .acesso-painel li { display: grid; grid-template-columns: 28px 1fr; gap: 12px; align-items: start; }
+  .acesso-painel ul {
+    list-style: none; margin: 0; padding: 0; display: grid;
+    flex: 0 0 auto; gap: 16px; max-width: 100%;
+  }
+  .acesso-painel li {
+    display: grid; grid-template-columns: 28px minmax(0, 1fr);
+    gap: 12px; align-items: start;
+  }
+  .acesso-painel li > span:last-child { display: block; min-width: 0; }
   .acesso-painel .num {
     width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center;
     background: rgba(255,255,255,.12); color: var(--orange); font-weight: 800; font-size: .8rem;
   }
   .acesso-painel li strong { display: block; font-size: .9rem; margin-bottom: 1px; }
-  .acesso-painel li span.diz { font-size: .8rem; line-height: 1.45; opacity: .72; }
+  .acesso-painel li span.diz {
+    display: block; font-size: .8rem; line-height: 1.5;
+    overflow-wrap: break-word; opacity: .82;
+  }
 
   .acesso-painel .fecho {
     font-size: .84rem; line-height: 1.5; margin: 0; max-width: 44ch;
