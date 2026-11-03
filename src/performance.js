@@ -160,6 +160,7 @@
     'perf31.badge.whatsapp',
     'perf31.badge.sinais',
     'perf31.badge.email',
+    'perf33.cockpit.canal.atualizar',
     /* PERF-26: métricas fixas já coletadas na troca de abas; sem IDs ou nomes comerciais. */
     'perf10.cockpit.abas.cabecalho',
     'perf10.cockpit.aba.conteudo',
