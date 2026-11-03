@@ -421,7 +421,10 @@
 
   /* PERF-02: índice de atrasos opcional por execução da fila. Os consumidores
      isolados de E.resumo continuam usando a rotina original, sem mudança. */
-  function resumo(op, atrasadasIndex, diagnosticoFila) {
+  function resumo(op, atrasadasIndex) {
+    /* PERF-22: terceiro argumento opcional e restrito a fila().
+       Preservar a assinatura publica original para consumidores legados. */
+    const diagnosticoFila = arguments[2];
     /* PERF-04 P5: idade da evidência calculada uma única vez por resumo.
        Não cachear entre renders, revisões, usuários ou empresas. */
     const idade = evidenceAge(op);
