@@ -157,6 +157,31 @@ test('PERF-34A: tela distingue os dois modos e nao bloqueia para sempre apos rel
  assert.ok(views.includes('g.pendenteIA = false;'));
  assert.ok(views.includes('Aprofundamento parcial:'));
 });
+test('PERF-34A: cache do panorama não atravessa empresas, usuários nem dias',()=>{
+ const viewsCode=between(views,"  const CHAVE_ANALISE = 'iad-crm:analise-do-dia';","  function definirAnalise(a)");
+ const disk=new Map();
+ let user={id:'u1',papel:'admin'},company='empresa1',day='2026-11-03';
+ const ctx={
+  Store:{contexto:()=>({usuario:user,tenantId:company,admin:true,gestor:true,
+   filtros:{tenant:company,usuario:'todos'}}),hoje:()=>day},
+  localStorage:{getItem:k=>disk.get(k)||null,setItem:(k,v)=>disk.set(k,v),removeItem:k=>disk.delete(k)},
+  JSON,Object,String
+ };
+ vm.runInNewContext('let analise=null;\n'+viewsCode+
+  '\nglobalThis.analysis={save:guardarAnalise,read:analiseDoDia};',ctx);
+ const p={panorama:{total:250},em:'2026-11-03T16:00:00.000Z',pendenteIA:true};
+ ctx.analysis.save(p);
+ assert.equal(ctx.analysis.read().panorama.total,250);
+ company='empresa2';
+ assert.equal(ctx.analysis.read(),null,'não cruzar empresa');
+ company='empresa1';
+ assert.equal(ctx.analysis.read().interrompida,true,'recarregar não preserva espera sem Promise');
+ user={id:'u2',papel:'admin'};
+ assert.equal(ctx.analysis.read(),null,'não cruzar usuário');
+ user={id:'u1',papel:'admin'};
+ day='2026-11-04';
+ assert.equal(ctx.analysis.read(),null,'não reutilizar outro dia');
+});
 test('PERF-34A: app e cache PWA v286.32 coerentes',()=>{
  const cfg=fs.readFileSync('src/config.js','utf8'),sw=fs.readFileSync('sw.js','utf8');
  assert.ok(cfg.includes("numero: 'v286.32'"));
