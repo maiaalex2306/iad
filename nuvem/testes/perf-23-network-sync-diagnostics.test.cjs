@@ -12,6 +12,13 @@ function ambiente(){
   let now=100, falhar=false;
   const chamadas=[];
   const storage=new Map();
+  /* P0: neste teste de rede, a fila CAS precisa estar verificada e vazia.
+     A ausencia de sessao CAS agora bloqueia corretamente o download. */
+  storage.set('iad-crm:nuvem-sessao:v1',JSON.stringify({
+    access_token:'test-token',
+    user:{id:'test-user'},
+    perfil:{tenant_id:'test-tenant',papel:'usuario'}
+  }));
   const localStorage={
     getItem:k=>storage.get(k)||null,
     setItem:(k,v)=>storage.set(k,String(v)),
@@ -21,7 +28,10 @@ function ambiente(){
     semSincronizar:fn=>fn(),salvar:()=>{}};
   const w={performance:{now:()=>now},localStorage,
     IADConfig:{supabase:{url:'https://supabase-ficticio.example.test',chave:'public-test-key'}},
-    IADStore:store,console};
+    IADStore:store,
+    IADCAS:{},
+    IADCASQueue:{create:()=>({pending:()=>[]})},
+    console};
   const fetch=function(url,opcoes){
     chamadas.push({url,metodo:opcoes.method});
     now+=5;
