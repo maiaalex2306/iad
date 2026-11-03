@@ -177,7 +177,7 @@
       versaoEsquema: 1,
       escopo: 'esta-sessao',
       privacidade: 'somente metricas predefinidas; sem IDs, nomes, URLs, tokens ou conteudo comercial',
-      metodologia: 'P50/P95 das ultimas 100 amostras de cada indicador; minimo sugerido 30 aberturas; dois frames nao comprovam pintura; chamadas de rede e sync podem se sobrepor e nao devem ser somadas',
+      metodologia: 'P50/P95 das últimas 100 amostras de cada indicador; mínimo sugerido 30 aberturas; dois frames não comprovam pintura; chamadas de rede e sincronização podem se sobrepor e não devem ser somadas',
       metricas: relatorioDiagnostico()
     }, null, 2);
   }
