@@ -9279,7 +9279,8 @@
     ['email', 'Minha caixa de e-mail'],
     ['lh', 'Linked Helper'],
     ['dados', 'Dados'],
-    ['app', 'O aplicativo']
+    ['app', 'O aplicativo'],
+    ['perf', 'Desempenho']
   ];
 
   const AJUDA_CONFIG = {
@@ -9287,7 +9288,8 @@
     email: 'De quais endereços o IAD recebe os seus e-mails e por qual deles ele responde. Vale para todas as negociações.',
     lh: 'A ponte com o Linked Helper: endereço, busca de respostas, quem foi descartado e o que as campanhas produziram de recusa.',
     dados: 'Importar planilha, exportar e importar backup, e a carteira de demonstração.',
-    app: 'A versão instalada, como instalar no celular, e o diagnóstico de quando a tela aparece vazia.'
+    app: 'A versão instalada, como instalar no celular, e o diagnóstico de quando a tela aparece vazia.',
+    perf: 'Meça P50/P95 de abertura dos cards, rede e sincronização. Só liga quando você pedir; exporta apenas números técnicos.'
   };
 
   let abaConfig = 'nuvem';
@@ -9304,7 +9306,7 @@
 
     const corpo = {
       nuvem: configNuvem, email: configEmail, lh: configLinkedHelper,
-      dados: configDados, app: configApp
+      dados: configDados, app: configApp, perf: configDesempenho
     }[abaConfig] || configNuvem;
 
     return '<h1>Configuração</h1>' +
@@ -9809,6 +9811,91 @@
       : '';
 
     return topo + tabela + botoes + deFora + '</div>';
+  }
+
+  /* PERF-24: diagnóstico dentro do app, sem console, sem mandar conteúdo
+     comercial à nuvem. Somente nomes de métricas pré-aprovados pelo motor.
+     Não calcular resumos de carteira para exibir esta tela. */
+  function configDesempenho() {
+    const p = global.IADPerformance;
+    if (!p || !p.relatorioDiagnostico)
+      return '<div class="card"><h2>Diagnóstico indisponível</h2><p>Atualize o aplicativo.</p></div>';
+    const ativo = p.ativo();
+    const rel = p.relatorioDiagnostico();
+    const principais = [
+      ['perf17.cockpit.clique-a-dois-frames', 'Abertura: clique até dois frames'],
+      ['perf17.cockpit.etapa-rota', 'Abertura: rota'],
+      ['perf17.cockpit.etapa-html', 'Abertura: geração HTML'],
+      ['perf17.cockpit.etapa-dom', 'Abertura: atualização DOM'],
+      ['perf17.cockpit.etapa-widgets', 'Abertura: inicialização dos widgets'],
+      ['perf17.cockpit.etapa-frame1', 'Abertura: primeiro frame'],
+      ['perf17.cockpit.etapa-frame2', 'Abertura: segundo frame'],
+      ['tela.cockpit', 'HTML do cockpit (medição independente)'],
+      ['dom.cockpit', 'DOM do cockpit (medição independente)'],
+      ['perf10.cockpit.resumo', 'Resumo do Decision Engine'],
+      ['perf03b.cockpit-resumo', 'Cálculo interno do resumo'],
+      ['perf10.cockpit.inicializar-quadro', 'Inicialização do quadro']
+    ];
+    const rede = [
+      ['perf23.sync.puxar', 'Sincronização: baixar'],
+      ['perf23.sync.manual', 'Sincronização manual completa'],
+      ['perf23.sync.entrada', 'Sincronização na entrada'],
+      ['perf23.rede.rest', 'Supabase: dados REST'],
+      ['perf23.rede.auth', 'Supabase: autenticação'],
+      ['perf23.rede.functions', 'Supabase: funções'],
+      ['perf23.rede.storage', 'Supabase: arquivos'],
+      ['perf23.rede.outros', 'Supabase: outros']
+    ];
+    const valor = function (n) {
+      return Number.isFinite(Number(n)) ? Number(n).toFixed(1) + ' ms' : '—';
+    };
+    const linhas = function (colecao) {
+      return colecao.filter(function (x) { return !!rel[x[0]]; })
+        .map(function (x) {
+          const m = rel[x[0]];
+          return '<tr><td class="small">' + esc(x[1]) + '</td>' +
+            '<td class="right small">' + Number(m.chamadas || 0) + '</td>' +
+            '<td class="right small">' + valor(m.p50Ultimas100Ms) + '</td>' +
+            '<td class="right small"><strong>' + valor(m.p95Ultimas100Ms) + '</strong></td>' +
+            '<td class="right small">' + valor(m.maxMs) + '</td></tr>';
+        }).join('');
+    };
+    const cabecalho = '<thead><tr><th>Indicador</th><th class="right">Amostras</th>' +
+      '<th class="right">P50</th><th class="right">P95</th><th class="right">Máximo</th></tr></thead>';
+    const tabela = function (titulo, grupo) {
+      const corpo = linhas(grupo);
+      return '<div class="card"><h2>' + esc(titulo) + '</h2>' +
+        (corpo ? '<div class="tabela-rolagem"><table>' + cabecalho +
+          '<tbody>' + corpo + '</tbody></table></div>' :
+          '<p class="small muted">Nenhuma medição deste grupo nesta sessão.</p>') +
+        '</div>';
+    };
+    const abertura = rel['perf17.cockpit.clique-a-dois-frames'];
+    const total = abertura ? abertura.chamadas : 0;
+    const amostras = total >= 30
+      ? '<span class="pill">Amostras de abertura: ' + total + ' (mínimo recomendado atingido)</span>'
+      : '<span class="pill">Amostras de abertura: ' + total + ' de 30 recomendadas</span>';
+    return '<div class="card"><h2>Diagnóstico de desempenho</h2>' +
+      '<p class="small muted">Medição local e voluntária, desligada por padrão. Nenhum nome de empresa, ' +
+      'oportunidade, URL, token ou conteúdo comercial é exportado.</p>' +
+      '<div class="row" style="margin:12px 0">' +
+      '<button class="btn" onclick="App.perf24Iniciar()"' + (ativo ? ' disabled' : '') +
+      '>Iniciar medição</button>' +
+      '<button class="btn ghost" onclick="App.perf24Parar()"' + (!ativo ? ' disabled' : '') +
+      '>Parar</button>' +
+      '<button class="btn ghost" onclick="App.perf24Atualizar()">Atualizar resultados</button>' +
+      '<button class="btn ghost" onclick="App.perf24Limpar()">Limpar medições</button>' +
+      '<button class="btn alt" onclick="App.perf24Baixar()">Baixar relatório JSON</button></div>' +
+      '<div class="row"><strong>' + (ativo ? 'Medição ATIVA' : 'Medição DESLIGADA') +
+      '</strong>' + amostras + '</div>' +
+      '<p class="small" style="margin-top:14px"><strong>Como medir:</strong> inicie, abra pelo menos ' +
+      '30 oportunidades (incluindo as mais complexas), volte aqui e atualize. Compare a primeira ' +
+      'abertura com as seguintes e faça uma sincronização normal para medir também a rede.</p>' +
+      '<p class="tiny muted">P95 representa as últimas 100 amostras de cada indicador; ' +
+      'dois frames não comprovam a apresentação visual. Rede e sincronização podem ocorrer em ' +
+      'paralelo, portanto não some seus tempos. O CRM não envia este relatório automaticamente.</p>' +
+      '</div>' + tabela('Abertura das oportunidades', principais) +
+      tabela('Rede e sincronização', rede);
   }
 
   function configApp() {

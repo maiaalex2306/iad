@@ -136,6 +136,52 @@
       metricas: relatorio(true)
     }, null, 2);
   }
+  /* PERF-24: allowlist estrita — a tela e o JSON baixado pelo usuario
+     jamais incluem nomes de metricas customizadas que por engano recebam
+     IDs, emails, URLs ou outros valores comerciais. Não alterar o relatório
+     de engenharia legado nem coletar informações em segundo plano. */
+  const CHAVES_DIAGNOSTICO = [
+    'perf17.cockpit.clique-a-dois-frames',
+    'perf17.cockpit.etapa-rota',
+    'perf17.cockpit.etapa-html',
+    'perf17.cockpit.etapa-dom',
+    'perf17.cockpit.etapa-widgets',
+    'perf17.cockpit.etapa-frame1',
+    'perf17.cockpit.etapa-frame2',
+    'tela.cockpit',
+    'dom.cockpit',
+    'perf10.cockpit.resumo',
+    'perf03b.cockpit-resumo',
+    'perf10.cockpit.inicializar-quadro',
+    'perf23.sync.puxar',
+    'perf23.sync.manual',
+    'perf23.sync.entrada',
+    'perf23.rede.rest',
+    'perf23.rede.auth',
+    'perf23.rede.functions',
+    'perf23.rede.storage',
+    'perf23.rede.outros'
+  ];
+  function relatorioDiagnostico() {
+    const bruto = relatorio(true);
+    const seguro = {};
+    CHAVES_DIAGNOSTICO.forEach(function (chave) {
+      if (Object.prototype.hasOwnProperty.call(bruto, chave))
+        seguro[chave] = bruto[chave];
+    });
+    return seguro;
+  }
+  function exportarDiagnosticoJSON() {
+    return JSON.stringify({
+      formato: 'iad-perf24-diagnostico',
+      versaoEsquema: 1,
+      escopo: 'esta-sessao',
+      privacidade: 'somente metricas predefinidas; sem IDs, nomes, URLs, tokens ou conteudo comercial',
+      metodologia: 'P50/P95 das últimas 100 amostras de cada indicador; mínimo sugerido 30 aberturas; dois frames não comprovam pintura; chamadas de rede e sincronização podem se sobrepor e não devem ser somadas',
+      metricas: relatorioDiagnostico()
+    }, null, 2);
+  }
+
   global.IADPerformance = {
     iniciar: function () { ativo = true; return 'Medição iniciada — não envia dados.'; },
     parar: function () { ativo = false; abertura = null; return relatorio(); },
@@ -145,6 +191,8 @@
     iniciarAbertura: iniciarAbertura, aberturaPendente: aberturaPendente,
     etapaAbertura: etapaAbertura, cancelarAbertura: cancelarAbertura,
     exportarJSON: exportarJSON,
+    relatorioDiagnostico: relatorioDiagnostico,
+    exportarDiagnosticoJSON: exportarDiagnosticoJSON,
     ativo: function () { return ativo; }
   };
 })(window);

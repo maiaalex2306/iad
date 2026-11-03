@@ -1948,6 +1948,35 @@
     abaNutricao: function (aba) { V.definirAbaNutricao(aba); render(); window.scrollTo(0, 0); },
     abaConfig: function (aba) { V.definirAbaConfig(aba); render(); window.scrollTo(0, 0); },
 
+    /* PERF-24: controles explícitos da aba Configuração > Desempenho.
+       Não coletar métricas por padrão; não enviar nada para a nuvem.
+       Apenas download local de métricas técnicas da allowlist. */
+    perf24Iniciar: function () {
+      const p = global.IADPerformance;
+      if (!p) return;
+      p.iniciar();
+      render();
+    },
+    perf24Parar: function () {
+      const p = global.IADPerformance;
+      if (!p) return;
+      p.parar();
+      render();
+    },
+    perf24Atualizar: function () { render(); },
+    perf24Limpar: function () {
+      const p = global.IADPerformance;
+      if (!p) return;
+      p.limpar();
+      render();
+    },
+    perf24Baixar: function () {
+      const p = global.IADPerformance;
+      if (!p || !p.exportarDiagnosticoJSON) return;
+      baixar(p.exportarDiagnosticoJSON(), 'iad-crm-diagnostico-performance.json',
+        'application/json;charset=utf-8');
+    },
+
     /* ---------------- a lista que sai para uma campanha ----------------
 
        Gerar é uma ação deliberada, com botão próprio, e não um efeito de mexer
