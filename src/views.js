@@ -5701,15 +5701,28 @@
   }
 
   /* ---------------- Contas e contatos ---------------- */
+  /* PERF-16: index local por render, sem cache entre usuarios/revisoes.
+     Preserva === do filtro anterior, inclusive NaN (que nunca coincide),
+     ordem original, registros repetidos e a visibilidade de Store.dados(). */
+  function oportunidadesAbertasPorConta(oportunidades) {
+    const grupos = new Map();
+    (oportunidades || []).forEach(function (o) {
+      if (o.desfecho || Number.isNaN(o.contaId)) return;
+      if (!grupos.has(o.contaId)) grupos.set(o.contaId, []);
+      grupos.get(o.contaId).push(o);
+    });
+    return grupos;
+  }
+
   function contas() {
     const est = Store.dados();
     if (!est.contas.length) {
       return '<div class="row"><h1>Contas</h1><span class="espaco"></span><button class="btn alt mini" onclick="App.novaConta()">+ Conta</button></div><div class="vazio">Nenhuma conta cadastrada.</div>';
     }
+    const abertasPorConta = oportunidadesAbertasPorConta(est.oportunidades);
     const lista = est.contas.map(function (c) {
       const pessoas = Store.contatosDaConta(c.id);
-      const ops = est.oportunidades.filter(function (o) { return o.contaId === c.id; });
-      const abertas = ops.filter(function (o) { return !o.desfecho; });
+      const abertas = abertasPorConta.get(c.id) || [];
       const valor = abertas.reduce(function (s, o) { return s + (o.valor || 0); }, 0);
       const ultima = abertas.map(function (o) { return E.evidenceAge(o); }).sort(function (a, b) { return a - b; })[0];
 
@@ -6121,10 +6134,11 @@
   }
 
   function listaEmpresas(est) {
+    const abertasPorConta = oportunidadesAbertasPorConta(est.oportunidades);
     const linhas = est.contas.filter(function (c) {
       return combina(c.nome) || combina(c.razaoSocial) || combina(c.cnpj) || combina(c.segmento) || combina(c.cidade);
     }).map(function (c) {
-      const ops = est.oportunidades.filter(function (o) { return o.contaId === c.id && !o.desfecho; });
+      const ops = abertasPorConta.get(c.id) || [];
       const valor = ops.reduce(function (s, o) { return s + (o.valor || 0); }, 0);
       return '<tr><td><strong>' + esc(c.nome) + '</strong>' +
         (c.razaoSocial ? '<span class="tiny muted">' + esc(c.razaoSocial) + '</span>' : '') +
