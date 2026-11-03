@@ -858,7 +858,9 @@
       /* Nem por empresa nem por dono: só minhas. `porDono` deixaria o gestor
          ler o caderninho da equipe, que é exatamente o que esta tela promete
          não fazer. */
-      notas: ordenarNotas((estado.notas || []).filter(minhaNota)),
+      notas: ordenarNotas((estado.notas || []).filter(function (n) {
+        return !!ctx.usuario && String(n.donoId || '') === String(ctx.usuario.id);
+      })),
       config: estado.config
     };
     snapshotVisivel = { chave: chave, estado: estado, dados: resultado };
@@ -1071,23 +1073,26 @@
   function oportunidade(id) { reconstruirIndices(); return oportunidadesPorId.get(id); }
   function oportunidadesDaConta(contaId) {
     reconstruirIndices();
-    /* O índice bruto nunca é exposto: papel, tenant e filtros administrativos
-       são reavaliados na leitura, inclusive sem nova revisão dos dados. */
+    /* O indice bruto nunca e exposto: contexto capturado nesta leitura,
+       nao entre leituras; troca de usuario/filtro exige novo contexto. */
+    const ctx = contexto();
     return (oportunidadesPorConta.get(contaId) || []).filter(function (op) {
-      return visivel(op, true);
+      return visivelNoContexto(op, true, ctx);
     });
   }
   function tarefa(id) { return estado.tarefas.find(function (t) { return t.id === id; }); }
   function contatosDaConta(contaId) {
     reconstruirIndices();
+    const ctx = contexto();
     return (contatosPorConta.get(contaId) || []).filter(function (c) {
-      return visivel(c, true);
+      return visivelNoContexto(c, true, ctx);
     });
   }
   function tarefasDaOportunidade(opId) {
     reconstruirIndices();
+    const ctx = contexto();
     return (tarefasPorOportunidade.get(String(opId)) || []).filter(function (t) {
-      return visivel(t, true);
+      return visivelNoContexto(t, true, ctx);
     });
   }
 
@@ -1442,20 +1447,25 @@
   }
 
   function sinais() {
-    return ordenarSinais((estado.sinais || []).filter(function (s) { return visivel(s, true); }));
+    const ctx = contexto();
+    return ordenarSinais((estado.sinais || []).filter(function (s) {
+      return visivelNoContexto(s, true, ctx);
+    }));
   }
 
   function sinaisDoContato(contatoId) {
     if (!contatoId) return [];
+    const ctx = contexto();
     return ordenarSinais((estado.sinais || []).filter(function (s) {
-      return s.contatoId === contatoId && visivel(s, true);
+      return s.contatoId === contatoId && visivelNoContexto(s, true, ctx);
     }));
   }
 
   function sinaisDaConta(contaId) {
     if (!contaId) return [];
+    const ctx = contexto();
     return ordenarSinais((estado.sinais || []).filter(function (s) {
-      return s.contaId === contaId && visivel(s, true);
+      return s.contaId === contaId && visivelNoContexto(s, true, ctx);
     }));
   }
 
@@ -1481,8 +1491,9 @@
     });
     if (op.contaId) incluir(sinaisPorContaSemContato.get(String(op.contaId)));
     candidatas.sort(function (a, b) { return a.i - b.i; });
+    const ctx = contexto();
     return ordenarSinais(candidatas.map(function (e) { return e.sinal; })
-      .filter(function (s) { return visivel(s, true); }));
+      .filter(function (s) { return visivelNoContexto(s, true, ctx); }));
   }
 
   function excluirSinal(id) {
