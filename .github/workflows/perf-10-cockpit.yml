@@ -20,5 +20,4 @@ jobs:
       - run: node --test nuvem/testes/perf-10-cockpit.test.cjs nuvem/testes/perf-10-percentis.test.cjs
       - name: Garantir versão de produção inalterada
         run: |
-          grep -q "numero: 'v286.29'" src/config.js
-          grep -q 'iad-crm-v286.29' sw.js
+          node scripts/verificar-versao-shell.cjs
