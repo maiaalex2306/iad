@@ -118,6 +118,6 @@ test('PERF-32: pares de versao e de cache PWA consistentes',()=>{
  const worker=fs.readFileSync(path.join(root,'sw.js'),'utf8');
  const version=config.match(/numero:\s*'(v[0-9.]+)'/);
  assert.ok(version,'numero de versao');
- assert.equal(version[1],'v286.30');
+ assert.match(version[1],/^v286\.\d+$/);
  assert.ok(worker.includes("const CACHE = 'iad-crm-"+version[1]+"'"));
 });

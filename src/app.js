@@ -8300,7 +8300,10 @@
      a tela se repinta — o mesmo que Dados faz com os leads da ponte. */
   function pintarConversas(forcar) {
     if (!W || !W.disponivel()) return;
-    W.carregar(forcar).then(colher).then(function () { render(); });
+    const assinaturaAntes = assinaturaDaAtualizacaoDoCanal();
+    return W.carregar(forcar).then(colher).then(function () {
+      atualizarCanalSemReabrirCockpit('whatsapp', assinaturaAntes);
+    });
   }
 
   /* A colheita anda junto da busca das conversas, e não num botão.
@@ -8369,15 +8372,55 @@
     W.carregar(true).then(colher).then(function () { render(); });
   };
 
+  /* PERF-33: canais carregam de maneira assincrona. Uma nova mensagem
+     nunca deve interromper desnecessariamente a interacao com um card.
+     O fingerprint protege revisoes, escopos, papel e identidade. */
+  function assinaturaDaAtualizacaoDoCanal() {
+    const usuario = A.atual();
+    if (!usuario || typeof Store.revisao !== 'function') return '';
+    const filtros = typeof A.filtros === 'function' ? (A.filtros() || {}) : {};
+    return JSON.stringify([usuario.id, usuario.papel, usuario.tenantId || '',
+      filtros.tenant || '', filtros.usuario || '', Store.revisao()]);
+  }
+
+  function atualizarCanalSemReabrirCockpit(canal, assinaturaAntes) {
+    const hash = location.hash || '';
+    const abas = hash.indexOf('#/op/') === 0 ? document.querySelector('.abas-cockpit') : null;
+    const corpo = abas ? document.querySelector('.corpo-aba') : null;
+    const nuvem = global.IADNuvem;
+    if (!assinaturaAntes || assinaturaAntes !== assinaturaDaAtualizacaoDoCanal() ||
+        !abas || !corpo || !A.atual() ||
+        (nuvem && nuvem.mandaNoAcesso() && !nuvem.sessao())) {
+      render();
+      return;
+    }
+
+    const id = hash.slice(5);
+    /* A View confirma permissao/visibilidade de cada usuario antes do HTML. */
+    const ativa = V.abaAtualDoCockpit();
+    const painel = ativa === canal ? V.painelDaAbaCockpit(id) : null;
+    const cabecalho = painel ? painel.abas : V.cabecalhoDoCockpit(id);
+    if (cabecalho === null) { render(); return; }
+
+    const atualizar = function () {
+      abas.outerHTML = cabecalho;
+      if (painel) corpo.innerHTML = painel.corpo;
+    };
+    const perf = global.IADPerformance;
+    if (perf) perf.medir('perf33.cockpit.canal.atualizar', atualizar);
+    else atualizar();
+  }
+
   /* Os e-mails, do mesmo jeito: a tela desenha antes, a resposta chega e
      repinta. Falhar aqui não pode segurar o resto do app — e-mail é bom de
      ter, não é pré-requisito para ver a carteira. */
   function pintarEmails(forcar) {
     if (!Mail || !Mail.disponivel()) return;
+    const assinaturaAntes = assinaturaDaAtualizacaoDoCanal();
     return Mail.carregar(forcar).then(function () {
       return Mail.carregarCaixas(forcar);
     }).then(function () {
-      render();
+      atualizarCanalSemReabrirCockpit('email', assinaturaAntes);
       /* A análise vem depois do render: a tela aparece na hora e o assistente
          trabalha no fundo. `analisandoAgora` evita o laço — pintarEmails é
          chamado de novo no fim da análise. */

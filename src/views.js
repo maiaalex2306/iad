@@ -3306,6 +3306,14 @@
     }).join('') + '</div>';
   }
 
+  /* PERF-33: somente os badges, sem executar corpoDaAba/Decision Engine.
+     Consultar visibilidade antes de devolver qualquer HTML: troca de
+     identidade/tenant nunca pode reaproveitar um cabeçalho anterior. */
+  function cabecalhoDoCockpit(id) {
+    const op = Store.oportunidade(id);
+    return op && Store.visivel(op, true) ? abasDoCockpit(op) : null;
+  }
+
   /* Aba isolada: trocar Tarefas não reconstrói cabeçalho e dez painéis. */
   function painelDaAbaCockpit(id) {
     const op = Store.oportunidade(id);
@@ -9907,7 +9915,8 @@
       ['perf31.badge.tarefas', 'Badge: tarefas abertas'],
       ['perf31.badge.whatsapp', 'Badge: WhatsApp não lido'],
       ['perf31.badge.sinais', 'Badge: sinais recentes'],
-      ['perf31.badge.email', 'Badge: e-mails não lidos']
+      ['perf31.badge.email', 'Badge: e-mails não lidos'],
+      ['perf33.cockpit.canal.atualizar', 'PERF-33: atualização parcial dos canais']
     ];
     const rede = [
       ['perf23.sync.puxar', 'Sincronização: baixar'],
@@ -11191,6 +11200,8 @@
     definirFiltroLH: definirFiltroLH, gerarListaLH: gerarListaLH,
     listaDeCampanha: listaDeCampanha, filtroDeCampanha: filtroDeCampanha,
     definirAbaCockpit: definirAbaCockpit,
+    abaAtualDoCockpit: function () { return abaCockpit; },
+    cabecalhoDoCockpit: cabecalhoDoCockpit,
     painelDaAbaCockpit: painelDaAbaCockpit,
     conteudoDetalheCockpit: conteudoDetalheCockpit,
     definirBuscaCadastro: function (b) { buscaCadastro = b; },
