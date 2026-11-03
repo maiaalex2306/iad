@@ -6305,6 +6305,15 @@
      cadastro; com a contagem de negócios e o valor em aberto ela vira a
      resposta para "de onde vem o que fecha" — que é a razão de ela existir. */
   function listaFontes(est) {
+    /* PERF-32: projetar as estatisticas em uma unica passagem. */
+    const porFonte = Object.create(null);
+    est.oportunidades.forEach(function (o) {
+      const id = o.fonteId;
+      const v = porFonte[id] || (porFonte[id] = { total: 0, ganhas: 0, valor: 0 });
+      v.total++;
+      if (o.desfecho && o.desfecho.tipo === 'ganho') v.ganhas++;
+      if (!o.desfecho) v.valor += (o.valor || 0);
+    });
     const cats = P.CATEGORIAS_FONTE || [];
     const nomeDaCategoria = function (id) {
       const c = cats.find(function (x) { return x.id === id; });
@@ -6314,15 +6323,13 @@
     const linhas = Store.catalogo('fontes').filter(function (f) {
       return combina(f.nome) || combina(nomeDaCategoria(f.categoria));
     }).map(function (f) {
-      const ops = est.oportunidades.filter(function (o) { return o.fonteId === f.id; });
-      const abertas = ops.filter(function (o) { return !o.desfecho; });
-      const ganhas = ops.filter(function (o) { return o.desfecho && o.desfecho.tipo === 'ganho'; });
-      const valor = abertas.reduce(function (soma, o) { return soma + (o.valor || 0); }, 0);
+      const resumo = porFonte[f.id] || { total: 0, ganhas: 0, valor: 0 };
+      const valor = resumo.valor;
       return '<tr><td><strong>' + esc(f.nome) + '</strong></td>' +
         '<td>' + esc(nomeDaCategoria(f.categoria)) + '</td>' +
         '<td>' + (f.ativo === false ? '<span class="pill">inativo</span>' : '<span class="pill ok">ativo</span>') + '</td>' +
-        '<td class="right">' + ops.length + '</td>' +
-        '<td class="right">' + ganhas.length + '</td>' +
+        '<td class="right">' + resumo.total + '</td>' +
+        '<td class="right">' + resumo.ganhas + '</td>' +
         '<td class="right">' + (valor ? U.compacto(valor) : '—') + '</td>' +
         '<td class="right" style="white-space:nowrap">' +
         '<button class="btn ghost mini" onclick="App.editarItemCatalogo(\'fontes\',\'' + f.id + '\')">Editar</button> ' +
@@ -6334,12 +6341,17 @@
   }
 
   function listaProdutos(est) {
+    /* Uma oportunidade conta uma vez por produto, mesmo com varios itens. */
+    const porProduto = Object.create(null);
+    est.oportunidades.forEach(function (o) {
+      const visto = new Set();
+      (o.itens || []).forEach(function (i) { visto.add(i.produtoId); });
+      visto.forEach(function (id) { porProduto[id] = (porProduto[id] || 0) + 1; });
+    });
     const linhas = Store.catalogo('produtos').filter(function (p) {
       return combina(p.nome) || combina(p.sku) || combina(p.categoria);
     }).map(function (p) {
-      const usos = est.oportunidades.filter(function (o) {
-        return (o.itens || []).some(function (i) { return i.produtoId === p.id; });
-      }).length;
+      const usos = porProduto[p.id] || 0;
       return '<tr><td><strong>' + esc(p.nome) + '</strong>' +
         (p.descricao ? '<span class="tiny muted">' + esc(p.descricao) + '</span>' : '') + '</td>' +
         '<td>' + esc(p.sku || '—') + '</td>' +
