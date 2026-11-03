@@ -975,7 +975,10 @@
         ganhos++;
         return;
       }
-      if (segmentos[seg] === 'ganho') return;
+      /* PERF-20: depois da primeira evidencia de maturidade no segmento,
+         outros negocios sem ganho nao podem mudar sua classificacao.
+         Continua procurando um GANHO posterior, que tem precedencia. */
+      if (segmentos[seg] === 'ganho' || segmentos[seg] === 'andou') return;
       if (iad(op) >= P.IAD_QUE_ANDOU) { segmentos[seg] = 'andou'; andaram++; }
     });
 
@@ -1146,13 +1149,12 @@
   /* O que tudo acima existe para produzir. `base` é opcional: quem desenha uma
      lista calcula uma vez e passa; quem abre um negócio só chama. */
   function potencial(op, base) {
-    if (!op) return null;
+    /* PERF-20: negocio encerrado nao participa da qualificacao ativa;
+       evitar construir a base de toda a carteira e buscar stakeholders
+       antes de devolver null, que ja era o resultado anterior. */
+    if (!op || op.desfecho) return null;
     const b = base || baseDoPotencial();
     const pessoas = stakeholdersDaOp(op);
-
-    /* Negócio encerrado não tem potencial — tem desfecho. Devolver uma faixa
-       aqui poria “Prioritário” num negócio ganho há seis meses. */
-    if (op.desfecho) return null;
 
     const recusa = pessoas.map(function (c) { return b.recusados[perfilLimpo(c.linkedin)]; })
       .filter(Boolean)[0];
