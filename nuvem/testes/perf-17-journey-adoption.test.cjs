@@ -80,6 +80,8 @@ test('contrato: App mede abertura sem armazenar IDs e Store preserva revisão', 
   assert.match(appCode,/etapaAbertura\(tokenAbertura, 'html'\)/);
   assert.match(appCode,/etapaAbertura\(tokenAbertura, 'frame2'\)/);
   assert.match(appCode,/location\.hash !== '#\/op\/' \+ id/);
+  assert.match(appCode,/perf\\.medir\\('tela\\.' \\+ rota\\.hash/);
+  assert.doesNotMatch(appCode,/perf\\.medir\\('tela\\.' \\+ hash/);
   assert.match(storeCode,/ultimaAdocao === chaveAdocao/);
   assert.match(storeCode,/if \(adotados \|\| padronizou\) salvar\(\)/);
 });
