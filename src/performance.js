@@ -153,6 +153,13 @@
     'perf10.cockpit.resumo',
     'perf03b.cockpit-resumo',
     'perf10.cockpit.inicializar-quadro',
+    /* PERF-31: cronometros fixos de abertura e quatro contadores no cabecalho. */
+    'perf31.cockpit.abas.inicial',
+    'perf31.cockpit.conteudo.inicial',
+    'perf31.badge.tarefas',
+    'perf31.badge.whatsapp',
+    'perf31.badge.sinais',
+    'perf31.badge.email',
     /* PERF-26: métricas fixas já coletadas na troca de abas; sem IDs ou nomes comerciais. */
     'perf10.cockpit.abas.cabecalho',
     'perf10.cockpit.aba.conteudo',

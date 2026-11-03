@@ -3081,8 +3081,13 @@
       '<div class="row" style="margin-top:10px"><h1 style="margin:0">' + esc(op.titulo) + '</h1>' +
       pilulaDoPotencial(potencialDe(op)) + '</div>' +
       fichaDaOportunidade(op, r) +
-      abasDoCockpit(op) +
-      '<div class="corpo-aba">' + corpoDaAba(op, r) + '</div>';
+      (perfCockpit ? perfCockpit.medir('perf31.cockpit.abas.inicial', function () {
+        return abasDoCockpit(op);
+      }) : abasDoCockpit(op)) +
+      '<div class="corpo-aba">' +
+      (perfCockpit ? perfCockpit.medir('perf31.cockpit.conteudo.inicial', function () {
+        return corpoDaAba(op, r);
+      }) : corpoDaAba(op, r)) + '</div>';
   }
 
   function outrasAbertasDaConta(op) {
@@ -3260,20 +3265,35 @@
 
   function abasDoCockpit(op) {
     const W = global.IADWhatsapp;
-    const abertas = Store.tarefasDaOportunidade(op.id).filter(function (t) {
-      return t.status === 'aberta';
-    }).length;
-    const novas = (W && W.carregadas()) ? W.naoLidasDaOp(op.id) : 0;
+    /* PERF-31: quatro etapas independentes e nomes tecnicos estaticos.
+       Medicao opcional, sem ID de oportunidade, telefone ou dados comerciais.
+       O valor retornado por cada contador nao muda. */
+    const perfContadores = global.IADPerformance;
+    const medirContador = function (chave, fn) {
+      return perfContadores ? perfContadores.medir(chave, fn) : fn();
+    };
+    const abertas = medirContador('perf31.badge.tarefas', function () {
+      return Store.tarefasDaOportunidade(op.id).filter(function (t) {
+        return t.status === 'aberta';
+      }).length;
+    });
+    const novas = medirContador('perf31.badge.whatsapp', function () {
+      return (W && W.carregadas()) ? W.naoLidasDaOp(op.id) : 0;
+    });
     /* O número na aba é o que faz a aba fechada continuar avisando. Sem ele,
        esconder as tarefas atrás de um clique esconderia também o atraso. */
     /* Na aba de Sinais o número é só o que está DENTRO da janela: sinal de
        dois meses atrás não é aviso, é histórico, e um contador que soma tudo
        nunca zera — deixa de ser aviso no dia seguinte. */
     /* PERF-25: contador sem montar e ordenar todos os sinais da negociação. */
-    const sinaisAgora = E.contarSinaisRecentes ? E.contarSinaisRecentes(op)
-      : (E.sinaisRecentes ? E.sinaisRecentes(op).length : 0);
+    const sinaisAgora = medirContador('perf31.badge.sinais', function () {
+      return E.contarSinaisRecentes ? E.contarSinaisRecentes(op)
+        : (E.sinaisRecentes ? E.sinaisRecentes(op).length : 0);
+    });
     const M = global.IADEmail;
-    const emailsNovos = (M && M.carregadas()) ? M.naoLidasDaOp(op.id) : 0;
+    const emailsNovos = medirContador('perf31.badge.email', function () {
+      return (M && M.carregadas()) ? M.naoLidasDaOp(op.id) : 0;
+    });
     const contagem = { tarefas: abertas, whatsapp: novas, sinais: sinaisAgora, email: emailsNovos };
 
     return '<div class="abas-cockpit">' + ABAS_COCKPIT.map(function (a) {
@@ -9852,6 +9872,15 @@
       ['perf10.aba.produtos', 'Conteúdo: produtos'],
       ['perf10.aba.arquivos', 'Conteúdo: arquivos']
     ];
+    /* PERF-31: medicao da abertura e dos quatro badges, sem dados comerciais. */
+    const gargalos = [
+      ['perf31.cockpit.abas.inicial', 'Abertura: cabeçalho inicial'],
+      ['perf31.cockpit.conteudo.inicial', 'Abertura: conteúdo inicial'],
+      ['perf31.badge.tarefas', 'Badge: tarefas abertas'],
+      ['perf31.badge.whatsapp', 'Badge: WhatsApp não lido'],
+      ['perf31.badge.sinais', 'Badge: sinais recentes'],
+      ['perf31.badge.email', 'Badge: e-mails não lidos']
+    ];
     const rede = [
       ['perf23.sync.puxar', 'Sincronização: baixar'],
       ['perf23.sync.manual', 'Sincronização manual completa'],
@@ -9912,6 +9941,7 @@
       'paralelo, portanto não some seus tempos. O CRM não envia este relatório automaticamente.</p>' +
       '</div>' + tabela('Abertura das oportunidades', principais) +
       tabela('Troca de abas do cockpit', abas) +
+      tabela('Gargalos de abertura e notificações', gargalos) +
       tabela('Rede e sincronização', rede);
   }
 

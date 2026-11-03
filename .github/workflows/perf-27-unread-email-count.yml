@@ -18,5 +18,5 @@ jobs:
       - run: node --test nuvem/testes/perf-27-unread-email-count.test.cjs
       - name: Ensure version and PWA match
         run: |
-          grep -q "numero: 'v286.28'" src/config.js
-          grep -q "iad-crm-v286.28" sw.js
+          grep -q "numero: 'v286.29'" src/config.js
+          grep -q "iad-crm-v286.29" sw.js
