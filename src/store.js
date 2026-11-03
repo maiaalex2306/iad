@@ -671,8 +671,12 @@
      Aqui é o reflexo: sem isto a tela mostraria o que a cópia local tem, que é
      o que o servidor já entregou filtrado — mas quem trabalha offline continua
      precisando do filtro certo. */
-  function visivel(registro, comDono) {
-    const ctx = contexto();
+  /* PERF-19: o contexto de permissao contem localStorage/JSON.parse e
+     pesquisa do usuario autenticado. Obter o contexto uma vez por lote evita
+     milhares de acessos sincronicos durante o primeiro render da carteira.
+     A regra de autorizacao e a MESMA da funcao visivel anterior. Nao reter
+     o contexto em cache global: logout, filtros e troca de empresa sao imediatos. */
+  function visivelNoContexto(registro, comDono, ctx) {
     if (!ctx.usuario) return false;
 
     if (ctx.admin) {
@@ -683,8 +687,11 @@
 
     if (registro.tenantId !== ctx.tenantId) return false;
     if (!comDono || ctx.gestor) return true;
-    /* Registro sem dono é da empresa: não some para ninguém. */
+    /* Registro sem dono e da empresa: nao some para ninguem. */
     return !registro.donoId || registro.donoId === ctx.usuario.id;
+  }
+  function visivel(registro, comDono) {
+    return visivelNoContexto(registro, comDono, contexto());
   }
 
   /* Por que a tela está vazia. Sem isto, "sumiu tudo" é um print — e um print
@@ -827,8 +834,12 @@
       ctx.usuario && ctx.usuario.papel, ctx.tenantId, filtros.tenant, filtros.usuario]);
     if (snapshotVisivel && snapshotVisivel.chave === chave &&
         snapshotVisivel.estado === estado) return snapshotVisivel.dados;
-    const porTenant = function (lista) { return (lista || []).filter(function (r) { return visivel(r, false); }); };
-    const porDono = function (lista) { return (lista || []).filter(function (r) { return visivel(r, true); }); };
+    const porTenant = function (lista) {
+      return (lista || []).filter(function (r) { return visivelNoContexto(r, false, ctx); });
+    };
+    const porDono = function (lista) {
+      return (lista || []).filter(function (r) { return visivelNoContexto(r, true, ctx); });
+    };
     const resultado = {
       tenants: estado.tenants,
       usuarios: estado.usuarios,
