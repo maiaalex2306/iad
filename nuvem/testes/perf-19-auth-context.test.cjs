@@ -176,7 +176,11 @@ test('Consultas de cockpit usam um contexto por bucket e não por linha',()=>{
     assert.ok(x.ler()<=4,`leituras=${x.ler()}`);
   }
   x.trocar(x.outro);
-  assert.equal(x.S.oportunidadesDaConta('ca').length,1000);
+  assert.equal(x.S.oportunidadesDaConta('ca').length,0,
+    'usuario de outro tenant nao deve ler registros de tenant-a');
+  x.trocar(x.vendedor);
+  assert.equal(x.S.oportunidadesDaConta('ca').length,1000,
+    'dono no tenant original deve continuar enxergando todos os seus registros');
   x.trocar(null);
   assert.equal(x.S.oportunidadesDaConta('ca').length,0);
   assert.equal(x.S.tarefasDaOportunidade('o1').length,0);
