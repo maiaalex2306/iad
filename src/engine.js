@@ -286,6 +286,17 @@
     return sinaisDaOp(op).filter(function (s) { return diasEntre(s.quando) <= janela; });
   }
 
+  /* PERF-25: equivalente a sinaisRecentes(op, dias).length, sem
+     criar/ordenar arrays para desenhar somente o contador da aba. */
+  function contarSinaisRecentes(op, dias) {
+    const janela = dias || P.JANELA_SINAL;
+    if (!Store.contarSinaisDaOportunidade)
+      return sinaisRecentes(op, dias).length;
+    return Store.contarSinaisDaOportunidade(op, function (s) {
+      return diasEntre(s.quando) <= janela;
+    });
+  }
+
   function sinaisFortes(op, dias) {
     return sinaisRecentes(op, dias).filter(function (s) {
       return (s.peso || 0) >= P.PESO_SINAL_FORTE;
@@ -1768,6 +1779,6 @@
     autoria, compromisso, mobilizadores, bloqueadores, tempoNaEtapa, medianaEtapaGanhos, deltaSemana, curva, historico, lacunas,
     evolucao, rendimentoPorTipoDeTarefa, semanasAte, INDICADORES,
     stakeholdersDaOp, diasEntre, indiceEtapa, depoisDaProposta, ORDEM_DECISAO, nutricaoVencida,
-    sinaisRecentes, sinaisFortes, idadeDoSinal, momento
+    sinaisRecentes, contarSinaisRecentes, sinaisFortes, idadeDoSinal, momento
   };
 })(window);
