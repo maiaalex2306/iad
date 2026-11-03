@@ -1,0 +1,22 @@
+name: PERF-13F — Static Shell Cache & CAS Map v286.10
+on:
+  push:
+    branches: ['performance/perf-13f-static-cache-and-cas-map-v28610']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check sw.js
+      - run: node --check src/nuvem.js
+      - run: node --test nuvem/testes/perf-13f-shell-and-cas-map.test.cjs
+      - run: node --test nuvem/testes/*.test.cjs

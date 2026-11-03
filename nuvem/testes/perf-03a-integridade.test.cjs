@@ -64,12 +64,12 @@ test('Service Worker somente intercepta arquivos estáticos da própria origem',
    location:{origin:'https://www.iadcrm.com.br',href:'https://www.iadcrm.com.br/sw.js'},
    addEventListener:(tipo,fn)=>{eventos[tipo]=fn}
  };
- const caches={open:async()=>({put:async(chave)=>{gravacoes.push(String(chave))}}),
+ const caches={open:async()=>({match:async()=>null,put:async(chave)=>{gravacoes.push(String(chave))}}),
    match:async()=>null};
  const fetch=async()=>({ok:true,type:'basic',headers:{get:()=>''},clone(){return this;}});
  vm.runInNewContext(src,{self,URL,Request,Response,Set,caches,fetch,console});
  function evento(url){
-   let resposta=null;const pedido={request:new Request(url),respondWith(x){resposta=x;}};
+   let resposta=null;const pedido={request:new Request(url),respondWith(x){resposta=x;},waitUntil(x){this.waiting=x;}};
    eventos.fetch(pedido);return resposta;
  }
  assert.equal(evento('https://teste.supabase.co/rest/v1/oportunidades?select=*'),null);
