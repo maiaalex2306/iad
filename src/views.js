@@ -57,6 +57,13 @@
         '<p>Há alterações neste navegador que ainda precisam de confirmação do servidor. ' +
         'A carteira não será substituída para evitar perda de dados.</p>' +
         '<p class="small muted">Detalhe: ' + esc(motivo || 'conflito de revisão') + '</p>' +
+        (function () {
+          const n = global.IADNuvem;
+          const d = n && n.diagnosticoPendenciasCAS ? n.diagnosticoPendenciasCAS() : null;
+          if(!d || !d.disponivel) return '<p class="small muted">Diagnóstico da fila indisponível nesta sessão.</p>';
+          return '<p class="small"><strong>' + d.quantidade + ' edição(ões) pendente(s)</strong> em ' +
+            d.filas + ' fila(s) protegida(s). Nenhum dado será descartado automaticamente.</p>';
+        })() +
         '<div class="row" style="margin-top:14px;gap:8px;flex-wrap:wrap">' +
         '<button class="btn" onclick="App.recuperarPendenciasCAS()">Conciliar e tentar novamente</button>' +
         '<button class="btn ghost" onclick="App.baixarCopiaPendenciasCAS()">Salvar cópia das edições</button></div>' +
