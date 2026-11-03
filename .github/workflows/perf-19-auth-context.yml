@@ -1,0 +1,28 @@
+name: PERF-19 — Auth Context por Lote e Paridade Multiempresa
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  auth-context:
+    name: PERF-19 10k registros, RLS e abertura de cockpit
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verificar sintaxe
+        run: node --check src/store.js && node --check src/auth.js && node --check nuvem/testes/perf-19-auth-context.test.cjs
+      - name: Provar leituras O(1) e contrato de Auth/RLS
+        run: node --test nuvem/testes/perf-19-auth-context.test.cjs
+      - name: Regressões críticas de isolamento e índices
+        run: |
+          node --test nuvem/testes/perf-18-opportunities-account-index.test.cjs
+          node --test nuvem/testes/perf-15-contacts-index.test.cjs
+          node --test nuvem/testes/perf-16-account-open-index.test.cjs
+          node --test nuvem/testes/perf-17-journey-adoption.test.cjs
+          node --test nuvem/testes/perf-03b.test.cjs

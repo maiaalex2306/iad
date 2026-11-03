@@ -671,8 +671,12 @@
      Aqui é o reflexo: sem isto a tela mostraria o que a cópia local tem, que é
      o que o servidor já entregou filtrado — mas quem trabalha offline continua
      precisando do filtro certo. */
-  function visivel(registro, comDono) {
-    const ctx = contexto();
+  /* PERF-19: o contexto de permissao contem localStorage/JSON.parse e
+     pesquisa do usuario autenticado. Obter o contexto uma vez por lote evita
+     milhares de acessos sincronicos durante o primeiro render da carteira.
+     A regra de autorizacao e a MESMA da funcao visivel anterior. Nao reter
+     o contexto em cache global: logout, filtros e troca de empresa sao imediatos. */
+  function visivelNoContexto(registro, comDono, ctx) {
     if (!ctx.usuario) return false;
 
     if (ctx.admin) {
@@ -683,8 +687,11 @@
 
     if (registro.tenantId !== ctx.tenantId) return false;
     if (!comDono || ctx.gestor) return true;
-    /* Registro sem dono é da empresa: não some para ninguém. */
+    /* Registro sem dono e da empresa: nao some para ninguem. */
     return !registro.donoId || registro.donoId === ctx.usuario.id;
+  }
+  function visivel(registro, comDono) {
+    return visivelNoContexto(registro, comDono, contexto());
   }
 
   /* Por que a tela está vazia. Sem isto, "sumiu tudo" é um print — e um print
@@ -827,8 +834,12 @@
       ctx.usuario && ctx.usuario.papel, ctx.tenantId, filtros.tenant, filtros.usuario]);
     if (snapshotVisivel && snapshotVisivel.chave === chave &&
         snapshotVisivel.estado === estado) return snapshotVisivel.dados;
-    const porTenant = function (lista) { return (lista || []).filter(function (r) { return visivel(r, false); }); };
-    const porDono = function (lista) { return (lista || []).filter(function (r) { return visivel(r, true); }); };
+    const porTenant = function (lista) {
+      return (lista || []).filter(function (r) { return visivelNoContexto(r, false, ctx); });
+    };
+    const porDono = function (lista) {
+      return (lista || []).filter(function (r) { return visivelNoContexto(r, true, ctx); });
+    };
     const resultado = {
       tenants: estado.tenants,
       usuarios: estado.usuarios,
@@ -847,7 +858,9 @@
       /* Nem por empresa nem por dono: só minhas. `porDono` deixaria o gestor
          ler o caderninho da equipe, que é exatamente o que esta tela promete
          não fazer. */
-      notas: ordenarNotas((estado.notas || []).filter(minhaNota)),
+      notas: ordenarNotas((estado.notas || []).filter(function (n) {
+        return !!ctx.usuario && String(n.donoId || '') === String(ctx.usuario.id);
+      })),
       config: estado.config
     };
     snapshotVisivel = { chave: chave, estado: estado, dados: resultado };
@@ -1060,23 +1073,26 @@
   function oportunidade(id) { reconstruirIndices(); return oportunidadesPorId.get(id); }
   function oportunidadesDaConta(contaId) {
     reconstruirIndices();
-    /* O índice bruto nunca é exposto: papel, tenant e filtros administrativos
-       são reavaliados na leitura, inclusive sem nova revisão dos dados. */
+    /* O indice bruto nunca e exposto: contexto capturado nesta leitura,
+       nao entre leituras; troca de usuario/filtro exige novo contexto. */
+    const ctx = contexto();
     return (oportunidadesPorConta.get(contaId) || []).filter(function (op) {
-      return visivel(op, true);
+      return visivelNoContexto(op, true, ctx);
     });
   }
   function tarefa(id) { return estado.tarefas.find(function (t) { return t.id === id; }); }
   function contatosDaConta(contaId) {
     reconstruirIndices();
+    const ctx = contexto();
     return (contatosPorConta.get(contaId) || []).filter(function (c) {
-      return visivel(c, true);
+      return visivelNoContexto(c, true, ctx);
     });
   }
   function tarefasDaOportunidade(opId) {
     reconstruirIndices();
+    const ctx = contexto();
     return (tarefasPorOportunidade.get(String(opId)) || []).filter(function (t) {
-      return visivel(t, true);
+      return visivelNoContexto(t, true, ctx);
     });
   }
 
@@ -1431,20 +1447,25 @@
   }
 
   function sinais() {
-    return ordenarSinais((estado.sinais || []).filter(function (s) { return visivel(s, true); }));
+    const ctx = contexto();
+    return ordenarSinais((estado.sinais || []).filter(function (s) {
+      return visivelNoContexto(s, true, ctx);
+    }));
   }
 
   function sinaisDoContato(contatoId) {
     if (!contatoId) return [];
+    const ctx = contexto();
     return ordenarSinais((estado.sinais || []).filter(function (s) {
-      return s.contatoId === contatoId && visivel(s, true);
+      return s.contatoId === contatoId && visivelNoContexto(s, true, ctx);
     }));
   }
 
   function sinaisDaConta(contaId) {
     if (!contaId) return [];
+    const ctx = contexto();
     return ordenarSinais((estado.sinais || []).filter(function (s) {
-      return s.contaId === contaId && visivel(s, true);
+      return s.contaId === contaId && visivelNoContexto(s, true, ctx);
     }));
   }
 
@@ -1470,8 +1491,9 @@
     });
     if (op.contaId) incluir(sinaisPorContaSemContato.get(String(op.contaId)));
     candidatas.sort(function (a, b) { return a.i - b.i; });
+    const ctx = contexto();
     return ordenarSinais(candidatas.map(function (e) { return e.sinal; })
-      .filter(function (s) { return visivel(s, true); }));
+      .filter(function (s) { return visivelNoContexto(s, true, ctx); }));
   }
 
   function excluirSinal(id) {
