@@ -110,7 +110,8 @@ test('PERF-25: com 10000 sinais, menos leituras de data e mesma contagem',()=>{
     avoidedPct:+(100*(1-readsAfter/readsBefore)).toFixed(2)}));
 });
 test('PERF-25: só o badge mudou; tela de Sinais e demais indicadores mantidos',()=>{
-  assert.match(viewsCode,/const sinaisAgora = E\.contarSinaisRecentes \? E\.contarSinaisRecentes\(op\)/);
+  assert.match(viewsCode,/const sinaisAgora = medirContador\('perf31\.badge\.sinais', function \(\) \{/);
+  assert.match(viewsCode,/return E\.contarSinaisRecentes \? E\.contarSinaisRecentes\(op\)/);
   assert.match(viewsCode,/const lista = Store\.sinaisDaOportunidade \? Store\.sinaisDaOportunidade\(op\) : \[\]/);
   const x=fixture(389);
   assert.equal(x.E.contarSinaisRecentes(x.op),x.E.sinaisRecentes(x.op).length);
