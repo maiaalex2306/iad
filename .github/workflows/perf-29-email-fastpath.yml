@@ -23,5 +23,5 @@ jobs:
           node --test nuvem/testes/perf-27-unread-email-count.test.cjs
       - name: Version/cache consistency
         run: |
-          grep -q "numero: 'v286.27'" src/config.js
-          grep -q 'iad-crm-v286.27' sw.js
+          grep -q "numero: 'v286.28'" src/config.js
+          grep -q 'iad-crm-v286.28' sw.js
