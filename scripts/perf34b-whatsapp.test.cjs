@@ -31,6 +31,7 @@ test('manual refresh returns promise so failures remain observable',async()=>{
 test('coordinated PWA version',()=>{
  const cfg=fs.readFileSync('src/config.js','utf8');
  const sw=fs.readFileSync('sw.js','utf8');
- assert.match(cfg,/numero: 'v286.33'/);
- assert.match(sw,/const CACHE = 'iad-crm-v286.33'/);
+ const version=cfg.match(/numero: '(v286\.\d+)'/);
+ assert.ok(version, 'versao do aplicativo');
+ assert.ok(sw.includes("const CACHE = 'iad-crm-"+version[1]+"'"));
 });
