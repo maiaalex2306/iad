@@ -320,7 +320,7 @@
     } else {
       const rota = ROTAS.find(function (r) { return r.hash === hash; }) || ROTAS[0];
       const perf = global.IADPerformance;
-      const html = perf ? perf.medir('tela.' + hash, function () { return rota.render(); }) : rota.render();
+      const html = perf ? perf.medir('tela.' + rota.hash, function () { return rota.render(); }) : rota.render();
       conteudo.innerHTML = faixa + html;
       /* Duas telas se completam depois de desenhadas: Dados mede o espaço
          usado e busca os leads na ponte; Cadastros lista quem está no
