@@ -23,5 +23,5 @@ jobs:
         run: node scripts/perf04-p4-parity.cjs
       - name: Verificar v286 preservada
         run: |
-          grep -q "numero: 'v286.17'" src/config.js
+          grep -q "numero: 'v286.18'" src/config.js
           grep -q "iad-crm-v286" sw.js

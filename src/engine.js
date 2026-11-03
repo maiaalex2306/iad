@@ -312,14 +312,25 @@
      da janela E evidência parada há mais tempo do que o sinal. Sem a segunda,
      isto viraria alerta em toda conta ativa e seria desligado na primeira
      semana, como todo alerta que toca sempre. */
-  function momento(op) {
-    const idadeEvidencia = evidenceAge(op);
-    const fortes = sinaisFortes(op);
-    if (!fortes.length) return null;
-
-    const idadeSinal = idadeDoSinal(op);
-    if (idadeSinal == null) return null;
+  function momento(op, idadeBase) {
+    /* PERF-21: o resumo ja calculou evidenceAge. Buscar sinais apenas
+       quando ha possibilidade de alerta, em UMA consulta por oportunidade.
+       Nenhum cache cruza usuario, tenant, filtros ou revisoes. */
+    const idadeEvidencia = idadeBase === undefined ? evidenceAge(op) : idadeBase;
     if (idadeEvidencia <= 14) return null;
+    const lista = sinaisDaOp(op);
+    if (!lista.length) return null;
+    const fortes = lista.filter(function (s) {
+      return diasEntre(s.quando) <= P.JANELA_SINAL &&
+        (s.peso || 0) >= P.PESO_SINAL_FORTE;
+    });
+    if (!fortes.length) return null;
+    /* A idade considera todos os sinais, nao somente os fortes/recentes.
+       Preserva tie-break e a ordenacao da implementacao anterior. */
+    const maisRecente = lista.reduce(function (max, s) {
+      return String(s.quando) > max ? String(s.quando) : max;
+    }, String(lista[0].quando));
+    const idadeSinal = diasEntre(maisRecente);
     if (idadeSinal >= idadeEvidencia) return null;
 
     const maior = fortes.reduce(function (m, s) { return (s.peso || 0) > (m.peso || 0) ? s : m; }, fortes[0]);
@@ -366,18 +377,21 @@
     if ((op.dims.problema || 0) === 2 && ins.estado !== 'aceito') {
       lista.push({ tipo: 'insight', nivel: 'medio', texto: 'Problema comprovado, mas o cliente ainda não adotou nosso reenquadramento.' });
     }
-    if (decisionVelocity(op) === 0) lista.push({ tipo: 'velocity', nivel: 'medio', texto: 'Decision Velocity zerada nos últimos 30 dias.' });
+    if ((base && base.velocity !== undefined ? base.velocity : decisionVelocity(op)) === 0) {
+      lista.push({ tipo: 'velocity', nivel: 'medio', texto: 'Decision Velocity zerada nos últimos 30 dias.' });
+    }
 
     /* O único alerta deste app que aponta para uma oportunidade em vez de
        um risco: aqui o comprador se mexeu e nós não soubemos usar. */
-    const mom = momento(op);
+    const mom = momento(op, idade);
     if (mom) {
       lista.push({ tipo: 'momento', nivel: 'alto',
         texto: 'Comportamento à frente do registro: ' + mom.principal.titulo +
           ' há ' + mom.idadeSinal + ' dia(s), com a evidência parada há ' + mom.idadeEvidencia + '. É a hora de falar.' });
     }
 
-    const comp = compromisso(op);
+    const comp = base && Object.prototype.hasOwnProperty.call(base, 'compromisso')
+      ? base.compromisso : compromisso(op);
     if (comp && comp.vencido) {
       lista.push({ tipo: 'compromisso', nivel: 'alto', texto: 'Compromisso vencido há ' + comp.diasAtraso + ' dia(s): ' + comp.texto + '.' });
     } else if (!comp) {
@@ -410,24 +424,27 @@
     const pontos = iad(op);
     const cobertura = coverage(op);
     const proposta = gates(op);
+    const velocidade = decisionVelocity(op);
+    const proximoCompromisso = compromisso(op);
     /* PERF-13D: cada resumo compartilha dependencias SOMENTE nesta chamada.
        Nenhum cache sobrevive a edicoes, revisoes, troca de usuario ou tenant.
        Os metodos publicos continuam independentes quando chamados sem base. */
-    const base = { iad: pontos, evidenceAge: idade, coverage: cobertura, gates: proposta };
+    const base = { iad: pontos, evidenceAge: idade, coverage: cobertura,
+      gates: proposta, velocity: velocidade, compromisso: proximoCompromisso };
     return {
       op: op,
       conta: Store.conta(op.contaId),
       iad: pontos,
       evidenceAge: idade,
       faixa: faixaEvidencia(idade),
-      velocity: decisionVelocity(op),
+      velocity: velocidade,
       coverage: cobertura,
       gates: proposta,
       saude: saude(op, base),
       classe: classificar(op, base),
       nbd: nextBestDecision(op, base),
       alertas: alertas(op, base),
-      compromisso: compromisso(op),
+      compromisso: proximoCompromisso,
       lacunas: lacunas(op, base),
       tempoNaEtapa: tempoNaEtapa(op),
       delta: deltaSemana(op),
@@ -1280,7 +1297,7 @@
       return true;
     }).map(function (op) {
       const r = resumo(op, atrasadasIndex);
-      const mom = momento(op);
+      const mom = momento(op, r.evidenceAge);
       const vencidas = (porOp[op.id] || []).filter(function (t) { return t.vencimento && t.vencimento < hoje; });
 
       /* ---------- O PRÓXIMO PASSO JÁ MARCADO ----------
