@@ -1529,12 +1529,20 @@
       /* PERF-03D: jamais executar upsert em oportunidade existente.
          CAS inicial cobre título, valor e etapa; demais alterações existentes
          falham fechadas, sem sobrescrever o servidor, até ampliação do SQL. */
+      /* PERF-13F: CAS precisa do mesmo registro original, mas buscar com
+         filter() para CADA oportunidade modificada era O(n*m).
+         Primeiro ID prevalece, exatamente como no filtro anterior. */
+      const registrosPorId = t.remota === 'oportunidades' ? new Map() : null;
+      if (registrosPorId) minhas.forEach(function (r) {
+        const id = String(r.id);
+        if (!registrosPorId.has(id)) registrosPorId.set(id, r);
+      });
       const trabalho = t.remota !== 'oportunidades'
         ? Promise.all(porFormato(mudaram).map(function(lote) {
             return enviarLote(t.remota,lote,[]);
           }))
         : Promise.all(mudaram.map(function(linha) {
-            const registro=minhas.filter(function(r){return String(r.id)===String(linha.id);})[0];
+            const registro = registrosPorId.get(String(linha.id));
             const base=Store.snapshotBaseRemoto && Store.snapshotBaseRemoto(linha.tenant_id,linha.id);
             if (!base) {
               const nova=Object.assign({},linha);
