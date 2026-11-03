@@ -9915,7 +9915,8 @@
       ['perf31.badge.tarefas', 'Badge: tarefas abertas'],
       ['perf31.badge.whatsapp', 'Badge: WhatsApp não lido'],
       ['perf31.badge.sinais', 'Badge: sinais recentes'],
-      ['perf31.badge.email', 'Badge: e-mails não lidos']
+      ['perf31.badge.email', 'Badge: e-mails não lidos'],
+      ['perf33.cockpit.canal.atualizar', 'PERF-33: atualização parcial dos canais']
     ];
     const rede = [
       ['perf23.sync.puxar', 'Sincronização: baixar'],
