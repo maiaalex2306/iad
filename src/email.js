@@ -295,8 +295,35 @@
     return conversas().filter(function (c) { return !c.contato && c.como !== 'interno'; });
   }
 
+  /* PERF-27: o badge do cockpit precisa apenas do número de e-mails não
+     lidos. A implementação antiga ordenava TODAS as mensagens, montava TODAS
+     as conversas e fazia o casamento com o CRM até para threads lidas.
+     Percurso linear sem cache: em cada chamada reavalia a conta, os contatos,
+     o contexto atual e as mensagens carregadas. A mensagem-base é a primeira
+     entrada em ordem cronológica, como em conversas(), inclusive empates. */
   function naoLidasDaOp(opId) {
-    return conversasDaOportunidade(opId).reduce(function (s, c) { return s + c.naoLidas; }, 0);
+    const grupos = new Map();
+    todas().forEach(function (m) {
+      const chave = chaveDaConversa(m);
+      if (!chave) return;
+      let grupo = grupos.get(chave);
+      if (!grupo) {
+        grupo = { naoLidas: 0, primeiraEntrada: null };
+        grupos.set(chave, grupo);
+      }
+      if (m.direcao !== 'entrada') return;
+      if (!grupo.primeiraEntrada ||
+          String(m.enviada_em).localeCompare(String(grupo.primeiraEntrada.enviada_em)) < 0)
+        grupo.primeiraEntrada = m;
+      if (!m.lida) grupo.naoLidas++;
+    });
+    let total = 0;
+    grupos.forEach(function (grupo) {
+      if (!grupo.naoLidas || !grupo.primeiraEntrada) return;
+      const dono = casar(grupo.primeiraEntrada);
+      if (dono.op && dono.op.id === opId) total += grupo.naoLidas;
+    });
+    return total;
   }
 
   function totalNaoLidas() {
