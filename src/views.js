@@ -5809,6 +5809,9 @@
     }
   }
   function potencialDe(op) {
+    /* PERF-20: fechado ja nao possui potencial, portanto nao precisa
+       reconstruir a base de segmentos nem acionar o Decision Engine. */
+    if (!op || op.desfecho) return null;
     renovarPotencial();
     if (!basePotencial) basePotencial = E.baseDoPotencial();
     return E.potencial(op, basePotencial);
