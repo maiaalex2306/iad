@@ -2,8 +2,14 @@ name: PERF-03D v273 — real GoTrue CAS E2E
 on:
   push:
     branches: [performance/iad-perf-03d-v273]
+  workflow_dispatch:
   pull_request:
     paths:
+      # PERF-24: mudanças no diagnóstico e controles de UI também exigem
+      # homologação autenticada de sessão/CAS, não apenas mudanças SQL.
+      - 'src/app.js'
+      - 'src/views.js'
+      - 'src/performance.js'
       - 'nuvem/perf-03d-cas*.sql'
       - 'scripts/perf03d-auth-cas-local.cjs'
       - 'src/nuvem.js'
