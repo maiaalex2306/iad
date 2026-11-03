@@ -65,6 +65,6 @@ test('PERF-31: screen contains separate initial/counter group and no hidden data
  });
  assert.match(html,/Gargalos de abertura e notificações/);
  assert.match(html,/Badge: e-mails não lidos/);
- assert.match(html,/45\\.0 ms/);
+ assert.match(html,/45\.0 ms/);
  assert.doesNotMatch(html,new RegExp(sentinel));
 });
