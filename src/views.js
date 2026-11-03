@@ -9838,6 +9838,20 @@
       ['perf03b.cockpit-resumo', 'Cálculo interno do resumo'],
       ['perf10.cockpit.inicializar-quadro', 'Inicialização do quadro']
     ];
+    /* PERF-26: separa cabeçalho e conteúdo, sem medir novamente ou coletar dados comerciais. */
+    const abas = [
+      ['perf10.cockpit.abas.cabecalho', 'Troca de aba: cabeçalho'],
+      ['perf10.cockpit.aba.conteudo', 'Troca de aba: conteúdo'],
+      ['perf10.aba.decisao', 'Conteúdo: decisão'],
+      ['perf10.aba.historico', 'Conteúdo: histórico'],
+      ['perf10.aba.tarefas', 'Conteúdo: tarefas'],
+      ['perf10.aba.whatsapp', 'Conteúdo: WhatsApp'],
+      ['perf10.aba.sinais', 'Conteúdo: sinais'],
+      ['perf10.aba.email', 'Conteúdo: e-mail'],
+      ['perf10.aba.propostas', 'Conteúdo: propostas'],
+      ['perf10.aba.produtos', 'Conteúdo: produtos'],
+      ['perf10.aba.arquivos', 'Conteúdo: arquivos']
+    ];
     const rede = [
       ['perf23.sync.puxar', 'Sincronização: baixar'],
       ['perf23.sync.manual', 'Sincronização manual completa'],
@@ -9897,6 +9911,7 @@
       'dois frames não comprovam a apresentação visual. Rede e sincronização podem ocorrer em ' +
       'paralelo, portanto não some seus tempos. O CRM não envia este relatório automaticamente.</p>' +
       '</div>' + tabela('Abertura das oportunidades', principais) +
+      tabela('Troca de abas do cockpit', abas) +
       tabela('Rede e sincronização', rede);
   }
 

@@ -23,7 +23,7 @@ const result=vm.runInNewContext(s.slice(begin,end)+'\nconfigDesempenho();',{
  global:{IADPerformance:w.IADPerformance},Number,Math,Object,
  esc:x=>String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
 });
-if(!result.includes('Abertura das oportunidades'))throw Error('Aba de desempenho faltando');
+if(!result.includes('Abertura das oportunidades')||!result.includes('Troca de abas do cockpit'))throw Error('Diagnóstico PERF-26 ausente');
 process.stdout.write(result);
 """
 html = subprocess.check_output(["node", "-e", SCRIPT], cwd=ROOT, text=True)
@@ -52,7 +52,7 @@ with sync_playwright() as playwright:
             buttons,rows:[...document.querySelectorAll('tbody tr')].length,
             cards:document.querySelectorAll('.card').length};
         }""")
-        assert report["cards"]==3, f"{width}: cards não renderizados"
+        assert report["cards"]==4, f"{width}: quatro cartões de diagnóstico não renderizados"
         assert report["rows"]>=2, f"{width}: métricas omitidas"
         assert len(report["buttons"])==5, f"{width}: controles incompletos"
         assert report["scroll"]<=width+1, (
