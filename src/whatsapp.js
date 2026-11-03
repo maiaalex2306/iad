@@ -399,12 +399,46 @@
 
   /* Quantas mensagens novas esperam numa negociação. É o que a tarja azul do
      cartão do pipeline mostra, e o que põe o negócio no topo de Hoje. */
+  /* PERF-30: o badge não precisa agrupar/ordenar TODO o histórico do WhatsApp
+     nem casar contatos e oportunidades de conversas sem mensagens novas.
+     A chave, o telefone inicial e o último vínculo gravado preservam exatamente
+     as regras de conversas(). Sem cache entre usuários, empresas ou revisões:
+     visibilidade e contexto comercial são reavaliados nesta chamada. */
   function naoLidasDaOp(opId) {
-    let n = 0;
-    conversas().forEach(function (c) {
-      if (c.op && c.op.id === opId) n += c.naoLidas;
+    const lista = todas();
+    if (!lista.some(function (m) {
+      return m.origem !== 'historico' && m.direcao === 'entrada' &&
+        !m.lida && !!(m.telefone_curto || curto(m.telefone));
+    })) return 0;
+
+    const grupos = new Map();
+    lista.forEach(function (m) {
+      const chave = m.telefone_curto || curto(m.telefone);
+      if (!chave) return;
+      let grupo = grupos.get(chave);
+      if (!grupo) {
+        grupo = { telefone: m.telefone || '', naoLidas: 0, gravado: null };
+        grupos.set(chave, grupo);
+      }
+      if (m.origem !== 'historico' && m.direcao === 'entrada' && !m.lida)
+        grupo.naoLidas++;
+      /* O vínculo usado em conversas() é o último contato_id da conversa
+         ordenada por data (sort estável em empates). */
+      if (m.contato_id && (!grupo.gravado ||
+          String(m.enviada_em).localeCompare(String(grupo.gravado.enviada_em)) >= 0))
+        grupo.gravado = m;
     });
-    return n;
+    let total = 0;
+    grupos.forEach(function (grupo, chave) {
+      if (!grupo.naoLidas) return;
+      const gravado = grupo.gravado;
+      const dono = casar(grupo.telefone || chave);
+      const opGravada = gravado && gravado.oportunidade_id
+        ? Store.oportunidade(gravado.oportunidade_id) : null;
+      const op = (opGravada && !opGravada.desfecho ? opGravada : null) || dono.op;
+      if (op && op.id === opId) total += grupo.naoLidas;
+    });
+    return total;
   }
 
   function totalNaoLidas() {
