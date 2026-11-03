@@ -8,6 +8,10 @@
   if(root) root.IADCASQueue=api;
 })(typeof globalThis!=='undefined'?globalThis:this,function(){
   'use strict';
+  /* P0 CAS: uma trava por storage e identidade, compartilhada por todas
+     as instancias criadas na mesma aba. Sem isso duas chamadas a create()
+     podem enviar o mesmo operationId em paralelo e disputar o ACK local. */
+  const voosPorStorage = new WeakMap();
   function create(storage,identity,send){
     if(!storage||!identity||typeof send!=='function') throw Error('Dependências CAS obrigatórias');
     const user=String(identity.userId||''),tenant=String(identity.tenantId||'');
@@ -22,7 +26,11 @@
       return parsed;
     }
     function save(queue){storage.setItem(key,JSON.stringify(queue));}
-    let inflight=null;
+    function voos() {
+      let mapa=voosPorStorage.get(storage);
+      if(!mapa){mapa=new Map();voosPorStorage.set(storage,mapa);}
+      return mapa;
+    }
     function enqueue(op){
       if(!op||op.userId!==user||op.tenantId!==tenant||!op.operationId) throw Error('Operação CAS de outra sessão');
       const q=load();
@@ -36,8 +44,9 @@
     function flush(){
       /* Reentrada compartilha o ACK da tentativa corrente. Não declarar
          busy como conflito nem criar um segundo envio para a mesma fila. */
-      if(inflight) return inflight;
-      inflight=(async function(){
+      const mapa=voos();
+      if(mapa.has(key)) return mapa.get(key);
+      const tentativa=(async function(){
       let sent=0;
       const acks=[];
       try{
@@ -54,7 +63,11 @@
         return {sent,blocked:false,acks};
       } finally { /* limpeza de inflight no encerramento da promessa */ }
       })();
-      return inflight.finally(function(){ inflight=null; });
+      const compartilhada=tentativa.finally(function(){
+        if(mapa.get(key)===compartilhada) mapa.delete(key);
+      });
+      mapa.set(key,compartilhada);
+      return compartilhada;
     }
     return Object.freeze({enqueue,flush,pending:()=>load().map(x=>JSON.parse(JSON.stringify(x)))});
   }
