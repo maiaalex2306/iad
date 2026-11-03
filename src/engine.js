@@ -344,7 +344,7 @@
     };
   }
 
-  function alertas(op, base) {
+  function alertas(op, base, diagnosticoFila) {
     const lista = [];
     const idade = base ? base.evidenceAge : evidenceAge(op);
     const cob = base ? base.coverage : coverage(op);
@@ -384,6 +384,10 @@
     /* O único alerta deste app que aponta para uma oportunidade em vez de
        um risco: aqui o comprador se mexeu e nós não soubemos usar. */
     const mom = momento(op, idade);
+    /* PERF-22: compartilhar somente nesta execucao de fila() o momento
+       ja calculado para os alertas. Nao persiste referencias nem visibilidade
+       entre usuario, tenant, revisao, sincronizacao ou navegacao. */
+    if (diagnosticoFila) diagnosticoFila.momento = mom;
     if (mom) {
       lista.push({ tipo: 'momento', nivel: 'alto',
         texto: 'Comportamento à frente do registro: ' + mom.principal.titulo +
@@ -417,7 +421,7 @@
 
   /* PERF-02: índice de atrasos opcional por execução da fila. Os consumidores
      isolados de E.resumo continuam usando a rotina original, sem mudança. */
-  function resumo(op, atrasadasIndex) {
+  function resumo(op, atrasadasIndex, diagnosticoFila) {
     /* PERF-04 P5: idade da evidência calculada uma única vez por resumo.
        Não cachear entre renders, revisões, usuários ou empresas. */
     const idade = evidenceAge(op);
@@ -443,7 +447,7 @@
       saude: saude(op, base),
       classe: classificar(op, base),
       nbd: nextBestDecision(op, base),
-      alertas: alertas(op, base),
+      alertas: alertas(op, base, diagnosticoFila),
       compromisso: proximoCompromisso,
       lacunas: lacunas(op, base),
       tempoNaEtapa: tempoNaEtapa(op),
@@ -1296,8 +1300,11 @@
       if (o.nutricao && !nutricaoVencida(o)) return false;
       return true;
     }).map(function (op) {
-      const r = resumo(op, atrasadasIndex);
-      const mom = momento(op, r.evidenceAge);
+      /* O alerta do resumo ja avaliou momento(): evitar segunda busca de
+         sinais para cada card da fila, sem alterar o contrato de resumo(). */
+      const diagnosticoFila = {};
+      const r = resumo(op, atrasadasIndex, diagnosticoFila);
+      const mom = diagnosticoFila.momento;
       const vencidas = (porOp[op.id] || []).filter(function (t) { return t.vencimento && t.vencimento < hoje; });
 
       /* ---------- O PRÓXIMO PASSO JÁ MARCADO ----------
