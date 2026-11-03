@@ -1,0 +1,21 @@
+name: PERF-15 — Contact Account Index Parity
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contacts-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check src/store.js
+      - run: node --test nuvem/testes/perf-15-contacts-index.test.cjs
+      - run: node --test nuvem/testes/perf-02-engine.test.cjs

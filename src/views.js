@@ -5961,7 +5961,7 @@
   /* Um negócio passa pelo filtro? A mesma regra vale para as duas listas: o
      que a pessoa digitou vale nos dois lados, senão ela filtraria a carteira,
      olharia a nutrição e veria outra coisa. */
-  function passaNoFiltroDaNutricao(op, atrasadasIndex) {
+  function passaNoFiltroDaNutricao(op, atrasadasIndex, obterPotencial) {
     const conta = Store.conta(op.contaId);
     const texto = (nutri.busca || '').trim().toLowerCase();
     if (texto) {
@@ -5973,7 +5973,7 @@
     if (nutri.segmento !== 'todos' && String((conta && conta.segmento) || '') !== nutri.segmento) return false;
 
     if (nutri.potencial !== 'todos') {
-      const pot = potencialDe(op);
+      const pot = obterPotencial ? obterPotencial(op) : potencialDe(op);
       if (!pot || pot.faixa.id !== nutri.potencial) return false;
     }
 
@@ -6014,11 +6014,23 @@
     });
     /* PERF-14: calcular potencial uma vez por oportunidade, não a cada
        comparação do sort (O(n log n)); preservar desempate pelo IAD. */
+    /* PERF-15: no mesmo render, a revisão/sessão não muda. Evitar
+       serializar contexto e filtros por oportunidade em potencialDe().
+       Calcula o potencial apenas quando solicitado e o reutiliza em
+       filtro, ordenação e linha, com base invalidada por revisão/escopo. */
+    renovarPotencial();
     const potenciais = new Map();
+    function obterPotencial(op) {
+      if (potenciais.has(op)) return potenciais.get(op);
+      if (!basePotencial) basePotencial = E.baseDoPotencial();
+      const pot = E.potencial(op, basePotencial);
+      potenciais.set(op, pot);
+      return pot;
+    }
     const filtradas = lista.filter(function(op) {
-      return passaNoFiltroDaNutricao(op, atrasadasIndex);
+      return passaNoFiltroDaNutricao(op, atrasadasIndex, obterPotencial);
     });
-    filtradas.forEach(function(op) { potenciais.set(op, potencialDe(op)); });
+    filtradas.forEach(obterPotencial);
     filtradas.sort(function (a, b) {
       const pa = potenciais.get(a), pb = potenciais.get(b);
       return (posicaoDaFaixa(pa) - posicaoDaFaixa(pb)) ||
