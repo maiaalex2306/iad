@@ -307,8 +307,13 @@
         return anterior.then(function(resumo) {
           const fila=filaCASDaSessao(tenant),pendentes=fila.pending();
           return fila.flush().then(function(r) {
-            if(r && (r.blocked||r.busy))
-              throw new Error('Conflito CAS ou fila ocupada: trabalho local preservado.');
+            if(r && (r.blocked||r.busy)) {
+              const motivo = String(r.reason||'').toLowerCase();
+              const detalhe = motivo==='conflito' ? 'Conflito de revisão no servidor.' :
+                r.busy ? 'Fila CAS em processamento.' :
+                'Operação CAS ainda sem confirmação do servidor.';
+              throw new Error(detalhe + ' Edições pendentes preservadas; não limpe os dados do navegador.');
+            }
             const ack=(r && r.acks)||[];
             return ack.reduce(function(p,x) {
               return p.then(function() {
@@ -350,6 +355,20 @@
     catch(e) { return Promise.reject(e); }
     retomadaCASEmCurso = Promise.resolve(tentativa).finally(function() { retomadaCASEmCurso = null; });
     return retomadaCASEmCurso;
+  }
+  /* Diagnóstico P0 somente quantitativo: nenhuma operação, patch, ID,
+     empresa ou credencial sai da fila persistente para a interface. */
+  function diagnosticoPendenciasCAS() {
+    let quantidade=0,filas=0;
+    try {
+      tenantsComFilaCAS().forEach(function(tenant) {
+        const n=filaCASDaSessao(tenant).pending().length;
+        if(n){filas++;quantidade+=n;}
+      });
+      return {quantidade:quantidade,filas:filas,disponivel:true};
+    } catch(e) {
+      return {quantidade:null,filas:null,disponivel:false};
+    }
   }
   /* Cópia local explícita. Nunca limpa fila e nunca envia operações.
      Conteúdo sensível: é exclusivamente para arquivo baixado pelo usuário. */
@@ -2196,7 +2215,7 @@
     caixasDeEmail, salvarCaixaDeEmail, guardarSenhaDaCaixa, esquecerSenhaDaCaixa,
     atualizarOportunidadeCAS,
     enfileirarEdicaoCAS, retomarFilaCAS: retomarFilaCASSeguro,
-    exportarPendenciasCAS,
+    exportarPendenciasCAS, diagnosticoPendenciasCAS,
     empresaParecida, achatarNome, porFormato, explicarFalhas,
     adotarTokens,
     trocarMinhaSenha,
