@@ -1,0 +1,27 @@
+name: PERF-29 — Email unread fast path and parity
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  perf29:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax
+        run: node --check src/email.js && node --check nuvem/testes/perf-29-email-unread-fastpath.test.cjs
+      - name: Baseline and PERF-29 parity
+        run: |
+          node --test nuvem/testes/perf-29-email-unread-fastpath.test.cjs
+          node --test nuvem/testes/perf-28-email-index-parity.test.cjs
+          node --test nuvem/testes/perf-27-unread-email-count.test.cjs
+      - name: Version/cache consistency
+        run: |
+          grep -q "numero: 'v286.27'" src/config.js
+          grep -q 'iad-crm-v286.27' sw.js

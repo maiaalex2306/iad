@@ -347,6 +347,12 @@
      o contexto atual e as mensagens carregadas. A mensagem-base é a primeira
      entrada em ordem cronológica, como em conversas(), inclusive empates. */
   function naoLidasDaOp(opId) {
+    /* PERF-29: nenhum e-mail recebido não lido => zero SEM agrupar milhares de
+       threads nem reconstruir os índices de conta/contato/oportunidade.
+       O filtro usa os mesmos critérios da contagem completa, inclusive chave. */
+    if (!todas().some(function (m) {
+      return m.direcao === 'entrada' && !m.lida && !!chaveDaConversa(m);
+    })) return 0;
     const grupos = new Map();
     todas().forEach(function (m) {
       const chave = chaveDaConversa(m);
@@ -363,7 +369,14 @@
       if (!m.lida) grupo.naoLidas++;
     });
     let total = 0;
-    const indice = indiceCasamento();
+    /* Poucas threads não lidas: usar casamento linear evita indexar a carteira
+       inteira para exibir um badge. Em volume maior, PERF-28 continua usando
+       os índices efêmeros, com contexto recalculado em cada chamada. */
+    let pendentes = 0;
+    grupos.forEach(function (grupo) {
+      if (grupo.naoLidas && grupo.primeiraEntrada) pendentes++;
+    });
+    const indice = pendentes > 3 ? indiceCasamento() : null;
     grupos.forEach(function (grupo) {
       if (!grupo.naoLidas || !grupo.primeiraEntrada) return;
       const dono = casar(grupo.primeiraEntrada, indice);
