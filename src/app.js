@@ -8451,9 +8451,13 @@
     });
   }
 
+  /* PERF-34B: o refresh manual nao deve reconstruir o cockpit inteiro. */
   App.recarregarConversas = function () {
-    if (!W) return;
-    W.carregar(true).then(colher).then(function () { render(); });
+    if (!W || !W.disponivel()) return;
+    const assinaturaAntes = assinaturaDaAtualizacaoDoCanal();
+    return W.carregar(true).then(colher).then(function () {
+      atualizarCanalSemReabrirCockpit('whatsapp', assinaturaAntes);
+    });
   };
 
   /* PERF-33: canais carregam de maneira assincrona. Uma nova mensagem
