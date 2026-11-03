@@ -15,7 +15,7 @@ function fixture(n){
   let filtros={tenant:'todas',usuario:'todos'};
   const w={console,localStorage:{getItem(){return null},setItem(){},removeItem(){}},
     IADAuth:{atual:()=>u,filtros:()=>filtros}};
-  const ctx={window:w,console,Date,Math,Map,Set,Number,JSON};
+  const ctx={window:w,localStorage:w.localStorage,console,Date,Math,Map,Set,Number,JSON};
   for(const [name,source] of [['playbook.js',playbookCode],['store.js',storeCode],['engine.js',engineCode]])
     vm.runInNewContext(source,ctx,{filename:name});
   const S=w.IADStore,E=w.IADEngine,P=w.IADPlaybook,e=S.obter();
