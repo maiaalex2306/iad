@@ -104,7 +104,7 @@ test('PERF-33 coordinated release is checked without pinning a legacy version',(
  const cfg=fs.readFileSync('src/config.js','utf8');
  const sw=fs.readFileSync('sw.js','utf8');
  const c=cfg.match(/numero: '(v\d+\.\d+)'/);
- assert.ok(c);assert.equal(c[1],'v286.31');
+ assert.ok(c);assert.match(c[1],/^v286\.\d+$/);
  assert.ok(sw.includes("const CACHE = 'iad-crm-"+c[1]+"'"));
  const helper=fs.readFileSync('scripts/verificar-versao-shell.cjs','utf8');
  assert.ok(helper.includes("assert.equal(b[1],'iad-crm-'+a[1]"));

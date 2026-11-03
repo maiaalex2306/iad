@@ -559,18 +559,44 @@
 
   const CHAVE_ANALISE = 'iad-crm:analise-do-dia';
 
-  function guardarAnalise(a) {
-    analise = a;
-    try { localStorage.setItem(CHAVE_ANALISE, JSON.stringify(a)); } catch (e) { /* aparelho cheio */ }
+  /* PERF-34A: não compartilhar resumos e exemplos de empresas diferentes
+     no mesmo navegador, mesmo quando a contagem de negócios é idêntica. */
+  function escopoDoPanorama() {
+    const ctx = Store.contexto ? Store.contexto() : null;
+    const usuario = ctx && ctx.usuario;
+    if (!usuario || !usuario.id) return '';
+    const f = ctx.filtros || {};
+    return JSON.stringify([usuario.id, usuario.papel || '', ctx.tenantId || '',
+      !!ctx.admin, !!ctx.gestor, f.tenant || '', f.usuario || '']);
   }
 
-  /* Lida do disco uma vez, e só se for de HOJE. Panorama de ontem apresentado
-     como o de hoje é pior do que panorama nenhum — o vendedor age nele. */
+  function guardarAnalise(a) {
+    const escopo = escopoDoPanorama();
+    if (!escopo) { analise = null; return; }
+    const registro = Object.assign({}, a, { escopo: escopo });
+    analise = registro;
+    try { localStorage.setItem(CHAVE_ANALISE, JSON.stringify(registro)); } catch (e) { /* aparelho cheio */ }
+  }
+
+  /* Só apresentar resultados do dia E do usuário/empresa/recorte atuais.
+     Dados antigos sem escopo precisam ser recalculados, nunca reutilizados. */
   function analiseDoDia() {
+    const escopo = escopoDoPanorama();
+    if (!escopo) { analise = null; return null; }
+    if (analise && (analise.escopo !== escopo ||
+        String(analise.em || '').slice(0, 10) !== Store.hoje())) analise = null;
     if (analise) return analise;
     try {
       const g = JSON.parse(localStorage.getItem(CHAVE_ANALISE) || 'null');
-      if (g && g.em && String(g.em).slice(0, 10) === Store.hoje()) analise = g;
+      if (g && g.escopo === escopo && g.em &&
+          String(g.em).slice(0, 10) === Store.hoje()) {
+        /* A página recarregada não mantém a Promise da IA em andamento. */
+        if (g.pendenteIA) {
+          g.pendenteIA = false;
+          g.interrompida = true;
+        }
+        analise = g;
+      }
     } catch (e) { analise = null; }
     return analise;
   }
@@ -585,16 +611,18 @@
   function botaoDaAnalise(foco) {
     const urgentes = foco.itens.filter(function (i) { return i.urgencia >= 3; }).length;
     const a = analiseDoDia();
-    const rodando = !!analisando;
+    const rodando = !!analisando || !!(a && a.pendenteIA);
     return '<button class="btn ' + (a && !a.erro ? 'ghost ' : '') + 'mini" onclick="App.analisarPendencias()"' +
       (rodando ? ' disabled' : '') +
-      ajudaComLinhas('Análise das pendências e ações',
-        'Lê a carteira INTEIRA e diz o que está acontecendo, por quê, e por onde começar hoje.',
-        [['O que ela faz', 'Relê com o assistente os ' + urgentes + ' negócio(s) urgente(s), conta o padrão que atravessa a carteira toda, e escreve a ordem da manhã.'],
-         ['Por que não é a mesma coisa que os cartões', 'O cartão explica UM negócio. Esta análise encontra o que se repete entre todos — e carteira em que quarenta travam no mesmo degrau não precisa de quarenta conversas, precisa de uma mudança.'],
-         ['Demora', 'Cerca de um segundo por negócio urgente. Pode deixar rodando e continuar trabalhando.'],
-         ['Custa', 'Uma chamada ao assistente por negócio urgente, mais uma da carteira. Por isso ela é um botão, e não algo que acontece sozinho a cada tela.']]) +
-      '>' + (rodando ? 'Analisando…' : 'Análise das pendências e ações') + '</button>';
+      ajudaComLinhas('Análise executiva rápida',
+        'Conta TODA a carteira imediatamente e solicita no máximo UMA interpretação de IA, sem reler cada negócio individualmente.',
+        [['O que ela faz', 'Conta todos os negócios e mostra padrões, riscos e prioridades já calculados.'],
+         ['IA', 'Uma chamada opcional interpreta o panorama. Os números aparecem antes da resposta.'],
+         ['Custo', 'No máximo uma chamada de IA, sem 208 leituras sequenciais.']]) +
+      '>' + (rodando ? 'Analisando…' : 'Análise rápida') + '</button>' +
+      '<button class="btn ghost mini" onclick="App.analisarPendenciasCompleta()"' + (rodando ? ' disabled' : '') +
+      ' title="Relê individualmente os ' + urgentes + ' urgentes; pode demorar e consumir muitas chamadas de IA.">' +
+      'Análise completa</button>';
   }
 
   function listinha(titulo, itens, classe) {
@@ -673,7 +701,11 @@
           esc(U.data(p.loteDeCombinados.data)) + ')'
         : '') + '.</p>';
 
-    const daIa = ia
+    const daIa = a.pendenteIA
+      ? '<p class="small muted">Panorama concluído. A interpretação da IA está em andamento; você pode continuar trabalhando.</p>'
+      : a.interrompida
+      ? '<p class="small muted">A página foi recarregada durante a interpretação da IA. O panorama continua válido para a carteira exibida; refaça se quiser o texto interpretativo.</p>'
+      : ia
       ? (ia.leitura ? '<p class="leitura-carteira">' + esc(ia.leitura) + '</p>' : '') +
         '<div class="orienta">' +
         listinha('Comece por aqui, hoje', ia.agora, 'fazer') +
@@ -682,13 +714,20 @@
         '</div>'
       : '<p class="small muted">O assistente não respondeu desta vez — os números acima são cálculo e valem do mesmo jeito.</p>';
 
+    const modo = a.modo === 'executiva'
+      ? ' · panorama executivo de toda a carteira'
+      : (a.modo === 'completa' ? ' · análise individual completa' : '');
+    const parcial = a.modo === 'completa' && Number(a.processadas || 0) < Number(a.solicitadas || 0)
+      ? '<div class="aviso">Aprofundamento parcial: ' + Number(a.processadas || 0) +
+        ' de ' + Number(a.solicitadas || 0) + ' oportunidades processadas. Não considerar todas relidas.</div>'
+      : '';
     return '<div class="card analise-dia"><div class="row"><h2 style="margin:0">Análise das pendências e ações</h2>' +
       '<span class="espaco"></span>' +
-      '<span class="tiny muted">' + (hora ? 'feita às ' + esc(hora) : '') +
-      (a.lidos ? ' · ' + a.lidos + ' negócio(s) relidos' : '') + '</span>' +
+      '<span class="tiny muted">' + (hora ? 'feita às ' + esc(hora) : '') + esc(modo) +
+      (a.lidos ? ' · ' + a.lidos + ' respostas individuais' : '') + '</span>' +
       '<button class="btn ghost mini" onclick="App.analisarPendencias()">Refazer</button>' +
       '<button class="btn ghost mini" onclick="App.fecharAnalise()" aria-label="Fechar">✕</button></div>' +
-      desencontro + (vazia ? '' : numeros + daIa) + '</div>';
+      desencontro + parcial + (vazia ? '' : numeros + daIa) + '</div>';
   }
 
   /* ---------------- as conversas do WhatsApp ----------------
