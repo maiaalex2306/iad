@@ -11,8 +11,14 @@ function montarNuvem() {
     tarefas:[],produtos:[],segmentos:[],tiposTarefa:[],fontes:[],sinais:[],notas:[]};
   let saves=0;
   const store={obter:()=>estado,semSincronizar:f=>f(),salvar:()=>{saves++;}};
-  const localStorage={getItem:()=>null,setItem(){},removeItem(){}};
-  const w={IADStore:store,IADConfig:{supabase:{url:'https://teste.supabase.co',chave:'sb_publishable_teste'}}};
+  /* A prova de paginacao ocorre com sessao CAS valida e fila verificada vazia.
+     Estado CAS invalido e testado separadamente no gate fail-closed. */
+  const session=JSON.stringify({access_token:'test-token',user:{id:'test-user'},
+    perfil:{tenant_id:'test-tenant',papel:'usuario'}});
+  const localStorage={getItem:k=>k==='iad-crm:nuvem-sessao:v1'?session:null,
+    setItem(){},removeItem(){}};
+  const w={IADStore:store,IADConfig:{supabase:{url:'https://teste.supabase.co',chave:'sb_publishable_teste'}},
+    IADCAS:{},IADCASQueue:{create:()=>({pending:()=>[]})}};
   vm.runInNewContext(fs.readFileSync(path.join(root,'src/nuvem.js'),'utf8'),
     {window:w,localStorage,Date,JSON,Set,Promise,console,fetch(){throw new Error('Chamada sem stub')}});
   return {N:w.IADNuvem,estado,saves:()=>saves};
