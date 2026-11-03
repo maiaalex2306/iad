@@ -23,5 +23,5 @@ jobs:
           node --test nuvem/testes/perf-04-p5d-events.test.cjs
       - name: Preservar versão de produção
         run: |
-          grep -q "numero: 'v286.27'" src/config.js
+          grep -q "numero: 'v286.28'" src/config.js
           grep -q "iad-crm-v286" sw.js
