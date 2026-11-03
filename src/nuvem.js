@@ -115,7 +115,17 @@
 
   function chamar(caminho, opcoes) {
     if (substitutoDeTeste) return substitutoDeTeste(caminho, opcoes);
-    return tentar(caminho, opcoes, true);
+    /* PERF-23: grupos fixos e sem dados da URL. Um único intervalo por
+       chamada lógica inclui parse/401+renovação, sem duplicar cada retry.
+       Não incluir nome da tabela, parâmetros, usuário nem status no relatório. */
+    const grupo = caminho.indexOf('/rest/v1/') === 0 ? 'rest'
+      : caminho.indexOf('/auth/v1/') === 0 ? 'auth'
+      : caminho.indexOf('/functions/v1/') === 0 ? 'functions'
+      : caminho.indexOf('/storage/v1/') === 0 ? 'storage' : 'outros';
+    const perf = global.IADPerformance;
+    const executar = function () { return tentar(caminho, opcoes, true); };
+    return perf && perf.medirPromessa
+      ? perf.medirPromessa('perf23.rede.' + grupo, executar) : executar();
   }
 
   function tentar(caminho, opcoes, podeRenovar) {
@@ -1981,6 +1991,13 @@
   }
 
   function puxar(forcar) {
+    const perf = global.IADPerformance;
+    return perf && perf.medirPromessa
+      ? perf.medirPromessa('perf23.sync.puxar', function () { return puxarSemMetrica(forcar); })
+      : puxarSemMetrica(forcar);
+  }
+
+  function puxarSemMetrica(forcar) {
     const ctx = contextoDelta();
     if (!ctx || forcar) { cursorDelta = null; return puxarCompleto(forcar); }
     if (ctx.tipo === 'admin') return puxarAdmin(ctx,forcar);
@@ -2082,12 +2099,15 @@
   }
 
   function sincronizar() {
-    return empurrar({ tudo: true }).then(function (subida) {
+    const executar = function () { return empurrar({ tudo: true }).then(function (subida) {
       return puxar().then(function (recebidos) {
         localStorage.setItem('iad-crm:nuvem-ultima', new Date().toISOString());
         return { enviados: subida.enviados, retidos: subida.retidos, recebidos: recebidos };
       });
-    });
+    }); };
+    const perf = global.IADPerformance;
+    return perf && perf.medirPromessa
+      ? perf.medirPromessa('perf23.sync.manual', executar) : executar();
   }
 
   /* A entrada no app.
@@ -2101,7 +2121,7 @@
      Subir primeiro, e sem deixar a falha da subida impedir a descida: quem
      acabou de entrar precisa ver a carteira mesmo que o envio tenha falhado. */
   function sincronizarNaEntrada() {
-    return empurrar().then(
+    const executar = function () { return empurrar().then(
       function (subida) { return subida; },
       function (e) { return { enviados: 0, retidos: 0, erroAoEnviar: e.message }; }
     ).then(function (subida) {
@@ -2126,7 +2146,10 @@
         e.subida = subida;
         throw e;
       });
-    });
+    }); };
+    const perf = global.IADPerformance;
+    return perf && perf.medirPromessa
+      ? perf.medirPromessa('perf23.sync.entrada', executar) : executar();
   }
 
   function ultimaSincronizacao() { return localStorage.getItem('iad-crm:nuvem-ultima') || ''; }

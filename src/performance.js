@@ -28,6 +28,23 @@
     try { return funcao(); }
     finally { registrar(nome, agora() - inicio); }
   }
+  /* PERF-23: a mesma métrica para Promise, incluindo falhas.
+     Nunca armazena payload, endpoint, token, ID ou motivo de erro.
+     Preserva o resultado e rejeição da operação original e não mede
+     nada quando o usuário não ativou a instrumentação local. */
+  function medirPromessa(nome, operacao) {
+    if (!ativo) return operacao();
+    const inicio = agora();
+    const concluir = function () { registrar(nome, agora() - inicio); };
+    let resultado;
+    try { resultado = operacao(); }
+    catch (erro) { concluir(); throw erro; }
+    return Promise.resolve(resultado).then(
+      function (valor) { concluir(); return valor; },
+      function (erro) { concluir(); throw erro; }
+    );
+  }
+
   /* PERF-10 P5: dois frames são aproximação do próximo paint,
      não prova de pixels apresentados. Medição opcional, somente leitura. */
   function medirDoisFrames(nome, inicio) {
@@ -115,7 +132,7 @@
       formato: 'iad-perf-10-p7',
       versaoEsquema: 1,
       escopo: 'esta-sessao',
-      metodologia: 'p50 e p95 das últimas 100 amostras por métrica; PERF-17: clique a dois frames opt-in, não mede paint físico nem rede isoladamente',
+      metodologia: 'p50 e p95 das últimas 100 amostras por métrica; PERF-17: clique a dois frames não comprova paint físico; PERF-23: duração das chamadas ao servidor e da sincronização, com grupos sem URLs; intervalos de rede podem se sobrepor',
       metricas: relatorio(true)
     }, null, 2);
   }
@@ -123,7 +140,7 @@
     iniciar: function () { ativo = true; return 'Medição iniciada — não envia dados.'; },
     parar: function () { ativo = false; abertura = null; return relatorio(); },
     limpar: function () { abertura = null; Object.keys(amostras).forEach(function(k){delete amostras[k];}); },
-    medir: medir, registrar: registrar, relatorio: relatorio,
+    medir: medir, medirPromessa: medirPromessa, registrar: registrar, relatorio: relatorio,
     medirDoisFrames: medirDoisFrames, agora: agora,
     iniciarAbertura: iniciarAbertura, aberturaPendente: aberturaPendente,
     etapaAbertura: etapaAbertura, cancelarAbertura: cancelarAbertura,
