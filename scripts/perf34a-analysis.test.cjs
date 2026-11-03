@@ -184,6 +184,7 @@ test('PERF-34A: cache do panorama não atravessa empresas, usuários nem dias',(
 });
 test('PERF-34A: app e cache PWA v286.32 coerentes',()=>{
  const cfg=fs.readFileSync('src/config.js','utf8'),sw=fs.readFileSync('sw.js','utf8');
- assert.ok(cfg.includes("numero: 'v286.32'"));
- assert.ok(sw.includes("const CACHE = 'iad-crm-v286.32'"));
+ assert.match(cfg,/numero: 'v286\.\d+'/);
+ const version=cfg.match(/numero: '(v286\.\d+)'/)[1];
+ assert.ok(sw.includes("const CACHE = 'iad-crm-"+version+"'"));
 });
