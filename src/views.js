@@ -559,20 +559,38 @@
 
   const CHAVE_ANALISE = 'iad-crm:analise-do-dia';
 
-  function guardarAnalise(a) {
-    analise = a;
-    try { localStorage.setItem(CHAVE_ANALISE, JSON.stringify(a)); } catch (e) { /* aparelho cheio */ }
+  /* PERF-34A: não compartilhar resumos e exemplos de empresas diferentes
+     no mesmo navegador, mesmo quando a contagem de negócios é idêntica. */
+  function escopoDoPanorama() {
+    const ctx = Store.contexto ? Store.contexto() : null;
+    const usuario = ctx && ctx.usuario;
+    if (!usuario || !usuario.id) return '';
+    const f = ctx.filtros || {};
+    return JSON.stringify([usuario.id, usuario.papel || '', ctx.tenantId || '',
+      !!ctx.admin, !!ctx.gestor, f.tenant || '', f.usuario || '']);
   }
 
-  /* Lida do disco uma vez, e só se for de HOJE. Panorama de ontem apresentado
-     como o de hoje é pior do que panorama nenhum — o vendedor age nele. */
+  function guardarAnalise(a) {
+    const escopo = escopoDoPanorama();
+    if (!escopo) { analise = null; return; }
+    const registro = Object.assign({}, a, { escopo: escopo });
+    analise = registro;
+    try { localStorage.setItem(CHAVE_ANALISE, JSON.stringify(registro)); } catch (e) { /* aparelho cheio */ }
+  }
+
+  /* Só apresentar resultados do dia E do usuário/empresa/recorte atuais.
+     Dados antigos sem escopo precisam ser recalculados, nunca reutilizados. */
   function analiseDoDia() {
+    const escopo = escopoDoPanorama();
+    if (!escopo) { analise = null; return null; }
+    if (analise && (analise.escopo !== escopo ||
+        String(analise.em || '').slice(0, 10) !== Store.hoje())) analise = null;
     if (analise) return analise;
     try {
       const g = JSON.parse(localStorage.getItem(CHAVE_ANALISE) || 'null');
-      if (g && g.em && String(g.em).slice(0, 10) === Store.hoje()) {
-        /* A pagina recarregada nao possui mais a Promise da IA.
-           Uma marca de espera persistida nao pode bloquear os botoes para sempre. */
+      if (g && g.escopo === escopo && g.em &&
+          String(g.em).slice(0, 10) === Store.hoje()) {
+        /* A página recarregada não mantém a Promise da IA em andamento. */
         if (g.pendenteIA) {
           g.pendenteIA = false;
           g.interrompida = true;
