@@ -2064,9 +2064,10 @@
       if (pending)
         return Promise.reject(new Error('Há edições CAS pendentes neste dispositivo. Conclua ou resolva os conflitos antes de baixar a carteira.'));
     } catch(e) {
-      if (e.message && e.message.indexOf('Há edições CAS pendentes')===0)
-        return Promise.reject(e);
-      /* Sessão ausente: os guardas de autenticação do puxar continuam valendo. */
+      /* P0 fail-closed: falha de leitura, JSON corrompido, storage indisponivel
+         ou identidade ausente NAO demonstram que a fila esta vazia.
+         Nunca sobrescrever a carteira ate verificar a fila com sucesso. */
+      return Promise.reject(e);
     }
     notificarCarga({ativa:true,concluidas:0,total:TABELAS.length,erro:''});
     const buscas = TABELAS.map(function (t) {

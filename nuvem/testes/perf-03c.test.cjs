@@ -15,7 +15,9 @@ function make({role='gestor',userid='userA',tenant=TA,selected='todas',count=2,p
  const state=create(),remote=create();let rev=0,privateEnabled=privateReady,broken=loadError;
  const store={obter:()=>state,revisao:()=>rev,salvar:()=>{rev++},exclusoesPendentes:()=>[],
    semSincronizar:fn=>fn(),contexto:()=>({filtros:{tenant:selected,usuario:'todos'}})};
- const win={IADStore:store,IADConfig:{supabase:{url:'https://homolog.supabase.co',chave:'sb_publishable_fake'}}};
+ /* Multiempresa tests assume no pending edits: model a verified empty CAS journal. */
+ const win={IADStore:store,IADConfig:{supabase:{url:'https://homolog.supabase.co',chave:'sb_publishable_fake'}},
+   IADCAS:{},IADCASQueue:{create:()=>({pending:()=>[]})}};
  vm.runInNewContext(source,{window:win,localStorage,Date,Map,Set,JSON,Promise,URL,encodeURIComponent,console});
  const N=win.IADNuvem;
  function allowed(row){const p=credentials().perfil;
