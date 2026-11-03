@@ -3269,7 +3269,9 @@
     /* Na aba de Sinais o número é só o que está DENTRO da janela: sinal de
        dois meses atrás não é aviso, é histórico, e um contador que soma tudo
        nunca zera — deixa de ser aviso no dia seguinte. */
-    const sinaisAgora = E.sinaisRecentes ? E.sinaisRecentes(op).length : 0;
+    /* PERF-25: contador sem montar e ordenar todos os sinais da negociação. */
+    const sinaisAgora = E.contarSinaisRecentes ? E.contarSinaisRecentes(op)
+      : (E.sinaisRecentes ? E.sinaisRecentes(op).length : 0);
     const M = global.IADEmail;
     const emailsNovos = (M && M.carregadas()) ? M.naoLidasDaOp(op.id) : 0;
     const contagem = { tarefas: abertas, whatsapp: novas, sinais: sinaisAgora, email: emailsNovos };
