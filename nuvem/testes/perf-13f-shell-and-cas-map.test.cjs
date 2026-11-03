@@ -34,7 +34,7 @@ function mockWorker(){
 }
 test('37+ arquivos estaticos sao atendidos pelo cache da versao ativa sem rede',async()=>{
  const w=mockWorker(),key=w.origin+'/src/app.js';
- await w.cache('iad-crm-v286.14').put(key,{token:'new-app'});
+ await w.cache('iad-crm-v286.15').put(key,{token:'new-app'});
  await w.cache('iad-crm-v286.9').put(key,{token:'old-app'});
  const first=await w.hit(key),second=await w.hit(key);
  assert.equal(first.response.token,'new-app');

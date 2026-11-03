@@ -140,6 +140,7 @@
   let revisaoIndices = -1;
   let contasPorId = new Map();
   let oportunidadesPorId = new Map();
+  let oportunidadesPorConta = new Map();
   let contatosPorId = new Map();
   let contatosPorConta = new Map();
   let tarefasPorOportunidade = new Map();
@@ -156,6 +157,7 @@
     if (revisaoIndices === revisaoDados) return;
     contasPorId = new Map();
     oportunidadesPorId = new Map();
+    oportunidadesPorConta = new Map();
     contatosPorId = new Map();
     contatosPorConta = new Map();
     tarefasPorOportunidade = new Map();
@@ -168,6 +170,13 @@
     });
     (estado.oportunidades || []).forEach(function (r) {
       if (!oportunidadesPorId.has(r.id)) oportunidadesPorId.set(r.id, r);
+      /* PERF-18: agrupar em uma passagem, preservando === (tipo da chave),
+         ordem original e IDs duplicados. O resultado final é filtrado por
+         visibilidade atual, nunca mantém um snapshot do usuário/tenant. */
+      if (r.contaId === r.contaId) {
+        if (!oportunidadesPorConta.has(r.contaId)) oportunidadesPorConta.set(r.contaId, []);
+        oportunidadesPorConta.get(r.contaId).push(r);
+      }
     });
     (estado.contatos || []).forEach(function (r) {
       if (!contatosPorId.has(r.id)) contatosPorId.set(r.id, r);
@@ -1049,6 +1058,14 @@
   function conta(id) { reconstruirIndices(); return contasPorId.get(id); }
   function contato(id) { reconstruirIndices(); return contatosPorId.get(id); }
   function oportunidade(id) { reconstruirIndices(); return oportunidadesPorId.get(id); }
+  function oportunidadesDaConta(contaId) {
+    reconstruirIndices();
+    /* O índice bruto nunca é exposto: papel, tenant e filtros administrativos
+       são reavaliados na leitura, inclusive sem nova revisão dos dados. */
+    return (oportunidadesPorConta.get(contaId) || []).filter(function (op) {
+      return visivel(op, true);
+    });
+  }
   function tarefa(id) { return estado.tarefas.find(function (t) { return t.id === id; }); }
   function contatosDaConta(contaId) {
     reconstruirIndices();
@@ -2268,7 +2285,7 @@
     excluirContato,
     quandoMudar, semSincronizar, registrarExclusao, exclusoesPendentes, esquecerExclusoes,
     moverRegistros, esquecerEmpresa,
-    conta, contato, oportunidade, tarefa, contatosDaConta, tarefasDaOportunidade,
+    conta, contato, oportunidade, oportunidadesDaConta, tarefa, contatosDaConta, tarefasDaOportunidade,
     daquiADias, PRAZO_PADRAO_DE_FECHAMENTO,
     dados, contexto, tenantDeTrabalho, visivel, diagnostico,
     fonte, origemDaOportunidade,

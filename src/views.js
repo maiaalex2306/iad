@@ -3087,8 +3087,10 @@
 
   function outrasAbertasDaConta(op) {
     if (!op || !op.contaId) return [];
-    return Store.dados().oportunidades.filter(function (o) {
-      return o.contaId === op.contaId && o.id !== op.id && !o.desfecho;
+    /* PERF-18: consultar bucket da conta, nao toda a carteira.
+       Store aplica RLS local por perfil/filtro A CADA leitura. */
+    return Store.oportunidadesDaConta(op.contaId).filter(function (o) {
+      return o.id !== op.id && !o.desfecho;
     });
   }
 
