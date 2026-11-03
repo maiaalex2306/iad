@@ -81,7 +81,7 @@ test('PERF-24: permite p50/p95 do usuário após 30 aberturas reais',()=>{
  assert.match(html,/20\.0 ms/);
  assert.match(html,/Abertura: clique até dois frames/);
 });
-test('PERF-24: só envia ao download local 20 métricas conhecidas; nenhuma URI ou cliente',()=>{
+test('PERF-24: só envia ao download local métricas conhecidas; nenhuma URI ou cliente',()=>{
  const e=ambiente();e.p.iniciar();
  const proibido='perf23.rede.rest.'+segredo;
  const proibido2='tela.cockpit?email=privado@example.com';
@@ -122,4 +122,26 @@ test('PERF-24: avisos metodológicos deixam claros os limites',()=>{
  assert.equal(j.versaoEsquema,1);
  assert.match(app,/perf24Baixar: function/);
  assert.match(app,/perf24Iniciar: function/);
+});
+
+/* PERF-26: métricas preexistentes no cockpit passam a ser visíveis na tela, mantendo allowlist. */
+test('PERF-26: cabeçalho e nove abas aparecem no diagnóstico e exportação segura',()=>{
+ const e=ambiente();e.p.iniciar();
+ const aceitas=['perf10.cockpit.abas.cabecalho','perf10.cockpit.aba.conteudo',
+   'perf10.aba.decisao','perf10.aba.historico','perf10.aba.tarefas',
+   'perf10.aba.whatsapp','perf10.aba.sinais','perf10.aba.email',
+   'perf10.aba.propostas','perf10.aba.produtos','perf10.aba.arquivos'];
+ for(const nome of aceitas)e.p.registrar(nome,12);
+ e.p.registrar('perf10.aba.sinais.'+segredo,999);
+ const m=e.p.relatorioDiagnostico();
+ for(const nome of aceitas)assert.equal(m[nome].p95Ultimas100Ms,12);
+ assert.equal(m['perf10.aba.sinais.'+segredo],undefined);
+ const html=htmlDaAba(e.p);
+ assert.match(html,/Troca de abas do cockpit/);
+ assert.match(html,/Conteúdo: sinais/);
+ assert.match(html,/Troca de aba: cabeçalho/);
+ const json=e.p.exportarDiagnosticoJSON();
+ assert.doesNotMatch(json,new RegExp(segredo));
+ assert.equal(Object.keys(JSON.parse(json).metricas).length,11);
+ assert.doesNotMatch(html,new RegExp(segredo));
 });
