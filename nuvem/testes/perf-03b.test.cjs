@@ -17,7 +17,10 @@ function ambiente() {
   let revision=0,version=0,requests=[],events=[],failure=false,journal=true;
   const S={obter:()=>state,salvar:()=>{revision++},revisao:()=>revision,
     semSincronizar:f=>f(),exclusoesPendentes:()=>[],esquecerExclusoes(){}};
-  const w={IADStore:S,IADConfig:{supabase:{url:'https://homolog.supabase.co',chave:'sb_publishable_test'}}};
+  /* Snapshot delta somente apos comprovacao de fila CAS vazia.
+     O harness nao exercita escritas CAS; usa journal vazio validado. */
+  const w={IADStore:S,IADConfig:{supabase:{url:'https://homolog.supabase.co',chave:'sb_publishable_test'}},
+    IADCAS:{},IADCASQueue:{create:()=>({pending:()=>[]})}};
   vm.runInNewContext(source,{window:w,localStorage,Date,JSON,Set,Map,Promise,console,URL,encodeURIComponent});
   const N=w.IADNuvem;
   const decode=url=>new URL(url,'https://homolog.supabase.co');
