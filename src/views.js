@@ -9872,6 +9872,15 @@
       ['perf10.aba.produtos', 'Conteúdo: produtos'],
       ['perf10.aba.arquivos', 'Conteúdo: arquivos']
     ];
+    /* PERF-31: medicao da abertura e dos quatro badges, sem dados comerciais. */
+    const gargalos = [
+      ['perf31.cockpit.abas.inicial', 'Abertura: cabeçalho inicial'],
+      ['perf31.cockpit.conteudo.inicial', 'Abertura: conteúdo inicial'],
+      ['perf31.badge.tarefas', 'Badge: tarefas abertas'],
+      ['perf31.badge.whatsapp', 'Badge: WhatsApp não lido'],
+      ['perf31.badge.sinais', 'Badge: sinais recentes'],
+      ['perf31.badge.email', 'Badge: e-mails não lidos']
+    ];
     const rede = [
       ['perf23.sync.puxar', 'Sincronização: baixar'],
       ['perf23.sync.manual', 'Sincronização manual completa'],
@@ -9932,6 +9941,7 @@
       'paralelo, portanto não some seus tempos. O CRM não envia este relatório automaticamente.</p>' +
       '</div>' + tabela('Abertura das oportunidades', principais) +
       tabela('Troca de abas do cockpit', abas) +
+      tabela('Gargalos de abertura e notificações', gargalos) +
       tabela('Rede e sincronização', rede);
   }
 
