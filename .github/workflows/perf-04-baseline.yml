@@ -59,7 +59,7 @@ jobs:
           node --check src/sincronia.js
           node --check src/store.js
           node --check src/performance.js
-          grep -q "numero: 'v286.12'" src/config.js
+          grep -q "numero: 'v286.13'" src/config.js
           grep -q "iad-crm-v286" sw.js
       - name: Paridade em 243, 1000 e 5000 oportunidades
         run: node scripts/perf03a-scale-bench.cjs
