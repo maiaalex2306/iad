@@ -48,7 +48,7 @@ async function main(){
   semSincronizar:f=>f(),exclusoesPendentes:()=>[],esquecerExclusoes(){}};
  /* Validar o journal CAS real antes do snapshot: somente fila vazia
     permite leitura integral; nenhuma operacao de cliente e enfileirada aqui. */
- const w={IADStore:S,IADConfig:{supabase:{url:base,chave:anon}},
+ const w={IADStore:S,localStorage,IADConfig:{supabase:{url:base,chave:anon}},
   IADCAS:{},IADCASQueue:require(path.join(root,'src/cas-queue.js'))};
  vm.runInNewContext(fs.readFileSync(path.join(root,'src/nuvem.js'),'utf8'),
   {window:w,localStorage,Date,Map,Set,JSON,console,URL,Promise,fetch,encodeURIComponent});
