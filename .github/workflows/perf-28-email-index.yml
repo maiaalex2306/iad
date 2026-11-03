@@ -22,5 +22,4 @@ jobs:
           node --test nuvem/testes/perf-27-unread-email-count.test.cjs
       - name: Check coordinated public version
         run: |
-          grep -q "numero: 'v286.29'" src/config.js
-          grep -q 'iad-crm-v286.29' sw.js
+          node scripts/verificar-versao-shell.cjs
