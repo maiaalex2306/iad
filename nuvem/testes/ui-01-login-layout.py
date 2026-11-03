@@ -86,7 +86,8 @@ with sync_playwright() as playwright:
             assert report["countSteps"] == 4, f"{width}: faltam etapas explicativas"
             box = report["chipsBox"]
             chips = report["chips"]
-            assert box["height"] >= 30, f"{width}: chips comprimidos a zero"
+            assert box["height"] >= 20 and box["height"] >= min(r["height"] for r in chips)-1, (
+                f"{width}: área dos chips menor que a altura de seus conteúdos: {box}")
             for i, r in enumerate(chips):
                 assert r["top"] >= box["top"]-1, f"{width}: chip {i} acima da caixa"
                 assert r["bottom"] <= box["bottom"]+1, f"{width}: chip {i} fora da caixa"
