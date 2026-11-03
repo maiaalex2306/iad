@@ -1013,9 +1013,20 @@
      Só roda para usuário comum, que tem exatamente uma empresa: para o
      administrador, com várias à vista, não há resposta certa sobre de quem é o
      registro órfão — e adivinhar seria pior do que deixar aparecer. */
+  /* PERF-17: reconciliacao de registros legados uma vez por revisao e
+     identidade/tenant. Cada salvar() invalida a chave. Nao guardar objetos,
+     IDs ou dados em cache compartilhado; somente marcacao local de revisao. */
+  let ultimaAdocao = null;
   function adotarOrfaos() {
     const ctx = contexto();
-    if (!ctx.usuario || ctx.admin || !ctx.tenantId) return 0;
+    if (!ctx.usuario || ctx.admin || !ctx.tenantId) {
+      ultimaAdocao = null;
+      return 0;
+    }
+    const chaveAdocao = JSON.stringify([
+      revisaoDados, ctx.usuario.id, ctx.usuario.papel, ctx.tenantId
+    ]);
+    if (ultimaAdocao === chaveAdocao) return 0;
     let adotados = 0;
     /* A padronização vem antes da adoção, e não depois: o tipo que ela
        acrescenta nasce sem empresa e ficaria invisível até o render seguinte. */
@@ -1027,6 +1038,11 @@
         });
       });
     if (adotados || padronizou) salvar();
+    /* Se houve escrita, a revisao mudou: a chave deve apontar para a revisao
+       final, sem saltar correcoes da proxima mutacao, importacao ou sync. */
+    ultimaAdocao = JSON.stringify([
+      revisaoDados, ctx.usuario.id, ctx.usuario.papel, ctx.tenantId
+    ]);
     return adotados;
   }
 

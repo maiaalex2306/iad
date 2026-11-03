@@ -61,6 +61,53 @@
     if (!silencioso && typeof console !== 'undefined' && console.table) console.table(resultado);
     return resultado;
   }
+  /* PERF-17: cronometro opt-in de clique ate dois frames do cockpit.
+     Nunca recebe ID, nome, hash ou registro; somente tokens numericos e nomes
+     tecnicos de etapas predefinidas. Dois frames nao comprovam paint fisico.
+     Uma nova abertura invalida os callbacks da abertura anterior. */
+  const ETAPAS_ABERTURA = ['rota', 'html', 'dom', 'widgets', 'frame1', 'frame2'];
+  let proximoTokenAbertura = 0;
+  let abertura = null;
+
+  function iniciarAbertura() {
+    if (!ativo) return 0;
+    const inicio = agora();
+    abertura = { token: ++proximoTokenAbertura, inicio: inicio,
+      anterior: inicio, ultimaEtapa: -1 };
+    return abertura.token;
+  }
+
+  function aberturaPendente() {
+    return ativo && abertura ? abertura.token : 0;
+  }
+
+  function cancelarAbertura(token) {
+    if (!abertura || (token && abertura.token !== token)) return false;
+    abertura = null;
+    return true;
+  }
+
+  function etapaAbertura(token, etapa) {
+    if (!ativo || !abertura || token !== abertura.token) return false;
+    const posicao = ETAPAS_ABERTURA.indexOf(etapa);
+    if (posicao < 0 || posicao <= abertura.ultimaEtapa) return false;
+    /* Nao mascarar marcas faltantes em fluxos interrompidos. */
+    if (posicao !== abertura.ultimaEtapa + 1) {
+      abertura = null;
+      return false;
+    }
+    const agoraMs = agora();
+    registrar('perf17.cockpit.ate-' + etapa, agoraMs - abertura.inicio);
+    registrar('perf17.cockpit.etapa-' + etapa, agoraMs - abertura.anterior);
+    abertura.anterior = agoraMs;
+    abertura.ultimaEtapa = posicao;
+    if (etapa === 'frame2') {
+      registrar('perf17.cockpit.clique-a-dois-frames', agoraMs - abertura.inicio);
+      abertura = null;
+    }
+    return true;
+  }
+
   /* Exportação local auditável: somente nomes técnicos de métricas e durações.
      O resultado não contém IDs, nomes, e-mails, conteúdo ou dados de cliente. */
   function exportarJSON() {
@@ -68,16 +115,18 @@
       formato: 'iad-perf-10-p7',
       versaoEsquema: 1,
       escopo: 'esta-sessao',
-      metodologia: 'p50 e p95 das últimas 100 amostras por métrica; dois frames não garantem paint',
+      metodologia: 'p50 e p95 das últimas 100 amostras por métrica; PERF-17: clique a dois frames opt-in, não mede paint físico nem rede isoladamente',
       metricas: relatorio(true)
     }, null, 2);
   }
   global.IADPerformance = {
     iniciar: function () { ativo = true; return 'Medição iniciada — não envia dados.'; },
-    parar: function () { ativo = false; return relatorio(); },
-    limpar: function () { Object.keys(amostras).forEach(function(k){delete amostras[k];}); },
+    parar: function () { ativo = false; abertura = null; return relatorio(); },
+    limpar: function () { abertura = null; Object.keys(amostras).forEach(function(k){delete amostras[k];}); },
     medir: medir, registrar: registrar, relatorio: relatorio,
     medirDoisFrames: medirDoisFrames, agora: agora,
+    iniciarAbertura: iniciarAbertura, aberturaPendente: aberturaPendente,
+    etapaAbertura: etapaAbertura, cancelarAbertura: cancelarAbertura,
     exportarJSON: exportarJSON,
     ativo: function () { return ativo; }
   };

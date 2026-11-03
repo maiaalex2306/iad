@@ -184,7 +184,13 @@
 
     /* Registro sem empresa fica invisível. Aqui, com a sessão já conhecida,
        o que tiver nascido assim é adotado antes de a tela ser desenhada. */
-    if (logado) Store.adotarOrfaos();
+    if (logado) {
+      const perfAdocao = global.IADPerformance;
+      if (perfAdocao) perfAdocao.medir('perf17.render.adocao', function () {
+        Store.adotarOrfaos();
+      });
+      else Store.adotarOrfaos();
+    }
 
     /* As conversas moram só no servidor, e a contagem de não lidas aparece no
        cartão do pipeline e no topo de Hoje — ou seja, em telas que não são a
@@ -225,6 +231,11 @@
     }
 
     const hash = location.hash || '#/hoje';
+    /* Navegacao interrompida nao pode contaminar o P95 do cockpit. */
+    if (hash.indexOf('#/op/') !== 0 && global.IADPerformance &&
+        global.IADPerformance.cancelarAbertura) {
+      global.IADPerformance.cancelarAbertura();
+    }
     /* Onde a pessoa estava em cada tela.
 
        Sem isto, entrar num negócio a partir da lista e voltar devolvia o topo
@@ -255,9 +266,14 @@
       const id = hash.slice(5);
       const perf = global.IADPerformance;
       const inicioVisual = perf && perf.ativo() && global.performance ? global.performance.now() : null;
+      /* PERF-17: token numerico isolado; nao guardar/opinar sobre ID comercial. */
+      const tokenAbertura = perf && perf.aberturaPendente ? perf.aberturaPendente() : 0;
+      if (tokenAbertura) perf.etapaAbertura(tokenAbertura, 'rota');
       const html = perf ? perf.medir('tela.cockpit', function () { return V.cockpit(id); }) : V.cockpit(id);
+      if (tokenAbertura) perf.etapaAbertura(tokenAbertura, 'html');
       if (perf) perf.medir('dom.cockpit', function () { conteudo.innerHTML = faixa + html; });
       else conteudo.innerHTML = faixa + html;
+      if (tokenAbertura) perf.etapaAbertura(tokenAbertura, 'dom');
       /* PERF-10: isolar o custo dos inicializadores da abertura do card.
          Não mudar sem provar que os widgets são dispensáveis nessa rota. */
       /* PERF-12B: a lista de anexos não pode concorrer com a primeira pintura.
@@ -275,6 +291,23 @@
       }
       if (perf) perf.medir('perf10.cockpit.inicializar-quadro', pintarSoltaQuadro);
       else pintarSoltaQuadro();
+      if (tokenAbertura) {
+        perf.etapaAbertura(tokenAbertura, 'widgets');
+        if (typeof requestAnimationFrame === 'function') {
+          requestAnimationFrame(function () {
+            if (location.hash !== '#/op/' + id) {
+              perf.cancelarAbertura(tokenAbertura); return;
+            }
+            if (!perf.etapaAbertura(tokenAbertura, 'frame1')) return;
+            requestAnimationFrame(function () {
+              if (location.hash !== '#/op/' + id) {
+                perf.cancelarAbertura(tokenAbertura); return;
+              }
+              perf.etapaAbertura(tokenAbertura, 'frame2');
+            });
+          });
+        } else perf.cancelarAbertura(tokenAbertura);
+      }
       /* Medida real de clique/rota até próximo frame (não equivale a paint confirmado). */
       if (inicioVisual !== null) {
         perf.medirDoisFrames('perf10.cockpit.dois-frames', inicioVisual);
@@ -287,7 +320,7 @@
     } else {
       const rota = ROTAS.find(function (r) { return r.hash === hash; }) || ROTAS[0];
       const perf = global.IADPerformance;
-      const html = perf ? perf.medir('tela.' + hash, function () { return rota.render(); }) : rota.render();
+      const html = perf ? perf.medir('tela.' + rota.hash, function () { return rota.render(); }) : rota.render();
       conteudo.innerHTML = faixa + html;
       /* Duas telas se completam depois de desenhadas: Dados mede o espaço
          usado e busca os leads na ponte; Cadastros lista quem está no
@@ -1775,8 +1808,20 @@
   };
 
   const App = {
-    ir: function (hash) { location.hash = hash; },
-    abrir: function (id) { location.hash = '#/op/' + id; },
+    ir: function (hash) {
+      if (typeof hash === 'string' && hash.indexOf('#/op/') === 0 &&
+          location.hash !== hash && global.IADPerformance) {
+        global.IADPerformance.iniciarAbertura();
+      }
+      location.hash = hash;
+    },
+    abrir: function (id) {
+      const destino = '#/op/' + id;
+      if (location.hash !== destino && global.IADPerformance) {
+        global.IADPerformance.iniciarAbertura();
+      }
+      location.hash = destino;
+    },
     filtrar: function (grupo) { V.definirFiltro(grupo); render(); },
     filtrarHistorico: function (tipo) { V.definirFiltroHistorico(tipo); render(); },
     filtrarHoje: function (chave) { V.definirFiltroHoje(chave); render(); },
