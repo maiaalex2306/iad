@@ -1807,6 +1807,18 @@
     __esquecerVarredura: function () { diaVarrido = ''; }
   };
 
+  /* PERF-34A: proteger a analise contra reentrancia e troca de identidade. */
+  let analisePendenciasEmCurso = false;
+  let analisePendenciasToken = 0;
+  function escopoDaAnalise() {
+    const usuario = A.atual();
+    if (!usuario) return null;
+    const ctx = Store.contexto ? Store.contexto() : {};
+    const filtros = ctx.filtros || {};
+    return JSON.stringify([usuario.id, usuario.papel, ctx.tenantId || '',
+      filtros.tenant || '', filtros.usuario || '']);
+  }
+
   const App = {
     ir: function (hash) {
       if (typeof hash === 'string' && hash.indexOf('#/op/') === 0 &&
@@ -1832,7 +1844,57 @@
        urgentes um a um (é onde o texto do cliente está), e só então conta o
        panorama e pede a leitura da carteira. Ao contrário, a leitura da
        carteira seria escrita antes das leituras que ela deveria resumir. */
+    /* Panorama de TODA a carteira primeiro; apenas UMA leitura de IA opcional.
+       A leitura individual de todos os urgentes fica no botão de modo completo. */
     analisarPendencias: function () {
+      if (analisePendenciasEmCurso || baixando) {
+        if (baixando) alert('Conclua a carga da carteira antes de analisar os números definitivos.');
+        return;
+      }
+      const O = global.IADOrientacao;
+      if (!O) return;
+      const est = Store.dados();
+      const fila = global.IADPerf02 ? global.IADPerf02.filaDados(est)
+        : E.fila(est.oportunidades, est.tarefas);
+      if (!fila.itens.length) {
+        V.definirAnalise({ erro: 'Não há negócios na fila para analisar.', em: new Date().toISOString() });
+        render();
+        return;
+      }
+      const escopo = escopoDaAnalise();
+      if (!escopo) return;
+      const pan = O.panorama(fila.itens, fila.triagem);
+      const IA = global.IADIA;
+      const comIA = !!(IA && IA.disponivel && IA.disponivel() && IA.leituraDaCarteira);
+      const em = new Date().toISOString();
+      const token = ++analisePendenciasToken;
+      analisePendenciasEmCurso = comIA;
+      /* Os números e a priorizacao aparecem ANTES da requisicao de IA. */
+      V.definirAnalise({ panorama: pan, ia: null, lidos: 0, em: em,
+        modo: 'executiva', pendenteIA: comIA });
+      render();
+      if (!comIA) return;
+      Promise.resolve().then(function () {
+        return IA.leituraDaCarteira(pan, fila.itens);
+      }).then(function (resposta) {
+        if (token !== analisePendenciasToken || escopoDaAnalise() !== escopo) return;
+        V.definirAnalise({ panorama: pan, ia: resposta, lidos: 0,
+          em: em, modo: 'executiva', pendenteIA: false });
+        render();
+      }, function () {
+        if (token !== analisePendenciasToken || escopoDaAnalise() !== escopo) return;
+        V.definirAnalise({ panorama: pan, ia: null, lidos: 0,
+          em: em, modo: 'executiva', pendenteIA: false });
+        render();
+      }).then(function () {
+        if (token === analisePendenciasToken) analisePendenciasEmCurso = false;
+      });
+    },
+
+    /* O modo completo preserva a leitura individual de cada urgente.
+       É explícito e jamais deve ser confundido com o panorama executivo. */
+    analisarPendenciasCompleta: function () {
+      if (analisePendenciasEmCurso) return;
       const IA = global.IADIA;
       const O = global.IADOrientacao;
       if (!O) return;
@@ -1860,6 +1922,10 @@
       /* O assistente desligado não impede a análise: o panorama é cálculo. O
          que falta é o parágrafo, e a tela já diz isso. */
       const temIA = !!(IA && IA.disponivel && IA.disponivel());
+      if (temIA && IA.varrendoAgora && IA.varrendoAgora()) {
+        alert('Há outra varredura de IA em andamento. Conclua-a antes de iniciar a análise profunda.');
+        return;
+      }
 
       /* Cada negócio relido é uma chamada paga. Acima de vinte e cinco a
          pessoa confirma — não para atrapalhar, mas porque um clique sem
@@ -1867,20 +1933,25 @@
       if (temIA && urgentes.length > 25) {
         const vai = confirm('Vou reler ' + urgentes.length + ' negócios urgentes com o assistente, ' +
           'um por vez, e depois analisar a carteira inteira.\n\n' +
-          'Leva cerca de ' + Math.ceil(urgentes.length * 1.3 / 60) + ' minuto(s) e gasta uma chamada por negócio.\n\n' +
+          'A duração depende das respostas da IA, além de 1,2 segundo de pausa por leitura; pode levar vários minutos e consumir muitas chamadas.\n\n' +
           'Pode continuar trabalhando enquanto roda. Continuar?');
         if (!vai) return;
       }
 
+      analisePendenciasEmCurso = true;
+      const escopo = escopoDaAnalise();
+      const token = ++analisePendenciasToken;
+      let processadas = 0;
       V.definirProgressoDaAnalise({ feitos: 0, total: urgentes.length,
         fase: temIA ? 'Relendo os negócios urgentes…' : 'Contando o panorama…' });
       render();
 
       const panoramaEleitura = function (lidos) {
-        V.definirProgressoDaAnalise({ feitos: urgentes.length, total: urgentes.length,
+        if (token !== analisePendenciasToken || escopoDaAnalise() !== escopo) return;
+        V.definirProgressoDaAnalise({ feitos: processadas, total: urgentes.length,
           fase: 'Lendo a carteira inteira…' });
         if (global.IADPerfHoje) {
-          global.IADPerfHoje.atualizarProgresso(urgentes.length, urgentes.length,
+          global.IADPerfHoje.atualizarProgresso(processadas, urgentes.length,
             'Lendo a carteira inteira…');
         }
 
@@ -1890,7 +1961,11 @@
         const pan = O.panorama(fila.itens, fila.triagem);
 
         const terminar = function (ia) {
-          V.definirAnalise({ panorama: pan, ia: ia, lidos: lidos, em: new Date().toISOString() });
+          if (token !== analisePendenciasToken || escopoDaAnalise() !== escopo) return;
+          analisePendenciasEmCurso = false;
+          V.definirAnalise({ panorama: pan, ia: ia, lidos: lidos,
+            solicitadas: urgentes.length, processadas: processadas, modo: 'completa',
+            em: new Date().toISOString() });
           render();
           window.scrollTo(0, 0);
         };
@@ -1899,10 +1974,10 @@
            tantos segundos. A faixa de progresso ficava parada em "X de X"
            durante essa última espera, e parado é indistinguível de travado.
            Esta linha é o único lugar que sabe que o passo mudou. */
-        V.definirProgressoDaAnalise({ feitos: urgentes.length, total: urgentes.length,
+        V.definirProgressoDaAnalise({ feitos: processadas, total: urgentes.length,
           fase: 'Lendo a carteira inteira…' });
         if (global.IADPerfHoje) {
-          global.IADPerfHoje.atualizarProgresso(urgentes.length, urgentes.length,
+          global.IADPerfHoje.atualizarProgresso(processadas, urgentes.length,
             'Lendo a carteira inteira…');
         }
         IA.leituraDaCarteira(pan, fila.itens).then(terminar, function () { terminar(null); });
@@ -1911,6 +1986,7 @@
       if (!temIA) { panoramaEleitura(0); return; }
 
       IA.varrerOrientacoes(urgentes, function (feitos, total, item) {
+        processadas = feitos;
         V.definirProgressoDaAnalise({ feitos: feitos, total: total,
           fase: 'Relendo os negócios urgentes…' });
         if (global.IADPerfHoje) {
@@ -1919,12 +1995,20 @@
             'Relendo os negócios urgentes…');
         }
       }, { forcar: true, teto: urgentes.length }).then(panoramaEleitura, function (e) {
+        if (token !== analisePendenciasToken || escopoDaAnalise() !== escopo) return;
+        analisePendenciasEmCurso = false;
         V.definirAnalise({ erro: (e && e.message) || 'erro desconhecido', em: new Date().toISOString() });
         render();
       });
     },
 
-    fecharAnalise: function () { V.esquecerAnalise(); render(); },
+    fecharAnalise: function () {
+      /* Fechar revoga a resposta atrasada da interface (nao o transporte HTTP). */
+      analisePendenciasToken++;
+      analisePendenciasEmCurso = false;
+      V.esquecerAnalise();
+      render();
+    },
     /* Conferir o banco. Só pergunta — não cria, não apaga, não lê registro. */
     conferirOBanco: function () {
       const C = global.IADConferencia;
