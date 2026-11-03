@@ -1496,6 +1496,34 @@
       .filter(function (s) { return visivelNoContexto(s, true, ctx); }));
   }
 
+  /* PERF-25: a etiqueta do cockpit precisa apenas da QUANTIDADE de sinais,
+     não de duas ordenações e da montagem da lista inteira.
+     Reusar os mesmos buckets/IDs e a mesma visibilidade do caminho completo.
+     O contexto é capturado nesta chamada: nunca compartilhar resultados entre
+     usuários, empresas, filtros nem revisões. */
+  function contarSinaisDaOportunidade(op, predicado) {
+    if (!op) return 0;
+    reconstruirIndices();
+    const ctx = contexto();
+    const vistos = new Set();
+    let total = 0;
+    function incluir(lista) {
+      (lista || []).forEach(function (entrada) {
+        if (vistos.has(entrada.i)) return;
+        vistos.add(entrada.i);
+        const sinal = entrada.sinal;
+        if (visivelNoContexto(sinal, true, ctx) &&
+            (!predicado || predicado(sinal))) total++;
+      });
+    }
+    incluir(sinaisDiretos.get(String(op.id)));
+    (op.stakeholders || []).forEach(function (id) {
+      incluir(sinaisPorContatoSemOp.get(String(id)));
+    });
+    if (op.contaId) incluir(sinaisPorContaSemContato.get(String(op.contaId)));
+    return total;
+  }
+
   function excluirSinal(id) {
     const antes = (estado.sinais || []).length;
     estado.sinais = (estado.sinais || []).filter(function (s) { return s.id !== id; });
@@ -2316,7 +2344,7 @@
     criarConta, criarContato, criarOportunidade, atualizarOportunidade, guardarOrientacao, vincularStakeholder,
     pontuar, registrarEvento, removerEvento, definirCompromisso, definirInsight,
     sinal, sinais, criarSinal, registrarSinalUnico, sinalExterno,
-    sinaisDoContato, sinaisDaConta, sinaisDaOportunidade, excluirSinal, promoverSinal,
+    sinaisDoContato, sinaisDaConta, sinaisDaOportunidade, contarSinaisDaOportunidade, excluirSinal, promoverSinal,
     minhasNotas, notasAbertas, nota, criarNota, atualizarNota, concluirNota, excluirNota,
     registrarRecusa, recusas, recusasPorCampanha, limparRecusas, excluirRecusa,
     descartarLead, foiDescartado, descartes, desfazerDescarte, chaveDoLead,
