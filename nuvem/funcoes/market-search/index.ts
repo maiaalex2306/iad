@@ -114,11 +114,25 @@ function combineAI(results,limit,f) {
    const cnpj=cnpjReal(entry.cnpj);if(!cnpj)continue;
    const sources=(Array.isArray(entry.fontes)?entry.fontes:[]).map(f=>({url:canonicalUrl(f.url),titulo:str(f.titulo,150)})).filter(f=>f.url&&r.urls.has(f.url));
    if(!sources.length)continue;
-   const existing=out.get(cnpj);
-   if(existing){existing.providers.push(r.engine);for(const s of sources)if(!existing.fontes.some(f=>f.url===s.url))existing.fontes.push(s);continue}
    const urls=new Set(sources.map(f=>f.url));
    const contatos=(Array.isArray(entry.contatos)?entry.contatos:[]).filter(c=>c&&urls.has(canonicalUrl(c.fonte))).slice(0,10).map(c=>({nome:str(c.nome),cargo:str(c.cargo),email:str(c.email,180),telefone:str(c.telefone,60),fonte:canonicalUrl(c.fonte)}));
    const noticias=(Array.isArray(entry.noticias)?entry.noticias:[]).filter(n=>n&&urls.has(canonicalUrl(n.url))).slice(0,6).map(n=>({titulo:str(n.titulo),url:canonicalUrl(n.url),data:str(n.data,40)}));
+   const existing=out.get(cnpj);
+   if(existing){
+    if(!existing.providers.includes(r.engine))existing.providers.push(r.engine);
+    for(const src of sources)if(!existing.fontes.some(x=>x.url===src.url))existing.fontes.push(src);
+    // Merge only contacts whose source was independently cited by this
+    // provider; never borrow another provider's global citation set.
+    for(const c of contatos){
+     if(existing.contatos.length>=10)break;
+     if(!existing.contatos.some(x=>x.nome===c.nome&&x.cargo===c.cargo&&x.fonte===c.fonte))existing.contatos.push(c);
+    }
+    for(const n of noticias){
+     if(existing.noticias.length>=6)break;
+     if(!existing.noticias.some(x=>x.url===n.url))existing.noticias.push(n);
+    }
+    continue;
+   }
    out.set(cnpj,{cnpj,razaoSocial:str(entry.razaoSocial||entry.nome),nome:str(entry.nome||entry.razaoSocial),cidade:str(entry.cidade),uf:str(entry.uf,2).toUpperCase(),porte:str(entry.porte),segmento:str(entry.segmento),site:str(entry.site,200),telefone:str(entry.telefone,60),funcionarios:entry.funcionarios??null,faturamento:entry.faturamento??null,contatos,noticias,insights:Array.isArray(entry.insights)?entry.insights.slice(0,6).map(s=>str(s,250)):[],fontes:sources,providers:[r.engine]});
   }
  }
