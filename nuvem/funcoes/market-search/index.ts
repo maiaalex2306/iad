@@ -173,6 +173,22 @@ Deno.serve(async req=>{
   let f;try{f=filters(body.filters)}catch(e){return output({error:'INVALID_FILTERS',message:e.message},422,origin)}
   const openai=aiKey('openai'),claude=aiKey('anthropic');
   if(!openai&&!claude)return output({error:'AI_NOT_CONFIGURED',message:'A pesquisa precisa de uma das IAs ja configuradas no IaD.'},503,origin);
+  // Reserve one research credit in Postgres BEFORE any external paid API call.
+  // This RPC authenticates the actor from JWT, checks active tenant membership,
+  // serializes concurrent requests per tenant and enforces daily quotas.
+  // No database quota service -> no AI calls (fail closed).
+  let quota;
+  try {
+   const reserved=await fetch(url+'/rest/v1/rpc/iad_market_search_reserve',{
+    method:'POST',
+    headers:{Authorization:access,apikey:anon,'content-type':'application/json'},
+    body:'{}',signal:AbortSignal.timeout(6500)
+   });
+   if(!reserved.ok)return output({error:'SEARCH_QUOTA_UNAVAILABLE'},503,origin);
+   quota=await reserved.json();
+  }catch{return output({error:'SEARCH_QUOTA_UNAVAILABLE'},503,origin)}
+  if(quota?.allowed===false)return output({error:'SEARCH_QUOTA_EXCEEDED',scope:quota.scope||'unknown'},429,origin);
+  if(quota?.allowed!==true)return output({error:'SEARCH_QUOTA_UNAVAILABLE'},503,origin);
   const jobs=[];if(openai)jobs.push(queryAI('OpenAI',openai,f));if(claude)jobs.push(queryAI('Anthropic',claude,f));
   const outcomes=await Promise.allSettled(jobs);
   const results=outcomes.filter(x=>x.status==='fulfilled').map(x=>x.value);
