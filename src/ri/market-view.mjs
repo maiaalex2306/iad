@@ -88,9 +88,18 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem}={
     body:JSON.stringify({action:'search',filters}),signal:controller.signal});
    const payload=await response.json();
    if(seq!==currentRequest||!valid())return;
-   if(!response.ok){show(payload?.message||({'AI_NOT_CONFIGURED':'Nenhum motor de IA habilitado para pesquisa no IaD.','AI_SEARCH_UNAVAILABLE':'OpenAI e Claude nao conseguiram consultar a web agora.','DDD_MAPPING_PENDING':'O DDD precisa ser mapeado para municipios antes da pesquisa.'}[payload?.error])||'Pesquisa indisponivel: '+(payload?.error||response.status));return;}
+   if(!response.ok){
+    const messages={'AI_NOT_CONFIGURED':'Nenhum motor de IA habilitado para pesquisa no IaD.',
+      'AI_SEARCH_UNAVAILABLE':'As IAs configuradas nao conseguiram consultar a web agora.',
+      'SEARCH_QUOTA_EXCEEDED':'Limite diario de pesquisas atingido. Nao houve nova chamada as IAs.',
+      'SEARCH_QUOTA_UNAVAILABLE':'Controle de quota indisponivel. Pesquisa interrompida sem consultar as IAs.',
+      'DDD_MAPPING_PENDING':'O DDD precisa ser mapeado para municipios antes da pesquisa.'};
+    show(payload?.message||messages[payload?.error]||'Pesquisa indisponivel: '+(payload?.error||response.status));return;
+   }
    const companies=normalizeMarketCompanies(payload.data||[],{source:payload.source||'Nao identificada',retrievedAt:payload.retrievedAt||''});
-   show('Pesquisa web exploratoria concluida: '+companies.length+' empresas com fontes; nao representa todas as empresas da regiao. Nenhuma gravacao realizada.');
+   const unavailable=Array.isArray(payload.failedProviders)?payload.failedProviders.filter(p=>p==='OpenAI'||p==='Anthropic'):[];
+   const partialWarning=payload.partial===true?('ATENCAO: pesquisa parcial. Falha em '+(unavailable.join(' e ')||'um provedor')+'. '):'';
+   show(partialWarning+'Pesquisa web exploratoria: '+companies.length+' empresas com fontes; nao representa todas as empresas da regiao. Nenhuma gravacao realizada.');
    renderCompanies(companies,payload.source||'Fornecedor',payload.retrievedAt||'data nao fornecida');
   }catch(e){if(seq===currentRequest&&valid()&&e.name!=='AbortError')show('Falha de rede ao consultar fonte empresarial. Nenhuma alteracao no CRM.');}
   finally{if(seq===currentRequest&&valid())btn.disabled=false;}
