@@ -66,7 +66,8 @@ test('comparison is read-only; archived operation appears in local export',async
  const ctx={Promise,Number,Error,Object,Array,encodeURIComponent,
   tenantsComFilaCAS:()=>['tenant1'],filaCASDaSessao:()=>h.queue,
   chamar:async(url,opts)=>{gets++;if(opts)posts++;return [h.remote];},
-  retomarFilaCASSeguro:async()=>({sent:0})};
+  retomarFilaCASSeguro:async()=>{throw Error('must not auto flush');},
+  diagnosticoPendenciasCAS:()=>({disponivel:true,quantidade:h.queue.pending().length+h.queue.pendingAcks().length})};
  vm.runInNewContext(cloud.slice(a,b)+
  'globalThis.preview=lerConflitoCAS;globalThis.resolve=resolverConflitoCASManterServidor;',ctx);
  const preview=await ctx.preview(1);
@@ -92,7 +93,8 @@ test('comparison failure never archives or removes local operation',async()=>{
  const ctx={Promise,Number,Error,Object,Array,encodeURIComponent,
   tenantsComFilaCAS:()=>['tenant1'],filaCASDaSessao:()=>h.queue,
   chamar:async()=>[{...h.remote,revisao:10}],
-  retomarFilaCASSeguro:async()=>{}};
+  retomarFilaCASSeguro:async()=>{throw Error('must not auto flush');},
+  diagnosticoPendenciasCAS:()=>({disponivel:true,quantidade:h.queue.pending().length+h.queue.pendingAcks().length})};
  vm.runInNewContext(cloud.slice(a,b)+'globalThis.resolve=resolverConflitoCASManterServidor;',ctx);
  await assert.rejects(ctx.resolve(1,8),/Revisao remota mudou/);
  assert.equal(h.queue.pending().length,1);
