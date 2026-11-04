@@ -11,7 +11,7 @@ function base(){return {
   context:{tenantId:'tenant-a',actorId:'seller-1',authenticated:true,role:'vendedor',now:'2026-11-04T12:00:00.000Z'},
   campaign:{id:'c1',tenantId:'tenant-a',actorId:'seller-1',state:'active',paused:false,channel:'email',dailyLimit:3,windowStart:'2026-11-04T11:00:00.000Z',windowEnd:'2026-11-04T20:00:00.000Z'},
   approval:undefined,
-  recipient:{id:'p1',tenantId:'tenant-a',optedOut:false,replied:false,bounced:false,lawfulBasisVerified:true,addressVerified:true},
+  recipient:{id:'p1',tenantId:'tenant-a',address:'person@example.com',optedOut:false,replied:false,bounced:false,lawfulBasisVerified:true,addressVerified:true},
   provider:{enabled:true,channel:'email'},
   proposal:{tenantId:'tenant-a',campaignId:'c1',recipientId:'p1',channel:'email',contactAddress:'person@example.com',content:'Proposta relevante',stepId:'step-1',alreadyDispatched:false,dailyCount:0}
 };}
@@ -44,4 +44,13 @@ test('dry run never modifies the candidate or creates outbound integrations',asy
  assert.equal(JSON.stringify(x),before);
  const mod=await import(u);
  assert.deepEqual(Object.keys(mod),['previewDispatch']);
+});
+
+test('prevents approved campaign from redirecting email to a different, unverified destination',async()=>{
+ const x=await approved();
+ x.proposal.contactAddress='attacker@example.com';
+ const attackerIntent=await fingerprint(x.proposal);
+ x.approval.audienceHash=attackerIntent.audienceHash;
+ const result=await execute(x);
+ assert.deepEqual(result,{status:'blocked',reason:'recipient_blocked'});
 });
