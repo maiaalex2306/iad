@@ -56,6 +56,47 @@
       if(next.length!==a.length)storage.setItem(receiptKey,JSON.stringify(next));
       return next.length;
     }
+    /* P0: só reconhecer uma edição como satisfeita quando o estado
+       remoto comprova TODOS os campos do patch, a identidade/tenant
+       coincidem e a revisão remota avançou. Nunca sobrescrever servidor. */
+    function satisfazRemoto(op,remote){
+      if(!op||!remote||op.table!=='oportunidades'||
+        String(remote.id)!==String(op.recordId)||
+        String(remote.tenant_id)!==tenant||
+        !Number.isSafeInteger(Number(remote.revisao))||
+        !Number.isSafeInteger(Number(op.expectedRevision))||
+        Number(remote.revisao)<=Number(op.expectedRevision)||
+        !op.patch||typeof op.patch!=='object'||Array.isArray(op.patch))return false;
+      const keys=Object.keys(op.patch);
+      if(!keys.length)return false;
+      function igual(a,b){
+        if(Object.is(a,b))return true;
+        if(!a||!b||typeof a!=='object'||typeof b!=='object')return false;
+        if(Array.isArray(a)!==Array.isArray(b))return false;
+        if(Array.isArray(a))return a.length===b.length&&
+          a.every(function(x,i){return igual(x,b[i]);});
+        const ka=Object.keys(a),kb=Object.keys(b);
+        return ka.length===kb.length&&
+          ka.every(function(k){return Object.prototype.hasOwnProperty.call(b,k)&&igual(a[k],b[k]);});
+      }
+      return keys.every(function(k){
+        return !['id','tenant_id','dono_id','revisao','criado_em','atualizado_em'].includes(k)&&
+          Object.prototype.hasOwnProperty.call(remote,k)&&igual(op.patch[k],remote[k]);
+      });
+    }
+    function reconhecerAplicada(operationId,remote){
+      if(voos().has(key))throw Error('Fila CAS ocupada: aguarde a transmissão.');
+      const q=load(),op=q[0];
+      if(!op||op.operationId!==operationId)throw Error('Só a primeira edição pendente pode ser conciliada.');
+      if(!satisfazRemoto(op,remote))throw Error('Campos divergentes: edição local preservada.');
+      persistReceipt(op,Number(remote.revisao));
+      const atual=load();
+      if(!atual.length||atual[0].operationId!==operationId)
+        throw Error('Fila CAS alterada: edição preservada.');
+      atual.shift();
+      save(atual);
+      return {reconhecida:true,revisao:Number(remote.revisao)};
+    }
     function voos() {
       let mapa=voosPorStorage.get(storage);
       if(!mapa){mapa=new Map();voosPorStorage.set(storage,mapa);}
@@ -105,7 +146,9 @@
     return Object.freeze({enqueue,flush,
       pending:()=>load().map(x=>JSON.parse(JSON.stringify(x))),
       pendingAcks:()=>receipts().map(x=>JSON.parse(JSON.stringify(x))),
-      confirmAck:confirmReceipt});
+      confirmAck:confirmReceipt,
+      satisfazRemoto:satisfazRemoto,
+      reconhecerAplicada:reconhecerAplicada});
   }
   return Object.freeze({create});
 });
