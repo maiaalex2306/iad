@@ -213,48 +213,6 @@
     carregar(null);
   }
 
-  /* RI-01B: carregamento de módulo apenas ao abrir a rota, nunca no boot.
-     A consulta é feita sobre Store.dados(), já limitado por perfil e RLS.
-     Mudança de sessão, filtros, tenant ou revisão invalida carregamento tardio. */
-  let moduloInteligencia = null;
-  let geracaoInteligencia = 0;
-  function assinaturaInteligencia() {
-    const u=A.atual(),n=global.IADNuvem;
-    if(!u||!n||(n.mandaNoAcesso()&&(!n.sessao()||!n.sessao().user)))return '';
-    const c=Store.contexto(),f=c.filtros||{};
-    return JSON.stringify([u.id,u.papel,u.tenantId||'',c.tenantId||'',
-      f.tenant||'todas',f.usuario||'todos',Store.revisao()]);
-  }
-  function iniciarInteligenciaComercial() {
-    const root=document.getElementById('iad-ri-root');
-    if(!root||global.IAD_RI_ENABLED!==true)return;
-    const token=++geracaoInteligencia;
-    const assinatura=assinaturaInteligencia(),usuario=A.atual();
-    if(!assinatura||!usuario){root.textContent='Sessão autorizada necessária.';return;}
-    const endereco=new URL('src/ri/account-view.mjs',document.baseURI).href;
-    const pendente=moduloInteligencia || (moduloInteligencia=import(endereco).catch(function(e){
-      moduloInteligencia=null;
-      throw e;
-    }));
-    pendente.then(function(m) {
-      if(token!==geracaoInteligencia||!root.isConnected||
-          location.hash!=='#/inteligencia'||assinatura!==assinaturaInteligencia())return;
-      const c=Store.contexto(),f=c.filtros||{};
-      m.mountAccountIntelligence({
-        root, snapshot:Store.dados(),
-        scope: {
-          userId:usuario.id,tenantId:c.tenantId,role:usuario.papel,admin:c.admin,
-          tenantFilter:f.tenant||'todas',ownerFilter:f.usuario||'todos',token:assinatura
-        },
-        getScopeToken:assinaturaInteligencia
-      });
-    }).catch(function() {
-      if(token===geracaoInteligencia&&root.isConnected&&
-          location.hash==='#/inteligencia'&&assinatura===assinaturaInteligencia())
-        root.textContent='Não foi possível carregar a inteligência comercial. A carteira não foi alterada.';
-    });
-  }
-
   function render() {
     const conteudo = document.getElementById('conteudo');
     let logado = A.atual();
@@ -535,6 +493,48 @@
        varredura de IA. A acao explicita App.analisarPendencias permanece ativa,
        assim como o assistente de conversa acionado pelo usuario. */
 
+  }
+
+  /* RI-01B: carregamento de módulo apenas ao abrir a rota, nunca no boot.
+     A consulta é feita sobre Store.dados(), já limitado por perfil e RLS.
+     Mudança de sessão, filtros, tenant ou revisão invalida carregamento tardio. */
+  let moduloInteligencia = null;
+  let geracaoInteligencia = 0;
+  function assinaturaInteligencia() {
+    const u=A.atual(),n=global.IADNuvem;
+    if(!u||!n||(n.mandaNoAcesso()&&(!n.sessao()||!n.sessao().user)))return '';
+    const c=Store.contexto(),f=c.filtros||{};
+    return JSON.stringify([u.id,u.papel,u.tenantId||'',c.tenantId||'',
+      f.tenant||'todas',f.usuario||'todos',Store.revisao()]);
+  }
+  function iniciarInteligenciaComercial() {
+    const root=document.getElementById('iad-ri-root');
+    if(!root||global.IAD_RI_ENABLED!==true)return;
+    const token=++geracaoInteligencia;
+    const assinatura=assinaturaInteligencia(),usuario=A.atual();
+    if(!assinatura||!usuario){root.textContent='Sessão autorizada necessária.';return;}
+    const endereco=new URL('src/ri/account-view.mjs',document.baseURI).href;
+    const pendente=moduloInteligencia || (moduloInteligencia=import(endereco).catch(function(e){
+      moduloInteligencia=null;
+      throw e;
+    }));
+    pendente.then(function(m) {
+      if(token!==geracaoInteligencia||!root.isConnected||
+          location.hash!=='#/inteligencia'||assinatura!==assinaturaInteligencia())return;
+      const c=Store.contexto(),f=c.filtros||{};
+      m.mountAccountIntelligence({
+        root, snapshot:Store.dados(),
+        scope: {
+          userId:usuario.id,tenantId:c.tenantId,role:usuario.papel,admin:c.admin,
+          tenantFilter:f.tenant||'todas',ownerFilter:f.usuario||'todos',token:assinatura
+        },
+        getScopeToken:assinaturaInteligencia
+      });
+    }).catch(function() {
+      if(token===geracaoInteligencia&&root.isConnected&&
+          location.hash==='#/inteligencia'&&assinatura===assinaturaInteligencia())
+        root.textContent='Não foi possível carregar a inteligência comercial. A carteira não foi alterada.';
+    });
   }
 
   /* ---------------- a varredura diária, disparada pela tela ----------------

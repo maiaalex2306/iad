@@ -58,6 +58,10 @@ const server=http.createServer((req,res)=>{
      ];
      e.tarefas=[];e.sinais=[];e.notas=[];e.fontes=[];e.produtos=[];e.tiposTarefa=[];
      A.abrirSessao(user);S.semSincronizar(()=>S.salvar());
+     /* O render legado de qualquer rota executa adotarOrfaos() e normaliza
+        tipos de tarefa quando a carteira sintética está vazia. Estabilizamos
+        esse estado ANTES da medição, para distinguir escrita legada do RI-01B. */
+     S.semSincronizar(()=>S.adotarOrfaos());
    });
    const initial=await page.evaluate(()=>({rev:window.IADStore.revisao(),hash:location.hash}));
    const t0=Date.now();
