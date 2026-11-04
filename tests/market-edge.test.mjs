@@ -17,7 +17,7 @@ const responseClaude=(search=true,cited=true)=>({
  {type:'text',text:marketJSON,citations:cited?[{type:'webpage_citation',url:URL_COMPANY,title:'Registro verificado'}]:[]}],
  usage:{input_tokens:100,output_tokens:150,server_tool_use:{web_search_requests:1}}
 });
-function harness({openai=false,claude=false,quotaAllowed=true,quotaUnavailable=false,openaiResponse=responseOpenAI(),claudeResponse=responseClaude()}={}){
+function harness({openai=false,claude=false,quotaAllowed=true,quotaUnavailable=false,openaiStatus=200,claudeStatus=200,openaiResponse=responseOpenAI(),claudeResponse=responseClaude()}={}){
  const calls=[];let handler=null;
  const sandbox={Request,Response,AbortSignal,URL,TextDecoder,console,Deno:{env:{get(k){
   if(k==='SUPABASE_URL')return 'https://safe.supabase.co';
@@ -31,8 +31,8 @@ function harness({openai=false,claude=false,quotaAllowed=true,quotaUnavailable=f
   if(String(url).includes('/auth/v1/user'))return new Response(JSON.stringify({id:'11111111-1111-1111-1111-111111111111'}),{status:200});
   if(String(url).includes('/rest/v1/perfis'))return new Response(JSON.stringify([{tenant_id:'tenant-a',papel:'vendedor',ativo:true}]),{status:200});
   if(String(url).includes('/rest/v1/rpc/iad_market_search_reserve'))return quotaUnavailable?new Response(JSON.stringify({message:'quota backend unavailable'}),{status:503}):new Response(JSON.stringify({allowed:quotaAllowed,scope:quotaAllowed?'ok':'user',remaining:quotaAllowed?2:0}),{status:200});
-  if(String(url).includes('api.openai.com/v1/responses'))return new Response(JSON.stringify(openaiResponse),{status:200});
-  if(String(url).includes('api.anthropic.com/v1/messages'))return new Response(JSON.stringify(claudeResponse),{status:200});
+  if(String(url).includes('api.openai.com/v1/responses'))return new Response(JSON.stringify(openaiResponse),{status:openaiStatus});
+  if(String(url).includes('api.anthropic.com/v1/messages'))return new Response(JSON.stringify(claudeResponse),{status:claudeStatus});
   throw Error('unexpected request '+url);
  }};
  vm.runInNewContext(source,sandbox,{filename:'market-search/index.ts'});
@@ -203,4 +203,31 @@ test('mesmo CNPJ com cidades divergentes entre IAs sinaliza conflito em vez de c
  assert.ok(Array.isArray(company.conflitos),'deve explicitar divergencias');
  assert.ok(company.conflitos.some(x=>x.campo==='cidade'&&x.valorOriginal==='Jacarei'&&x.valorDivergente==='Campinas'));
  assert.equal(company.territorioCorroborado,false);
+});
+
+test('falha apenas do Claude sinaliza pesquisa parcial sem ocultar provedor indisponivel',async()=>{
+ const h=harness({openai:true,claude:true,claudeStatus:429});
+ const res=await h.handle(request(query));
+ assert.equal(res.status,200);
+ const result=await res.json();
+ assert.equal(result.partial,true);
+ assert.deepEqual(Array.from(result.failedProviders),['Anthropic']);
+ assert.deepEqual(Array.from(result.providers),['OpenAI']);
+ assert.equal(result.data.length,1);
+});
+test('falha apenas do ChatGPT sinaliza pesquisa parcial com Claude disponivel',async()=>{
+ const h=harness({openai:true,claude:true,openaiStatus:503});
+ const res=await h.handle(request(query));
+ assert.equal(res.status,200);
+ const result=await res.json();
+ assert.equal(result.partial,true);
+ assert.deepEqual(Array.from(result.failedProviders),['OpenAI']);
+ assert.deepEqual(Array.from(result.providers),['Anthropic']);
+ assert.equal(result.data.length,1);
+});
+test('falha de ambos provedores retorna 502 e nao lista empresas',async()=>{
+ const h=harness({openai:true,claude:true,openaiStatus:503,claudeStatus:429});
+ const res=await h.handle(request(query));
+ assert.equal(res.status,502);
+ assert.equal((await res.json()).error,'AI_SEARCH_UNAVAILABLE');
 });
