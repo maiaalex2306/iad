@@ -39,6 +39,9 @@ test('does not promise automatic replay of permanent conflicts',()=>{
  assert.doesNotMatch(text,/sobe sozinho assim que o envio voltar/);
 });
 test('release versions agree',()=>{
- assert.match(fs.readFileSync('src/config.js','utf8'),/numero: 'v286.45'/);
- assert.match(fs.readFileSync('sw.js','utf8'),/const CACHE = 'iad-crm-v286.45'/);
+ const riCfgVersion=(fs.readFileSync('src/config.js','utf8').match(/numero: '(v[0-9]+(?:\.[0-9]+)*)'/)||[])[1];
+ const riPwaVersion=(fs.readFileSync('sw.js','utf8').match(/const CACHE = 'iad-crm-(v[0-9]+(?:\.[0-9]+)*)'/)||[])[1];
+ assert.ok(riCfgVersion && riPwaVersion,'release and PWA version required');
+ assert.equal(riCfgVersion,riPwaVersion,'release and PWA cache must match');
+
 });

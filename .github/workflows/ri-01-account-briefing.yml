@@ -1,0 +1,29 @@
+name: RI-01 — Read-only account briefing quality
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - 'src/ri/**'
+      - 'scripts/ri-account-briefing.test.cjs'
+      - '.github/workflows/ri-01-account-briefing.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  briefing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Read-only account briefing syntax and behavior
+        run: |
+          node --check src/ri/account-briefing.mjs
+          node --test scripts/ri-account-briefing.test.cjs
+      - name: Existing PWA and CAS safety parity
+        run: |
+          node scripts/verificar-versao-shell.cjs
+          node --test scripts/p0-cas-readonly-portfolio.test.cjs
+          node --test scripts/p0-cas-failclosed.test.cjs

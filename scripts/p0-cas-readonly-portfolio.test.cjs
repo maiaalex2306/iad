@@ -56,6 +56,10 @@ test('readonly UI uses DOM textContent, no Store or server mutations',()=>{
  assert.match(cloud,/consultarCarteiraCASProtegida,/);
 });
 test('app and PWA version aligned',()=>{
- assert.match(fs.readFileSync('src/config.js','utf8'),/numero: 'v286.45'/);
- assert.match(fs.readFileSync('sw.js','utf8'),/const CACHE = 'iad-crm-v286.45'/);
+ const config=fs.readFileSync('src/config.js','utf8');
+ const worker=fs.readFileSync('sw.js','utf8');
+ const version=config.match(/numero: '(v[0-9]+(?:\.[0-9]+)*)'/);
+ const cache=worker.match(/const CACHE = 'iad-crm-([^']+)'/);
+ assert.ok(version && cache,'release number and cache must both exist');
+ assert.equal(cache[1],version[1],'cache must match application version');
 });

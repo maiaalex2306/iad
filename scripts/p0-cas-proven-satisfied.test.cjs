@@ -101,6 +101,8 @@ test('failed remote proof retains all pending work',async()=>{
 });
 test('shell version matches app',()=>{
  const cfg=fs.readFileSync('src/config.js','utf8'),sw=fs.readFileSync('sw.js','utf8');
- assert.match(cfg,/numero: 'v286.45'/);
- assert.match(sw,/const CACHE = 'iad-crm-v286.45'/);
+ const declared=cfg.match(/numero: '(v[0-9]+(?:\.[0-9]+)*)'/);
+ const cached=sw.match(/const CACHE = 'iad-crm-([^']+)'/);
+ assert.ok(declared&&cached,'app version and PWA cache must be declared');
+ assert.equal(cached[1],declared[1],'both versions must be identical');
 });
