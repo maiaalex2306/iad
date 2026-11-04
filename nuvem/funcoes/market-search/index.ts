@@ -75,7 +75,20 @@ function aiSummary(result,engine) {
   }
   for(const an of (Array.isArray(b.citations)?b.citations:[])){const u=canonicalUrl(an.url);if(u)urls.add(u)}
  }
- return {engine,searched,urls,parsed:parseAI(texts)};
+ // Preserve provider-reported usage; no price conversion without a vetted
+ // per-model price table, exchange rate and billed web search quantities.
+ const safeCount=v=>Number.isSafeInteger(v)&&v>=0?v:null;
+ const metering=result&&typeof result.usage==='object'?result.usage:{};
+ const usage={
+  provider:engine,
+  inputTokens:safeCount(engine==='OpenAI'?metering.input_tokens:metering.input_tokens),
+  outputTokens:safeCount(metering.output_tokens),
+  webSearchRequests:engine==='OpenAI'
+   ?blocks.filter(b=>b.type==='web_search_call').length
+   :safeCount(metering.server_tool_use?.web_search_requests),
+  costBRL:null
+ };
+ return {engine,searched,urls,parsed:parseAI(texts),usage};
 }
 function prompt(f) {
  return 'PESQUISE NA WEB empresas reais com recorte '+JSON.stringify(f)+'. Busque sites corporativos, bases publicas e noticias. Responda somente JSON com chave empresas (array): cada empresa possui cnpj, razaoSocial, nome, cidade, uf, segmento, porte, site, telefone, funcionarios, faturamento, fontes:[{url,titulo}], contatos:[{nome,cargo,email,telefone,fonte}], noticias:[{titulo,url,data}], insights:[]. Somente CNPJ e URLs encontrados e citados na web. Valores nao encontrados=null. NUNCA invente empresa ou pessoa. Para DDD/regiao pesquisa e exploratoria, sem promessa de cobertura total. Maximo '+f.limit+' empresas.';
@@ -220,6 +233,6 @@ Deno.serve(async req=>{
   const failedProviders=jobs.filter((x,i)=>outcomes[i].status==='rejected').map(x=>x.engine);
   if(!results.length)return output({error:'AI_SEARCH_UNAVAILABLE',failedProviders},502,origin);
   const partial=failedProviders.length>0;
-  return output({data:combineAI(results,f.limit,f),source:'Pesquisa web OpenAI / Claude',providers:results.map(x=>x.engine),failedProviders,partial,retrievedAt:new Date().toISOString(),total:null,hasMore:false,coverage:'exploratoria',territoryVerified:false,warning:(partial?'Uma ou mais IAs nao concluiram a pesquisa; cobertura parcial. ':'')+'Pesquisa exploratoria; nao equivale ao universo integral de CNPJs. Nenhum registro foi importado.'},200,origin);
+  return output({data:combineAI(results,f.limit,f),source:'Pesquisa web OpenAI / Claude',providers:results.map(x=>x.engine),failedProviders,partial,usage:results.map(x=>x.usage),retrievedAt:new Date().toISOString(),total:null,hasMore:false,coverage:'exploratoria',territoryVerified:false,warning:(partial?'Uma ou mais IAs nao concluiram a pesquisa; cobertura parcial. ':'')+'Pesquisa exploratoria; nao equivale ao universo integral de CNPJs. Nenhum registro foi importado.'},200,origin);
  }catch{return output({error:'SEARCH_UNAVAILABLE'},502,origin)}
 });
