@@ -165,3 +165,25 @@ test('controle de quota indisponivel falha fechado e nao cobra IA',async()=>{
  assert.equal((await res.json()).error,'SEARCH_QUOTA_UNAVAILABLE');
  assert.equal(aiCalls(h).length,0);
 });
+
+
+test('ChatGPT e Claude complementam decisores de mesmo CNPJ sem perder fontes',async()=>{
+ const verified='https://example.org/equipe-diretiva';
+ const unverified='https://example.org/sem-prova';
+ const second={...candidate,fontes:[{url:verified,titulo:'Equipe executiva'}],
+  contatos:[
+   {nome:'Bruna',cargo:'Diretora Comercial',email:'',telefone:'',fonte:verified},
+   {nome:'Contato Inventado',cargo:'CEO',email:'',telefone:'',fonte:unverified}
+  ]};
+ const claudeResponse=responseClaude();
+ claudeResponse.content[1].text=JSON.stringify({empresas:[second]});
+ claudeResponse.content[1].citations=[{type:'webpage_citation',url:verified,title:'Equipe executiva'}];
+ const h=harness({openai:true,claude:true,claudeResponse});
+ const res=await h.handle(request(query));
+ assert.equal(res.status,200);
+ const body=await res.json();
+ assert.equal(body.data.length,1,'CNPJ repetido nao pode duplicar empresa');
+ assert.deepEqual([...body.data[0].contatos.map(x=>x.nome)].sort(),['Ana','Bruna']);
+ assert.deepEqual([...body.data[0].fontes.map(x=>x.url)].sort(),[URL_COMPANY,verified].sort());
+ assert.ok(!body.data[0].contatos.some(c=>c.nome==='Contato Inventado'));
+});
