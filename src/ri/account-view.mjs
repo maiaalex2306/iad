@@ -8,8 +8,9 @@ import {buildAccountBriefing} from './account-briefing.mjs';
 const id = value => typeof value === 'string' && value.trim().length > 0;
 const fold = value => String(value == null ? '' : value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 const str = (value,fallback='') => typeof value==='string' && value.trim() ? value.trim().slice(0,200) : fallback;
-const usableScope = scope => !!scope && id(scope.userId) && id(scope.tenantId) &&
-  ['vendedor','gestor','admin'].includes(scope.role);
+const usableScope = scope => !!scope && id(scope.userId) &&
+  ['vendedor','gestor','admin'].includes(scope.role) &&
+  (id(scope.tenantId) || (scope.role === 'admin' && scope.admin === true));
 function allowedAccount(a,scope) {
   if(!usableScope(scope) || !a || !id(a.id) || !id(a.tenantId))return false;
   const admin=scope.admin===true && scope.role==='admin';
