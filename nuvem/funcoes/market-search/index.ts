@@ -94,13 +94,23 @@ async function queryAI(engine,key,f) {
  if(!resp.ok)throw Error('IA_SEARCH_FAILED');
  return aiSummary(await resp.json(),engine);
 }
-function combineAI(results,limit) {
+// Filter only explicit geographic contradictions; missing fields remain unverified.
+function normalizedPlace(value) {
+ return str(value,120).normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase().replace(/\s+/g,' ');
+}
+function inRequestedPlace(entry,f) {
+ if(f.uf && entry.uf && normalizedPlace(entry.uf)!==normalizedPlace(f.uf))return false;
+ if(f.cidade && entry.cidade && normalizedPlace(entry.cidade)!==normalizedPlace(f.cidade))return false;
+ return true;
+}
+function combineAI(results,limit,f) {
  const out=new Map();
  for(const r of results){
   if(!r.searched)continue;
   const list=Array.isArray(r.parsed.empresas)?r.parsed.empresas:[];
   for(const entry of list.slice(0,limit)){
    if(!entry||typeof entry!=='object')continue;
+   if(!inRequestedPlace(entry,f))continue;
    const cnpj=cnpjReal(entry.cnpj);if(!cnpj)continue;
    const sources=(Array.isArray(entry.fontes)?entry.fontes:[]).map(f=>({url:canonicalUrl(f.url),titulo:str(f.titulo,150)})).filter(f=>f.url&&r.urls.has(f.url));
    if(!sources.length)continue;
@@ -167,6 +177,6 @@ Deno.serve(async req=>{
   const outcomes=await Promise.allSettled(jobs);
   const results=outcomes.filter(x=>x.status==='fulfilled').map(x=>x.value);
   if(!results.length)return output({error:'AI_SEARCH_UNAVAILABLE'},502,origin);
-  return output({data:combineAI(results,f.limit),source:'Pesquisa web OpenAI / Claude',providers:results.map(x=>x.engine),retrievedAt:new Date().toISOString(),total:null,hasMore:false,coverage:'exploratoria',territoryVerified:false,warning:'Pesquisa exploratoria; nao equivale ao universo integral de CNPJs. Nenhum registro foi importado.'},200,origin);
+  return output({data:combineAI(results,f.limit,f),source:'Pesquisa web OpenAI / Claude',providers:results.map(x=>x.engine),retrievedAt:new Date().toISOString(),total:null,hasMore:false,coverage:'exploratoria',territoryVerified:false,warning:'Pesquisa exploratoria; nao equivale ao universo integral de CNPJs. Nenhum registro foi importado.'},200,origin);
  }catch{return output({error:'SEARCH_UNAVAILABLE'},502,origin)}
 });

@@ -108,6 +108,22 @@ test('OpenAI + Claude podem verificar a mesma empresa sem duplicar CNPJ',async()
  assert.equal(res.status,200);const body=await res.json();assert.equal(body.data.length,1);
  assert.equal(aiCalls(h).length,2);assert.ok(body.providers.includes('OpenAI'));assert.ok(body.providers.includes('Anthropic'));
 });
+test('UF contraria ao filtro exclui empresa embora citada e com CNPJ valido',async()=>{
+ const mismatched={...candidate,uf:'RJ'};
+ const r=responseOpenAI();r.output[1].content[0].text=JSON.stringify({empresas:[mismatched]});
+ const h=harness({openai:true,openaiResponse:r}),res=await h.handle(request(query));
+ assert.equal(res.status,200);assert.equal((await res.json()).data.length,0);
+});
+test('cidade contraria ao filtro exclui empresa; comparacao ignora acentos',async()=>{
+ const different={...candidate,cidade:'Campinas'};
+ const r=responseOpenAI();r.output[1].content[0].text=JSON.stringify({empresas:[different]});
+ const h=harness({openai:true,openaiResponse:r}),res=await h.handle(request(query));
+ assert.equal(res.status,200);assert.equal((await res.json()).data.length,0);
+ const accented={...candidate,cidade:'Jacareí'};
+ const r2=responseOpenAI();r2.output[1].content[0].text=JSON.stringify({empresas:[accented]});
+ const h2=harness({openai:true,openaiResponse:r2}),res2=await h2.handle(request(query));
+ assert.equal(res2.status,200);assert.equal((await res2.json()).data.length,1);
+});
 test('DDD e regiao sao aceitos como busca exploratoria, sem alegar mapa ou total exato',async()=>{
  const h=harness({openai:true}),res=await h.handle(request({action:'search',filters:{ddd:'012',regiao:'Vale do Paraiba',segmento:'Quimico'}}));
  assert.equal(res.status,200);const body=await res.json();
