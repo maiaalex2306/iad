@@ -1,0 +1,25 @@
+name: P0 CAS — Missing snapshot create/update guard
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  missing-base:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify no accidental duplicate creation
+        run: |
+          node --check src/nuvem.js
+          node scripts/verificar-versao-shell.cjs
+          node --test scripts/p0-cas-missing-base.test.cjs
+          node --test scripts/p0-cas-modal.test.cjs
+          node --test scripts/p0-cas-assisted-resolution.test.cjs
+          node --test scripts/p0-cas-proven-satisfied.test.cjs
+          node --test scripts/p0-cas-failclosed.test.cjs

@@ -1762,6 +1762,13 @@
             const registro = registrosPorId.get(String(linha.id));
             const base=Store.snapshotBaseRemoto && Store.snapshotBaseRemoto(linha.tenant_id,linha.id);
             if (!base) {
+              /* P0 PERF/CAS: falta de snapshot nao prova que o registro seja
+                 novo. Uma oportunidade carimbada com revisao positiva nao
+                 pode ser recriada (nem ter a revisao omitida num POST).
+                 Preservar a alteracao local ate restaurar a base ou resolver
+                 a divergencia; nunca inventar revisao-base. */
+              const revisaoLocal=registro&&registro.revisao;
+              const revisaoConhecida=Number.isSafeInteger(revisaoLocal)&&revisaoLocal>0;
               const nova=Object.assign({},linha);
               delete nova.revisao;
               const confirmarCriacao=function(remota) {
@@ -1784,7 +1791,17 @@
               return chamar('/rest/v1/oportunidades?select=*&id=eq.' +
                 encodeURIComponent(linha.id) + '&limit=1').then(function(encontradas) {
                 if (!Array.isArray(encontradas)) throw Error('Verificação de ID sem resposta válida.');
-                if (encontradas.length) return confirmarCriacao(encontradas[0]);
+                if (encontradas.length) {
+                  if(!global.IADCAS.sameRecord(nova,encontradas[0]))
+                    throw Error('Base CAS da oportunidade existente indisponível. '+
+                      'O servidor possui dados divergentes; edição local preservada, '+
+                      'sem criação duplicada nem sobrescrita. Utilize a resolução assistida.');
+                  return confirmarCriacao(encontradas[0]);
+                }
+                if(revisaoConhecida)
+                  throw Error('Oportunidade local possui revisão anterior sem base CAS e '+
+                    'não foi encontrada no servidor. Criação bloqueada para impedir perda '+
+                    'ou duplicação; preserve a cópia e verifique a carteira.');
                 return chamar('/rest/v1/oportunidades',{
                   metodo:'POST',cabecalhos:{Prefer:'return=representation'},corpo:nova
                 }).then(function(resultados) {
