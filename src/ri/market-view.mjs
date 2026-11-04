@@ -99,7 +99,13 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem}={
    const companies=normalizeMarketCompanies(payload.data||[],{source:payload.source||'Nao identificada',retrievedAt:payload.retrievedAt||''});
    const unavailable=Array.isArray(payload.failedProviders)?payload.failedProviders.filter(p=>p==='OpenAI'||p==='Anthropic'):[];
    const partialWarning=payload.partial===true?('ATENCAO: pesquisa parcial. Falha em '+(unavailable.join(' e ')||'um provedor')+'. '):'';
-   show(partialWarning+'Pesquisa web exploratoria: '+companies.length+' empresas com fontes; nao representa todas as empresas da regiao. Nenhuma gravacao realizada.');
+   const usageText=Array.isArray(payload.usage)?payload.usage.filter(u=>u&&['OpenAI','Anthropic'].includes(u.provider)).map(u=>{
+    const inTokens=Number.isSafeInteger(u.inputTokens)?u.inputTokens:'nao informado';
+    const outTokens=Number.isSafeInteger(u.outputTokens)?u.outputTokens:'nao informado';
+    const searches=Number.isSafeInteger(u.webSearchRequests)?u.webSearchRequests:'nao informado';
+    return u.provider+': '+inTokens+' tokens entrada, '+outTokens+' saida, '+searches+' buscas web';
+   }).join(' | '):'';
+   show(partialWarning+'Pesquisa web exploratoria: '+companies.length+' empresas com fontes; nao representa todas as empresas da regiao. Nenhuma gravacao realizada.'+(usageText?' Consumo informado: '+usageText+'. Custo em R$ a apurar.':''));
    renderCompanies(companies,payload.source||'Fornecedor',payload.retrievedAt||'data nao fornecida');
   }catch(e){if(seq===currentRequest&&valid()&&e.name!=='AbortError')show('Falha de rede ao consultar fonte empresarial. Nenhuma alteracao no CRM.');}
   finally{if(seq===currentRequest&&valid())btn.disabled=false;}
