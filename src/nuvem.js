@@ -310,10 +310,15 @@
             /* Reconciliar ACKs anteriores mesmo quando a operacao seguinte
                bloqueou. Um lote parcialmente confirmado nao e perda nem
                sucesso completo: a operacao conflitante continua na fila. */
-            const ack=(r && r.acks)||[];
+            const ack=fila.pendingAcks ? fila.pendingAcks() :
+              ((r && r.acks)||[]).map(function(x) {
+                return {operation:pendentes.find(function(y) {
+                  return y.operationId===x.operationId;
+                }),revisaoAtual:x.revisaoAtual};
+              });
             return ack.reduce(function(p,x) {
               return p.then(function() {
-                const op=pendentes.find(function(y){return y.operationId===x.operationId;});
+                const op=x.operation;
                 if(!op) throw Error('Recibo CAS sem operação original.');
                 /* Reconstruir a base remota do ACK antes do envio normal.
                    Após reload o Store não tem necessariamente revisão-base. */
@@ -328,6 +333,9 @@
                       return z.id===op.recordId&&z.tenantId===op.tenantId;
                     });
                     if(local && Number.isSafeInteger(remote.revisao))local.revisao=remote.revisao;
+                    /* A confirmacao duravel so e removida apos leitura,
+                       verificacao e reconciliacao do registro remoto. */
+                    if(fila.confirmAck)fila.confirmAck(op.operationId);
                   });
               });
             },Promise.resolve()).then(function() {
@@ -365,7 +373,9 @@
     let quantidade=0,filas=0;
     try {
       tenantsComFilaCAS().forEach(function(tenant) {
-        const n=filaCASDaSessao(tenant).pending().length;
+        const fila=filaCASDaSessao(tenant);
+        const n=fila.pending().length+
+          (fila.pendingAcks?fila.pendingAcks().length:0);
         if(n){filas++;quantidade+=n;}
       });
       return {quantidade:quantidade,filas:filas,disponivel:true};
@@ -376,12 +386,17 @@
   /* Cópia local explícita. Nunca limpa fila e nunca envia operações.
      Conteúdo sensível: é exclusivamente para arquivo baixado pelo usuário. */
   function exportarPendenciasCAS() {
-    const operacoes = [];
+    const operacoes = [],recibos=[];
     tenantsComFilaCAS().forEach(function(tenant) {
-      filaCASDaSessao(tenant).pending().forEach(function(op) { operacoes.push(op); });
+      const fila=filaCASDaSessao(tenant);
+      fila.pending().forEach(function(op) { operacoes.push(op); });
+      if(fila.pendingAcks)fila.pendingAcks().forEach(function(x) {
+        recibos.push(x);
+      });
     });
     return { formato:'iad-cas-pendencias-v1', geradoEm:new Date().toISOString(),
-      quantidade:operacoes.length, operacoes:operacoes };
+      quantidade:operacoes.length+recibos.length, operacoes:operacoes,
+      recibosConfirmadosPendentesDeConciliacao:recibos };
   }
 
   function chamarFuncao(nome, corpo) {
@@ -2063,7 +2078,11 @@
     /* Nunca substituir a carteira local enquanto há CAS sem ACK. A fila
        persistente é a verdade sobre o trabalho ainda não confirmado. */
     try {
-      const pending=tenantsComFilaCAS().some(function(t){return filaCASDaSessao(t).pending().length>0;});
+      const pending=tenantsComFilaCAS().some(function(t){
+        const fila=filaCASDaSessao(t);
+        return fila.pending().length>0||
+          !!(fila.pendingAcks&&fila.pendingAcks().length);
+      });
       if (pending)
         return Promise.reject(new Error('Há edições CAS pendentes neste dispositivo. Conclua ou resolva os conflitos antes de baixar a carteira.'));
     } catch(e) {
