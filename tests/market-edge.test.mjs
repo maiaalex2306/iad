@@ -17,7 +17,7 @@ const responseClaude=(search=true,cited=true)=>({
  {type:'text',text:marketJSON,citations:cited?[{type:'webpage_citation',url:URL_COMPANY,title:'Registro verificado'}]:[]}],
  usage:{input_tokens:100,output_tokens:150,server_tool_use:{web_search_requests:1}}
 });
-function harness({openai=false,claude=false,openaiResponse=responseOpenAI(),claudeResponse=responseClaude()}={}){
+function harness({openai=false,claude=false,quotaAllowed=true,quotaUnavailable=false,openaiResponse=responseOpenAI(),claudeResponse=responseClaude()}={}){
  const calls=[];let handler=null;
  const sandbox={Request,Response,AbortSignal,URL,TextDecoder,console,Deno:{env:{get(k){
   if(k==='SUPABASE_URL')return 'https://safe.supabase.co';
@@ -30,6 +30,7 @@ function harness({openai=false,claude=false,openaiResponse=responseOpenAI(),clau
   calls.push({url:String(url),method:opt.method||'GET',headers:opt.headers,body:opt.body?JSON.parse(opt.body):null});
   if(String(url).includes('/auth/v1/user'))return new Response(JSON.stringify({id:'11111111-1111-1111-1111-111111111111'}),{status:200});
   if(String(url).includes('/rest/v1/perfis'))return new Response(JSON.stringify([{tenant_id:'tenant-a',papel:'vendedor',ativo:true}]),{status:200});
+  if(String(url).includes('/rest/v1/rpc/iad_market_search_reserve'))return quotaUnavailable?new Response(JSON.stringify({message:'quota backend unavailable'}),{status:503}):new Response(JSON.stringify({allowed:quotaAllowed,scope:quotaAllowed?'ok':'user',remaining:quotaAllowed?2:0}),{status:200});
   if(String(url).includes('api.openai.com/v1/responses'))return new Response(JSON.stringify(openaiResponse),{status:200});
   if(String(url).includes('api.anthropic.com/v1/messages'))return new Response(JSON.stringify(claudeResponse),{status:200});
   throw Error('unexpected request '+url);
@@ -139,4 +140,28 @@ test('consulta de IA nao executa mutacoes no Supabase',async()=>{
  const h=harness({openai:true,claude:true}),res=await h.handle(request(query));
  assert.equal(res.status,200);
  assert.equal(h.calls.filter(c=>c.url.includes('safe.supabase.co')&&c.method!=='GET').length,0);
+});
+test('cada pesquisa reserva quota transacional antes de chamar provedores',async()=>{
+ const h=harness({openai:true,claude:true}),res=await h.handle(request(query));
+ assert.equal(res.status,200);
+ const idx=h.calls.findIndex(c=>c.url.includes('/rest/v1/rpc/iad_market_search_reserve'));
+ const aiIdx=h.calls.findIndex(c=>/api.openai.com|api.anthropic.com/.test(c.url));
+ assert.ok(idx>=0,'quota RPC não foi chamada');
+ assert.ok(aiIdx>idx,'quota precisa anteceder qualquer chamada de IA');
+ assert.equal(h.calls[idx].method,'POST');
+ assert.equal(h.calls[idx].body!==null,true);
+});
+test('quota esgotada retorna 429 sem custo OpenAI ou Claude',async()=>{
+ const h=harness({openai:true,claude:true,quotaAllowed:false});
+ const res=await h.handle(request(query));
+ assert.equal(res.status,429);
+ assert.equal((await res.json()).error,'SEARCH_QUOTA_EXCEEDED');
+ assert.equal(aiCalls(h).length,0);
+});
+test('controle de quota indisponivel falha fechado e nao cobra IA',async()=>{
+ const h=harness({openai:true,claude:true,quotaUnavailable:true});
+ const res=await h.handle(request(query));
+ assert.equal(res.status,503);
+ assert.equal((await res.json()).error,'SEARCH_QUOTA_UNAVAILABLE');
+ assert.equal(aiCalls(h).length,0);
 });
