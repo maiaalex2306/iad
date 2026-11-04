@@ -43,3 +43,13 @@ test('fontes de pesquisa web verificadas sao preservadas no dossie',()=>{
  assert.equal(v.length,1);assert.equal(v[0].fontes[0].url,source);
  assert.deepEqual(v[0].providers,['OpenAI','Anthropic']);
 });
+
+test('normalizacao preserva divergencias de dados das IAs para revisao comercial',()=>{
+ const v=normalizeMarketCompanies([{cnpj:'11222333000181',cidade:'Jacarei',
+  conflitos:[{campo:'cidade',valorOriginal:'Jacarei',valorDivergente:'Campinas',provedor:'Anthropic'}],
+  territorioCorroborado:false}],{source:'IA Web'});
+ assert.equal(v.length,1);
+ assert.equal(v[0].territorioCorroborado,false);
+ assert.equal(v[0].conflitos.length,1);
+ assert.equal(v[0].conflitos[0].valorDivergente,'Campinas');
+});
