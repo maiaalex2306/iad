@@ -37,3 +37,9 @@ test('plano nunca grava no CRM e aponta oportunidades existentes',()=>{
  assert.equal(result.operation,'review_existing');assert.equal(result.existingOpportunityId,'opp1');assert.equal(result.writePerformed,false);assert.equal(JSON.stringify(snapshot),before);
  assert.throws(()=>proposePipelineAction({},snapshot,{tenantId:'',userId:'u1'}),/escopo/i);
 });
+test('fontes de pesquisa web verificadas sao preservadas no dossie',()=>{
+ const source='https://example.org/empresa-a';
+ const v=normalizeMarketCompanies([{cnpj:'11222333000181',nome:'Empresa A',fontes:[{url:source,titulo:'Empresa A verificada'}],providers:['OpenAI','Anthropic']}],{source:'IA Web',retrievedAt:'2026-11-04'});
+ assert.equal(v.length,1);assert.equal(v[0].fontes[0].url,source);
+ assert.deepEqual(v[0].providers,['OpenAI','Anthropic']);
+});
