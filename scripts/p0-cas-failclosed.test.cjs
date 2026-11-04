@@ -29,6 +29,6 @@ test('P0: browser storage failure blocks full download',async()=>{
 });
 test('P0: release app and PWA are coordinated',()=>{
  const c=fs.readFileSync('src/config.js','utf8'),s=fs.readFileSync('sw.js','utf8');
- assert.match(c,/numero: 'v286.38'/);
- assert.match(s,/const CACHE = 'iad-crm-v286.38'/);
+ assert.match(c,/numero: 'v286.39'/);
+ assert.match(s,/const CACHE = 'iad-crm-v286.39'/);
 });
