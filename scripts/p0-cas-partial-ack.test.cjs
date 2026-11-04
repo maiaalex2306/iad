@@ -57,6 +57,6 @@ test('durable ACK is reconciled once; conflict remains without fabricated ACK',a
 });
 test('PWA version matches',()=>{
  const config=fs.readFileSync('src/config.js','utf8'),sw=fs.readFileSync('sw.js','utf8');
- assert.match(config,/numero: 'v286.44'/);
- assert.match(sw,/const CACHE = 'iad-crm-v286.44'/);
+ assert.match(config,/numero: 'v286.45'/);
+ assert.match(sw,/const CACHE = 'iad-crm-v286.45'/);
 });
