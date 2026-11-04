@@ -50,6 +50,6 @@ test('encoded tenant IDs round-trip from ACK-only keys',async()=>{
 });
 test('release and service worker version match',()=>{
  const cfg=fs.readFileSync('src/config.js','utf8'),sw=fs.readFileSync('sw.js','utf8');
- assert.match(cfg,/numero: 'v286.40'/);
- assert.match(sw,/const CACHE = 'iad-crm-v286.40'/);
+ assert.match(cfg,/numero: 'v286.41'/);
+ assert.match(sw,/const CACHE = 'iad-crm-v286.41'/);
 });
