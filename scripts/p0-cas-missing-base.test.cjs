@@ -35,6 +35,6 @@ test('genuinely new row can still be created after not-found check',async()=>{
  await s.go();assert.equal(s.requests.length,2);assert.equal(s.requests[1].opts.metodo,'POST');
 });
 test('app release and service worker match',()=>{
- assert.match(fs.readFileSync('src/config.js','utf8'),/numero: 'v286.44'/);
- assert.match(fs.readFileSync('sw.js','utf8'),/const CACHE = 'iad-crm-v286.44'/);
+ assert.match(fs.readFileSync('src/config.js','utf8'),/numero: 'v286.45'/);
+ assert.match(fs.readFileSync('sw.js','utf8'),/const CACHE = 'iad-crm-v286.45'/);
 });
