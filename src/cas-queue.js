@@ -125,12 +125,22 @@
         satisfazRemoto(op,remote))
         throw Error('Revisao remota mudou ou edicao sem conflito: fila preservada.');
       const history=archived();
-      if(history.some(function(x){return x.operation.operationId===operationId;}))
-        throw Error('Historico CAS duplicado; fila preservada.');
-      history.push({operation:JSON.parse(JSON.stringify(op)),
-        revisaoRemota:remote.revisao,motivo:'usuario_optou_servidor',
-        arquivadaEm:new Date().toISOString()});
-      storage.setItem(archiveKey,JSON.stringify(history));
+      const anterior=history.find(function(x){
+        return x.operation.operationId===operationId;
+      });
+      if(anterior) {
+        /* Queda entre salvar historico e retirar a fila: retomada
+           idempotente, sem perder o registro ou exigir um novo descarte. */
+        if(JSON.stringify(anterior.operation)!==JSON.stringify(op)||
+          anterior.revisaoRemota!==remote.revisao||
+          anterior.motivo!=='usuario_optou_servidor')
+          throw Error('Historico CAS divergente; fila preservada.');
+      } else {
+        history.push({operation:JSON.parse(JSON.stringify(op)),
+          revisaoRemota:remote.revisao,motivo:'usuario_optou_servidor',
+          arquivadaEm:new Date().toISOString()});
+        storage.setItem(archiveKey,JSON.stringify(history));
+      }
       const current=load();
       if(!current.length||current[0].operationId!==operationId)
         throw Error('Fila alterada; recuperacao interrompida.');
