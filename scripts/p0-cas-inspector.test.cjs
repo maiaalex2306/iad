@@ -61,6 +61,9 @@ test('blocked UI connects inspector to button; PWA coordinated',()=>{
  const sw=fs.readFileSync('sw.js','utf8');
  assert.match(app,/diagnosticarPendenciasCAS: function/);
  assert.match(app,/botao\.textContent='Diagnosticar pendências'/);
- assert.match(config,/numero: 'v286.45'/);
- assert.match(sw,/const CACHE = 'iad-crm-v286.45'/);
+ const riCfgVersion=(fs.readFileSync('src/config.js','utf8').match(/numero: '(v[0-9]+(?:\.[0-9]+)*)'/)||[])[1];
+ const riPwaVersion=(fs.readFileSync('sw.js','utf8').match(/const CACHE = 'iad-crm-(v[0-9]+(?:\.[0-9]+)*)'/)||[])[1];
+ assert.ok(riCfgVersion && riPwaVersion,'release and PWA version required');
+ assert.equal(riCfgVersion,riPwaVersion,'release and PWA cache must match');
+
 });

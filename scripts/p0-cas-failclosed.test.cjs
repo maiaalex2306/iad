@@ -29,6 +29,9 @@ test('P0: browser storage failure blocks full download',async()=>{
 });
 test('P0: release app and PWA are coordinated',()=>{
  const c=fs.readFileSync('src/config.js','utf8'),s=fs.readFileSync('sw.js','utf8');
- assert.match(c,/numero: 'v286.45'/);
- assert.match(s,/const CACHE = 'iad-crm-v286.45'/);
+ const riCfgVersion=(fs.readFileSync('src/config.js','utf8').match(/numero: '(v[0-9]+(?:\.[0-9]+)*)'/)||[])[1];
+ const riPwaVersion=(fs.readFileSync('sw.js','utf8').match(/const CACHE = 'iad-crm-(v[0-9]+(?:\.[0-9]+)*)'/)||[])[1];
+ assert.ok(riCfgVersion && riPwaVersion,'release and PWA version required');
+ assert.equal(riCfgVersion,riPwaVersion,'release and PWA cache must match');
+
 });
