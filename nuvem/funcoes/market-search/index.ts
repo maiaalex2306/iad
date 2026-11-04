@@ -134,7 +134,14 @@ Deno.serve(async req=>{
   const profile=(await profileRes.json())?.[0];
   if(!profile||profile.ativo===false||!['vendedor','gestor','admin'].includes(profile.papel)||(!profile.tenant_id&&profile.papel!=='admin'))
    return output({error:'AUTH_SCOPE_UNAVAILABLE'},403,origin);
-  let body;try{body=await req.json()}catch{return output({error:'INVALID_JSON'},400,origin)}
+  // Enforce the actual request body size even when Content-Length is absent or falsified.
+  // The text length is a conservative lower bound on UTF-8 bytes.
+  let body;
+  try {
+   const raw=await req.text();
+   if(raw.length>12000)return output({error:'REQUEST_TOO_LARGE'},413,origin);
+   body=JSON.parse(raw);
+  }catch{return output({error:'INVALID_JSON'},400,origin)}
   if(body?.action!=='search')return output({error:'SEARCH_ONLY'},400,origin);
   let f;try{f=filters(body.filters)}catch(e){return output({error:'INVALID_FILTERS',message:e.message},422,origin)}
   const openai=aiKey('openai'),claude=aiKey('anthropic');

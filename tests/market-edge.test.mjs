@@ -51,6 +51,20 @@ test('sem JWT nao consulta a IA nem dados do CRM',async()=>{
  const h=harness({openai:true}),res=await h.handle(request(query,'invalid'));
  assert.equal(res.status,401);assert.equal(h.calls.length,0);
 });
+test('corpo excessivo sem Content-Length declarado recebe 413 e nao consome IA',async()=>{
+ const h=harness({openai:true});
+ const req=request({action:'search',filters:{...query.filters,segmento:'X'.repeat(13000)}});
+ req.headers.delete('content-length');
+ const res=await h.handle(req);
+ assert.equal(res.status,413);assert.equal(aiCalls(h).length,0);
+});
+test('Content-Length falsificado nao contorna limite do corpo',async()=>{
+ const h=harness({openai:true});
+ const req=request({action:'search',filters:{...query.filters,segmento:'X'.repeat(13000)}});
+ req.headers.set('content-length','20');
+ const res=await h.handle(req);
+ assert.equal(res.status,413);assert.equal(aiCalls(h).length,0);
+});
 test('sem chaves de IA ja configuradas retorna 503 explicito e nenhum resultado falso',async()=>{
  const h=harness(),res=await h.handle(request(query));
  assert.equal(res.status,503);assert.equal((await res.json()).error,'AI_NOT_CONFIGURED');assert.equal(aiCalls(h).length,0);
