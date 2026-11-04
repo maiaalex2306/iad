@@ -14,6 +14,15 @@
       ajuda: 'A carteira em números e gráficos: quanto do pipeline tem decisão madura, por mês e por segmento.' },
     { hash: '#/pipeline', ico: '🗂️', nome: 'Pipeline', render: V.pipeline,
       ajuda: 'Todos os negócios abertos, em lista ou kanban, agrupados pela saúde da decisão.' },
+    ...(global.IAD_RI_ENABLED === true ? [{
+      hash: '#/inteligencia', ico: '🧠', nome: 'Inteligência Comercial',
+      render: function () {
+        return '<section class="card"><h1>Inteligência Comercial</h1>' +
+          '<p class="small muted">Análise de contas existentes — somente leitura, com dados já autorizados.</p>' +
+          '<div id="iad-ri-root" aria-live="polite">Preparando a visualização...</div></section>';
+      },
+      ajuda: 'Consulta sob demanda da carteira, com perguntas para reuniões e lacunas de informação; não envia mensagens nem altera negócios.'
+    }] : []),
     /* Debaixo do Pipeline de propósito: o pipeline é a foto das contas, a
        tarefa é o que muda a foto. Quem abre o app para trabalhar desce um
        item e está no lugar certo. */
@@ -202,6 +211,48 @@
     filtro.oninput=desenhar;
     proximo.onclick=function(){if(cursor)carregar(cursor);};
     carregar(null);
+  }
+
+  /* RI-01B: carregamento de módulo apenas ao abrir a rota, nunca no boot.
+     A consulta é feita sobre Store.dados(), já limitado por perfil e RLS.
+     Mudança de sessão, filtros, tenant ou revisão invalida carregamento tardio. */
+  let moduloInteligencia = null;
+  let geracaoInteligencia = 0;
+  function assinaturaInteligencia() {
+    const u=A.atual(),n=global.IADNuvem;
+    if(!u||!n||(n.mandaNoAcesso()&&(!n.sessao()||!n.sessao().user)))return '';
+    const c=Store.contexto(),f=c.filtros||{};
+    return JSON.stringify([u.id,u.papel,u.tenantId||'',c.tenantId||'',
+      f.tenant||'todas',f.usuario||'todos',Store.revisao()]);
+  }
+  function iniciarInteligenciaComercial() {
+    const root=document.getElementById('iad-ri-root');
+    if(!root||global.IAD_RI_ENABLED!==true)return;
+    const token=++geracaoInteligencia;
+    const assinatura=assinaturaInteligencia(),usuario=A.atual();
+    if(!assinatura||!usuario){root.textContent='Sessão autorizada necessária.';return;}
+    const endereco=new URL('src/ri/account-view.mjs',document.baseURI).href;
+    const pendente=moduloInteligencia || (moduloInteligencia=import(endereco).catch(function(e){
+      moduloInteligencia=null;
+      throw e;
+    }));
+    pendente.then(function(m) {
+      if(token!==geracaoInteligencia||!root.isConnected||
+          location.hash!=='#/inteligencia'||assinatura!==assinaturaInteligencia())return;
+      const c=Store.contexto(),f=c.filtros||{};
+      m.mountAccountIntelligence({
+        root, snapshot:Store.dados(),
+        scope: {
+          userId:usuario.id,tenantId:c.tenantId,role:usuario.papel,admin:c.admin,
+          tenantFilter:f.tenant||'todas',ownerFilter:f.usuario||'todos',token:assinatura
+        },
+        getScopeToken:assinaturaInteligencia
+      });
+    }).catch(function() {
+      if(token===geracaoInteligencia&&root.isConnected&&
+          location.hash==='#/inteligencia'&&assinatura===assinaturaInteligencia())
+        root.textContent='Não foi possível carregar a inteligência comercial. A carteira não foi alterada.';
+    });
   }
 
   function render() {
@@ -448,7 +499,8 @@
       /* Duas telas se completam depois de desenhadas: Dados mede o espaço
          usado e busca os leads na ponte; Cadastros lista quem está no
          servidor. Nenhuma das duas pode segurar o render. */
-      if (rota.hash === '#/dados') { pintarUso(); pintarLeads(); pintarVersao(); }
+      if (rota.hash === '#/inteligencia') iniciarInteligenciaComercial();
+      else if (rota.hash === '#/dados') { pintarUso(); pintarLeads(); pintarVersao(); }
       else pintarUsuariosNuvem();
       /* O ditado vivia dentro de formulário, onde alguem sempre chamava
          ligarVoz ao abrir o diálogo. Nas Notas o botão está na página, e
