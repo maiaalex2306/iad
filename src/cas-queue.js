@@ -26,6 +26,36 @@
       return parsed;
     }
     function save(queue){storage.setItem(key,JSON.stringify(queue));}
+    /* ACK duravel antes de remover a operacao original: se cair a aba
+       durante a reconciliacao, a proxima sessao recupera o recibo. */
+    const receiptKey=key+':ack-v1';
+    function receipts(){
+      const raw=storage.getItem(receiptKey);
+      if(!raw)return [];
+      const found=JSON.parse(raw);
+      if(!Array.isArray(found))throw Error('Recibos CAS invalidos; nao sobrescrever');
+      for(const a of found) if(!a||!a.operation||a.operation.userId!==user||
+        a.operation.tenantId!==tenant||!a.operation.operationId)
+        throw Error('Recibos CAS de outra sessao');
+      return found;
+    }
+    function persistReceipt(op,revision){
+      const a=receipts();
+      const found=a.find(x=>x.operation.operationId===op.operationId);
+      if(found){
+        if(JSON.stringify(found.operation)!==JSON.stringify(op))
+          throw Error('Recibo CAS divergente');
+        return;
+      }
+      a.push({operation:JSON.parse(JSON.stringify(op)),revisaoAtual:revision});
+      storage.setItem(receiptKey,JSON.stringify(a));
+    }
+    function confirmReceipt(id){
+      const a=receipts();
+      const next=a.filter(x=>x.operation.operationId!==id);
+      if(next.length!==a.length)storage.setItem(receiptKey,JSON.stringify(next));
+      return next.length;
+    }
     function voos() {
       let mapa=voosPorStorage.get(storage);
       if(!mapa){mapa=new Map();voosPorStorage.set(storage,mapa);}
@@ -34,7 +64,8 @@
     function enqueue(op){
       if(!op||op.userId!==user||op.tenantId!==tenant||!op.operationId) throw Error('Operação CAS de outra sessão');
       const q=load();
-      const previous=q.find(x=>x.operationId===op.operationId);
+      const previous=q.find(x=>x.operationId===op.operationId)||
+        receipts().find(x=>x.operation.operationId===op.operationId)?.operation;
       if(previous){
         if(JSON.stringify(previous)!==JSON.stringify(op)) throw Error('Idempotência divergente');
         return q.length;
@@ -53,10 +84,12 @@
         let q=load();
         while(q.length){
           const op=q[0];
-          const res=await send(op);
+          const prior=receipts().find(x=>x.operation.operationId===op.operationId);
+          const res=prior?{estado:'ok',revisao_atual:prior.revisaoAtual}:await send(op);
           if(!res||res.estado!=='ok') return {sent,blocked:true,reason:res&&res.estado||'sem_confirmacao',acks};
           const latest=load();
           if(!latest.length||latest[0].operationId!==op.operationId) throw Error('Fila alterada durante o envio');
+          persistReceipt(op,res.revisao_atual);
           latest.shift();save(latest);sent++;acks.push({operationId:op.operationId,revisaoAtual:res.revisao_atual});
           q=latest;
         }
@@ -69,7 +102,10 @@
       mapa.set(key,compartilhada);
       return compartilhada;
     }
-    return Object.freeze({enqueue,flush,pending:()=>load().map(x=>JSON.parse(JSON.stringify(x)))});
+    return Object.freeze({enqueue,flush,
+      pending:()=>load().map(x=>JSON.parse(JSON.stringify(x))),
+      pendingAcks:()=>receipts().map(x=>JSON.parse(JSON.stringify(x))),
+      confirmAck:confirmReceipt});
   }
   return Object.freeze({create});
 });
