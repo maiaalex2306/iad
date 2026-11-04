@@ -105,6 +105,6 @@ test('app requires explicit server choice and release is coordinated',()=>{
  assert.match(app,/Comparar e resolver conflito/);
  assert.match(app,/decisao!=='SERVIDOR'/);
  assert.match(app,/resolverConflitoCASManterServidor: function/);
- assert.match(fs.readFileSync('src/config.js','utf8'),/numero: 'v286.42'/);
- assert.match(fs.readFileSync('sw.js','utf8'),/const CACHE = 'iad-crm-v286.42'/);
+ assert.match(fs.readFileSync('src/config.js','utf8'),/numero: 'v286.43'/);
+ assert.match(fs.readFileSync('sw.js','utf8'),/const CACHE = 'iad-crm-v286.43'/);
 });

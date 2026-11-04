@@ -205,6 +205,13 @@
       document.body.classList.remove('sem-sessao');
       conteudo.innerHTML = V.semServidor(semServidor);
       if(/CAS|edições pendentes/i.test(String(semServidor))) {
+        /* Ao entrar na tela CAS, fechar imediatamente eventual aviso modal
+           que chegou antes do bloqueio, sem alterar a falha de sincronizacao. */
+        if (relogioDoAviso) { clearTimeout(relogioDoAviso); relogioDoAviso = null; }
+        if (caixaDoAviso && caixaDoAviso.isConnected) {
+          try { caixaDoAviso.close(); } catch(e) {}
+        }
+        caixaDoAviso = null;
         const card=conteudo.querySelector('.card');
         if(card && !conteudo.querySelector('#diagnosticar-cas')) {
           const botao=document.createElement('button');
@@ -646,6 +653,19 @@
       return;
     }
 
+    /* P0 v286.43: a carteira ja esta bloqueada com recuperacao CAS e
+       instrucoes de backup. Nao sobrepor um segundo modal automatico
+       dizendo que uma divergencia permanente vai "subir sozinha".
+       Mantemos o estado da falha, fila, RLS e bloqueio integralmente. */
+    if (semServidor && /CAS|edições pendentes/i.test(String(semServidor))) {
+      if (relogioDoAviso) { clearTimeout(relogioDoAviso); relogioDoAviso = null; }
+      if (caixaDoAviso && caixaDoAviso.isConnected) {
+        try { caixaDoAviso.close(); } catch(e) {}
+      }
+      caixaDoAviso = null;
+      return;
+    }
+
     const parado = Date.now() - sinc.desde;
     const naHora = avisadoEm ? (Date.now() - avisadoEm >= REPETIR_O_AVISO) : (parado >= ESPERA_PARA_INTERROMPER);
     if (!naHora) {
@@ -680,7 +700,8 @@
       '<p class="small">O motivo que o servidor deu: <em>' + U.esc(sinc.recado || 'sem explicação') + '</em></p>' +
       (guardado
         ? '<p class="small"><strong>O que você fez não se perdeu.</strong> Está gravado neste aparelho e ' +
-          'sobe sozinho assim que o envio voltar — pode fechar o app. O que <em>não</em> acontece enquanto ' +
+          'precisa de confirmação do servidor. Se houver conflito de dados, a edição exige conciliação ' +
+          'assistida e não será enviada automaticamente. O que <em>não</em> acontece enquanto ' +
           'isso: ninguém mais vê. Nos outros aparelhos e para o resto da equipe, este trabalho ainda não existe.</p>'
         : '<p class="small"><strong>E não consegui nem guardar aqui.</strong> O que está na tela existe só ' +
           'nesta aba: fechar ou recarregar perde. Baixe a cópia antes de qualquer outra coisa.</p>') +
