@@ -212,10 +212,14 @@ Deno.serve(async req=>{
   }catch{return output({error:'SEARCH_QUOTA_UNAVAILABLE'},503,origin)}
   if(quota?.allowed===false)return output({error:'SEARCH_QUOTA_EXCEEDED',scope:quota.scope||'unknown'},429,origin);
   if(quota?.allowed!==true)return output({error:'SEARCH_QUOTA_UNAVAILABLE'},503,origin);
-  const jobs=[];if(openai)jobs.push(queryAI('OpenAI',openai,f));if(claude)jobs.push(queryAI('Anthropic',claude,f));
-  const outcomes=await Promise.allSettled(jobs);
+  const jobs=[];
+  if(openai)jobs.push({engine:'OpenAI',promise:queryAI('OpenAI',openai,f)});
+  if(claude)jobs.push({engine:'Anthropic',promise:queryAI('Anthropic',claude,f)});
+  const outcomes=await Promise.allSettled(jobs.map(x=>x.promise));
   const results=outcomes.filter(x=>x.status==='fulfilled').map(x=>x.value);
-  if(!results.length)return output({error:'AI_SEARCH_UNAVAILABLE'},502,origin);
-  return output({data:combineAI(results,f.limit,f),source:'Pesquisa web OpenAI / Claude',providers:results.map(x=>x.engine),retrievedAt:new Date().toISOString(),total:null,hasMore:false,coverage:'exploratoria',territoryVerified:false,warning:'Pesquisa exploratoria; nao equivale ao universo integral de CNPJs. Nenhum registro foi importado.'},200,origin);
+  const failedProviders=jobs.filter((x,i)=>outcomes[i].status==='rejected').map(x=>x.engine);
+  if(!results.length)return output({error:'AI_SEARCH_UNAVAILABLE',failedProviders},502,origin);
+  const partial=failedProviders.length>0;
+  return output({data:combineAI(results,f.limit,f),source:'Pesquisa web OpenAI / Claude',providers:results.map(x=>x.engine),failedProviders,partial,retrievedAt:new Date().toISOString(),total:null,hasMore:false,coverage:'exploratoria',territoryVerified:false,warning:(partial?'Uma ou mais IAs nao concluiram a pesquisa; cobertura parcial. ':'')+'Pesquisa exploratoria; nao equivale ao universo integral de CNPJs. Nenhum registro foi importado.'},200,origin);
  }catch{return output({error:'SEARCH_UNAVAILABLE'},502,origin)}
 });
