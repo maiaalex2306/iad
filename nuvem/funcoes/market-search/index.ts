@@ -134,12 +134,29 @@ Deno.serve(async req=>{
   const profile=(await profileRes.json())?.[0];
   if(!profile||profile.ativo===false||!['vendedor','gestor','admin'].includes(profile.papel)||(!profile.tenant_id&&profile.papel!=='admin'))
    return output({error:'AUTH_SCOPE_UNAVAILABLE'},403,origin);
-  // Enforce the actual request body size even when Content-Length is absent or falsified.
-  // The text length is a conservative lower bound on UTF-8 bytes.
+  // Byte-limited streaming read: never buffer an unbounded body even if the
+  // client omits or lies about Content-Length. Enforce the same 12 KB cap
+  // for multibyte UTF-8 input, before contacting any AI provider.
   let body;
   try {
-   const raw=await req.text();
-   if(raw.length>12000)return output({error:'REQUEST_TOO_LARGE'},413,origin);
+   if(!req.body)return output({error:'INVALID_JSON'},400,origin);
+   const reader=req.body.getReader();
+   const decoder=new TextDecoder('utf-8',{fatal:true});
+   let bytes=0,raw='',overflow=false;
+   try {
+    while(true){
+     const chunk=await reader.read();
+     if(chunk.done)break;
+     bytes+=chunk.value.byteLength;
+     if(bytes>12000){overflow=true;break;}
+     raw+=decoder.decode(chunk.value,{stream:true});
+    }
+    if(!overflow)raw+=decoder.decode();
+   } finally {
+    if(overflow)await reader.cancel().catch(()=>{});
+    reader.releaseLock();
+   }
+   if(overflow)return output({error:'REQUEST_TOO_LARGE'},413,origin);
    body=JSON.parse(raw);
   }catch{return output({error:'INVALID_JSON'},400,origin)}
   if(body?.action!=='search')return output({error:'SEARCH_ONLY'},400,origin);

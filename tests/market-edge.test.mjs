@@ -19,7 +19,7 @@ const responseClaude=(search=true,cited=true)=>({
 });
 function harness({openai=false,claude=false,openaiResponse=responseOpenAI(),claudeResponse=responseClaude()}={}){
  const calls=[];let handler=null;
- const sandbox={Request,Response,AbortSignal,URL,console,Deno:{env:{get(k){
+ const sandbox={Request,Response,AbortSignal,URL,TextDecoder,console,Deno:{env:{get(k){
   if(k==='SUPABASE_URL')return 'https://safe.supabase.co';
   if(k==='SUPABASE_ANON_KEY')return 'safe-public-key';
   if(k==='IA_CHAVE_OPENAI')return openai?'sk-test-openai':undefined;
@@ -57,6 +57,18 @@ test('corpo excessivo sem Content-Length declarado recebe 413 e nao consome IA',
  req.headers.delete('content-length');
  const res=await h.handle(req);
  assert.equal(res.status,413);assert.equal(aiCalls(h).length,0);
+});
+test('UTF-8 multibyte maior que 12 KB recebe 413 sem chamar IA',async()=>{
+ const h=harness({openai:true});
+ const req=request({action:'search',filters:{...query.filters,segmento:'á'.repeat(6200)}});
+ req.headers.delete('content-length');
+ const res=await h.handle(req);
+ assert.equal(res.status,413);assert.equal(aiCalls(h).length,0);
+});
+test('corpo na faixa normal passa pelo leitor streaming',async()=>{
+ const h=harness({openai:true});
+ const res=await h.handle(request(query));
+ assert.equal(res.status,200);assert.equal(aiCalls(h).length,1);
 });
 test('Content-Length falsificado nao contorna limite do corpo',async()=>{
  const h=harness({openai:true});
