@@ -205,6 +205,13 @@
       document.body.classList.remove('sem-sessao');
       conteudo.innerHTML = V.semServidor(semServidor);
       if(/CAS|edições pendentes/i.test(String(semServidor))) {
+        /* Ao entrar na tela CAS, fechar imediatamente eventual aviso modal
+           que chegou antes do bloqueio, sem alterar a falha de sincronizacao. */
+        if (relogioDoAviso) { clearTimeout(relogioDoAviso); relogioDoAviso = null; }
+        if (caixaDoAviso && caixaDoAviso.isConnected) {
+          try { caixaDoAviso.close(); } catch(e) {}
+        }
+        caixaDoAviso = null;
         const card=conteudo.querySelector('.card');
         if(card && !conteudo.querySelector('#diagnosticar-cas')) {
           const botao=document.createElement('button');
