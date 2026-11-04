@@ -54,6 +54,10 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem}={
     }
    }else card.appendChild(el('p','Sem fontes verificaveis: nao utilizar como fato.','small muted'));
    if(company.insights.length){card.appendChild(el('h5','Insights — hipoteses a investigar'));for(const insight of company.insights)card.appendChild(el('p',insight,'small'));}
+   if(company.conflitos?.length){
+    card.appendChild(el('h5','Divergencias entre IAs — verificar antes de qualificar'));
+    for(const item of company.conflitos)card.appendChild(el('p',item.campo+': '+item.valorOriginal+' / '+item.valorDivergente+' ('+item.provedor+')','small'));
+   }
    if(company.providers.length)card.appendChild(el('p','Pesquisado por: '+company.providers.join(' + '),'small muted'));
    const label=el('label','Selecionar para revisao comercial','campo'),check=doc.createElement('input');
    check.type='checkbox';check.disabled=plan.match.status==='review'&&!plan.match.accountId;
