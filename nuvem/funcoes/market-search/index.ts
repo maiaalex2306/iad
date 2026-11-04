@@ -119,6 +119,15 @@ function combineAI(results,limit,f) {
    const noticias=(Array.isArray(entry.noticias)?entry.noticias:[]).filter(n=>n&&urls.has(canonicalUrl(n.url))).slice(0,6).map(n=>({titulo:str(n.titulo),url:canonicalUrl(n.url),data:str(n.data,40)}));
    const existing=out.get(cnpj);
    if(existing){
+    // Same CNPJ is an identity key, not proof that all provider facts agree.
+    for(const campo of ['cidade','uf','razaoSocial','segmento']){
+     const first=str(existing[campo],160),other=str(entry[campo],160);
+     if(first&&other&&normalizedPlace(first)!==normalizedPlace(other)){
+      if(existing.conflitos.length<12&&!existing.conflitos.some(x=>x.campo===campo&&x.valorDivergente===other))
+       existing.conflitos.push({campo,valorOriginal:first,valorDivergente:other,provedor:r.engine});
+      if(campo==='cidade'||campo==='uf')existing.territorioCorroborado=false;
+     }
+    }
     if(!existing.providers.includes(r.engine))existing.providers.push(r.engine);
     for(const src of sources)if(!existing.fontes.some(x=>x.url===src.url))existing.fontes.push(src);
     // Merge only contacts whose source was independently cited by this
@@ -133,7 +142,7 @@ function combineAI(results,limit,f) {
     }
     continue;
    }
-   out.set(cnpj,{cnpj,razaoSocial:str(entry.razaoSocial||entry.nome),nome:str(entry.nome||entry.razaoSocial),cidade:str(entry.cidade),uf:str(entry.uf,2).toUpperCase(),porte:str(entry.porte),segmento:str(entry.segmento),site:str(entry.site,200),telefone:str(entry.telefone,60),funcionarios:entry.funcionarios??null,faturamento:entry.faturamento??null,contatos,noticias,insights:Array.isArray(entry.insights)?entry.insights.slice(0,6).map(s=>str(s,250)):[],fontes:sources,providers:[r.engine]});
+   out.set(cnpj,{cnpj,razaoSocial:str(entry.razaoSocial||entry.nome),nome:str(entry.nome||entry.razaoSocial),cidade:str(entry.cidade),uf:str(entry.uf,2).toUpperCase(),porte:str(entry.porte),segmento:str(entry.segmento),site:str(entry.site,200),telefone:str(entry.telefone,60),funcionarios:entry.funcionarios??null,faturamento:entry.faturamento??null,contatos,noticias,insights:Array.isArray(entry.insights)?entry.insights.slice(0,6).map(s=>str(s,250)):[],fontes:sources,providers:[r.engine],conflitos:[],territorioCorroborado:false});
   }
  }
  return [...out.values()].slice(0,limit);
