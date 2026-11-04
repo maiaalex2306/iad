@@ -51,3 +51,11 @@ test('seleção de conta após a primeira página não pode perder o registro',a
  assert.equal(findVisibleAccount({contas:accounts},seller,'acct-999'),null);
  assert.equal(findVisibleAccount({contas:accounts},{...seller,tenantId:'tenant-b'},'acct-109'),null);
 });
+
+test('global administrator with no fixed tenant can view the authorized cross-tenant snapshot',async()=>{
+ const rootAdmin={userId:'root-admin',tenantId:null,role:'admin',admin:true,tenantFilter:'todas',ownerFilter:'todos'};
+ const rows=await select(snapshot,rootAdmin,'',50);
+ assert.deepEqual(rows.map(x=>x.id),['c1','c2','c3','c4']);
+ modulePromise??=import(file);
+ assert.equal((await modulePromise).findVisibleAccount(snapshot,rootAdmin,'c3')?.id,'c3');
+});
