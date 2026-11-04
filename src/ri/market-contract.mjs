@@ -50,6 +50,8 @@ export function normalizeMarketCompanies(companies,{source='',retrievedAt=''}={}
    source:str(source),retrievedAt:str(retrievedAt,40),
    fontes:Array.isArray(x.fontes)?x.fontes.slice(0,15).filter(v=>v&&/^https?:\/\//i.test(str(v.url,500))).map(v=>({url:str(v.url,500),titulo:str(v.titulo,180)})):[],
    providers:Array.isArray(x.providers)?x.providers.slice(0,3).filter(v=>v==='OpenAI'||v==='Anthropic'):[],
+   territorioCorroborado:x.territorioCorroborado===true,
+   conflitos:Array.isArray(x.conflitos)?x.conflitos.slice(0,12).filter(v=>v&&['cidade','uf','razaoSocial','segmento'].includes(v.campo)).map(v=>({campo:v.campo,valorOriginal:str(v.valorOriginal),valorDivergente:str(v.valorDivergente),provedor:str(v.provedor,30)})):[],
    contatos:contacts.filter(c=>c&&str(c.nome)).map(c=>({nome:str(c.nome),cargo:str(c.cargo),email:str(c.email,200),telefone:str(c.telefone,50),fonte:str(c.fonte||source)})),
    noticias:Array.isArray(x.noticias)?x.noticias.slice(0,10).map(y=>({titulo:str(y.titulo),url:str(y.url,300),data:str(y.data,40)})):[],
    insights:Array.isArray(x.insights)?x.insights.slice(0,8).map(v=>str(v,300)):[]
