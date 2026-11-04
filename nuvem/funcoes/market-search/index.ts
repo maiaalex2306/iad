@@ -62,6 +62,7 @@ Deno.serve(async req=>{
   let f;try{f=filters(body.filters)}catch(e){return output({error:'INVALID_FILTERS',message:e.message},422,origin)}
   // DDD deve ser expandido por mapa territorial Anatel/IBGE, nunca por telefone.
   if(f.ddd)return output({error:'DDD_MAPPING_PENDING',message:'DDD precisa de mapa de municipios antes da consulta. Informe cidade e UF.'},422,origin);
+  if(f.regiao)return output({error:'REGION_MAPPING_PENDING',message:'O recorte regional exige relacao oficial de municipios; use cidade e UF sem regiao.'},422,origin);
   const key=Deno.env.get('ECONODATA_API_KEY');
   if(!key)return output({error:'PROVIDER_NOT_CONFIGURED',message:'Pesquisa externa ainda nao configurada: a API empresarial precisa de credencial licenciada.'},503,origin);
   const providerFilters={};if(f.uf)providerFilters.uf=f.uf;if(f.cidade)providerFilters.cidade=f.cidade;if(f.cnae)providerFilters.cnaePrimario=f.cnae;if(f.segmento)providerFilters.segmento=f.segmento;if(f.porte)providerFilters.porte=f.porte;
