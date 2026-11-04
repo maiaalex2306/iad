@@ -39,6 +39,11 @@ test('DDD without official municipal mapping must fail even when city was suppli
  assert.equal(res.status,422);assert.equal((await res.json()).error,'DDD_MAPPING_PENDING');
  assert.ok(!h.calls.some(c=>c.url.includes('econodata')));
 });
+test('texto de regiao exige mapeamento territorial e nao pode ser ignorado',async()=>{
+ const h=harness(true),res=await h.handle(request({action:'search',filters:{uf:'SP',regiao:'Vale do Paraiba',segmento:'Quimico'}}));
+ assert.equal(res.status,422);assert.equal((await res.json()).error,'REGION_MAPPING_PENDING');
+ assert.equal(h.calls.filter(c=>c.url.includes('/v4/')).length,0);
+});
 test('licensed request is bounded, read-only to IaD CRM and returns source',async()=>{
  const h=harness(true),res=await h.handle(request({action:'search',filters:{uf:'SP',segmento:'Quimico',limit:20}}));
  assert.equal(res.status,200);const value=await res.json();assert.equal(value.data[0].cnpj,'11222333000181');assert.equal(value.source,'Econodata');
