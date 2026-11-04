@@ -412,7 +412,7 @@
           itens.push({numero:indice+1,estado:'dados_locais_incompletos'});
           return;
         }
-        return chamar('/rest/v1/oportunidades?select=id,revisao&'+
+        return chamar('/rest/v1/oportunidades?select=*&'+
           'id=eq.'+encodeURIComponent(op.recordId)+
           '&tenant_id=eq.'+encodeURIComponent(op.tenantId)+'&limit=1')
           .then(function(rows) {
@@ -420,9 +420,14 @@
             if(Array.isArray(rows)&&rows.length===1) {
               const revisao=Number(rows[0].revisao);
               const base=Number(op.expectedRevision);
+              const validos=rows[0].revisao!==null&&rows[0].revisao!==undefined&&
+                op.expectedRevision!==null&&op.expectedRevision!==undefined&&
+                Number.isSafeInteger(revisao)&&Number.isSafeInteger(base);
+              const fila=filaCASDaSessao(op.tenantId);
               estado=registro.tipo==='ack'?'ack_aguardando_conciliacao':
-                !Number.isSafeInteger(revisao)||!Number.isSafeInteger(base)?
-                  'revisao_indefinida':
+                !validos?'revisao_indefinida':
+                fila.satisfazRemoto&&fila.satisfazRemoto(op,rows[0])?
+                  'ja_aplicada':
                 revisao===base?'revisao_compativel':
                   'conflito_de_revisao';
             }
@@ -433,6 +438,42 @@
       });
     },Promise.resolve()).then(function() {
       return {disponivel:true,total:total,verificados:itens.length,itens:itens};
+    });
+  }
+  /* Recuperação solicitada explicitamente: sem POST/PUT/PATCH.
+     Só reconhece uma operação quando a leitura RLS comprova que TODOS os
+     campos da edição já estão aplicados. Recibo é persistido ANTES de
+     retirar a operação; conflitos permanecem intocados. */
+  function reconhecerEdicaoCASJaAplicada(numero) {
+    if(!Number.isSafeInteger(numero)||numero<1||numero>30)
+      return Promise.reject(Error('Número de edição inválido.'));
+    let registros;
+    try {
+      registros=tenantsComFilaCAS().map(function(tenant) {
+        const fila=filaCASDaSessao(tenant);
+        return fila.pending().map(function(op){return {tipo:'op',op:op};}).concat(
+          fila.pendingAcks?fila.pendingAcks().map(function(r) {
+            return {tipo:'ack',op:r.operation};
+          }):[]);
+      }).reduce(function(a,b){return a.concat(b);},[]);
+    } catch(e){return Promise.reject(e);}
+    const candidato=registros[numero-1];
+    if(!candidato||candidato.tipo!=='op')
+      return Promise.reject(Error('Esta edição não está pendente de envio.'));
+    const op=candidato.op,fila=filaCASDaSessao(op.tenantId);
+    if(fila.pending()[0]?.operationId!==op.operationId)
+      return Promise.reject(Error('Concilie primeiro a edição anterior da mesma fila.'));
+    return chamar('/rest/v1/oportunidades?select=*&id=eq.'+
+      encodeURIComponent(op.recordId)+'&tenant_id=eq.'+
+      encodeURIComponent(op.tenantId)+'&limit=1').then(function(rows) {
+      if(!Array.isArray(rows)||rows.length!==1)
+        throw Error('Registro não disponível: edição local preservada.');
+      const resultado=fila.reconhecerAplicada(op.operationId,rows[0]);
+      return retomarFilaCASSeguro().then(function(){
+        return {reconhecida:resultado.reconhecida,outrasPendencias:false};
+      },function(){
+        return {reconhecida:resultado.reconhecida,outrasPendencias:true};
+      });
     });
   }
   /* Cópia local explícita. Nunca limpa fila e nunca envia operações.
@@ -2291,6 +2332,7 @@
     atualizarOportunidadeCAS,
     enfileirarEdicaoCAS, retomarFilaCAS: retomarFilaCASSeguro,
     exportarPendenciasCAS, diagnosticoPendenciasCAS, inspecionarPendenciasCAS,
+    reconhecerEdicaoCASJaAplicada,
     empresaParecida, achatarNome, porFormato, explicarFalhas,
     adotarTokens,
     trocarMinhaSenha,
