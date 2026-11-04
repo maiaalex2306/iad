@@ -2267,6 +2267,8 @@
   function consultarCarteiraCASProtegida(cursor) {
     if(!conectado()||!sessao()||!sessao().user)
       return Promise.reject(Error('Sessão autenticada necessária.'));
+    const identidade=sessao(),usuario=String(identidade.user.id),
+      empresa=String(identidade.perfil&&identidade.perfil.tenant_id||'');
     const diag=diagnosticoPendenciasCAS();
     if(!diag.disponivel || diag.quantidade<1)
       return Promise.reject(Error('Visualização protegida disponível apenas com CAS pendente.'));
@@ -2276,6 +2278,10 @@
     const filtro=cursor?'&id=gt.'+encodeURIComponent(cursor):'';
     return chamar('/rest/v1/oportunidades?select=*&order=id.asc&limit=101'+filtro)
       .then(function(rows) {
+        const atual=sessao();
+        if(!atual||!atual.user||String(atual.user.id)!==usuario||
+          String(atual.perfil&&atual.perfil.tenant_id||'')!==empresa)
+          throw Error('Sessão ou empresa mudou durante a consulta.');
         if(!Array.isArray(rows)||rows.length>101)
           throw Error('Resposta de carteira inválida.');
         const seen=new Set();
