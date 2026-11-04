@@ -387,6 +387,54 @@
       return {quantidade:null,filas:null,disponivel:false};
     }
   }
+  /* P0: inspeção exclusivamente de leitura das operações CAS.
+     Não publica IDs/patches em UI, não altera fila, não reenvia RPC.
+     Limite protege a rede de grandes históricos não sincronizados. */
+  function inspecionarPendenciasCAS() {
+    let filas;
+    try {
+      filas=tenantsComFilaCAS().map(function(tenant) {
+        const fila=filaCASDaSessao(tenant);
+        const pendentes=fila.pending().map(function(op) {return {tipo:'op',op:op};});
+        const acks=fila.pendingAcks?fila.pendingAcks().map(function(r) {
+          return {tipo:'ack',op:r.operation};
+        }):[];
+        return pendentes.concat(acks);
+      }).reduce(function(a,b){return a.concat(b);},[]);
+    } catch(e) {
+      return Promise.resolve({disponivel:false,total:null,verificados:0,itens:[]});
+    }
+    const total=filas.length,limite=30,itens=[];
+    return filas.slice(0,limite).reduce(function(anterior,registro,indice) {
+      return anterior.then(function() {
+        const op=registro.op;
+        if(!op||!op.recordId||!op.tenantId) {
+          itens.push({numero:indice+1,estado:'dados_locais_incompletos'});
+          return;
+        }
+        return chamar('/rest/v1/oportunidades?select=id,revisao&'+
+          'id=eq.'+encodeURIComponent(op.recordId)+
+          '&tenant_id=eq.'+encodeURIComponent(op.tenantId)+'&limit=1')
+          .then(function(rows) {
+            let estado='registro_indisponivel';
+            if(Array.isArray(rows)&&rows.length===1) {
+              const revisao=Number(rows[0].revisao);
+              const base=Number(op.expectedRevision);
+              estado=registro.tipo==='ack'?'ack_aguardando_conciliacao':
+                !Number.isSafeInteger(revisao)||!Number.isSafeInteger(base)?
+                  'revisao_indefinida':
+                revisao===base?'revisao_compativel':
+                  'conflito_de_revisao';
+            }
+            itens.push({numero:indice+1,estado:estado});
+          }).catch(function() {
+            itens.push({numero:indice+1,estado:'consulta_indisponivel'});
+          });
+      });
+    },Promise.resolve()).then(function() {
+      return {disponivel:true,total:total,verificados:itens.length,itens:itens};
+    });
+  }
   /* Cópia local explícita. Nunca limpa fila e nunca envia operações.
      Conteúdo sensível: é exclusivamente para arquivo baixado pelo usuário. */
   function exportarPendenciasCAS() {
@@ -2242,7 +2290,7 @@
     caixasDeEmail, salvarCaixaDeEmail, guardarSenhaDaCaixa, esquecerSenhaDaCaixa,
     atualizarOportunidadeCAS,
     enfileirarEdicaoCAS, retomarFilaCAS: retomarFilaCASSeguro,
-    exportarPendenciasCAS, diagnosticoPendenciasCAS,
+    exportarPendenciasCAS, diagnosticoPendenciasCAS, inspecionarPendenciasCAS,
     empresaParecida, achatarNome, porFormato, explicarFalhas,
     adotarTokens,
     trocarMinhaSenha,

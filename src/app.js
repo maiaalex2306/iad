@@ -204,6 +204,18 @@
     if (semServidor && global.IADNuvem.conectado()) {
       document.body.classList.remove('sem-sessao');
       conteudo.innerHTML = V.semServidor(semServidor);
+      if(/CAS|edições pendentes/i.test(String(semServidor))) {
+        const card=conteudo.querySelector('.card');
+        if(card && !conteudo.querySelector('#diagnosticar-cas')) {
+          const botao=document.createElement('button');
+          botao.id='diagnosticar-cas';
+          botao.className='btn ghost';
+          botao.type='button';
+          botao.textContent='Diagnosticar pendências';
+          botao.onclick=function(){ global.App.diagnosticarPendenciasCAS(); };
+          card.appendChild(botao);
+        }
+      }
       return;
     }
 
@@ -5924,6 +5936,30 @@
     recuperarPendenciasCAS: function () {
       if (baixando) return;
       baixarDoServidor();
+    },
+
+    diagnosticarPendenciasCAS: function () {
+      const n=global.IADNuvem;
+      if(!n || !n.inspecionarPendenciasCAS) return;
+      n.inspecionarPendenciasCAS().then(function(d) {
+        if(!d.disponivel){ alert('Diagnóstico indisponível. Preserve a cópia local.');return; }
+        const mensagens={
+          conflito_de_revisao:'Conflito de revisão: requer resolução',
+          revisao_compativel:'Revisão compatível',
+          ack_aguardando_conciliacao:'Confirmação aguardando conciliação',
+          registro_indisponivel:'Registro indisponível',
+          revisao_indefinida:'Revisão não identificada',
+          dados_locais_incompletos:'Dados locais incompletos',
+          consulta_indisponivel:'Falha de consulta'
+        };
+        const linhas=d.itens.map(function(x) {
+          return x.numero+'. '+(mensagens[x.estado]||'Não identificado');
+        });
+        alert('Diagnóstico CAS: '+d.verificados+' de '+d.total+' pendências.\n\n'+
+          linhas.join('\n')+'\n\nNenhuma edição foi alterada.');
+      }).catch(function() {
+        alert('Diagnóstico indisponível. As edições foram preservadas.');
+      });
     },
 
     /* Download local, por clique, das operações ainda sem ACK.
