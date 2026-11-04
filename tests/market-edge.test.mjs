@@ -231,3 +231,27 @@ test('falha de ambos provedores retorna 502 e nao lista empresas',async()=>{
  assert.equal(res.status,502);
  assert.equal((await res.json()).error,'AI_SEARCH_UNAVAILABLE');
 });
+
+test('pesquisa de ambas IAs devolve uso auditavel por provedor sem estimar custo inexistente',async()=>{
+ const h=harness({openai:true,claude:true});
+ const res=await h.handle(request(query));
+ assert.equal(res.status,200);
+ const body=await res.json();
+ assert.deepEqual(Array.from(body.usage.map(u=>u.provider)),['OpenAI','Anthropic']);
+ assert.equal(body.usage[0].inputTokens,100);
+ assert.equal(body.usage[0].outputTokens,150);
+ assert.equal(body.usage[0].webSearchRequests,1);
+ assert.equal(body.usage[1].inputTokens,100);
+ assert.equal(body.usage[1].outputTokens,150);
+ assert.equal(body.usage[1].webSearchRequests,1);
+ assert.equal(body.usage[0].costBRL,null);
+ assert.equal(body.usage[1].costBRL,null);
+});
+test('falha parcial exibe uso somente do provedor concluido',async()=>{
+ const h=harness({openai:true,claude:true,claudeStatus:503});
+ const res=await h.handle(request(query));
+ assert.equal(res.status,200);
+ const body=await res.json();
+ assert.equal(body.partial,true);
+ assert.deepEqual(Array.from(body.usage.map(u=>u.provider)),['OpenAI']);
+});
