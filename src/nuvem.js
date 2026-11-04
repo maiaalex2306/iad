@@ -2261,6 +2261,36 @@
   }
   function estadoCarga() { return Object.assign({},carga); }
 
+  /* P0 v286.45: acesso operacional somente de LEITURA com CAS pendente.
+     Não usar Store, não marcar sincronização, não alterar revisão-base ou
+     journal e não chamar empurrar/flush. Paginação no servidor, sob RLS. */
+  function consultarCarteiraCASProtegida(cursor) {
+    if(!conectado()||!sessao()||!sessao().user)
+      return Promise.reject(Error('Sessão autenticada necessária.'));
+    const diag=diagnosticoPendenciasCAS();
+    if(!diag.disponivel || diag.quantidade<1)
+      return Promise.reject(Error('Visualização protegida disponível apenas com CAS pendente.'));
+    if(cursor!==null&&cursor!==undefined&&
+      (typeof cursor!=='string'||cursor.length>180))
+      return Promise.reject(Error('Cursor de paginação inválido.'));
+    const filtro=cursor?'&id=gt.'+encodeURIComponent(cursor):'';
+    return chamar('/rest/v1/oportunidades?select=*&order=id.asc&limit=101'+filtro)
+      .then(function(rows) {
+        if(!Array.isArray(rows)||rows.length>101)
+          throw Error('Resposta de carteira inválida.');
+        const seen=new Set();
+        rows.forEach(function(x){
+          if(!x||!x.id||seen.has(String(x.id)))
+            throw Error('Paginação repetida da carteira.');
+          seen.add(String(x.id));
+        });
+        const itens=rows.slice(0,100).map(paraApp);
+        return {itens:itens,proximo:rows.length>100&&itens.length?
+          String(itens[itens.length-1].id):null,
+          somenteLeitura:true};
+      });
+  }
+
   function puxarCompleto(forcar) {
     /* Nunca substituir a carteira local enquanto há CAS sem ACK. A fila
        persistente é a verdade sobre o trabalho ainda não confirmado. */
@@ -2423,7 +2453,7 @@
     emailsDaNuvem, vincularEmail, enfileirarEmail, marcarLidosEmail,
     marcarEmailAnalisado, contarTentativaDeAnalise,
     caixasDeEmail, salvarCaixaDeEmail, guardarSenhaDaCaixa, esquecerSenhaDaCaixa,
-    atualizarOportunidadeCAS,
+    atualizarOportunidadeCAS, consultarCarteiraCASProtegida,
     enfileirarEdicaoCAS, retomarFilaCAS: retomarFilaCASSeguro,
     exportarPendenciasCAS, diagnosticoPendenciasCAS, inspecionarPendenciasCAS,
     reconhecerEdicaoCASJaAplicada, lerConflitoCAS, resolverConflitoCASManterServidor,
