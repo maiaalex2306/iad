@@ -8,6 +8,15 @@ const same = (a,b) => typeof a === 'string' && a.length>0 && a === b;
 const id = v => typeof v === 'string' && v.trim().length>0 && v === v.trim();
 const hash = v => typeof v === 'string' && /^[0-9a-f]{64}$/.test(v);
 const instant = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(v) && Number.isFinite(Date.parse(v)) ? Date.parse(v) : NaN;
+/* Contact eligibility is tied to the address verified on the recipient
+ * record, not just to a caller-provided recipient ID or boolean flag.
+ * Production callers must fetch this record independently under tenant policy.
+ */
+function canonicalEmail(value) {
+  if (typeof value !== 'string') return null;
+  const addr = value.trim().toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr) ? addr : null;
+}
 const roles = new Set(['vendedor','gestor','administrador']);
 
 export function authorizeDispatch(input) {
@@ -41,6 +50,10 @@ export function authorizeDispatch(input) {
   if (instant(context.now)>=instant(approval.expiresAt)) return deny('approval_expired');
   if (recipient.optedOut!==false||recipient.replied!==false||recipient.bounced!==false||
       recipient.lawfulBasisVerified!==true||recipient.addressVerified!==true) return deny('recipient_blocked');
+  const verifiedEndpoint=canonicalEmail(recipient.address);
+  const requestedEndpoint=canonicalEmail(action.destination);
+  if (!verifiedEndpoint || requestedEndpoint!==verifiedEndpoint)
+      return deny('recipient_blocked');
   /* Only email can eventually be activated after the real integration is certified.
      WhatsApp/LinkedIn are deliberately unavailable in RI-00. */
   if (provider.enabled!==true||provider.channel!=='email'||action.channel!=='email'||campaign.channel!=='email')

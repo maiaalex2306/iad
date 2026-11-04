@@ -16,6 +16,7 @@ export async function previewDispatch(input) {
   const action={
     ...intent,
     actorId:input.context.actorId,
+    destination:input.proposal.contactAddress,
     alreadyDispatched:input.proposal.alreadyDispatched,
     dailyCount:input.proposal.dailyCount
   };

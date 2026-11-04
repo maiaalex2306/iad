@@ -14,8 +14,8 @@ function valid() {
     context: {tenantId:'tenant-a', actorId:'seller-1', authenticated:true, role:'vendedor', now:'2026-11-04T12:00:00.000Z'},
     campaign: {id:'campaign-1',tenantId:'tenant-a',actorId:'seller-1',state:'active',paused:false,channel:'email',dailyLimit:3,windowStart:'2026-11-04T10:00:00.000Z',windowEnd:'2026-11-04T20:00:00.000Z'},
     approval: {tenantId:'tenant-a',campaignId:'campaign-1',authorizedActorId:'seller-1',state:'approved',channel:'email',audienceHash:'a'.repeat(64),contentHash:'b'.repeat(64),expiresAt:'2026-11-05T12:00:00.000Z',revokedAt:null},
-    recipient: {id:'contact-1',tenantId:'tenant-a',optedOut:false,replied:false,bounced:false,lawfulBasisVerified:true,addressVerified:true},
-    action: {tenantId:'tenant-a',campaignId:'campaign-1',recipientId:'contact-1',actorId:'seller-1',channel:'email',audienceHash:'a'.repeat(64),contentHash:'b'.repeat(64),idempotencyKey:'c'.repeat(64),alreadyDispatched:false,dailyCount:0},
+    recipient: {id:'contact-1',tenantId:'tenant-a',address:'contact@example.com',optedOut:false,replied:false,bounced:false,lawfulBasisVerified:true,addressVerified:true},
+    action: {tenantId:'tenant-a',campaignId:'campaign-1',recipientId:'contact-1',actorId:'seller-1',channel:'email',destination:'contact@example.com',audienceHash:'a'.repeat(64),contentHash:'b'.repeat(64),idempotencyKey:'c'.repeat(64),alreadyDispatched:false,dailyCount:0},
     provider: {enabled:true,channel:'email'}
   };
 }
@@ -83,4 +83,13 @@ test('valid identification hashes and a stable idempotency key are mandatory', a
     const x=valid();Object.assign(x.action,patch);
     assert.equal((await authorize(x)).allowed,false);
   }
+});
+
+test('verified contact endpoint cannot be redirected or silently omitted',async()=>{
+ const changed=valid();changed.action.destination='outside@example.com';
+ assert.equal((await authorize(changed)).code,'recipient_blocked');
+ const noStored=valid();delete noStored.recipient.address;
+ assert.equal((await authorize(noStored)).code,'recipient_blocked');
+ const casefold=valid();casefold.action.destination=' CONTACT@EXAMPLE.COM ';
+ assert.equal((await authorize(casefold)).code,'allowed');
 });
