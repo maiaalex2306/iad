@@ -44,13 +44,16 @@ test('resume reconciles already-confirmed operation BEFORE surfacing conflict',a
  assert.equal(e.queue.pending()[0].operationId,'id2');
  assert.equal(e.sends(),2);
 });
-test('no ACK means no fabricated reconciliation',async()=>{
+test('durable ACK is reconciled once; conflict remains without fabricated ACK',async()=>{
  const e=environment();
- await e.queue.flush(); // only conflicting operation remains
- const before=e.reads.length;
+ await e.queue.flush(); // first acknowledged, second conflicting
+ assert.equal(e.queue.pendingAcks().length,1);
  await assert.rejects(e.restore(),/Conflito de revisão no servidor/);
- assert.equal(e.reads.length,before);
+ assert.equal(e.reads.length,1);
+ assert.equal(e.queue.pendingAcks().length,0);
  assert.equal(e.queue.pending().length,1);
+ await assert.rejects(e.restore(),/Conflito de revisão no servidor/);
+ assert.equal(e.reads.length,1,'conflicting operation has no manufactured receipt');
 });
 test('PWA version matches',()=>{
  const config=fs.readFileSync('src/config.js','utf8'),sw=fs.readFileSync('sw.js','utf8');
