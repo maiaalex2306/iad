@@ -54,6 +54,6 @@ test('no ACK means no fabricated reconciliation',async()=>{
 });
 test('PWA version matches',()=>{
  const config=fs.readFileSync('src/config.js','utf8'),sw=fs.readFileSync('sw.js','utf8');
- assert.match(config,/numero: 'v286.37'/);
- assert.match(sw,/const CACHE = 'iad-crm-v286.37'/);
+ assert.match(config,/numero: 'v286.38'/);
+ assert.match(sw,/const CACHE = 'iad-crm-v286.38'/);
 });
