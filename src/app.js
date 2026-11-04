@@ -127,6 +127,83 @@
     ]);
   }
 
+  /* P0: a carteira do servidor é uma tabela de CONSULTA separada.
+     Jamais importar estes registros para o Store enquanto houver CAS.
+     Criar texto via textContent evita executar HTML dos negócios. */
+  function visualizarCarteiraCASProtegida() {
+    const N=global.IADNuvem,card=document.querySelector('#conteudo .card');
+    if(!N||!N.consultarCarteiraCASProtegida||!card)return;
+    let painel=document.getElementById('carteira-cas-leitura');
+    if(painel) {painel.remove();return;}
+    painel=document.createElement('section');
+    painel.id='carteira-cas-leitura';
+    painel.style.cssText='margin-top:16px;padding:14px;border:1px solid #ddd;border-radius:10px';
+    card.appendChild(painel);
+    const titulo=document.createElement('h3');
+    titulo.textContent='Carteira no servidor — somente leitura';
+    painel.appendChild(titulo);
+    const nota=document.createElement('p');
+    nota.textContent='Dados atuais do servidor. As edições CAS locais continuam protegidas e podem ser diferentes. Nenhuma edição será enviada ou sobrescrita por esta consulta.';
+    painel.appendChild(nota);
+    const status=document.createElement('p');
+    painel.appendChild(status);
+    const filtro=document.createElement('input');
+    filtro.type='search';filtro.placeholder='Filtrar esta página por nome ou etapa';
+    filtro.setAttribute('aria-label','Filtrar oportunidades desta página');
+    filtro.style.cssText='width:100%;padding:10px;margin:8px 0';
+    painel.appendChild(filtro);
+    const lista=document.createElement('div');painel.appendChild(lista);
+    const proximo=document.createElement('button');
+    proximo.type='button';proximo.className='btn ghost';
+    proximo.textContent='Próximas 100 oportunidades';
+    painel.appendChild(proximo);
+    let itens=[],cursor=null,geracao=0;
+    function desenhar() {
+      lista.replaceChildren();
+      const busca=filtro.value.trim().toLowerCase();
+      const filtrados=itens.filter(function(o) {
+        return String(o.nome||o.titulo||o.empresa||o.id||'').toLowerCase().includes(busca)||
+          String(o.etapa||o.estagio||'').toLowerCase().includes(busca);
+      });
+      filtrados.forEach(function(o) {
+        const linha=document.createElement('div');
+        linha.style.cssText='padding:9px 0;border-bottom:1px solid #ddd';
+        const nome=document.createElement('strong');
+        nome.textContent=String(o.nome||o.titulo||o.empresa||o.id||'Oportunidade');
+        linha.appendChild(nome);
+        const detalhe=document.createElement('span');
+        detalhe.textContent=' | '+String(o.etapa||o.estagio||'Sem etapa')+
+          ' | revisão '+String(o.revisao??'não informada');
+        linha.appendChild(detalhe);lista.appendChild(linha);
+      });
+      if(!filtrados.length) {
+        const vazio=document.createElement('p');
+        vazio.textContent='Nenhum registro encontrado nesta página.';
+        lista.appendChild(vazio);
+      }
+    }
+    function carregar(next) {
+      const token=++geracao;
+      status.textContent='Consultando servidor…';
+      proximo.disabled=true;
+      N.consultarCarteiraCASProtegida(next).then(function(p) {
+        if(token!==geracao||!painel.isConnected)return;
+        itens=p.itens||[];cursor=p.proximo;
+        status.textContent=itens.length+' oportunidades nesta página; sem alterações locais.';
+        proximo.disabled=!cursor;
+        proximo.hidden=!cursor;
+        desenhar();
+      }).catch(function() {
+        if(token!==geracao||!painel.isConnected)return;
+        status.textContent='Falha na consulta. A fila CAS e a carteira local não foram alteradas.';
+        proximo.disabled=true;
+      });
+    }
+    filtro.oninput=desenhar;
+    proximo.onclick=function(){if(cursor)carregar(cursor);};
+    carregar(null);
+  }
+
   function render() {
     const conteudo = document.getElementById('conteudo');
     let logado = A.atual();
@@ -239,6 +316,15 @@
           resolver.textContent='Comparar e resolver conflito';
           resolver.onclick=function(){global.App.resolverConflitoCASManterServidor();};
           card.appendChild(resolver);
+        }
+        if(card && !conteudo.querySelector('#abrir-carteira-cas-leitura')) {
+          const leitura=document.createElement('button');
+          leitura.id='abrir-carteira-cas-leitura';
+          leitura.className='btn ghost';
+          leitura.type='button';
+          leitura.textContent='Consultar carteira do servidor (somente leitura)';
+          leitura.onclick=visualizarCarteiraCASProtegida;
+          card.appendChild(leitura);
         }
       }
       return;
