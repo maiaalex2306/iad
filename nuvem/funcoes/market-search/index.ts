@@ -1,6 +1,6 @@
 /* RI-M01 /market-search — consulta MANUAL read-only, sem credenciais no browser.
  * A funcao nao cria/atualiza contas, contatos nem oportunidades.
- * ECONODATA_API_KEY e segredo de servidor; sem ele: 503, nunca dados falsos.
+ * Reutiliza IA_CHAVE_OPENAI e IA_CHAVE_ANTHROPIC de servidor; nenhuma API de leads obrigatoria.
  * verify_jwt=false no gateway, porque o OPTIONS precisa atravessar o CORS;
  * o JWT da pessoa e validado explicitamente pelo Auth REST antes da consulta.
  */
@@ -38,6 +38,83 @@ function normalize(data){
   noticias:[],insights:[]
  }));
 }
+
+/* Pesquisa web nativa dos dois provedores ja integrados ao IaD.
+   Exigimos web_search_call / server_tool_use e URL citada pelo provedor. */
+function aiKey(id) {
+ const direct=(Deno.env.get('IA_CHAVE_'+id.toUpperCase())||'').trim();
+ const legacy=(Deno.env.get('IA_PROVEDOR')||'').trim().toLowerCase()===id?(Deno.env.get('IA_CHAVE')||'').trim():'';
+ return direct||legacy;
+}
+function canonicalUrl(s) {
+ try { const u=new URL(String(s||''));return (u.protocol==='https:'||u.protocol==='http:')&&!u.username&&!u.password?u.href:''; } catch{return '';}
+}
+function cnpjReal(s){
+ const v=String(s||'').toUpperCase().replace(/[^0-9A-Z]/g,'');
+ if(!/^[A-Z0-9]{12}[0-9]{2}$/.test(v))return '';
+ const digit=(s,w)=>{const mod=[...s].reduce((sum,c,i)=>sum+(c.charCodeAt(0)-48)*w[i],0)%11;return mod<2?'0':String(11-mod)};
+ return v[12]===digit(v.slice(0,12),[5,4,3,2,9,8,7,6,5,4,3,2])&&v[13]===digit(v.slice(0,13),[6,5,4,3,2,9,8,7,6,5,4,3,2])?v:'';
+}
+function parseAI(s) {
+ const text=String(s||'').trim();
+ const fence=text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+ try{return JSON.parse(fence?fence[1]:text)}catch {
+  try{return JSON.parse(text.slice(text.indexOf('{'),text.lastIndexOf('}')+1))}catch{return {}}
+ }
+}
+function aiSummary(result,engine) {
+ const blocks=engine==='OpenAI'?(Array.isArray(result.output)?result.output:[]):(Array.isArray(result.content)?result.content:[]);
+ const searched=engine==='OpenAI'?blocks.some(b=>b.type==='web_search_call'):blocks.some(b=>b.type==='server_tool_use'&&b.name==='web_search');
+ const textBlocks=engine==='OpenAI'?blocks.filter(b=>b.type==='message').flatMap(b=>b.content||[]):blocks.filter(b=>b.type==='text');
+ const texts=textBlocks.map(b=>b.text||'').join('\n');
+ const urls=new Set();
+ for(const b of blocks) {
+  for(const item of (Array.isArray(b.content)?b.content:[])){
+   if(item.url&&canonicalUrl(item.url))urls.add(canonicalUrl(item.url));
+   for(const an of (Array.isArray(item.annotations)?item.annotations:[])){const u=canonicalUrl(an.url||(an.url_citation&&an.url_citation.url));if(u)urls.add(u)}
+  }
+  for(const an of (Array.isArray(b.citations)?b.citations:[])){const u=canonicalUrl(an.url);if(u)urls.add(u)}
+ }
+ return {engine,searched,urls,parsed:parseAI(texts)};
+}
+function prompt(f) {
+ return 'PESQUISE NA WEB empresas reais com recorte '+JSON.stringify(f)+'. Busque sites corporativos, bases publicas e noticias. Responda somente JSON com chave empresas (array): cada empresa possui cnpj, razaoSocial, nome, cidade, uf, segmento, porte, site, telefone, funcionarios, faturamento, fontes:[{url,titulo}], contatos:[{nome,cargo,email,telefone,fonte}], noticias:[{titulo,url,data}], insights:[]. Somente CNPJ e URLs encontrados e citados na web. Valores nao encontrados=null. NUNCA invente empresa ou pessoa. Para DDD/regiao pesquisa e exploratoria, sem promessa de cobertura total. Maximo '+f.limit+' empresas.';
+}
+async function queryAI(engine,key,f) {
+ const instructions='Pesquisador B2B: use sempre a ferramenta web_search, inclua URLs citadas e retorne JSON sem inventar fatos.';
+ let uri,headers,body;
+ if(engine==='OpenAI') {
+  uri='https://api.openai.com/v1/responses';headers={authorization:'Bearer '+key,'content-type':'application/json'};
+  body={model:Deno.env.get('IA_MODELO_PESQUISA_OPENAI')||Deno.env.get('IA_MODELO_OPENAI')||'gpt-5',instructions,input:prompt(f),tools:[{type:'web_search',search_context_size:'medium'}],tool_choice:'required',max_tool_calls:2,max_output_tokens:3500,store:false};
+ } else {
+  uri='https://api.anthropic.com/v1/messages';headers={'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json'};
+  body={model:Deno.env.get('IA_MODELO_PESQUISA_ANTHROPIC')||Deno.env.get('IA_MODELO_ANTHROPIC')||'claude-opus-5',system:instructions,max_tokens:3500,messages:[{role:'user',content:prompt(f)}],tools:[{type:'web_search_20250305',name:'web_search',max_uses:2}]};
+ }
+ const resp=await fetch(uri,{method:'POST',headers,body:JSON.stringify(body),signal:AbortSignal.timeout(35000)});
+ if(!resp.ok)throw Error('IA_SEARCH_FAILED');
+ return aiSummary(await resp.json(),engine);
+}
+function combineAI(results,limit) {
+ const out=new Map();
+ for(const r of results){
+  if(!r.searched)continue;
+  const list=Array.isArray(r.parsed.empresas)?r.parsed.empresas:[];
+  for(const entry of list.slice(0,limit)){
+   if(!entry||typeof entry!=='object')continue;
+   const cnpj=cnpjReal(entry.cnpj);if(!cnpj)continue;
+   const sources=(Array.isArray(entry.fontes)?entry.fontes:[]).map(f=>({url:canonicalUrl(f.url),titulo:str(f.titulo,150)})).filter(f=>f.url&&r.urls.has(f.url));
+   if(!sources.length)continue;
+   const existing=out.get(cnpj);
+   if(existing){existing.providers.push(r.engine);for(const s of sources)if(!existing.fontes.some(f=>f.url===s.url))existing.fontes.push(s);continue}
+   const urls=new Set(sources.map(f=>f.url));
+   const contatos=(Array.isArray(entry.contatos)?entry.contatos:[]).filter(c=>c&&urls.has(canonicalUrl(c.fonte))).slice(0,10).map(c=>({nome:str(c.nome),cargo:str(c.cargo),email:str(c.email,180),telefone:str(c.telefone,60),fonte:canonicalUrl(c.fonte)}));
+   const noticias=(Array.isArray(entry.noticias)?entry.noticias:[]).filter(n=>n&&urls.has(canonicalUrl(n.url))).slice(0,6).map(n=>({titulo:str(n.titulo),url:canonicalUrl(n.url),data:str(n.data,40)}));
+   out.set(cnpj,{cnpj,razaoSocial:str(entry.razaoSocial||entry.nome),nome:str(entry.nome||entry.razaoSocial),cidade:str(entry.cidade),uf:str(entry.uf,2).toUpperCase(),porte:str(entry.porte),segmento:str(entry.segmento),site:str(entry.site,200),telefone:str(entry.telefone,60),funcionarios:entry.funcionarios??null,faturamento:entry.faturamento??null,contatos,noticias,insights:Array.isArray(entry.insights)?entry.insights.slice(0,6).map(s=>str(s,250)):[],fontes:sources,providers:[r.engine]});
+  }
+ }
+ return [...out.values()].slice(0,limit);
+}
+
 Deno.serve(async req=>{
  const origin=req.headers.get('origin')||'';
  if(req.method==='OPTIONS')return new Response(null,{status:204,headers:headers(origin)});
@@ -60,19 +137,12 @@ Deno.serve(async req=>{
   let body;try{body=await req.json()}catch{return output({error:'INVALID_JSON'},400,origin)}
   if(body?.action!=='search')return output({error:'SEARCH_ONLY'},400,origin);
   let f;try{f=filters(body.filters)}catch(e){return output({error:'INVALID_FILTERS',message:e.message},422,origin)}
-  // DDD deve ser expandido por mapa territorial Anatel/IBGE, nunca por telefone.
-  if(f.ddd)return output({error:'DDD_MAPPING_PENDING',message:'DDD precisa de mapa de municipios antes da consulta. Informe cidade e UF.'},422,origin);
-  if(f.regiao)return output({error:'REGION_MAPPING_PENDING',message:'O recorte regional exige relacao oficial de municipios; use cidade e UF sem regiao.'},422,origin);
-  const key=Deno.env.get('ECONODATA_API_KEY');
-  if(!key)return output({error:'PROVIDER_NOT_CONFIGURED',message:'Pesquisa externa ainda nao configurada: a API empresarial precisa de credencial licenciada.'},503,origin);
-  const providerFilters={};if(f.uf)providerFilters.uf=f.uf;if(f.cidade)providerFilters.cidade=f.cidade;if(f.cnae)providerFilters.cnaePrimario=f.cnae;if(f.segmento)providerFilters.segmento=f.segmento;if(f.porte)providerFilters.porte=f.porte;
-  if(f.funcionariosMin!==null||f.funcionariosMax!==null)providerFilters.funcionarios={...(f.funcionariosMin!==null?{de:f.funcionariosMin}:{}),...(f.funcionariosMax!==null?{ate:f.funcionariosMax}:{})};
-  if(f.faturamentoMin!==null||f.faturamentoMax!==null)providerFilters.faturamento={...(f.faturamentoMin!==null?{de:f.faturamentoMin}:{}),...(f.faturamentoMax!==null?{ate:f.faturamentoMax}:{})};
-  const resp=await fetch('https://api.econodata.com.br/v4/companies/search_list',{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({filtros:providerFilters,limit:f.limit}),signal:AbortSignal.timeout(18000)});
-  if(!resp.ok)return output({error:'PROVIDER_UNAVAILABLE',status:resp.status},502,origin);
-  const raw=await resp.json();let rows;try{rows=normalize(raw)}catch{return output({error:'PROVIDER_RESPONSE_UNKNOWN'},502,origin)}
-  return output({data:rows,source:'Econodata',retrievedAt:new Date().toISOString(),limit:f.limit,
-   total:Number.isFinite(Number(raw?.meta?.total))?Number(raw.meta.total):null,
-   hasMore:Boolean(raw?.meta?.hasMore||raw?.pagination?.next)},200,origin);
+  const openai=aiKey('openai'),claude=aiKey('anthropic');
+  if(!openai&&!claude)return output({error:'AI_NOT_CONFIGURED',message:'A pesquisa precisa de uma das IAs ja configuradas no IaD.'},503,origin);
+  const jobs=[];if(openai)jobs.push(queryAI('OpenAI',openai,f));if(claude)jobs.push(queryAI('Anthropic',claude,f));
+  const outcomes=await Promise.allSettled(jobs);
+  const results=outcomes.filter(x=>x.status==='fulfilled').map(x=>x.value);
+  if(!results.length)return output({error:'AI_SEARCH_UNAVAILABLE'},502,origin);
+  return output({data:combineAI(results,f.limit),source:'Pesquisa web OpenAI / Claude',providers:results.map(x=>x.engine),retrievedAt:new Date().toISOString(),total:null,hasMore:false,coverage:'exploratoria',territoryVerified:false,warning:'Pesquisa exploratoria; nao equivale ao universo integral de CNPJs. Nenhum registro foi importado.'},200,origin);
  }catch{return output({error:'SEARCH_UNAVAILABLE'},502,origin)}
 });
