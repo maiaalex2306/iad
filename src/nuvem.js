@@ -476,20 +476,94 @@
       });
     });
   }
+  /* P0 CAS: comparar em memoria do navegador; nenhum patch/valor
+     comercial e transmitido para analiticos ou retornado no diagnostico
+     agregado. So a primeira operacao pendente pode ser resolvida. */
+  function conflitoCASPrimeiraOperacao(numero) {
+    if(!Number.isSafeInteger(numero)||numero<1||numero>30)
+      throw Error('Numero de operacao CAS invalido.');
+    const records=tenantsComFilaCAS().map(function(tenant){
+      const fila=filaCASDaSessao(tenant);
+      return fila.pending().map(function(op){return {tipo:'op',op:op};}).concat(
+        fila.pendingAcks?fila.pendingAcks().map(function(x){
+          return {tipo:'ack',op:x.operation};
+        }):[]);
+    }).reduce(function(a,b){return a.concat(b);},[]);
+    const item=records[numero-1];
+    if(!item||item.tipo!=='op')throw Error('Edicao nao pendente.');
+    const op=item.op,fila=filaCASDaSessao(op.tenantId);
+    if(fila.pending()[0]?.operationId!==op.operationId)
+      throw Error('Resolva primeiro a edicao anterior da mesma fila.');
+    return {op:op,fila:fila};
+  }
+  function lerConflitoCAS(numero) {
+    let entry;
+    try {entry=conflitoCASPrimeiraOperacao(numero);}
+    catch(e){return Promise.reject(e);}
+    const op=entry.op;
+    return chamar('/rest/v1/oportunidades?select=*&id=eq.'+
+      encodeURIComponent(op.recordId)+'&tenant_id=eq.'+
+      encodeURIComponent(op.tenantId)+'&limit=1').then(function(rows) {
+      if(!Array.isArray(rows)||rows.length!==1)
+        throw Error('Registro remoto indisponivel. Nada foi alterado.');
+      const remote=rows[0],revision=remote.revisao;
+      if(!Number.isSafeInteger(revision)||!Number.isSafeInteger(op.expectedRevision)||
+        revision<=op.expectedRevision)
+        throw Error('Conflito de revisao nao comprovado.');
+      if(entry.fila.satisfazRemoto(op,remote))
+        throw Error('Edicao ja aplicada. Utilize Reconhecer edicao ja aplicada.');
+      const itens=Object.keys(op.patch||{}).slice(0,30).map(function(field) {
+        const formatar=function(value){
+          const raw=value===undefined?'(ausente)':JSON.stringify(value);
+          return String(raw===undefined?'(indefinido)':raw).slice(0,220);
+        };
+        return {campo:field,local:formatar(op.patch[field]),
+          servidor:formatar(remote[field])};
+      });
+      if(!itens.length)throw Error('Edicao sem campos a comparar.');
+      return {numero:numero,revisaoServidor:revision,
+        revisaoOriginal:op.expectedRevision,campos:itens,
+        camposOmitidos:Math.max(0,Object.keys(op.patch).length-itens.length)};
+    });
+  }
+  function resolverConflitoCASManterServidor(numero,revisaoVista) {
+    if(!Number.isSafeInteger(revisaoVista))
+      return Promise.reject(Error('Revisao de confirmacao invalida.'));
+    let entry;
+    try{entry=conflitoCASPrimeiraOperacao(numero);}
+    catch(e){return Promise.reject(e);}
+    const op=entry.op;
+    return chamar('/rest/v1/oportunidades?select=*&id=eq.'+
+      encodeURIComponent(op.recordId)+'&tenant_id=eq.'+
+      encodeURIComponent(op.tenantId)+'&limit=1').then(function(rows){
+      if(!Array.isArray(rows)||rows.length!==1)
+        throw Error('Registro remoto nao encontrado. Fila preservada.');
+      entry.fila.manterServidor(op.operationId,rows[0],revisaoVista);
+      return retomarFilaCASSeguro().then(function(){
+        return {arquivada:true,outrasPendencias:false};
+      },function(){
+        return {arquivada:true,outrasPendencias:true};
+      });
+    });
+  }
   /* Cópia local explícita. Nunca limpa fila e nunca envia operações.
      Conteúdo sensível: é exclusivamente para arquivo baixado pelo usuário. */
   function exportarPendenciasCAS() {
-    const operacoes = [],recibos=[];
+    const operacoes = [],recibos=[],historicoResolvido=[];
     tenantsComFilaCAS().forEach(function(tenant) {
       const fila=filaCASDaSessao(tenant);
       fila.pending().forEach(function(op) { operacoes.push(op); });
       if(fila.pendingAcks)fila.pendingAcks().forEach(function(x) {
         recibos.push(x);
       });
+      if(fila.archived)fila.archived().forEach(function(x){
+        historicoResolvido.push(x);
+      });
     });
     return { formato:'iad-cas-pendencias-v1', geradoEm:new Date().toISOString(),
       quantidade:operacoes.length+recibos.length, operacoes:operacoes,
-      recibosConfirmadosPendentesDeConciliacao:recibos };
+      recibosConfirmadosPendentesDeConciliacao:recibos,
+      historicoResolvidoPreservado:historicoResolvido };
   }
 
   function chamarFuncao(nome, corpo) {
@@ -2332,7 +2406,7 @@
     atualizarOportunidadeCAS,
     enfileirarEdicaoCAS, retomarFilaCAS: retomarFilaCASSeguro,
     exportarPendenciasCAS, diagnosticoPendenciasCAS, inspecionarPendenciasCAS,
-    reconhecerEdicaoCASJaAplicada,
+    reconhecerEdicaoCASJaAplicada, lerConflitoCAS, resolverConflitoCASManterServidor,
     empresaParecida, achatarNome, porFormato, explicarFalhas,
     adotarTokens,
     trocarMinhaSenha,
