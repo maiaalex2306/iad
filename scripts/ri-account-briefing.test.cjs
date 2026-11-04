@@ -86,3 +86,12 @@ test('recognizes RFC3339 timestamps with explicit timezone offsets from PostgreS
  const result=await build(x);
  assert.equal(result.facts.length,1);
 });
+
+test('shows the buyer role stored by the actual IaD CRM contact schema',async()=>{
+ const x=sample();
+ delete x.contacts[0].papelCompra;
+ x.contacts[0].papel='Decisor Econômico';
+ x.contacts[0].cargo='Diretor Financeiro';
+ const result=await build(x);
+ assert.equal(result.decisionMap[0].role,'Decisor Econômico');
+});
