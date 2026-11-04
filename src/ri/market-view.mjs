@@ -28,7 +28,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem}={
  function renderCompanies(data,source,asOf){
   if(!valid())return;
   selected.clear();review.replaceChildren();results.replaceChildren();
-  results.appendChild(el('h3',data.length+' empresas nesta pagina · '+source));
+  results.appendChild(el('h3',data.length+' empresas encontradas na web · '+source));
   results.appendChild(el('p','Dados consultados em '+asOf+'. Esta pagina nao representa necessariamente todas as empresas da regiao.','small muted'));
   const snapshotNow=snapshot;
   for(const company of data){
@@ -46,6 +46,15 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem}={
    }else card.appendChild(el('p','Nenhum decisor validado pela fonte nesta consulta.','small muted'));
    if(company.noticias.length){for(const n of company.noticias)card.appendChild(el('p','Noticia: '+n.titulo+' · '+n.data,'small'));}
    else card.appendChild(el('p','Noticias e oportunidades especificas ainda nao verificadas.','small muted'));
+   if(company.fontes.length) {
+    card.appendChild(el('h5','Fontes consultadas — abrir para verificar'));
+    for(const f of company.fontes.slice(0,8)) {
+     const link=doc.createElement('a');link.href=f.url;link.target='_blank';link.rel='noopener noreferrer';
+     link.textContent=(f.titulo||f.url);card.appendChild(link);card.appendChild(el('p',''));
+    }
+   }else card.appendChild(el('p','Sem fontes verificaveis: nao utilizar como fato.','small muted'));
+   if(company.insights.length){card.appendChild(el('h5','Insights — hipoteses a investigar'));for(const insight of company.insights)card.appendChild(el('p',insight,'small'));}
+   if(company.providers.length)card.appendChild(el('p','Pesquisado por: '+company.providers.join(' + '),'small muted'));
    const label=el('label','Selecionar para revisao comercial','campo'),check=doc.createElement('input');
    check.type='checkbox';check.disabled=plan.match.status==='review'&&!plan.match.accountId;
    check.addEventListener('change',()=>{if(!valid())return;if(check.checked)selected.add(company.cnpj);else selected.delete(company.cnpj);renderSelection(data);});
@@ -68,16 +77,16 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem}={
   const session=nuvem.sessao(),config=nuvem.config();
   if(!session?.access_token||!config?.url||!config?.chave){show('Autenticacao de nuvem necessaria para pesquisar empresas.');return;}
   if(controller)controller.abort();controller=new AbortController();const seq=++currentRequest;
-  results.replaceChildren();review.replaceChildren();btn.disabled=true;show('Consultando a fonte empresarial autorizada...');
+  results.replaceChildren();review.replaceChildren();btn.disabled=true;show('Pesquisando sites e noticias com as IAs configuradas no IaD...');
   try{
    const response=await fetch(config.url.replace(/\/$/,'')+'/functions/v1/market-search',{method:'POST',
     headers:{'Content-Type':'application/json','apikey':config.chave,'Authorization':'Bearer '+session.access_token},
     body:JSON.stringify({action:'search',filters}),signal:controller.signal});
    const payload=await response.json();
    if(seq!==currentRequest||!valid())return;
-   if(!response.ok){show(payload?.message||({'PROVIDER_NOT_CONFIGURED':'Ainda nao ha fornecedor de dados configurado no IaD.','DDD_MAPPING_PENDING':'O DDD precisa ser mapeado para municipios antes da pesquisa.'}[payload?.error])||'Pesquisa indisponivel: '+(payload?.error||response.status));return;}
+   if(!response.ok){show(payload?.message||({'AI_NOT_CONFIGURED':'Nenhum motor de IA habilitado para pesquisa no IaD.','AI_SEARCH_UNAVAILABLE':'OpenAI e Claude nao conseguiram consultar a web agora.','DDD_MAPPING_PENDING':'O DDD precisa ser mapeado para municipios antes da pesquisa.'}[payload?.error])||'Pesquisa indisponivel: '+(payload?.error||response.status));return;}
    const companies=normalizeMarketCompanies(payload.data||[],{source:payload.source||'Nao identificada',retrievedAt:payload.retrievedAt||''});
-   show('Consulta concluida. '+companies.length+' registros nesta pagina; nenhuma gravacao realizada.');
+   show('Pesquisa web exploratoria concluida: '+companies.length+' empresas com fontes; nao representa todas as empresas da regiao. Nenhuma gravacao realizada.');
    renderCompanies(companies,payload.source||'Fornecedor',payload.retrievedAt||'data nao fornecida');
   }catch(e){if(seq===currentRequest&&valid()&&e.name!=='AbortError')show('Falha de rede ao consultar fonte empresarial. Nenhuma alteracao no CRM.');}
   finally{if(seq===currentRequest&&valid())btn.disabled=false;}
