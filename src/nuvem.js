@@ -293,8 +293,12 @@
       const prefix='iad-crm:cas:v273:',sufixo=':'+encodeURIComponent(String(u.id));
       for(let i=0;i<global.localStorage.length;i++) {
         const k=global.localStorage.key(i);
-        if(k&&k.startsWith(prefix)&&k.endsWith(sufixo)) {
-          const t=decodeURIComponent(k.slice(prefix.length,k.length-sufixo.length));
+        /* Os ACKs duraveis ficam em chave :ack-v1 apos a ultima operacao.
+           Um admin pode ter so recibos de outra empresa, sem fila original. */
+        const sufixoAck=sufixo+':ack-v1';
+        if(k&&k.startsWith(prefix)&&(k.endsWith(sufixo)||k.endsWith(sufixoAck))) {
+          const fim=k.endsWith(sufixoAck)?sufixoAck:sufixo;
+          const t=decodeURIComponent(k.slice(prefix.length,k.length-fim.length));
           if(t)tenants.add(t);
         }
       }
