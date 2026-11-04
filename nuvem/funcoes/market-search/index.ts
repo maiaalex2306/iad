@@ -40,7 +40,7 @@ function normalize(data){
 }
 Deno.serve(async req=>{
  const origin=req.headers.get('origin')||'';
- if(req.method==='OPTIONS')return new Response('',{status:204,headers:headers(origin)});
+ if(req.method==='OPTIONS')return new Response(null,{status:204,headers:headers(origin)});
  if(req.method!=='POST')return output({error:'METHOD_NOT_ALLOWED'},405,origin);
  if(origin&&!ORIGINS.has(origin))return output({error:'ORIGIN_NOT_ALLOWED'},403,origin);
  if(Number(req.headers.get('content-length')||0)>12000)return output({error:'REQUEST_TOO_LARGE'},413,origin);
@@ -61,7 +61,7 @@ Deno.serve(async req=>{
   if(body?.action!=='search')return output({error:'SEARCH_ONLY'},400,origin);
   let f;try{f=filters(body.filters)}catch(e){return output({error:'INVALID_FILTERS',message:e.message},422,origin)}
   // DDD deve ser expandido por mapa territorial Anatel/IBGE, nunca por telefone.
-  if(f.ddd&&!f.cidade&&!f.uf)return output({error:'DDD_MAPPING_PENDING',message:'DDD precisa de mapa de municipios antes da consulta. Informe cidade e UF.'},422,origin);
+  if(f.ddd)return output({error:'DDD_MAPPING_PENDING',message:'DDD precisa de mapa de municipios antes da consulta. Informe cidade e UF.'},422,origin);
   const key=Deno.env.get('ECONODATA_API_KEY');
   if(!key)return output({error:'PROVIDER_NOT_CONFIGURED',message:'Pesquisa externa ainda nao configurada: a API empresarial precisa de credencial licenciada.'},503,origin);
   const providerFilters={};if(f.uf)providerFilters.uf=f.uf;if(f.cidade)providerFilters.cidade=f.cidade;if(f.cnae)providerFilters.cnaePrimario=f.cnae;if(f.segmento)providerFilters.segmento=f.segmento;if(f.porte)providerFilters.porte=f.porte;
