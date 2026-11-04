@@ -215,6 +215,15 @@
           botao.onclick=function(){ global.App.diagnosticarPendenciasCAS(); };
           card.appendChild(botao);
         }
+        if(card && !conteudo.querySelector('#reconhecer-cas-aplicada')) {
+          const confirmar=document.createElement('button');
+          confirmar.id='reconhecer-cas-aplicada';
+          confirmar.className='btn ghost';
+          confirmar.type='button';
+          confirmar.textContent='Reconhecer edição já aplicada';
+          confirmar.onclick=function(){ global.App.reconhecerEdicaoCASJaAplicada(); };
+          card.appendChild(confirmar);
+        }
       }
       return;
     }
@@ -5950,7 +5959,8 @@
           registro_indisponivel:'Registro indisponível',
           revisao_indefinida:'Revisão não identificada',
           dados_locais_incompletos:'Dados locais incompletos',
-          consulta_indisponivel:'Falha de consulta'
+          consulta_indisponivel:'Falha de consulta',
+          ja_aplicada:'Edição já refletida no servidor; pode reconhecer sem sobrescrever'
         };
         const linhas=d.itens.map(function(x) {
           return x.numero+'. '+(mensagens[x.estado]||'Não identificado');
@@ -5959,6 +5969,27 @@
           linhas.join('\n')+'\n\nNenhuma edição foi alterada.');
       }).catch(function() {
         alert('Diagnóstico indisponível. As edições foram preservadas.');
+      });
+    },
+
+    reconhecerEdicaoCASJaAplicada: function () {
+      const N=global.IADNuvem;
+      if(!N||!N.reconhecerEdicaoCASJaAplicada)return;
+      const bruto=prompt('Digite o número da edição classificada como já aplicada no diagnóstico CAS:');
+      if(bruto===null)return;
+      const numero=Number(bruto);
+      if(!Number.isSafeInteger(numero)||numero<1||numero>30){
+        alert('Informe um número de edição válido (1 a 30).');return;
+      }
+      if(!confirm('Confirme que salvou a cópia das edições. A operação só será reconhecida se todos os campos já coincidirem no servidor. Nenhum registro remoto será alterado. Prosseguir?'))return;
+      N.reconhecerEdicaoCASJaAplicada(numero).then(function(res) {
+        alert(res.outrasPendencias?
+          'Edição comprovadamente aplicada e recibo preservado. Existem outras pendências, que não foram descartadas.':
+          'Edição comprovadamente aplicada e conciliada. Atualize a carteira.');
+        if(!res.outrasPendencias)baixarDoServidor();
+        else render();
+      }).catch(function(e) {
+        alert('Edição preservada. Não foi possível comprovar a aplicação: '+(e&&e.message||'erro desconhecido'));
       });
     },
 
