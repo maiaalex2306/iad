@@ -224,6 +224,15 @@
           confirmar.onclick=function(){ global.App.reconhecerEdicaoCASJaAplicada(); };
           card.appendChild(confirmar);
         }
+        if(card && !conteudo.querySelector('#resolver-conflito-cas')) {
+          const resolver=document.createElement('button');
+          resolver.id='resolver-conflito-cas';
+          resolver.className='btn ghost';
+          resolver.type='button';
+          resolver.textContent='Comparar e resolver conflito';
+          resolver.onclick=function(){global.App.resolverConflitoCASManterServidor();};
+          card.appendChild(resolver);
+        }
       }
       return;
     }
@@ -5990,6 +5999,47 @@
         else render();
       }).catch(function(e) {
         alert('Edição preservada. Não foi possível comprovar a aplicação: '+(e&&e.message||'erro desconhecido'));
+      });
+    },
+
+    /* P0: comparar diferencas no proprio navegador, exigindo duas
+       confirmacoes explicitas antes de manter a revisao do servidor. */
+    resolverConflitoCASManterServidor: function () {
+      const N=global.IADNuvem;
+      if(!N||!N.lerConflitoCAS||!N.resolverConflitoCASManterServidor)return;
+      const bruto=prompt('Qual o número da edição em conflito (1 a 30)?');
+      if(bruto===null)return;
+      const numero=Number(bruto);
+      if(!Number.isSafeInteger(numero)||numero<1||numero>30){
+        alert('Informe um número válido de 1 a 30.');return;
+      }
+      N.lerConflitoCAS(numero).then(function(d) {
+        const linhas=d.campos.map(function(x){
+          return x.campo+'\\n  Sua edição: '+x.local+'\\n  Servidor: '+x.servidor;
+        });
+        const texto='EDIÇÃO '+d.numero+' — COMPARAÇÃO DE CONFLITO\\n'+
+          'Revisão anterior: '+d.revisaoOriginal+
+          ' | Revisão servidor: '+d.revisaoServidor+'\\n\\n'+
+          linhas.join('\\n\\n')+
+          (d.camposOmitidos?'\\n\\nHá campos adicionais não exibidos.':'')+
+          '\\n\\nATENÇÃO: escolher o servidor retira esta edição da fila ativa,'+
+          ' MAS arquiva integralmente os valores locais para recuperação futura.'+
+          ' O servidor não será alterado. Exporte antes a cópia das edições.'+
+          '\\n\\nDeseja manter os valores do servidor?';
+        if(!confirm(texto))return;
+        const decisao=prompt('Para confirmar a escolha do servidor e arquivar sua edição, digite SERVIDOR:');
+        if(decisao!=='SERVIDOR')return;
+        N.resolverConflitoCASManterServidor(numero,d.revisaoServidor).then(function(r) {
+          alert(r.outrasPendencias?
+            'Edição arquivada com segurança. Ainda existem outras pendências.':
+            'Edição arquivada e conciliação concluída. A carteira será atualizada.');
+          if(r.outrasPendencias)render();
+          else baixarDoServidor();
+        }).catch(function(e) {
+          alert('Edição preservada. Resolução não concluída: '+(e&&e.message||'erro desconhecido'));
+        });
+      }).catch(function(e) {
+        alert('Não foi possível comparar esta edição. Nenhum dado foi alterado: '+(e&&e.message||'erro desconhecido'));
       });
     },
 

@@ -97,6 +97,57 @@
       save(atual);
       return {reconhecida:true,revisao:Number(remote.revisao)};
     }
+    /* P0: escolha explicita do usuario por manter o servidor.
+       Arquivar integralmente a edicao antes de retirar a cabeca da fila.
+       Nao faz chamadas de rede nem altera o registro remoto. */
+    const archiveKey=key+':resolved-v1';
+    function archived(){
+      const raw=storage.getItem(archiveKey);
+      if(!raw)return [];
+      const items=JSON.parse(raw);
+      if(!Array.isArray(items)||items.some(function(item) {
+        return !item||!item.operation||item.operation.userId!==user||
+          item.operation.tenantId!==tenant||!item.operation.operationId;
+      }))throw Error('Arquivo CAS invalido; operacoes preservadas.');
+      return items;
+    }
+    function manterServidor(operationId,remote,expectedRemoteRevision){
+      if(voos().has(key))throw Error('Fila CAS ocupada.');
+      const op=load()[0];
+      if(!op||op.operationId!==operationId)
+        throw Error('Somente a primeira edicao pode ser resolvida.');
+      if(!remote||String(remote.id)!==String(op.recordId)||
+        String(remote.tenant_id)!==tenant||
+        !Number.isSafeInteger(remote.revisao)||
+        !Number.isSafeInteger(op.expectedRevision)||
+        remote.revisao<=op.expectedRevision||
+        remote.revisao!==expectedRemoteRevision||
+        satisfazRemoto(op,remote))
+        throw Error('Revisao remota mudou ou edicao sem conflito: fila preservada.');
+      const history=archived();
+      const anterior=history.find(function(x){
+        return x.operation.operationId===operationId;
+      });
+      if(anterior) {
+        /* Queda entre salvar historico e retirar a fila: retomada
+           idempotente, sem perder o registro ou exigir um novo descarte. */
+        if(JSON.stringify(anterior.operation)!==JSON.stringify(op)||
+          anterior.revisaoRemota!==remote.revisao||
+          anterior.motivo!=='usuario_optou_servidor')
+          throw Error('Historico CAS divergente; fila preservada.');
+      } else {
+        history.push({operation:JSON.parse(JSON.stringify(op)),
+          revisaoRemota:remote.revisao,motivo:'usuario_optou_servidor',
+          arquivadaEm:new Date().toISOString()});
+        storage.setItem(archiveKey,JSON.stringify(history));
+      }
+      const current=load();
+      if(!current.length||current[0].operationId!==operationId)
+        throw Error('Fila alterada; recuperacao interrompida.');
+      current.shift();
+      save(current);
+      return {arquivada:true};
+    }
     function voos() {
       let mapa=voosPorStorage.get(storage);
       if(!mapa){mapa=new Map();voosPorStorage.set(storage,mapa);}
@@ -148,7 +199,9 @@
       pendingAcks:()=>receipts().map(x=>JSON.parse(JSON.stringify(x))),
       confirmAck:confirmReceipt,
       satisfazRemoto:satisfazRemoto,
-      reconhecerAplicada:reconhecerAplicada});
+      reconhecerAplicada:reconhecerAplicada,
+      manterServidor:manterServidor,
+      archived:()=>archived().map(function(x){return JSON.parse(JSON.stringify(x));})});
   }
   return Object.freeze({create});
 });

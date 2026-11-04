@@ -1,0 +1,28 @@
+name: P0 CAS — Assisted conflict archival and recovery
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  assisted-resolution:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check protected app, archive and remote-confirmation flow
+        run: |
+          node --check src/nuvem.js
+          node --check src/cas-queue.js
+          node --check src/app.js
+          node scripts/verificar-versao-shell.cjs
+          node --test scripts/p0-cas-assisted-resolution.test.cjs
+          node --test scripts/p0-cas-proven-satisfied.test.cjs
+          node --test scripts/p0-cas-inspector.test.cjs
+          node --test scripts/p0-cas-durable-receipts.test.cjs
+          node --test scripts/p0-cas-partial-ack.test.cjs
+          node --test scripts/p0-cas-failclosed.test.cjs
