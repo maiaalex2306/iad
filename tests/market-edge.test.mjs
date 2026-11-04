@@ -139,7 +139,7 @@ test('importacao e qualquer acao diferente de buscar nao dispara IA',async()=>{
 test('consulta de IA nao executa mutacoes no Supabase',async()=>{
  const h=harness({openai:true,claude:true}),res=await h.handle(request(query));
  assert.equal(res.status,200);
- assert.equal(h.calls.filter(c=>c.url.includes('safe.supabase.co')&&c.method!=='GET').length,0);
+ assert.equal(h.calls.filter(c=>c.url.includes('safe.supabase.co')&&c.method!=='GET'&&!c.url.includes('/rpc/iad_market_search_reserve')).length,0);
 });
 test('cada pesquisa reserva quota transacional antes de chamar provedores',async()=>{
  const h=harness({openai:true,claude:true}),res=await h.handle(request(query));
