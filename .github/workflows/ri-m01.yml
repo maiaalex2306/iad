@@ -1,0 +1,23 @@
+name: RI-M01 — contratos, segurança e busca manual
+on:
+  pull_request:
+    paths:
+      - "src/ri/market-*.mjs"
+      - "nuvem/funcoes/market-search/**"
+      - "tests/market-*.test.mjs"
+      - ".github/workflows/ri-m01.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node --test tests/market-contract.test.mjs tests/market-edge.test.mjs
+      - run: node --check src/ri/market-contract.mjs
+      - run: node --check src/ri/market-view.mjs
