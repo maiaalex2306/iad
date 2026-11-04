@@ -204,6 +204,18 @@
     if (semServidor && global.IADNuvem.conectado()) {
       document.body.classList.remove('sem-sessao');
       conteudo.innerHTML = V.semServidor(semServidor);
+      if(/CAS|edições pendentes/i.test(String(semServidor))) {
+        const card=conteudo.querySelector('.card');
+        if(card && !conteudo.querySelector('#diagnosticar-cas')) {
+          const botao=document.createElement('button');
+          botao.id='diagnosticar-cas';
+          botao.className='btn ghost';
+          botao.type='button';
+          botao.textContent='Diagnosticar pendências';
+          botao.onclick=function(){ global.App.diagnosticarPendenciasCAS(); };
+          card.appendChild(botao);
+        }
+      }
       return;
     }
 
