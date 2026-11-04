@@ -187,3 +187,20 @@ test('ChatGPT e Claude complementam decisores de mesmo CNPJ sem perder fontes',a
  assert.deepEqual([...body.data[0].fontes.map(x=>x.url)].sort(),[URL_COMPANY,verified].sort());
  assert.ok(!body.data[0].contatos.some(c=>c.nome==='Contato Inventado'));
 });
+
+test('mesmo CNPJ com cidades divergentes entre IAs sinaliza conflito em vez de confirmar localizacao',async()=>{
+ const second={...candidate,cidade:'Campinas'};
+ const claudeResponse=responseClaude();
+ claudeResponse.content[1].text=JSON.stringify({empresas:[second]});
+ const h=harness({openai:true,claude:true,claudeResponse});
+ const ufOnly={action:'search',filters:{uf:'SP',segmento:'Quimico',limit:10}};
+ const res=await h.handle(request(ufOnly));
+ assert.equal(res.status,200);
+ const body=await res.json();
+ assert.equal(body.data.length,1);
+ const company=body.data[0];
+ assert.equal(company.cidade,'Jacarei');
+ assert.ok(Array.isArray(company.conflitos),'deve explicitar divergencias');
+ assert.ok(company.conflitos.some(x=>x.campo==='cidade'&&x.valorOriginal==='Jacarei'&&x.valorDivergente==='Campinas'));
+ assert.equal(company.territorioCorroborado,false);
+});
