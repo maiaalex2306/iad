@@ -307,13 +307,9 @@
         return anterior.then(function(resumo) {
           const fila=filaCASDaSessao(tenant),pendentes=fila.pending();
           return fila.flush().then(function(r) {
-            if(r && (r.blocked||r.busy)) {
-              const motivo = String(r.reason||'').toLowerCase();
-              const detalhe = motivo==='conflito' ? 'Conflito de revisão no servidor.' :
-                r.busy ? 'Fila CAS em processamento.' :
-                'Operação CAS ainda sem confirmação do servidor.';
-              throw new Error(detalhe + ' Edições pendentes preservadas; não limpe os dados do navegador.');
-            }
+            /* Reconciliar ACKs anteriores mesmo quando a operacao seguinte
+               bloqueou. Um lote parcialmente confirmado nao e perda nem
+               sucesso completo: a operacao conflitante continua na fila. */
             const ack=(r && r.acks)||[];
             return ack.reduce(function(p,x) {
               return p.then(function() {
@@ -336,6 +332,13 @@
               });
             },Promise.resolve()).then(function() {
               resumo.sent+=Number(r&&r.sent||0);
+              if(r && (r.blocked||r.busy)) {
+                const motivo=String(r.reason||'').toLowerCase();
+                const detalhe=motivo==='conflito' ? 'Conflito de revisão no servidor.' :
+                  r.busy ? 'Fila CAS em processamento.' :
+                  'Operação CAS ainda sem confirmação do servidor.';
+                throw new Error(detalhe+' Edições pendentes preservadas; não limpe os dados do navegador.');
+              }
               return resumo;
             });
           });

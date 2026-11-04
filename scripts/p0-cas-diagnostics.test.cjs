@@ -40,6 +40,6 @@ test('blocking conflict retains fail-closed error and preserves CAS',()=>{
 });
 test('PWA version matches application',()=>{
  const config=fs.readFileSync('src/config.js','utf8'),sw=fs.readFileSync('sw.js','utf8');
- assert.match(config,/numero: 'v286.36'/);
- assert.match(sw,/const CACHE = 'iad-crm-v286.36'/);
+ assert.match(config,/numero: 'v286.37'/);
+ assert.match(sw,/const CACHE = 'iad-crm-v286.37'/);
 });
