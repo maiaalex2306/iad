@@ -49,7 +49,7 @@ const server=http.createServer((req,res)=>{
        {id:'b1',tenantId:'tenant-b',donoId:user.id,nome:'EMPRESA SECRETA B'}
      ];
      e.contatos=[
-       {id:'c1',tenantId:'tenant-a',donoId:user.id,contaId:'a1',nome:'Ana Gestora',papelCompra:'Decisora'},
+       {id:'c1',tenantId:'tenant-a',donoId:user.id,contaId:'a1',nome:'Ana Gestora',papel:'Decisora'},
        {id:'c2',tenantId:'tenant-b',donoId:user.id,contaId:'a1',nome:'CONTATO SECRETO'}
      ];
      e.oportunidades=[
@@ -74,6 +74,7 @@ const server=http.createServer((req,res)=>{
    await page.locator('#iad-ri-details').waitFor();
    const view=await page.locator('#iad-ri-root').textContent();
    assert.match(view,/Ana Gestora/);
+   assert.match(view,/Decisora/,'o papel do contato no schema CRM deve ser exibido');
    assert.match(view,/1 oportunidade/);
    assert.doesNotMatch(view,/EMPRESA SECRETA|CONTATO SECRETO|NEGÓCIO SECRETO/);
    assert.equal(await page.locator('#iad-ri-root img').count(),0,'texto comercial não pode executar HTML');
