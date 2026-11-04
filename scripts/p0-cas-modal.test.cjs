@@ -39,6 +39,6 @@ test('does not promise automatic replay of permanent conflicts',()=>{
  assert.doesNotMatch(text,/sobe sozinho assim que o envio voltar/);
 });
 test('release versions agree',()=>{
- assert.match(fs.readFileSync('src/config.js','utf8'),/numero: 'v286.43'/);
- assert.match(fs.readFileSync('sw.js','utf8'),/const CACHE = 'iad-crm-v286.43'/);
+ assert.match(fs.readFileSync('src/config.js','utf8'),/numero: 'v286.44'/);
+ assert.match(fs.readFileSync('sw.js','utf8'),/const CACHE = 'iad-crm-v286.44'/);
 });
