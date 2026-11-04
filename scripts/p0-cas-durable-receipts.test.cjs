@@ -75,6 +75,6 @@ test('invalid receipt journal blocks access and cannot be silently erased',()=>{
 });
 test('application and PWA version aligned',()=>{
  const cfg=fs.readFileSync('src/config.js','utf8'),sw=fs.readFileSync('sw.js','utf8');
- assert.match(cfg,/numero: 'v286.39'/);
- assert.match(sw,/const CACHE = 'iad-crm-v286.39'/);
+ assert.match(cfg,/numero: 'v286.40'/);
+ assert.match(sw,/const CACHE = 'iad-crm-v286.40'/);
 });
