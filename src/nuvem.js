@@ -520,7 +520,8 @@
         return {campo:field,local:formatar(op.patch[field]),
           servidor:formatar(remote[field])};
       });
-      if(!itens.length)throw Error('Edicao sem campos a comparar.');
+      if(!itens.length||Object.keys(op.patch).length>itens.length)
+        throw Error('A edicao possui campos demais para comparacao segura; fila preservada.');
       return {numero:numero,revisaoServidor:revision,
         revisaoOriginal:op.expectedRevision,campos:itens,
         camposOmitidos:Math.max(0,Object.keys(op.patch).length-itens.length)};
@@ -539,11 +540,12 @@
       if(!Array.isArray(rows)||rows.length!==1)
         throw Error('Registro remoto nao encontrado. Fila preservada.');
       entry.fila.manterServidor(op.operationId,rows[0],revisaoVista);
-      return retomarFilaCASSeguro().then(function(){
-        return {arquivada:true,outrasPendencias:false};
-      },function(){
+      /* Não disparar flush das próximas operações após a escolha manual.
+         Elas podem pertencer a outro conflito e exigem revisão independente. */
+      const restante=diagnosticoPendenciasCAS();
+      if(!restante.disponivel)
         return {arquivada:true,outrasPendencias:true};
-      });
+      return {arquivada:true,outrasPendencias:restante.quantidade>0};
     });
   }
   /* Cópia local explícita. Nunca limpa fila e nunca envia operações.
@@ -561,7 +563,8 @@
       });
     });
     return { formato:'iad-cas-pendencias-v1', geradoEm:new Date().toISOString(),
-      quantidade:operacoes.length+recibos.length, operacoes:operacoes,
+      quantidade:operacoes.length+recibos.length+historicoResolvido.length,
+      operacoes:operacoes,
       recibosConfirmadosPendentesDeConciliacao:recibos,
       historicoResolvidoPreservado:historicoResolvido };
   }
