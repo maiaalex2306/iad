@@ -25,7 +25,7 @@ export function buildAccountBriefing({account,opportunities,contacts,evidence,as
     contactCount++;
     if(decisionMap.length<MAX_PEOPLE){
       decisionMap.push({id:label(c.id,''),name:label(c.nome,'Nome não informado'),
-        role:label(c.papelCompra||c.papelDecisao,'Papel a confirmar')});
+        role:label(c.papel||c.papelCompra||c.papelDecisao,'Papel a confirmar')});
     }
   }
   for(const e of evidence){
