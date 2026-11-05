@@ -121,7 +121,7 @@ async function queryAI(engine,key,f) {
   body={model:Deno.env.get('IA_MODELO_PESQUISA_ANTHROPIC')||Deno.env.get('IA_MODELO_ANTHROPIC')||'claude-opus-5',system:instructions,max_tokens:3500,messages:[{role:'user',content:prompt(f)}],tools:[{type:'web_search_20250305',name:'web_search',max_uses:2}]};
  }
  const resp=await fetch(uri,{method:'POST',headers,body:JSON.stringify(body),signal:AbortSignal.timeout(35000)});
- if(!resp.ok)throw Error('IA_SEARCH_FAILED');
+ if(!resp.ok)throw Error('IA_HTTP_'+resp.status);
  return aiSummary(await resp.json(),engine);
 }
 // Filter only explicit geographic contradictions; missing fields remain unverified.
@@ -200,8 +200,8 @@ Deno.serve(async req=>{
   // Release pilot: only an authenticated tenant admin may spend provider credits
   // in the production project. Homologation remains available to normal users.
   // Use the trusted server-side Supabase project URL, never a client header.
-  if(url==='https://drhonmdffhnwamwzynrs.supabase.co'&&profile.papel!=='admin')
-   return output({error:'PILOT_ADMIN_ONLY'},403,origin);
+  if(url==='https://drhonmdffhnwamwzynrs.supabase.co'&&!['admin','gestor'].includes(profile.papel))
+   return output({error:'PILOT_ADMIN_OR_MANAGER_ONLY'},403,origin);
   // Byte-limited streaming read: never buffer an unbounded body even if the
   // client omits or lies about Content-Length. Enforce the same 12 KB cap
   // for multibyte UTF-8 input, before contacting any AI provider.
@@ -255,6 +255,17 @@ Deno.serve(async req=>{
   // is not a successful market search, even when its text looks plausible.
   const results=outcomes.filter(x=>x.status==='fulfilled'&&x.value?.searched===true).map(x=>x.value);
   const failedProviders=jobs.filter((x,i)=>outcomes[i].status==='rejected'||(outcomes[i].status==='fulfilled'&&outcomes[i].value?.searched!==true)).map(x=>x.engine);
+  // Only coarse diagnostic categories: no prompts, API keys, identities or company data.
+  for(let i=0;i<outcomes.length;i++){
+   const outcome=outcomes[i];
+   if(outcome.status==='rejected'){
+    const reason=String(outcome.reason?.message||'').slice(0,100);
+    const category=/^IA_HTTP_\d{3}$/.test(reason)?reason:/timeout|abort/i.test(reason)?'TIMEOUT':'NETWORK_OR_PARSE';
+    console.warn('[market-search] provider_failure',JSON.stringify({provider:jobs[i].engine,category}));
+   }else if(outcome.value?.searched!==true){
+    console.warn('[market-search] provider_failure',JSON.stringify({provider:jobs[i].engine,category:'WEB_SEARCH_NOT_COMPLETED'}));
+   }
+  }
   if(!results.length)return output({error:'AI_SEARCH_UNAVAILABLE',failedProviders},502,origin);
   const partial=failedProviders.length>0;
   return output({data:combineAI(results,f.limit,f),source:'Pesquisa web OpenAI / Claude',providers:results.map(x=>x.engine),failedProviders,partial,usage:results.map(x=>x.usage),retrievedAt:new Date().toISOString(),total:null,hasMore:null,coverage:'exploratoria',coverageStatus:'unknown',territoryVerified:false,warning:(partial?'Uma ou mais IAs nao concluiram a pesquisa; cobertura parcial. ':'')+'Pesquisa exploratoria; nao equivale ao universo integral de CNPJs. Nenhum registro foi importado.'},200,origin);
