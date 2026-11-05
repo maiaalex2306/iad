@@ -319,3 +319,57 @@ test('rejeita no motor de pesquisa CNPJ com digitos verificadores incorretos',as
  const body=await response.json();
  assert.equal(body.data.length,0);
 });
+
+
+test('OpenAI com web_search_call em status failed nao certifica pesquisa mesmo com JSON e fontes',async()=>{
+ const bad=responseOpenAI(true,true);
+ bad.output.find(b=>b.type==='web_search_call').status='failed';
+ const h=harness({openai:true,openaiResponse:bad});
+ const res=await h.handle(request(query));
+ assert.equal(res.status,502);
+ const body=await res.json();
+ assert.equal(body.error,'AI_SEARCH_UNAVAILABLE');
+ assert.deepEqual(Array.from(body.failedProviders),['OpenAI']);
+});
+test('Claude com erro interno no web_search_tool_result nao certifica pesquisa HTTP 200',async()=>{
+ const bad=responseClaude(true,true);
+ const call=bad.content.find(b=>b.type==='server_tool_use');
+ call.id='srvtoolu_mockfailed';
+ bad.content.splice(1,0,{
+  type:'web_search_tool_result',
+  tool_use_id:call.id,
+  content:{type:'web_search_tool_result_error',error_code:'unavailable'}
+ });
+ const h=harness({claude:true,claudeResponse:bad});
+ const res=await h.handle(request(query));
+ assert.equal(res.status,502);
+ const body=await res.json();
+ assert.equal(body.error,'AI_SEARCH_UNAVAILABLE');
+ assert.deepEqual(Array.from(body.failedProviders),['Anthropic']);
+});
+test('Claude que falha ferramenta web e OpenAI que conclui deve retornar pesquisa parcial',async()=>{
+ const bad=responseClaude(true,true);
+ const call=bad.content.find(b=>b.type==='server_tool_use');
+ call.id='srvtoolu_mockfailed';
+ bad.content.splice(1,0,{type:'web_search_tool_result',tool_use_id:call.id,content:{type:'web_search_tool_result_error',error_code:'too_many_requests'}});
+ const h=harness({openai:true,claude:true,claudeResponse:bad});
+ const res=await h.handle(request(query));
+ assert.equal(res.status,200);
+ const body=await res.json();
+ assert.equal(body.partial,true);
+ assert.deepEqual(Array.from(body.providers),['OpenAI']);
+ assert.deepEqual(Array.from(body.failedProviders),['Anthropic']);
+ assert.equal(body.data.length,1);
+});
+test('OpenAI com resposta incompleta nao certifica pesquisa embora tenha chamado web',async()=>{
+ const bad=responseOpenAI(true,true);bad.status='incomplete';
+ const h=harness({openai:true,openaiResponse:bad});
+ const res=await h.handle(request(query));
+ assert.equal(res.status,502);
+});
+test('Claude com pause_turn nao certifica pesquisa terminada',async()=>{
+ const incomplete=responseClaude(true,true);incomplete.stop_reason='pause_turn';
+ const h=harness({claude:true,claudeResponse:incomplete});
+ const res=await h.handle(request(query));
+ assert.equal(res.status,502);
+});
