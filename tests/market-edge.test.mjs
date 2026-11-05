@@ -269,3 +269,18 @@ test('papel estranho nao pode gerar custo com IA',async()=>{
  assert.equal(res.status,403);
  assert.equal(aiCalls(h).length,0);
 });
+
+test('JSON sem execucao da ferramenta web nao e pesquisa valida',async()=>{
+ const h=harness({openai:true,claude:true,openaiResponse:responseOpenAI(false),claudeResponse:responseClaude(false)});
+ const res=await h.handle(request(query));
+ assert.equal(res.status,502);
+ assert.deepEqual(Array.from((await res.json()).failedProviders),['OpenAI','Anthropic']);
+});
+test('provedor sem ferramenta web e contabilizado como falha parcial',async()=>{
+ const h=harness({openai:true,claude:true,claudeResponse:responseClaude(false)});
+ const res=await h.handle(request(query));
+ assert.equal(res.status,200);
+ const body=await res.json();
+ assert.equal(body.partial,true);
+ assert.deepEqual(Array.from(body.failedProviders),['Anthropic']);
+});
