@@ -106,13 +106,35 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   const request=new AbortController();cityRequest=request;cityLoading=true;
   status.textContent='Consultando municipios oficiais do IBGE para '+uf+'…';
   try{
-   const res=await fetch('https://servicodados.ibge.gov.br/api/v1/localidades/estados/'+UF_IBGE[uf]+'/municipios?orderBy=nome',{signal:request.signal});
-   if(!res.ok)throw Error('IBGE HTTP '+res.status);
-   const rows=await res.json();
-   if(!Array.isArray(rows)||rows.length===0||rows.length>2000)throw Error('Catalogo IBGE inesperado');
-   const items=rows.filter(x=>Number.isSafeInteger(x?.id)&&String(x.id).startsWith(String(UF_IBGE[uf]))&&typeof x.nome==='string').map(x=>({key:String(x.id),label:x.nome,value:{codigoIBGE:String(x.id),nome:x.nome,uf}}));
+   // The public IBGE endpoint can be temporarily unavailable. A second
+   // IBGE-derived catalog avoids blocking the entire region selector.
+   let rows=[],source='IBGE';
+   try{
+    const signal=AbortSignal.any([request.signal,AbortSignal.timeout(9500)]);
+    const res=await fetch('https://servicodados.ibge.gov.br/api/v1/localidades/estados/'+UF_IBGE[uf]+'/municipios?orderBy=nome',{signal});
+    if(!res.ok)throw Error('IBGE HTTP '+res.status);
+    rows=await res.json();
+    if(!Array.isArray(rows)||!rows.length)throw Error('IBGE vazio');
+   }catch(error){
+    if(request.signal.aborted)return [];
+    source='BrasilAPI (dados IBGE)';
+    const signal=AbortSignal.any([request.signal,AbortSignal.timeout(9500)]);
+    const response=await fetch('https://brasilapi.com.br/api/ibge/municipios/v1/'+uf,{signal});
+    if(!response.ok)throw Error('BrasilAPI HTTP '+response.status);
+    const fallback=await response.json();
+    if(!Array.isArray(fallback)||!fallback.length)throw Error('Catalogo alternativo vazio');
+    rows=fallback.map(x=>({...x,id:Number(String(x.codigo_ibge||'').slice(0,7))}));
+   }
+   if(rows.length>2000)throw Error('Catalogo municipal inesperado');
+   const seen=new Set();
+   const items=rows.filter(x=>{
+    const id=String(x?.id||''),nome=String(x?.nome||'').trim();
+    if(!/^\d{7}$/.test(id)||!id.startsWith(String(UF_IBGE[uf]))||!nome||seen.has(id))return false;
+    seen.add(id);return true;
+   }).map(x=>({key:String(x.id),label:x.nome,value:{codigoIBGE:String(x.id),nome:x.nome,uf}})).sort((a,b)=>a.label.localeCompare(b.label,'pt-BR'));
+   if(!items.length)throw Error('Nenhum municipio valido');
    if(ufSelect.value!==uf||!valid())return [];
-   cityCache.set(uf,items);cityPick.setItems(items);status.textContent=items.length+' municipios carregados do IBGE. Selecione as cidades.';
+   cityCache.set(uf,items);cityPick.setItems(items);status.textContent=items.length+' municipios carregados via '+source+'. Selecione as cidades.';
    return items;
   }catch(error){
    if(error?.name!=='AbortError'&&ufSelect.value===uf&&valid())status.textContent='Nao foi possivel carregar o catalogo oficial de municipios. Tente selecionar o estado novamente.';
@@ -125,7 +147,8 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
  demoBtn.addEventListener('click',async()=>{
   ufSelect.value='SP';const cities=await loadCities('SP');
   const mogi=cities.find(x=>x.label==='Mogi das Cruzes');
-  if(mogi)cityPick.choose([mogi.key]);
+  if(!mogi){show('Nao foi possivel validar Mogi das Cruzes no catalogo de municipios. Exemplo nao aplicado.');return;}
+  cityPick.choose([mogi.key]);
   dddPick.choose(['11']);
   const selected=tenantSegments.find(x=>/qu[ií]mic/i.test(String(x.nome||'')));
   if(selected)segmentPick.choose([String(selected.nome)]);
@@ -177,6 +200,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
    card.appendChild(el('p',(company.cnpj?'CNPJ '+company.cnpj:'CNPJ pendente — validar identidade')+' · '+(company.segmento||'Setor nao informado')+' · '+(company.porte||'Porte nao informado'),'small muted'));
    card.appendChild(el('p','Situacao CRM: '+statusMatch+(plan.existingOpportunityId?' · Ja existe oportunidade em Prospecção':''),'small'));
    card.appendChild(el('p','Funcionarios: '+(company.funcionarios===null?'indisponivel':String(company.funcionarios))+' (nao confirmado) · Faturamento: '+(company.faturamento===null?'indisponivel':String(company.faturamento))+' (nao confirmado)','small'));
+   if(company.faixaFuncionariosStatus==='pendente')card.appendChild(el('p','Faixa de funcionarios pendente: a IA nao encontrou quantidade verificavel.','small muted'));
    if(company.telefone)card.appendChild(el('p','Telefone corporativo informado: '+company.telefone,'small'));
    if(company.contatos.length){
     card.appendChild(el('h5','Contatos fornecidos pela fonte — confirmar antes de usar'));
@@ -297,7 +321,9 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
       'AI_PROVIDER_NOT_CONFIGURED':'O motor selecionado nao esta configurado.',
       'SEARCH_QUOTA_EXCEEDED':'Limite diario de pesquisas atingido. Nao houve nova chamada as IAs.',
       'SEARCH_QUOTA_UNAVAILABLE':'Controle de quota indisponivel. Pesquisa interrompida sem consultar as IAs.',
-      'DDD_MAPPING_PENDING':'O DDD precisa ser mapeado para municipios antes da pesquisa.'};
+      'DDD_MAPPING_PENDING':'O DDD precisa ser mapeado para municipios antes da pesquisa.',
+      'SEGMENT_NOT_AUTHORIZED':'O segmento selecionado nao pertence ao catalogo autorizado desta empresa. Atualize os filtros.',
+      'SEGMENT_CATALOG_UNAVAILABLE':'Nao foi possivel validar os segmentos da empresa. Nenhum credito de pesquisa foi consumido.'};
     const failure=failureDescription(payload?.failures);
     show((payload?.message||messages[payload?.error]||'Pesquisa indisponivel: '+(payload?.error||response.status))+(failure?' Motivo: '+failure+'.':''));return;
    }
