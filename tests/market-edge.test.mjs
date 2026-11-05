@@ -727,3 +727,68 @@ test('RI-M04: preflight tem cooldown e segunda chamada nao solicita provider nem
  assert.equal(h.calls.filter(x=>/api\.(openai|anthropic)\.com/.test(x.url)).length,2);
  assert.equal(h.calls.filter(x=>x.url.includes('iad_market_search_reserve')).length,0);
 });
+
+test('RI-M05: diagnostico de resultado vazio explicita falta de URL citada, sem expor CNPJ nem URL',async()=>{
+ const h=harness({openai:true,openaiResponse:responseOpenAI(true,false)});
+ const response=await h.handle(request(query));
+ assert.equal(response.status,200);
+ const body=await response.json();
+ assert.equal(body.data.length,0);
+ assert.equal(body.diagnostics.candidates,1);
+ assert.equal(body.diagnostics.rejectedUncitedSource,1);
+ assert.equal(body.diagnostics.accepted,0);
+ assert.equal(body.diagnostics.rejectedInvalidCnpj,0);
+ assert.ok(!JSON.stringify(body.diagnostics).includes(URL_COMPANY));
+ assert.ok(!JSON.stringify(body.diagnostics).includes(candidate.cnpj));
+});
+test('RI-M05: numero declarado fora da faixa aumenta contador e nao aparece na pesquisa',async()=>{
+ const h=harness({openai:true,openaiResponse:multiProvider({...marketMogi,funcionarios:200})});
+ const response=await h.handle(request({action:'search',provider:'OpenAI',filters:multiFilters}));
+ assert.equal(response.status,200);
+ const body=await response.json();
+ assert.equal(body.data.length,0);
+ assert.equal(body.diagnostics.candidates,1);
+ assert.equal(body.diagnostics.rejectedEmployees,1);
+ assert.equal(body.diagnostics.accepted,0);
+});
+test('RI-M05: municipio declarado fora do recorte e registrado como exclusao territorial',async()=>{
+ const h=harness({openai:true,openaiResponse:multiProvider({...marketMogi,cidade:'Campinas'})});
+ const response=await h.handle(request({action:'search',provider:'OpenAI',filters:multiFilters}));
+ assert.equal(response.status,200);
+ const body=await response.json();
+ assert.equal(body.data.length,0);
+ assert.equal(body.diagnostics.rejectedTerritory,1);
+});
+test('RI-M05: CNPJ explicitamente invalido recebe diagnostico e nao vira identidade pendente',async()=>{
+ const h=harness({openai:true,openaiResponse:multiProvider({...marketMogi,cnpj:'12345678000199'})});
+ const response=await h.handle(request({action:'search',provider:'OpenAI',filters:multiFilters}));
+ assert.equal(response.status,200);
+ const body=await response.json();
+ assert.equal(body.diagnostics.candidates,1);
+ assert.equal(body.diagnostics.rejectedInvalidCnpj,1);
+ assert.equal(body.data.length,0);
+});
+test('RI-M05: deduplicacao preserva uma empresa, registra dois candidatos e nenhum gasto extra',async()=>{
+ const h=harness({openai:true,claude:true});
+ const response=await h.handle(request(query));
+ assert.equal(response.status,200);
+ const body=await response.json();
+ assert.equal(body.diagnostics.candidates,2);
+ assert.equal(body.diagnostics.mergedDuplicates,1);
+ assert.equal(body.diagnostics.accepted,1);
+ assert.equal(body.data.length,1);
+ assert.equal(aiCalls(h).length,2);
+ assert.equal(h.calls.filter(c=>c.url.includes('/rpc/iad_market_search_reserve')).length,1);
+});
+test('RI-M05: pesquisa web completada sem candidatas e distinguida de candidatos descartados',async()=>{
+ const response=responseOpenAI();
+ response.output.find(x=>x.type==='message').content[0].text=JSON.stringify({empresas:[]});
+ const h=harness({openai:true,openaiResponse:response});
+ const result=await h.handle(request(query));
+ assert.equal(result.status,200);
+ const body=await result.json();
+ assert.equal(body.data.length,0);
+ assert.equal(body.diagnostics.candidates,0);
+ assert.equal(body.diagnostics.rejectedUncitedSource,0);
+ assert.equal(body.diagnostics.accepted,0);
+});
