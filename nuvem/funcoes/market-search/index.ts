@@ -200,42 +200,48 @@ function reportedICP(entry,f,employees){
  const requested=Object.values(values).filter(x=>x!=='nao_solicitado');
  return {...values,statusGeral:requested.length&&requested.every(x=>x==='declarado')?'declarado_nao_verificado':'pendente'};
 }
-function combineAI(results,limit,f) {
+function combineAI(results,limit,f,diagnostics={}) {
  const out=new Map();
+ // Aggregate-only diagnostics; never log names, IDs, URLs or prompts.
+ const counts={candidates:0,rejectedTerritory:0,rejectedEmployees:0,
+  rejectedInvalidCnpj:0,rejectedMissingName:0,rejectedUncitedSource:0,
+  mergedDuplicates:0,accepted:0};
  for(const r of results){
   if(!r.searched)continue;
   const list=Array.isArray(r.parsed.empresas)?r.parsed.empresas:[];
   for(const entry of list.slice(0,limit)){
-   if(!entry||typeof entry!=='object')continue;
-   if(!inRequestedPlace(entry,f))continue;
+   counts.candidates++;
+   if(!entry||typeof entry!=='object'){counts.rejectedMissingName++;continue;}
+   if(!inRequestedPlace(entry,f)){counts.rejectedTerritory++;continue;}
    // OR between the selected ranges; missing/ambiguous employee counts stay
    // visible for research, never labeled as confirmed ICP matches.
    const reported=entry.funcionarios;
    const employees=typeof reported==='number'?reported:(typeof reported==='string'&&/^\d+$/.test(reported)?Number(reported):null);
    if(f.faixasFuncionarios.length&&Number.isSafeInteger(employees)&&employees>=0&&
-      !f.faixasFuncionarios.some(id=>{const [min,max]=BAND_LIMITS[id];return employees>=min&&(max===null||employees<=max)}))continue;
+      !f.faixasFuncionarios.some(id=>{const [min,max]=BAND_LIMITS[id];return employees>=min&&(max===null||employees<=max)})){counts.rejectedEmployees++;continue;}
    const icp=reportedICP(entry,f,employees);
    // Preserve legacy numeric employee filters: an explicit out-of-band
    // number is not a prospect that matches this requested ICP.
    if(Number.isSafeInteger(employees)&&employees>=0&&(
       (f.funcionariosMin!==null&&employees<f.funcionariosMin)||
-      (f.funcionariosMax!==null&&employees>f.funcionariosMax)))continue;
+      (f.funcionariosMax!==null&&employees>f.funcionariosMax))){counts.rejectedEmployees++;continue;}
    const rawCnpj=str(entry.cnpj,40),cnpj=cnpjReal(rawCnpj);
    // Invalid supplied CNPJ is discarded; genuinely missing CNPJ can be
    // displayed as a non-importable research candidate with web evidence.
-   if(rawCnpj&&!cnpj)continue;
+   if(rawCnpj&&!cnpj){counts.rejectedInvalidCnpj++;continue;}
    const nome=str(entry.nome||entry.razaoSocial,160);
-   if(!nome)continue;
+   if(!nome){counts.rejectedMissingName++;continue;}
    const sources=(Array.isArray(entry.fontes)?entry.fontes:[]).map(f=>({url:canonicalUrl(f.url),titulo:str(f.titulo,150)})).filter(f=>f.url&&r.urls.has(f.url));
-   if(!sources.length)continue;
+   if(!sources.length){counts.rejectedUncitedSource++;continue;}
    const normalizedName=normalizedPlace(nome).replace(/[^a-z0-9]/g,'');
-   if(!cnpj&&normalizedName.length<4)continue;
+   if(!cnpj&&normalizedName.length<4){counts.rejectedMissingName++;continue;}
    const researchKey=cnpj?'cnpj:'+cnpj:'pending:'+normalizedName+'|'+normalizedPlace(entry.cidade||f.cidade)+'|'+str(entry.uf||f.uf,2).toUpperCase();
    const urls=new Set(sources.map(f=>f.url));
    const contatos=(Array.isArray(entry.contatos)?entry.contatos:[]).filter(c=>c&&urls.has(canonicalUrl(c.fonte))).slice(0,10).map(c=>({nome:str(c.nome),cargo:str(c.cargo),email:str(c.email,180),telefone:str(c.telefone,60),fonte:canonicalUrl(c.fonte)}));
    const noticias=(Array.isArray(entry.noticias)?entry.noticias:[]).filter(n=>n&&urls.has(canonicalUrl(n.url))).slice(0,6).map(n=>({titulo:str(n.titulo),url:canonicalUrl(n.url),data:str(n.data,40)}));
    const existing=out.get(researchKey);
    if(existing){
+    counts.mergedDuplicates++;
     // Same CNPJ is an identity key, not proof that all provider facts agree.
     for(const campo of ['cidade','uf','razaoSocial','segmento']){
      const first=str(existing[campo],160),other=str(entry[campo],160);
@@ -269,6 +275,8 @@ function combineAI(results,limit,f) {
    out.set(researchKey,{cnpj,identidadeStatus:cnpj?'cnpj_validado':'pendente_cnpj',razaoSocial:str(entry.razaoSocial||entry.nome),nome:str(entry.nome||entry.razaoSocial),cidade:str(entry.cidade),uf:str(entry.uf,2).toUpperCase(),porte:str(entry.porte),segmento:str(entry.segmento),site:str(entry.site,200),telefone:str(entry.telefone,60),funcionarios:entry.funcionarios??null,faixaFuncionariosStatus:f.faixasFuncionarios.length?(Number.isSafeInteger(employees)?'aderente_nao_verificado':'pendente'):'nao_solicitado',qualificacaoICP:icp,faturamento:entry.faturamento??null,contatos,noticias,insights:Array.isArray(entry.insights)?entry.insights.slice(0,6).map(s=>str(s,250)):[],fontes:sources,providers:[r.engine],conflitos:[],territorioCorroborado:false});
   }
  }
+ counts.accepted=Math.min(out.size,limit);
+ Object.assign(diagnostics,counts);
  return [...out.values()].slice(0,limit);
 }
 
@@ -450,6 +458,9 @@ Deno.serve(async req=>{
   }
   if(!results.length)return output({error:'AI_SEARCH_UNAVAILABLE',failedProviders,failures},502,origin);
   const partial=failedProviders.length>0;
-  return output({data:combineAI(results,f.limit,f),source:'Pesquisa web OpenAI / Claude',providers:results.map(x=>x.engine),failedProviders,failures,partial,usage:results.map(x=>x.usage),retrievedAt:new Date().toISOString(),total:null,hasMore:null,coverage:'exploratoria',coverageStatus:'unknown',territoryVerified:false,warning:(partial?'Uma ou mais IAs nao concluiram a pesquisa; cobertura parcial. ':'')+'Pesquisa exploratoria; nao equivale ao universo integral de CNPJs. Nenhum registro foi importado.'},200,origin);
+  const diagnostics={};
+  const companies=combineAI(results,f.limit,f,diagnostics);
+  console.info('[market-search] filtering_summary',JSON.stringify({completedProviders:results.length,...diagnostics}));
+  return output({data:companies,diagnostics,source:'Pesquisa web OpenAI / Claude',providers:results.map(x=>x.engine),failedProviders,failures,partial,usage:results.map(x=>x.usage),retrievedAt:new Date().toISOString(),total:null,hasMore:null,coverage:'exploratoria',coverageStatus:'unknown',territoryVerified:false,warning:(partial?'Uma ou mais IAs nao concluiram a pesquisa; cobertura parcial. ':'')+'Pesquisa exploratoria; nao equivale ao universo integral de CNPJs. Nenhum registro foi importado.'},200,origin);
  }catch{return output({error:'SEARCH_UNAVAILABLE'},502,origin)}
 });
