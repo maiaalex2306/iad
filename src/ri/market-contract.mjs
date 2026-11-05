@@ -42,9 +42,16 @@ export function normalizeMarketCompanies(companies,{source='',retrievedAt=''}={}
  const seen=new Set(),output=[];
  for(const x of companies.slice(0,50)){
   if(!x||typeof x!=='object')continue;
-  const cnpj=normalizeCnpj(x.cnpj);if(!cnpj||seen.has(cnpj))continue;seen.add(cnpj);
+  const rawCnpj=str(x.cnpj,40),cnpj=normalizeCnpj(rawCnpj);
+  // A claimed but invalid identifier is never silently downgraded to pending.
+  if(rawCnpj&&!cnpj)continue;
+  const name=str(x.nome||x.nomeFantasia||x.razaoSocial);
+  const evidence=Array.isArray(x.fontes)?x.fontes.filter(v=>v&&/^https?:\/\//i.test(str(v.url,500))):[];
+  if(!cnpj&&(!name||!evidence.length))continue;
+  const key=cnpj?'cnpj:'+cnpj:'pending:'+folded(name)+'|'+folded(x.cidade)+'|'+str(x.uf,2).toUpperCase();
+  if(seen.has(key))continue;seen.add(key);
   const contacts=Array.isArray(x.contatos)?x.contatos.slice(0,15):[];
-  output.push({cnpj,nome:str(x.nome||x.nomeFantasia||x.razaoSocial),razaoSocial:str(x.razaoSocial),
+  output.push({cnpj,identidadeStatus:cnpj?'cnpj_validado':'pendente_cnpj',nome:name,razaoSocial:str(x.razaoSocial),
    cidade:str(x.cidade),uf:str(x.uf,2).toUpperCase(),segmento:str(x.segmento||x.cnaePrimario),cnae:str(x.cnae),porte:str(x.porte),site:str(x.site),telefone:str(x.telefone),
    funcionarios:x.funcionarios??null,faturamento:x.faturamento??null,faturamentoStatus:'nao_confirmado',funcionariosStatus:'nao_confirmado',
    source:str(source),retrievedAt:str(retrievedAt,40),
