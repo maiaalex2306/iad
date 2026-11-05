@@ -30,7 +30,7 @@ test('seis agentes têm métricas reais sobre o mesmo resultado externo, sem inv
  assert.equal(a.shortlist[0].evidence.contatosVerificados,0);
  assert.equal(a.shortlist[0].evidence.sinaisCompraConfirmados,0);
  assert.equal(a.networkCalls,0);assert.equal(a.writes,0);
- assert.match(a.method,/Não significa probabilidade de compra/);
+ assert.match(a.method,/não significa probabilidade de compra/i);
 });
 test('notícia e insight sem URL https não viram sinal citado ou sinal de compra',()=>{
  const a=run([{...raw,noticias:[{titulo:'Aumento de produção',url:'http://localhost/teste'}],
