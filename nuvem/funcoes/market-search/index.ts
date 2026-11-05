@@ -115,14 +115,34 @@ async function queryAI(engine,key,f) {
  let uri,headers,body;
  if(engine==='OpenAI') {
   uri='https://api.openai.com/v1/responses';headers={authorization:'Bearer '+key,'content-type':'application/json'};
-  body={model:Deno.env.get('IA_MODELO_PESQUISA_OPENAI')||Deno.env.get('IA_MODELO_OPENAI')||'gpt-5',instructions,input:prompt(f),tools:[{type:'web_search',search_context_size:'medium'}],tool_choice:'required',max_tool_calls:2,max_output_tokens:3500,store:false};
+  body={model:Deno.env.get('IA_MODELO_PESQUISA_OPENAI')||Deno.env.get('IA_MODELO_OPENAI')||'gpt-5',instructions,input:prompt(f),tools:[{type:'web_search',search_context_size:'low'}],tool_choice:'required',max_tool_calls:2,max_output_tokens:2200,store:false};
  } else {
   uri='https://api.anthropic.com/v1/messages';headers={'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json'};
-  body={model:Deno.env.get('IA_MODELO_PESQUISA_ANTHROPIC')||Deno.env.get('IA_MODELO_ANTHROPIC')||'claude-opus-5',system:instructions,max_tokens:3500,messages:[{role:'user',content:prompt(f)}],tools:[{type:'web_search_20250305',name:'web_search',max_uses:2}]};
+  body={model:Deno.env.get('IA_MODELO_PESQUISA_ANTHROPIC')||Deno.env.get('IA_MODELO_ANTHROPIC')||'claude-opus-5',system:instructions,max_tokens:2200,messages:[{role:'user',content:prompt(f)}],tools:[{type:'web_search_20250305',name:'web_search',max_uses:2}]};
  }
- const resp=await fetch(uri,{method:'POST',headers,body:JSON.stringify(body),signal:AbortSignal.timeout(35000)});
- if(!resp.ok)throw Error('IA_HTTP_'+resp.status);
- return aiSummary(await resp.json(),engine);
+ // Short searches need enough time for the hosted web tool, but always stay
+ // below Supabase's 150s request idle limit. No hidden retry or extra quota.
+ const started=Date.now();
+ let resp;
+ try{
+  resp=await fetch(uri,{method:'POST',headers,body:JSON.stringify(body),signal:AbortSignal.timeout(80000)});
+ }catch(err){
+  const code=err?.name==='TimeoutError'||err?.name==='AbortError'?'TIMEOUT': 'FETCH_FAILURE';
+  console.warn('[market-search] provider_transport',JSON.stringify({provider:engine,category:code,elapsedMs:Date.now()-started}));
+  throw Error('IA_'+code);
+ }
+ if(!resp.ok){
+  console.warn('[market-search] provider_http',JSON.stringify({provider:engine,status:resp.status,elapsedMs:Date.now()-started}));
+  throw Error('IA_HTTP_'+resp.status);
+ }
+ let data;
+ try{data=await resp.json()}catch{
+  console.warn('[market-search] provider_invalid_json',JSON.stringify({provider:engine,elapsedMs:Date.now()-started}));
+  throw Error('IA_INVALID_JSON');
+ }
+ const summary=aiSummary(data,engine);
+ console.info('[market-search] provider_result',JSON.stringify({provider:engine,searched:summary.searched,elapsedMs:Date.now()-started}));
+ return summary;
 }
 // Filter only explicit geographic contradictions; missing fields remain unverified.
 function normalizedPlace(value) {
@@ -260,7 +280,7 @@ Deno.serve(async req=>{
    const outcome=outcomes[i];
    if(outcome.status==='rejected'){
     const reason=String(outcome.reason?.message||'').slice(0,100);
-    const category=/^IA_HTTP_\d{3}$/.test(reason)?reason:/timeout|abort/i.test(reason)?'TIMEOUT':'NETWORK_OR_PARSE';
+    const category=/^IA_HTTP_\d{3}$/.test(reason)?reason:/^IA_(TIMEOUT|FETCH_FAILURE|INVALID_JSON)$/.test(reason)?reason.slice(3):'UNKNOWN_FAILURE';
     console.warn('[market-search] provider_failure',JSON.stringify({provider:jobs[i].engine,category}));
    }else if(outcome.value?.searched!==true){
     console.warn('[market-search] provider_failure',JSON.stringify({provider:jobs[i].engine,category:'WEB_SEARCH_NOT_COMPLETED'}));
