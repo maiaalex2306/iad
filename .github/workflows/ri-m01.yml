@@ -6,6 +6,8 @@ on:
       - "nuvem/funcoes/market-search/**"
       - "tests/market-*.test.mjs"
       - "nuvem/sql/ri-m01-*.sql"
+      - "scripts/ri-m01-staging-e2e.mjs"
+      - ".github/workflows/ri-m01-live-e2e.yml"
       - ".github/workflows/ri-m01.yml"
   workflow_dispatch:
 permissions:
@@ -22,6 +24,7 @@ jobs:
       - run: node --test tests/market-contract.test.mjs tests/market-edge.test.mjs tests/market-sql.test.mjs tests/market-staging-e2e.test.mjs
       - run: node --check src/ri/market-contract.mjs
       - run: node --check src/ri/market-view.mjs
+      - run: node --check scripts/ri-m01-staging-e2e.mjs
       # Live perimeter smoke against homologation only. No API keys or paid AI calls.
       - name: Smoke homologation market-search (unauthenticated)
         shell: bash
