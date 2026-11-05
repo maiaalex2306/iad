@@ -95,3 +95,24 @@ test('falha de download nao desfaz importacao confirmada no servidor',async()=>{
  assert.equal(state.status,'pending');
  assert.equal(state.serverCommitted,true);
 });
+
+test('retorno de puxar sem conta/oportunidade importadas nao e sincronizacao comprovada',async()=>{
+ const {refreshMarketPipelineAfterImport}=await import('../src/ri/market-view.mjs');
+ const nuvem={diagnosticoPendenciasCAS:()=>({disponivel:true,quantidade:0}),haMudancas:()=>false,puxar:async()=>{}};
+ const result=await refreshMarketPipelineAfterImport({nuvem,importedCount:1,valid:()=>true,
+  tenantId:'tenant-a',importedIds:[{accountId:'ri-a',opportunityId:'ri-b'}],
+  getSnapshot:()=>({contas:[],oportunidades:[]})});
+ assert.equal(result.status,'pending');
+ assert.equal(result.serverCommitted,true);
+});
+test('sync so e confirmada com IDs de conta e oportunidade visiveis no Store correto',async()=>{
+ const {refreshMarketPipelineAfterImport}=await import('../src/ri/market-view.mjs');
+ const nuvem={diagnosticoPendenciasCAS:()=>({disponivel:true,quantidade:0}),haMudancas:()=>false,puxar:async()=>{}};
+ const importedIds=[{accountId:'ri-a',opportunityId:'ri-b'}];
+ const args={nuvem,importedCount:1,valid:()=>true,tenantId:'tenant-a',importedIds,
+ getSnapshot:()=>({contas:[{id:'ri-a',tenantId:'tenant-a'}],
+ oportunidades:[{id:'ri-b',contaId:'ri-a',tenantId:'tenant-a'}]})};
+ assert.equal((await refreshMarketPipelineAfterImport(args)).status,'synced');
+ assert.equal((await refreshMarketPipelineAfterImport({...args,getSnapshot:()=>({
+  contas:[{id:'ri-a',tenantId:'outro'}],oportunidades:[{id:'ri-b',contaId:'ri-a',tenantId:'outro'}]})})).status,'pending');
+});
