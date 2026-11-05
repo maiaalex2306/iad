@@ -1,5 +1,10 @@
 name: RI-M01 — E2E real de ChatGPT e Claude (homologação)
 on:
+  push:
+    branches:
+      - feature/ri-m01-atomic-quota-20261104
+    paths:
+      - .github/workflows/ri-m01-live-e2e.yml
   workflow_dispatch:
 permissions:
   contents: read
