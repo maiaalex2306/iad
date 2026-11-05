@@ -1,5 +1,18 @@
 import {pathToFileURL} from 'node:url';
 
+/** CNPJ alfanumérico brasileiro; mesma regra do motor e da RPC de importação. */
+function validCnpj(value) {
+ const v=String(value||'').toUpperCase();
+ if(!/^[0-9A-Z]{12}[0-9]{2}$/.test(v))return false;
+ if(v.slice(0,12)===v[0].repeat(12))return false;
+ const digit=(part,weights)=>{
+  const mod=[...part].reduce((sum,ch,i)=>sum+(ch.charCodeAt(0)-48)*weights[i],0)%11;
+  return mod<2?'0':String(11-mod);
+ };
+ return v[12]===digit(v.slice(0,12),[5,4,3,2,9,8,7,6,5,4,3,2])
+  &&v[13]===digit(v.slice(0,13),[6,5,4,3,2,9,8,7,6,5,4,3,2]);
+}
+
 /**
  * Authenticated RI-M01 staging smoke. The configured staging Edge Function
  * performs the paid searches; no provider secret is ever handled here.
@@ -61,8 +74,8 @@ export async function runMarketResearchE2E({
   let companiesWithSources = 0;
   const known = new Set();
   for (const company of payload.data) {
-    if (!/^[0-9A-Z]{12}[0-9]{2}$/.test(String(company?.cnpj || ''))) {
-      throw Error('Company missing a well-formed CNPJ');
+    if (!validCnpj(company?.cnpj)) {
+      throw Error('Company missing a legally valid CNPJ');
     }
     if (known.has(company.cnpj)) throw Error('Duplicate CNPJ returned');
     known.add(company.cnpj);
