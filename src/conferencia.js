@@ -60,6 +60,7 @@
     ["carteira", "coluna", "contatos", "email_pessoal", "nuvem/correcao-13-contatos-dois-canais.sql"],
     ["carteira", "coluna", "contatos", "telefone_comercial", "nuvem/correcao-13-contatos-dois-canais.sql"],
     ["acesso", "coluna", "convites", "nome", "nuvem/correcao-08-nome-do-convite.sql"],
+    ["acesso", "coluna", "convites", "whatsapp", "nuvem/correcao-28-cadastro-administrativo.sql"],
     ["e-mail", "coluna", "emails", "analisada_em", "nuvem/correcao-19-analise-do-email.sql"],
     ["e-mail", "coluna", "emails", "analise", "nuvem/correcao-19-analise-do-email.sql"],
     ["e-mail", "coluna", "emails", "analise_erro", "nuvem/correcao-19-analise-do-email.sql"],

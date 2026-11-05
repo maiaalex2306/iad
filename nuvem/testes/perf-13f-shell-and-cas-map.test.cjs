@@ -33,8 +33,16 @@ function mockWorker(){
  return {cache,cachesData,hit,requests,origin};
 }
 test('37+ arquivos estaticos sao atendidos pelo cache da versao ativa sem rede',async()=>{
+ /* O cache "novo" tem de ser o DA VERSÃO ATIVA, lida do próprio sw.js.
+    Estava fixo em 'iad-crm-v286.23': a partir da v286.24 o worker não achava
+    esse nome, servia o antigo, e o teste ficou vermelho para sempre — por
+    estar desatualizado, não por o cache ter deixado de funcionar. Lido do
+    arquivo, ele acompanha cada bump sozinho. O cache "velho" segue fixo de
+    propósito: o papel dele é só ser um nome diferente que NÃO deve ganhar. */
  const w=mockWorker(),key=w.origin+'/src/app.js';
- await w.cache('iad-crm-v286.23').put(key,{token:'new-app'});
+ const ATIVO=/const CACHE = '(iad-crm-v[\d.]+)'/.exec(sw);
+ assert.ok(ATIVO,'nao li o nome do cache em sw.js');
+ await w.cache(ATIVO[1]).put(key,{token:'new-app'});
  await w.cache('iad-crm-v286.9').put(key,{token:'old-app'});
  const first=await w.hit(key),second=await w.hit(key);
  assert.equal(first.response.token,'new-app');

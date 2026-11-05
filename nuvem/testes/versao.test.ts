@@ -42,13 +42,40 @@ function conferir(nome: string, condicao: boolean, detalhe = '') {
 const sw = await readFile(RAIZ + 'sw.js', 'utf8');
 const config = await readFile(RAIZ + 'src/config.js', 'utf8');
 
-const doCache = /const CACHE = ['"]iad-crm-(v\d+)['"]/.exec(sw);
-const doConfig = /window\.IADVersao\s*=\s*\{\s*numero:\s*['"](v\d+)['"]\s*,\s*data:\s*['"]([\d-]+)['"]/.exec(config);
+/* O FORMATO DO NÚMERO MUDOU, E ISSO QUASE DESLIGOU ESTE TESTE
+   ------------------------------------------------------------------
+   Estes dois `exec` liam `v\d+` — só dígitos depois do `v`. Quando a versão
+   passou a ter uma segunda parte (`v286.48`), nenhum dos dois achou nada: o
+   `if` logo abaixo não rodou, e a COMPARAÇÃO ENTRE OS DOIS NÚMEROS deixou de
+   acontecer. O teste continuou vermelho, então ninguém perdeu o aviso — mas
+   vermelho por não saber ler, não por ter encontrado desacordo.
 
-conferir('achei o CACHE em sw.js', !!doCache,
-  'esperava uma linha como:  const CACHE = \'iad-crm-v211\';');
-conferir('achei o IADVersao em src/config.js', !!doConfig,
-  'esperava uma linha como:  window.IADVersao = { numero: \'v211\', data: \'2026-09-22\' };');
+   Essa é a falha pior das duas. Um teste que falha diz "olhe aqui". Um teste
+   que não consegue ler diz a MESMA COISA quer os números batam, quer tenham
+   voltado a derivar sete versões seguidas — que é exatamente o que ele existe
+   para pegar. Enquanto esteve cego, a trava estava desligada.
+
+   Daí `(?:\.\d+)*`: aceita `v286`, `v286.48` e o que vier depois, sem
+   abrir mão de exigir que os dois lados digam a mesma coisa. E as duas
+   primeiras verificações passam a dizer "não consegui LER o número" em vez de
+   "não achei a linha", porque com a linha presente e o formato novo a causa
+   era a leitura, não a ausência. */
+const NUMERO = '(v\\d+(?:\\.\\d+)*)';
+const doCache = new RegExp("const CACHE = ['\"]iad-crm-" + NUMERO + "['\"]").exec(sw);
+const doConfig = new RegExp(
+  "window\\.IADVersao\\s*=\\s*\\{\\s*numero:\\s*['\"]" + NUMERO +
+  "['\"]\\s*,\\s*data:\\s*['\"]([\\d-]+)['\"]").exec(config);
+
+conferir('li o número do CACHE em sw.js', !!doCache,
+  'a linha existe mas o número não foi lido. Esperava algo como:\n      ' +
+  'const CACHE = \'iad-crm-v286.48\';  (ou \'iad-crm-v286\')\n      ' +
+  'Se o formato do número mudou de novo, conserte o NUMERO aqui em cima — ' +
+  'senão\n      a comparação dos dois lados para de acontecer.');
+conferir('li o número do IADVersao em src/config.js', !!doConfig,
+  'a linha existe mas o número não foi lido. Esperava algo como:\n      ' +
+  'window.IADVersao = { numero: \'v286.48\', data: \'2026-11-05\' };\n      ' +
+  'Se o formato do número mudou de novo, conserte o NUMERO aqui em cima — ' +
+  'senão\n      a comparação dos dois lados para de acontecer.');
 
 if (doCache && doConfig) {
   conferir('os dois números são o mesmo', doCache[1] === doConfig[1],
