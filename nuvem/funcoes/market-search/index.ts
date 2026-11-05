@@ -178,7 +178,7 @@ Deno.serve(async req=>{
   const profileRes=await fetch(url+'/rest/v1/perfis?select=tenant_id,papel,ativo&id=eq.'+encodeURIComponent(user.id)+'&limit=1',{headers:{Authorization:access,apikey:anon},signal:AbortSignal.timeout(6500)});
   if(!profileRes.ok)return output({error:'AUTH_SCOPE_UNAVAILABLE'},403,origin);
   const profile=(await profileRes.json())?.[0];
-  if(!profile||profile.ativo===false||!['vendedor','gestor','admin'].includes(profile.papel)||(!profile.tenant_id&&profile.papel!=='admin'))
+  if(!profile||profile.ativo===false||!['usuario','gestor','admin'].includes(profile.papel)||(!profile.tenant_id&&profile.papel!=='admin'))
    return output({error:'AUTH_SCOPE_UNAVAILABLE'},403,origin);
   // Byte-limited streaming read: never buffer an unbounded body even if the
   // client omits or lies about Content-Length. Enforce the same 12 KB cap
