@@ -62,10 +62,14 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
  form.appendChild(grid);form.appendChild(btn);
  root.replaceChildren(el('h2','Pesquisar empresas fora do CRM'),el('p','Pesquisa iniciada manualmente. Fontes, custos e cobertura dependem do provedor contratado. Os dados nao sao fatos confirmados ate verificacao.','small muted'),form,status,results,review);
  const show=(message)=>{if(valid())status.textContent=message;};
+ // Stable review key for candidates without CNPJ; never an import identity.
+ const researchKey=c=>c.cnpj||'pending:'+String(c.nome||c.razaoSocial||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()+'|'+String(c.cidade||'').toLowerCase()+'|'+String(c.uf||'');
  function renderCompanies(data,source,asOf){
   if(!valid())return;
   selected.clear();importKeys.clear();review.replaceChildren();results.replaceChildren();
-  results.appendChild(el('h3',data.length+' empresas encontradas na web · '+source));
+  const pending=data.filter(c=>!c.cnpj).length;
+  results.appendChild(el('h3',data.length+' empresas candidatas encontradas na web · '+source));
+  results.appendChild(el('p',pending+' candidata(s) com CNPJ pendente, somente para revisao; nenhuma pode ser importada sem validacao.','small muted'));
   results.appendChild(el('p','Dados consultados em '+asOf+'. Esta pagina nao representa necessariamente todas as empresas da regiao.','small muted'));
   const snapshotNow=snapshot;
   for(const company of data){
@@ -73,7 +77,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
    const card=el('section','','card'),title=el('h4',(company.nome||company.razaoSocial)+' · '+company.cidade+'/'+company.uf);
    const statusMatch=plan.match.status==='existing'?'Ja cadastrada — CNPJ exato':plan.match.status==='related'?'Possivel matriz/filial':plan.match.status==='review'?'Revisar possivel duplicidade':'Nao cadastrada';
    card.appendChild(title);
-   card.appendChild(el('p','CNPJ '+company.cnpj+' · '+(company.segmento||'Setor nao informado')+' · '+(company.porte||'Porte nao informado'),'small muted'));
+   card.appendChild(el('p',(company.cnpj?'CNPJ '+company.cnpj:'CNPJ pendente — validar identidade')+' · '+(company.segmento||'Setor nao informado')+' · '+(company.porte||'Porte nao informado'),'small muted'));
    card.appendChild(el('p','Situacao CRM: '+statusMatch+(plan.existingOpportunityId?' · Ja existe oportunidade em Prospecção':''),'small'));
    card.appendChild(el('p','Funcionarios: '+(company.funcionarios===null?'indisponivel':String(company.funcionarios))+' (nao confirmado) · Faturamento: '+(company.faturamento===null?'indisponivel':String(company.faturamento))+' (nao confirmado)','small'));
    if(company.telefone)card.appendChild(el('p','Telefone corporativo informado: '+company.telefone,'small'));
@@ -97,8 +101,8 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
    }
    if(company.providers.length)card.appendChild(el('p','Pesquisado por: '+company.providers.join(' + '),'small muted'));
    const label=el('label','Selecionar para revisao comercial','campo'),check=doc.createElement('input');
-   check.type='checkbox';check.disabled=plan.match.status==='review'&&!plan.match.accountId;
-   check.addEventListener('change',()=>{if(!valid())return;if(check.checked)selected.add(company.cnpj);else selected.delete(company.cnpj);renderSelection(data);});
+   check.type='checkbox'; // pending candidates may be selected for research review; never for import.
+   check.addEventListener('change',()=>{if(!valid())return;const key=researchKey(company);if(check.checked)selected.add(key);else selected.delete(key);renderSelection(data);});
    label.prepend(check);card.appendChild(label);results.appendChild(card);
   }
  }
@@ -106,10 +110,10 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   review.replaceChildren();
   review.appendChild(el('h3','Selecao: '+selected.size+' empresa(s)'));
   if(!selected.size)return;
-  const chosen=data.filter(c=>selected.has(c.cnpj)),eligible=[];
+  const chosen=data.filter(c=>selected.has(researchKey(c))),eligible=[];
   for(const c of chosen){
    const plan=proposePipelineAction(c,snapshot,{tenantId:scope.tenantId,userId:scope.userId});
-   const rejected=plan.match.status!=='new'||!!c.conflitos?.length||!c.fontes?.length;
+   const rejected=!c.cnpj||plan.match.status!=='new'||!!c.conflitos?.length||!c.fontes?.length;
    if(!rejected)eligible.push(c);
    review.appendChild(el('p',(c.nome||c.razaoSocial)+' — '+(rejected?'Exige revisao ou ja esta cadastrada':'Nova empresa elegivel para confirmacao')+(plan.existingOpportunityId?' (oportunidade existente)':''),'small'));
   }
@@ -149,9 +153,9 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
      if(data?.status==='imported'||data?.status==='already_imported'){
       imported++;
       importedIds.push({accountId:data.accountId,opportunityId:data.opportunityId});
-      selected.delete(company.cnpj);
+      selected.delete(researchKey(company));
      }
-     else if(data?.status==='existing'||data?.status==='review_duplicate'){reviewed++;selected.delete(company.cnpj);}
+     else if(data?.status==='existing'||data?.status==='review_duplicate'){reviewed++;selected.delete(researchKey(company));}
      else failed++;
     }catch{failed++;}
    }
@@ -198,7 +202,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
     const searches=Number.isSafeInteger(u.webSearchRequests)?u.webSearchRequests:'nao informado';
     return u.provider+': '+inTokens+' tokens entrada, '+outTokens+' saida, '+searches+' buscas web';
    }).join(' | '):'';
-   show(partialWarning+'Pesquisa web exploratoria: '+companies.length+' empresas com fontes; nao representa todas as empresas da regiao. Nenhuma gravacao realizada.'+(usageText?' Consumo informado: '+usageText+'. Custo em R$ a apurar.':''));
+   show(partialWarning+'Pesquisa exploratoria: '+companies.length+' candidatas com fontes, '+companies.filter(c=>!c.cnpj).length+' com CNPJ pendente; cobertura total desconhecida. Nenhuma gravacao realizada.'+(usageText?' Consumo informado: '+usageText+'. Custo em R$ a apurar.':''));
    renderCompanies(companies,payload.source||'Fornecedor',payload.retrievedAt||'data nao fornecida');
   }catch(e){if(seq===currentRequest&&valid()&&e.name!=='AbortError')show('Falha de rede ao consultar fonte empresarial. Nenhuma alteracao no CRM.');}
   finally{if(seq===currentRequest&&valid())btn.disabled=false;}
