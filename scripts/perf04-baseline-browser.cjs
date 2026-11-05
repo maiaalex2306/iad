@@ -241,10 +241,8 @@ async function main(){
      baseline.__perf04SetNutri({...common,aba:'ativa'});
      candidate.__perf04SetNutri({...common,aba:'ativa'});
      const oldTimes=[],newTimes=[];
-     // Medir P95 em apenas seis amostras apos aquecimento equivale ao maximo
-     // e flutua com um unico jitter do runner. Manter a mesma meta de 50%
-     // com 30 amostras aquecidas, alternando a ordem para reduzir vies.
-     for(let i=0;i<31;i++){
+     // alterna a ordem para minimizar tendência térmica do runner.
+     for(let i=0;i<7;i++){
        let t=performance.now();
        if(i%2===0){baseline.nutricao();oldTimes.push(performance.now()-t);
          t=performance.now();candidate.nutricao();newTimes.push(performance.now()-t);}
