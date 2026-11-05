@@ -37,4 +37,9 @@ window.IADConfig = {
    disso vale mais do que a coincidência dos dois números. */
 /* RI-01C: ativar somente a análise de contas existentes, sem envios ou gravações. */
 window.IAD_RI_ENABLED = true;
-window.IADVersao = { numero: 'v286.46', data: '2026-11-04' };
+/* RI-M01: opt-in de pesquisa no piloto. O backend permite somente admin.
+   Sem ?riMarketPilot=1, a interface publica continua inalterada. */
+window.IAD_MARKET_ENABLED = new URLSearchParams(location.search).get('riMarketPilot') === '1';
+/* Importação desligada até E2E real, RLS/CAS e fontes homologados. */
+window.IAD_MARKET_IMPORT_ENABLED = false;
+window.IADVersao = { numero: 'v286.47', data: '2026-11-05' };
