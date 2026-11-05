@@ -1,0 +1,23 @@
+name: RI-M01 — E2E real de ChatGPT e Claude (homologação)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  live-research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: homologacao
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Contratos de E2E (sem consumo de IA)
+        run: node --test tests/market-staging-e2e.test.mjs
+      - name: Pesquisa autenticada com OpenAI + Claude na Edge de homologação
+        env:
+          RI_M01_STAGING_EMAIL: ${{ secrets.RI_M01_STAGING_EMAIL }}
+          RI_M01_STAGING_PASSWORD: ${{ secrets.RI_M01_STAGING_PASSWORD }}
+          RI_M01_STAGING_ANON_KEY: ${{ secrets.RI_M01_STAGING_ANON_KEY }}
+        run: node scripts/ri-m01-staging-e2e.mjs
