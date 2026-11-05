@@ -43,7 +43,7 @@ function filters(raw){
  if(funcionariosMax!==null&&funcionariosMin!==null&&funcionariosMax<funcionariosMin)throw Error('Faixa de empregados invertida');
  if(faturamentoMax!==null&&faturamentoMin!==null&&faturamentoMax<faturamentoMin)throw Error('Faixa de faturamento invertida');
  const limit=raw.limit===undefined?20:Number(raw.limit);if(!Number.isInteger(limit)||limit<1||limit>50)throw Error('Limite 1 a 50');
- return {uf,cidade,regiao,ddd,segmento,cnae,porte,municipios,ddds,segmentos,faixasFuncionarios,funcionariosMin,funcionariosMax,faturamentoMin,faturamentoMax,limit,catalogRequired:Array.isArray(raw.segmentos)};
+ return {uf,cidade,regiao,ddd,segmento,cnae,porte,municipios,ddds,segmentos,faixasFuncionarios,funcionariosMin,funcionariosMax,faturamentoMin,faturamentoMax,limit,catalogRequired:Array.isArray(raw.segmentos)&&segmentos.length>0};
 }
 
 function normalize(data){
