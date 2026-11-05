@@ -115,6 +115,11 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   }
   review.appendChild(el('p','A importacao cria somente conta e oportunidade em Prospeccao. Contatos nao sao gravados automaticamente. Confirme CNPJ, municipio e evidencia diretamente nas fontes.','small muted'));
   if(!eligible.length)return;
+  // Production research canary: no import command until explicit E2E approval.
+  if(globalThis.IAD_MARKET_IMPORT_ENABLED!==true){
+   review.appendChild(el('p','PILOTO DE PESQUISA: importacao no Pipeline desativada ate homologacao real. Revise empresas e fontes sem gravar dados comerciais.','small muted'));
+   return;
+  }
   const approval=el('label','Confirmo que verifiquei a identidade, localizacao e fontes de cada empresa elegivel e autorizo a inclusao no Pipeline.','campo');
   const agree=doc.createElement('input');agree.type='checkbox';agree.checked=false;
   approval.prepend(agree);review.appendChild(approval);
