@@ -435,3 +435,21 @@ test('tempo maximo de busca maior que 35s e menor que idle 150s, sem retry',()=>
  assert.match(source,/provider_invalid_json/);
  assert.match(source,/search_context_size:'low'/);
 });
+
+test('preserva candidata com nome e fonte web mas sem CNPJ',async()=>{
+ const response=responseOpenAI();
+ response.output.find(b=>b.type==='message').content[0].text=JSON.stringify({empresas:[{...candidate,cnpj:null}]});
+ const h=harness({openai:true,openaiResponse:response}),res=await h.handle(request(query));
+ assert.equal(res.status,200);
+ const body=await res.json();
+ assert.equal(body.data.length,1);
+ assert.equal(body.data[0].cnpj,'');
+ assert.equal(body.data[0].identidadeStatus,'pendente_cnpj');
+});
+test('sem CNPJ e sem citacao registrada nao gera candidata',async()=>{
+ const response=responseOpenAI(true,false);
+ response.output.find(b=>b.type==='message').content[0].text=JSON.stringify({empresas:[{...candidate,cnpj:null}]});
+ const h=harness({openai:true,openaiResponse:response}),res=await h.handle(request(query));
+ assert.equal(res.status,200);
+ assert.equal((await res.json()).data.length,0);
+});
