@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {normalizeCnpj, normalizeMarketFilters, matchCrmAccount, normalizeMarketCompanies, proposePipelineAction} from '../src/ri/market-contract.mjs';
+import {normalizeCnpj, normalizeMarketFilters, matchCrmAccount, normalizeMarketCompanies, proposePipelineAction, buildMarketImportRequest} from '../src/ri/market-contract.mjs';
 const tenantId='tenant-a',existing={id:'a1',tenantId,cnpj:'11.222.333/0001-81',nome:'Acme Indústria',razaoSocial:'Acme Indústria',site:'https://acme.example'};
 test('CNPJ numerico e alfanumerico validos; DV incorreto rejeitado',()=>{
  assert.equal(normalizeCnpj('11.222.333/0001-81'),'11222333000181');
@@ -52,4 +52,20 @@ test('normalizacao preserva divergencias de dados das IAs para revisao comercial
  assert.equal(v[0].territorioCorroborado,false);
  assert.equal(v[0].conflitos.length,1);
  assert.equal(v[0].conflitos[0].valorDivergente,'Campinas');
+});
+
+test('importacao exige revisao, cnpj novo, fonte e ausencia de conflitos',()=>{
+ const scope={tenantId,userId:'u1'},rid='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+ const company={cnpj:'11222333000181',nome:'Empresa A',cidade:'Jacarei',uf:'SP',segmento:'Quimico',
+  fontes:[{url:'https://example.org/empresa-a'}],conflitos:[]};
+ const request=buildMarketImportRequest(company,{contas:[],oportunidades:[]},scope,rid);
+ assert.equal(request.p_tenant,tenantId);
+ assert.equal(request.p_request_id,rid);
+ assert.equal(request.p_confirmed,true);
+ assert.equal(request.p_empresa.cnpj,company.cnpj);
+ assert.equal(request.p_empresa.fontes[0].url,company.fontes[0].url);
+ assert.throws(()=>buildMarketImportRequest({...company,conflitos:[{campo:'cidade'}]}, {contas:[]},scope,rid),/diverg|revis/i);
+ assert.throws(()=>buildMarketImportRequest({...company,fontes:[]}, {contas:[]},scope,rid),/fonte/i);
+ assert.throws(()=>buildMarketImportRequest(company,{contas:[existing]},scope,rid),/cadastrad|exist/i);
+ assert.throws(()=>buildMarketImportRequest(company,{contas:[]},scope,'bad'),/identificador/i);
 });
