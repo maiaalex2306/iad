@@ -1,0 +1,2 @@
+IAD-RI-RELEASE-PROBE 2026-11-05
+Public static deployment branch detection only. No credentials, no business data.
