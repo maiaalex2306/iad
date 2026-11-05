@@ -10,19 +10,53 @@ export function normalizeCnpj(raw){
  return v[12]===digit(v.slice(0,12),[5,4,3,2,9,8,7,6,5,4,3,2])&&v[13]===digit(v.slice(0,13),[6,5,4,3,2,9,8,7,6,5,4,3,2])?v:'';
 }
 function amount(v,name){if(v===undefined||v===null||v==='')return null;const n=Number(v);if(!Number.isSafeInteger(n)||n<0||n>1e12)throw Error(name+': valor invalido');return n;}
+// Region/facet contract. The labels are the real Brazil DDD codes and
+// employment ranges, never guessed from a business name or phone number.
+export const UF_IBGE=Object.freeze({AC:12,AL:27,AP:16,AM:13,BA:29,CE:23,DF:53,ES:32,GO:52,MA:21,MT:51,MS:50,MG:31,PA:15,PB:25,PR:41,PE:26,PI:22,RJ:33,RN:24,RS:43,RO:11,RR:14,SC:42,SP:35,SE:28,TO:17});
+export const MARKET_DDDS=Object.freeze([11,12,13,14,15,16,17,18,19,21,22,24,27,28,31,32,33,34,35,37,38,41,42,43,44,45,46,47,48,49,51,53,54,55,61,62,63,64,65,66,67,68,69,71,73,74,75,77,79,81,82,83,84,85,86,87,88,89,91,92,93,94,95,96,97,98,99].map(String));
+export const MARKET_BANDS=Object.freeze([
+ {id:'0_10',label:'0 a 10',min:0,max:10},
+ {id:'11_100',label:'11 a 100',min:11,max:100},
+ {id:'101_200',label:'101 a 200',min:101,max:200},
+ {id:'201_500',label:'201 a 500',min:201,max:500},
+ {id:'501_1000',label:'501 a 1.000',min:501,max:1000},
+ {id:'1001_5000',label:'1.001 a 5.000',min:1001,max:5000},
+ {id:'5001_10000',label:'5.001 a 10.000',min:5001,max:10000},
+ {id:'10001_plus',label:'Acima de 10.000',min:10001,max:null}
+]);
+const marketList=(v,name,max,fn)=>{
+ if(v===undefined||v===null)return [];
+ if(!Array.isArray(v)||v.length>max)throw Error(name+': selecao invalida');
+ const out=v.map(fn);
+ if(out.some(x=>x===null))throw Error(name+': item invalido');
+ return [...new Map(out.map(x=>[typeof x==='string'?x:JSON.stringify(x),x])).values()];
+};
 export function normalizeMarketFilters(raw={}){
  const uf=str(raw.uf,2).toUpperCase(),cidade=str(raw.cidade,120),ddd=digits(raw.ddd).replace(/^0+(?=\d)/,''),regiao=str(raw.regiao,100),segmento=str(raw.segmento,120),cnae=digits(raw.cnae).slice(0,7),porte=str(raw.porte,60);
- if(uf&&!/^[A-Z]{2}$/.test(uf))throw Error('UF invalida');
- if(ddd&&!/^\d{2}$/.test(ddd))throw Error('DDD deve ter 2 digitos');
- if(!uf&&!cidade&&!ddd&&!regiao)throw Error('Informe uma geografia: UF, cidade, DDD ou regiao');
- if(!segmento&&!cnae)throw Error('Informe segmento ou CNAE');
+ if(uf&&!Object.hasOwn(UF_IBGE,uf))throw Error('UF invalida');
+ if(ddd&&!MARKET_DDDS.includes(ddd))throw Error('DDD invalido');
+ const municipios=marketList(raw.municipios,'Municipios',15,v=>{
+  if(!v||typeof v!=='object'||Array.isArray(v))return null;
+  const codigoIBGE=String(v.codigoIBGE??''),nome=str(v.nome,120),state=str(v.uf,2).toUpperCase();
+  return /^\d{7}$/.test(codigoIBGE)&&nome&&state===uf&&Number(codigoIBGE.slice(0,2))===UF_IBGE[state]?{codigoIBGE,nome,uf:state}:null;
+ });
+ if(municipios.length&&cidade)throw Error('Cidade singular e municipios simultaneos');
+ const ddds=marketList(raw.ddds,'DDDs',20,v=>{const c=digits(v).replace(/^0+(?=\d)/,'');return MARKET_DDDS.includes(c)?c:null});
+ const segmentos=marketList(raw.segmentos,'Segmentos',12,v=>{const t=str(v,120);return t&&t.length>=2?t:null});
+ const faixasFuncionarios=marketList(raw.faixasFuncionarios,'Faixas de funcionarios',8,v=>MARKET_BANDS.some(b=>b.id===v)?v:null);
+ if(ddd&&ddds.length)throw Error('DDD singular e multiplos simultaneos');
+ if(segmento&&segmentos.length)throw Error('Segmento singular e multiplos simultaneos');
+ if(!uf&&!cidade&&!ddd&&!regiao&&!municipios.length&&!ddds.length)throw Error('Informe uma geografia: UF, cidade, DDD ou regiao');
+ if(!segmento&&!segmentos.length&&!cnae)throw Error('Informe segmento ou CNAE');
  const funcionariosMin=amount(raw.funcionariosMin,'funcionarios'),funcionariosMax=amount(raw.funcionariosMax,'funcionarios');
  const faturamentoMin=amount(raw.faturamentoMin,'faturamento'),faturamentoMax=amount(raw.faturamentoMax,'faturamento');
+ if(faixasFuncionarios.length&&(funcionariosMin!==null||funcionariosMax!==null))throw Error('Escolha faixas ou limites numericos, sem misturar');
  if(funcionariosMin!==null&&funcionariosMax!==null&&funcionariosMin>funcionariosMax)throw Error('Faixa de funcionarios invertida');
  if(faturamentoMin!==null&&faturamentoMax!==null&&faturamentoMin>faturamentoMax)throw Error('Faixa de faturamento invertida');
- const limit=raw.limit===undefined?20:Number(raw.limit);if(!Number.isSafeInteger(limit)||limit<1||limit>50)throw Error('Limite por pagina deve estar entre 1 e 50');
- return {uf,cidade,ddd,regiao,segmento,cnae,porte,funcionariosMin,funcionariosMax,faturamentoMin,faturamentoMax,limit};
+ const limit=raw.limit===undefined?20:Number(raw.limit);if(!Number.isInteger(limit)||limit<1||limit>50)throw Error('Limite por pagina deve estar entre 1 e 50');
+ return {uf,cidade,ddd,regiao,segmento,cnae,porte,municipios,ddds,segmentos,faixasFuncionarios,funcionariosMin,funcionariosMax,faturamentoMin,faturamentoMax,limit};
 }
+
 export function matchCrmAccount(company,accounts,tenantId){
  if(!str(tenantId)||!Array.isArray(accounts))throw Error('Escopo de CRM invalido');
  const visible=accounts.filter(a=>a&&a.tenantId===tenantId),cnpj=normalizeCnpj(company?.cnpj);
