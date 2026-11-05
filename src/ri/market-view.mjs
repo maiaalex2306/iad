@@ -1,7 +1,7 @@
 /* RI-M01 / interface manual de mercado (pesquisa nunca roda no boot).
  * Nenhum resultado e importado; a revisao de duplicidades e somente leitura.
  */
-import {normalizeMarketFilters,normalizeMarketCompanies,proposePipelineAction} from './market-contract.mjs';
+import {normalizeMarketFilters,normalizeMarketCompanies,proposePipelineAction,buildMarketImportRequest} from './market-contract.mjs';
 const fields=[
  ['uf','UF (ex.: SP)','text'],['cidade','Cidade (ex.: Jacarei)','text'],['ddd','DDD (ex.: 012)','text'],
  ['regiao','Regiao','text'],['segmento','Segmento (ex.: quimico)','text'],['cnae','CNAE','text'],
@@ -10,7 +10,7 @@ const fields=[
 ];
 export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem}={}){
  if(!root||!root.ownerDocument||!snapshot||!scope||typeof getScopeToken!=='function'||!nuvem)throw Error('Sessao e dados autorizados obrigatorios');
- const doc=root.ownerDocument,els=new Map();let currentRequest=0,controller=null,selected=new Set();
+ const doc=root.ownerDocument,els=new Map();let currentRequest=0,controller=null,selected=new Set(),importKeys=new Map(),importing=false;
  const valid=()=>root.isConnected&&getScopeToken()===scope.token;
  const el=(tag,text='',className='')=>{const n=doc.createElement(tag);n.textContent=String(text);if(className)n.className=className;return n};
  const form=doc.createElement('form'),grid=el('div','','grid'),status=el('p','Defina o mercado desejado e clique em BUSCAR. Nenhuma empresa sera incluida no CRM.','small muted');
@@ -27,7 +27,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem}={
  const show=(message)=>{if(valid())status.textContent=message;};
  function renderCompanies(data,source,asOf){
   if(!valid())return;
-  selected.clear();review.replaceChildren();results.replaceChildren();
+  selected.clear();importKeys.clear();review.replaceChildren();results.replaceChildren();
   results.appendChild(el('h3',data.length+' empresas encontradas na web · '+source));
   results.appendChild(el('p','Dados consultados em '+asOf+'. Esta pagina nao representa necessariamente todas as empresas da regiao.','small muted'));
   const snapshotNow=snapshot;
@@ -69,11 +69,52 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem}={
   review.replaceChildren();
   review.appendChild(el('h3','Selecao: '+selected.size+' empresa(s)'));
   if(!selected.size)return;
-  for(const c of data.filter(c=>selected.has(c.cnpj))){
+  const chosen=data.filter(c=>selected.has(c.cnpj)),eligible=[];
+  for(const c of chosen){
    const plan=proposePipelineAction(c,snapshot,{tenantId:scope.tenantId,userId:scope.userId});
-   review.appendChild(el('p',(c.nome||c.razaoSocial)+' — '+(plan.match.status==='new'?'Candidata nova':'Exige avaliacao do cadastro existente')+(plan.existingOpportunityId?' (oportunidade existente)':''),'small'));
+   const rejected=plan.match.status!=='new'||!!c.conflitos?.length||!c.fontes?.length;
+   if(!rejected)eligible.push(c);
+   review.appendChild(el('p',(c.nome||c.razaoSocial)+' — '+(rejected?'Exige revisao ou ja esta cadastrada':'Nova empresa elegivel para confirmacao')+(plan.existingOpportunityId?' (oportunidade existente)':''),'small'));
   }
-  review.appendChild(el('p','A integracao no Pipeline exige uma transacao autorizada e idempotente. Esta etapa prepara a revisao sem alterar a carteira ou o CAS.','small muted'));
+  review.appendChild(el('p','A importacao cria somente conta e oportunidade em Prospeccao. Contatos nao sao gravados automaticamente. Confirme CNPJ, municipio e evidencia diretamente nas fontes.','small muted'));
+  if(!eligible.length)return;
+  const approval=el('label','Confirmo que verifiquei a identidade, localizacao e fontes de cada empresa elegivel e autorizo a inclusao no Pipeline.','campo');
+  const agree=doc.createElement('input');agree.type='checkbox';agree.checked=false;
+  approval.prepend(agree);review.appendChild(approval);
+  const importBtn=el('button','IMPORTAR '+eligible.length+' EMPRESA(S) REVISADA(S)','btn');
+  importBtn.type='button';importBtn.disabled=true;review.appendChild(importBtn);
+  agree.addEventListener('change',()=>{importBtn.disabled=!agree.checked||importing||!valid();});
+  const resultArea=el('p','','small');review.appendChild(resultArea);
+  importBtn.addEventListener('click',async()=>{
+   if(importing||!agree.checked||!valid())return;
+   const session=nuvem.sessao(),config=nuvem.config();
+   if(!session?.access_token||!config?.url||!config?.chave){resultArea.textContent='Sessao de nuvem obrigatoria para importar.';return;}
+   if(!globalThis.crypto?.randomUUID){resultArea.textContent='O navegador precisa suportar identificadores seguros para importar.';return;}
+   importing=true;importBtn.disabled=true;agree.disabled=true;
+   let imported=0,reviewed=0,failed=0;
+   for(const company of eligible){
+    if(!valid())break;
+    try{
+     let requestId=importKeys.get(company.cnpj);
+     if(!requestId){requestId=globalThis.crypto.randomUUID();importKeys.set(company.cnpj,requestId);}
+     const body=buildMarketImportRequest(company,snapshot,{tenantId:scope.tenantId,userId:scope.userId},requestId);
+     const response=await fetch(config.url.replace(/\\/$/,'')+'/rest/v1/rpc/iad_market_import_confirmed',{
+      method:'POST',headers:{'Content-Type':'application/json','apikey':config.chave,'Authorization':'Bearer '+session.access_token},
+      body:JSON.stringify(body)
+     });
+     if(!response.ok){failed++;continue;}
+     const data=await response.json();
+     if(data?.status==='imported'||data?.status==='already_imported'){imported++;selected.delete(company.cnpj);}
+     else if(data?.status==='existing'||data?.status==='review_duplicate'){reviewed++;selected.delete(company.cnpj);}
+     else failed++;
+    }catch{failed++;}
+   }
+   if(valid()){
+    resultArea.textContent='Importacao concluida: '+imported+' aceita(s), '+reviewed+' para revisao de duplicidade, '+failed+' falha(s). A sincronizacao do CRM atualizara a carteira; confira as oportunidades antes de continuar.';
+    show('Importacao manual finalizada. Nenhum contato pessoal foi criado automaticamente.');
+   }
+   importing=false;agree.disabled=false;agree.checked=false;importBtn.disabled=true;
+  });
  }
  form.addEventListener('submit',async ev=>{
   ev.preventDefault();if(!valid())return;
