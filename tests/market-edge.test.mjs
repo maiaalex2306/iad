@@ -8,12 +8,14 @@ const URL_COMPANY='https://example.org/empresa-a';
 const candidate={cnpj:'11222333000181',razaoSocial:'Empresa A',nome:'Empresa A',cidade:'Jacarei',uf:'SP',segmento:'Quimico',fontes:[{url:URL_COMPANY,titulo:'Registro verificado'}],contatos:[{nome:'Ana',cargo:'Diretora',telefone:'',fonte:URL_COMPANY}]};
 const marketJSON=JSON.stringify({empresas:[candidate]});
 const responseOpenAI=(search=true,cited=true)=>({
- output:[...(search?[{type:'web_search_call',action:{type:'search'}}]:[]),
+ status:'completed',output:[...(search?[{type:'web_search_call',status:'completed',action:{type:'search'}}]:[]),
  {type:'message',content:[{type:'output_text',text:marketJSON,annotations:cited?[{type:'url_citation',url:URL_COMPANY,title:'Registro verificado'}]:[]}]}],
  usage:{input_tokens:100,output_tokens:150}
 });
 const responseClaude=(search=true,cited=true)=>({
- content:[...(search?[{type:'server_tool_use',name:'web_search'}]:[]),
+ stop_reason:'end_turn',
+ content:[...(search?[{type:'server_tool_use',id:'srvtoolu_mockvalid',name:'web_search'},
+ {type:'web_search_tool_result',tool_use_id:'srvtoolu_mockvalid',content:[{type:'web_search_result',url:URL_COMPANY,title:'Registro verificado'}]}]:[]),
  {type:'text',text:marketJSON,citations:cited?[{type:'webpage_citation',url:URL_COMPANY,title:'Registro verificado'}]:[]}],
  usage:{input_tokens:100,output_tokens:150,server_tool_use:{web_search_requests:1}}
 });
