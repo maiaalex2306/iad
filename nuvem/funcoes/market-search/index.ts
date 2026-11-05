@@ -52,6 +52,9 @@ function canonicalUrl(s) {
 function cnpjReal(s){
  const v=String(s||'').toUpperCase().replace(/[^0-9A-Z]/g,'');
  if(!/^[A-Z0-9]{12}[0-9]{2}$/.test(v))return '';
+ // Match the transactional import guard: a repeated 12-char CNPJ root
+ // is invalid even when the mathematical check digits happen to match.
+ if(v.slice(0,12)===v[0].repeat(12))return '';
  const digit=(s,w)=>{const mod=[...s].reduce((sum,c,i)=>sum+(c.charCodeAt(0)-48)*w[i],0)%11;return mod<2?'0':String(11-mod)};
  return v[12]===digit(v.slice(0,12),[5,4,3,2,9,8,7,6,5,4,3,2])&&v[13]===digit(v.slice(0,13),[6,5,4,3,2,9,8,7,6,5,4,3,2])?v:'';
 }
