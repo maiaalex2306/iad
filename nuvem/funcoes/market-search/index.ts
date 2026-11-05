@@ -235,6 +235,6 @@ Deno.serve(async req=>{
   const failedProviders=jobs.filter((x,i)=>outcomes[i].status==='rejected'||(outcomes[i].status==='fulfilled'&&outcomes[i].value?.searched!==true)).map(x=>x.engine);
   if(!results.length)return output({error:'AI_SEARCH_UNAVAILABLE',failedProviders},502,origin);
   const partial=failedProviders.length>0;
-  return output({data:combineAI(results,f.limit,f),source:'Pesquisa web OpenAI / Claude',providers:results.map(x=>x.engine),failedProviders,partial,usage:results.map(x=>x.usage),retrievedAt:new Date().toISOString(),total:null,hasMore:false,coverage:'exploratoria',territoryVerified:false,warning:(partial?'Uma ou mais IAs nao concluiram a pesquisa; cobertura parcial. ':'')+'Pesquisa exploratoria; nao equivale ao universo integral de CNPJs. Nenhum registro foi importado.'},200,origin);
+  return output({data:combineAI(results,f.limit,f),source:'Pesquisa web OpenAI / Claude',providers:results.map(x=>x.engine),failedProviders,partial,usage:results.map(x=>x.usage),retrievedAt:new Date().toISOString(),total:null,hasMore:null,coverage:'exploratoria',coverageStatus:'unknown',territoryVerified:false,warning:(partial?'Uma ou mais IAs nao concluiram a pesquisa; cobertura parcial. ':'')+'Pesquisa exploratoria; nao equivale ao universo integral de CNPJs. Nenhum registro foi importado.'},200,origin);
  }catch{return output({error:'SEARCH_UNAVAILABLE'},502,origin)}
 });
