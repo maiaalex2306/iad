@@ -172,9 +172,11 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   const option=doc.createElement('option');option.value=value;option.textContent=label;aiSelect.appendChild(option);
  }
  aiHolder.appendChild(aiSelect);grid.appendChild(aiHolder);aiSelect.value='both';
+ const preflightBtn=el('button','VERIFICAR ACESSO ÀS IAs (SEM GASTAR COTA DE PESQUISA)','btn');
+ preflightBtn.type='button';
  const btn=el('button','BUSCAR EMPRESAS','btn');btn.type='submit';
  const results=el('div','','iad-market-results'),review=el('div','','iad-market-review');
- form.appendChild(grid);form.appendChild(demoBtn);form.appendChild(btn);
+ form.appendChild(grid);form.appendChild(demoBtn);form.appendChild(preflightBtn);form.appendChild(btn);
  root.replaceChildren(el('h2','Pesquisar empresas fora do CRM'),el('p','Pesquisa iniciada manualmente. Fontes, custos e cobertura dependem do provedor contratado. Os dados nao sao fatos confirmados ate verificacao.','small muted'),form,status,results,review);
  const show=(message)=>{if(valid())status.textContent=message;};
  const failureDescription=failures=>{
@@ -188,6 +190,50 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   });
   return safe.join(' | ');
  };
+ // Diagnostic validates provider model access, not web research execution.
+ let preflightController=null,preflightBusy=false;
+ preflightBtn.addEventListener('click',async()=>{
+  if(!valid()||preflightBusy)return;
+  const session=nuvem.sessao(),config=nuvem.config();
+  if(!session?.access_token||!config?.url||!config?.chave){
+   show('Sessao de nuvem necessaria para verificar as IAs.');return;
+  }
+  preflightBusy=true;preflightBtn.disabled=true;
+  preflightController=new AbortController();
+  show('Verificando as credenciais e os modelos. Nenhuma pesquisa web sera executada...');
+  const labels={
+   MODEL_AVAILABLE:'credencial e modelo acessiveis',MODEL_NO_WEB_SEARCH:'modelo acessivel, sem suporte a busca web',
+   NOT_CONFIGURED:'credencial nao configurada',AUTH_REJECTED:'credencial rejeitada (401)',
+   ACCESS_DENIED:'acesso negado (403)',MODEL_NOT_FOUND:'modelo inexistente ou indisponivel (404)',
+   PROVIDER_RATE_LIMIT:'limite do provedor (429)',PROVIDER_HTTP_ERROR:'erro HTTP do provedor',
+   INVALID_RESPONSE:'resposta de modelo invalida',TIMEOUT:'tempo limite excedido',NETWORK_ERROR:'falha de conexao'
+  };
+  try{
+   const response=await fetch(config.url.replace(/\/$/,'')+'/functions/v1/market-search',{
+    method:'POST',headers:{'Content-Type':'application/json','apikey':config.chave,'Authorization':'Bearer '+session.access_token},
+    body:JSON.stringify({action:'preflight',provider:aiSelect.value}),signal:preflightController.signal
+   });
+   const data=await response.json();
+   if(!valid())return;
+   if(!response.ok){
+    show(data?.error==='PREFLIGHT_RATE_LIMIT'?'Diagnostico recente. Aguarde 30 segundos para repetir.':
+     data?.error==='PILOT_ADMIN_OR_MANAGER_ONLY'?'Diagnostico disponivel apenas para administradores e gestores.':
+     'Diagnostico indisponivel: '+String(data?.error||response.status));return;
+   }
+   const detail=(Array.isArray(data.results)?data.results:[]).filter(x=>['OpenAI','Anthropic'].includes(x?.provider)).map(x=>{
+    const providerName=x.provider==='OpenAI'?'ChatGPT':'Claude';
+    const message=labels[x.status]||'situacao desconhecida';
+    const web=x.webSearchSupport==='supported'?' · busca web suportada':
+     x.webSearchSupport==='not_supported'?' · busca web nao suportada':' · busca web ainda nao testada';
+    return providerName+': '+message+web;
+   });
+   show((detail.join(' | ')||'Nenhum motor consultado')+'. Nenhuma cota de pesquisa consumida. Esta verificacao nao realiza busca web.');
+  }catch(e){
+   if(valid()&&e?.name!=='AbortError')show('Nao foi possivel concluir a verificacao dos modelos: falha de rede.');
+  }finally{
+   preflightBusy=false;preflightBtn.disabled=false;preflightController=null;
+  }
+ });
  // Stable review key for candidates without CNPJ; never an import identity.
  const researchKey=c=>c.cnpj||'pending:'+String(c.nome||c.razaoSocial||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()+'|'+String(c.cidade||'').toLowerCase()+'|'+String(c.uf||'');
  function renderCompanies(data,source,asOf){
@@ -359,5 +405,5 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   }catch(e){if(seq===currentRequest&&valid()&&e.name!=='AbortError')show('Falha de rede ao consultar fonte empresarial. Nenhuma alteracao no CRM.');}
   finally{if(seq===currentRequest&&valid())btn.disabled=false;}
  });
- return ()=>{if(controller)controller.abort();if(cityRequest)cityRequest.abort();currentRequest++;};
+ return ()=>{if(controller)controller.abort();if(preflightController)preflightController.abort();if(cityRequest)cityRequest.abort();currentRequest++;};
 }
