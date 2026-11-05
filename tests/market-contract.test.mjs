@@ -268,3 +268,32 @@ test('DOM: falha de IBGE usa BrasilAPI e preserva codigo municipal de sete digit
   cleanup();
  }finally{globalThis.fetch=originalFetch;}
 });
+
+test('RI-M03: contrato preserva somente estados ICP permitidos, jamais verificado de IA',()=>{
+ const rows=normalizeMarketCompanies([{
+  cnpj:null,nome:'Empresa de pesquisa',cidade:'Mogi das Cruzes',uf:'SP',fontes:[{url:'https://example.org/empresa'}],
+  qualificacaoICP:{municipio:'declarado',ddd:'pendente',segmento:'verificado',funcionarios:'declarado',statusGeral:'confirmado'}
+ }]);
+ assert.equal(rows.length,1);
+ const q=rows[0].qualificacaoICP;
+ assert.equal(q.municipio,'declarado');
+ assert.equal(q.ddd,'pendente');
+ assert.equal(q.segmento,'nao_solicitado');
+ assert.equal(q.statusGeral,'pendente');
+ assert.equal(rows[0].identidadeStatus,'pendente_cnpj');
+});
+test('RI-M03: ICP declarado nao prova correspondencia e a importacao segue condicionada a CNPJ',()=>{
+ const rows=normalizeMarketCompanies([{
+  cnpj:null,nome:'Empresa com porte declarado',cidade:'Mogi das Cruzes',uf:'SP',
+  qualificacaoICP:{municipio:'declarado',ddd:'declarado',segmento:'declarado',funcionarios:'declarado',statusGeral:'declarado_nao_verificado'},
+  fontes:[{url:'https://example.org/empresa'}]
+ }]);
+ assert.equal(rows[0].qualificacaoICP.statusGeral,'declarado_nao_verificado');
+ assert.throws(()=>buildMarketImportRequest(rows[0],{contas:[],oportunidades:[]},{tenantId:'tenant-a',userId:'u1'},'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),/CNPJ|revis/i);
+});
+test('RI-M03: interface identifica individualmente municipio DDD segmento e faixa de empregados',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const source=readFileSync(new URL('../src/ri/market-view.mjs',import.meta.url),'utf8');
+ for(const part of ['Aderencia ao ICP','Municipio','DDD','Segmento','Faixa de funcionarios','nao verificados'])
+  assert.ok(source.includes(part),'missing ICP label '+part);
+});
