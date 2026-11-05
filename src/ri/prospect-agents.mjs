@@ -33,6 +33,8 @@ export function buildProspectWorkflow({companies,snapshot,scope}={}){
   // Validar DV não garante associação real CNPJ/razão social.
   const cnpj=normalizeCnpj(company.cnpj);
   const conflicted=Array.isArray(company.conflitos)&&company.conflitos.length>0;
+  const possibleDuplicate=action.match.status==='related'||
+   (action.match.status==='review'&&action.match.reason!=='cnpj_ausente_ou_invalido');
   const claimed=icpFields.filter(f=>company.qualificacaoICP?.[f]==='declarado');
   const required=icpFields.filter(f=>company.qualificacaoICP?.[f]!=='nao_solicitado');
   const contacts=(Array.isArray(company.contatos)?company.contatos:[]).filter(c=>text(c?.nome));
@@ -57,7 +59,7 @@ export function buildProspectWorkflow({companies,snapshot,scope}={}){
    (text(company.cidade)&&text(company.uf)?5:0)-
    (conflicted?30:0)-
    (action.match.status==='existing'?25:0)-
-   (action.match.status==='related'||action.match.status==='review'?15:0)));
+   (possibleDuplicate?15:0)));
   const reasons=[];
   if(claimed.length)reasons.push(claimed.length+'/4 critérios ICP declarados, ainda sem verificação');
   if(sources.length)reasons.push(sources.length+' fonte(s) HTTPS citada(s), revisar conteúdo');
@@ -65,11 +67,11 @@ export function buildProspectWorkflow({companies,snapshot,scope}={}){
   if(news.length)reasons.push(news.length+' notícia(s) a investigar, sem prova de intenção de compra');
   if(!identity)reasons.push('CNPJ pendente; sem importação');
   if(conflicted)reasons.push('Divergências entre fontes exigem revisão');
-  if(action.match.status!=='new')reasons.push('Possível conta existente, filial ou duplicidade no CRM');
+  if(action.match.status==='existing'||possibleDuplicate)reasons.push('Possível conta existente, filial ou duplicidade no CRM');
   if(!sources.length)reasons.push('Sem fonte HTTPS citada');
   if(!reasons.length)reasons.push('Evidência insuficiente para priorizar');
   const status=action.match.status==='existing'?'ja_cadastrada':
-   action.match.status==='related'||action.match.status==='review'?'duplicidade_a_revisar':
+   possibleDuplicate?'duplicidade_a_revisar':
    !identity||!sources.length||conflicted?'verificacao_obrigatoria':'candidata_para_revisao';
   candidates.push({
    company,score,status,reasons,matchStatus:action.match.status,
