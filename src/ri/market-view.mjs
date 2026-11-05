@@ -2,6 +2,28 @@
  * Nenhum resultado e importado; a revisao de duplicidades e somente leitura.
  */
 import {normalizeMarketFilters,normalizeMarketCompanies,proposePipelineAction,buildMarketImportRequest} from './market-contract.mjs';
+/**
+ * Pull only the server-confirmed RI-M01 import into the local Pipeline.
+ * Never upload local edits. Refuse the pull when CAS/pending state is unknown.
+ * The server transaction remains committed even if local refresh fails.
+ */
+export async function refreshMarketPipelineAfterImport({nuvem,importedCount,valid}={}){
+ if(!Number.isSafeInteger(importedCount)||importedCount<1)return {status:'unchanged',serverCommitted:false};
+ if(typeof valid!=='function'||!valid())return {status:'pending',serverCommitted:true};
+ if(!nuvem||typeof nuvem.puxar!=='function'||
+    typeof nuvem.diagnosticoPendenciasCAS!=='function'||
+    typeof nuvem.haMudancas!=='function')return {status:'pending',serverCommitted:true};
+ try{
+  const cas=nuvem.diagnosticoPendenciasCAS();
+  if(!cas||cas.disponivel!==true||!Number.isSafeInteger(cas.quantidade)||cas.quantidade>0||
+     nuvem.haMudancas())return {status:'pending',serverCommitted:true};
+  if(!valid())return {status:'pending',serverCommitted:true};
+  await nuvem.puxar();
+  return {status:valid()?'synced':'pending',serverCommitted:true};
+ }catch{
+  return {status:'pending',serverCommitted:true};
+ }
+}
 const fields=[
  ['uf','UF (ex.: SP)','text'],['cidade','Cidade (ex.: Jacarei)','text'],['ddd','DDD (ex.: 012)','text'],
  ['regiao','Regiao','text'],['segmento','Segmento (ex.: quimico)','text'],['cnae','CNAE','text'],
@@ -109,9 +131,15 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem}={
      else failed++;
     }catch{failed++;}
    }
+   const reconciliation=await refreshMarketPipelineAfterImport({nuvem,importedCount:imported,valid});
    if(valid()){
-    resultArea.textContent='Importacao concluida: '+imported+' aceita(s), '+reviewed+' para revisao de duplicidade, '+failed+' falha(s). A sincronizacao do CRM atualizara a carteira; confira as oportunidades antes de continuar.';
-    show('Importacao manual finalizada. Nenhum contato pessoal foi criado automaticamente.');
+    const stateMessage=reconciliation.status==='synced'
+     ?'Carteira local atualizada de forma segura. Confira as oportunidades no Pipeline.'
+     :imported>0
+      ?'Gravacao confirmada no servidor, mas atualizacao local pendente (edicoes CAS, alteracoes locais ou erro de rede). Resolva a sincronizacao antes de conferir o Pipeline.'
+      :'Nenhuma nova conta foi inserida.';
+    resultArea.textContent='Importacao: '+imported+' confirmada(s), '+reviewed+' para revisao de duplicidade, '+failed+' falha(s). '+stateMessage;
+    show('Revisao comercial finalizada. Nenhum contato pessoal foi criado automaticamente.');
    }
    importing=false;agree.disabled=false;agree.checked=false;importBtn.disabled=true;
   });
