@@ -212,7 +212,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
    if(icp){
     const labels={municipio:'Municipio',ddd:'DDD',segmento:'Segmento',funcionarios:'Faixa de funcionarios'};
     const desc={declarado:'informado pela IA (verificar fonte)',pendente:'pendente de informacao',a_confirmar:'classificacao a confirmar',nao_solicitado:'nao solicitado'};
-    card.appendChild(el('h5','Aderencia ao ICP — declaracoes ainda nao verificadas'));
+    card.appendChild(el('h5','Aderencia ao ICP — dados informados mas nao verificados'));
     for(const key of Object.keys(labels)){
      if(icp[key]==='nao_solicitado')continue;
      card.appendChild(el('p',labels[key]+': '+(desc[icp[key]]||'pendente de verificacao'),'small muted'));
