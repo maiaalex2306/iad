@@ -257,7 +257,14 @@ Deno.serve(async req=>{
   }catch{return output({error:'INVALID_JSON'},400,origin)}
   if(body?.action!=='search')return output({error:'SEARCH_ONLY'},400,origin);
   let f;try{f=filters(body.filters)}catch(e){return output({error:'INVALID_FILTERS',message:e.message},422,origin)}
+  // Explicit provider selection helps diagnose a failed provider without
+  // charging for both. Invalid values are rejected before quota reservation.
+  const provider=body.provider===undefined?'both':body.provider;
+  if(!['both','OpenAI','Anthropic'].includes(provider))
+   return output({error:'INVALID_PROVIDER'},422,origin);
   const openai=aiKey('openai'),claude=aiKey('anthropic');
+  if((provider==='OpenAI'&&!openai)||(provider==='Anthropic'&&!claude))
+   return output({error:'AI_PROVIDER_NOT_CONFIGURED',provider},503,origin);
   if(!openai&&!claude)return output({error:'AI_NOT_CONFIGURED',message:'A pesquisa precisa de uma das IAs ja configuradas no IaD.'},503,origin);
   // Reserve one research credit in Postgres BEFORE any external paid API call.
   // This RPC authenticates the actor from JWT, checks active tenant membership,
@@ -276,26 +283,29 @@ Deno.serve(async req=>{
   if(quota?.allowed===false)return output({error:'SEARCH_QUOTA_EXCEEDED',scope:quota.scope||'unknown'},429,origin);
   if(quota?.allowed!==true)return output({error:'SEARCH_QUOTA_UNAVAILABLE'},503,origin);
   const jobs=[];
-  if(openai)jobs.push({engine:'OpenAI',promise:queryAI('OpenAI',openai,f)});
-  if(claude)jobs.push({engine:'Anthropic',promise:queryAI('Anthropic',claude,f)});
+  if(openai&&provider!=='Anthropic')jobs.push({engine:'OpenAI',promise:queryAI('OpenAI',openai,f)});
+  if(claude&&provider!=='OpenAI')jobs.push({engine:'Anthropic',promise:queryAI('Anthropic',claude,f)});
   const outcomes=await Promise.allSettled(jobs.map(x=>x.promise));
   // A provider returning JSON without a recorded web_search execution
   // is not a successful market search, even when its text looks plausible.
   const results=outcomes.filter(x=>x.status==='fulfilled'&&x.value?.searched===true).map(x=>x.value);
   const failedProviders=jobs.filter((x,i)=>outcomes[i].status==='rejected'||(outcomes[i].status==='fulfilled'&&outcomes[i].value?.searched!==true)).map(x=>x.engine);
   // Only coarse diagnostic categories: no prompts, API keys, identities or company data.
+  const failures=[];
   for(let i=0;i<outcomes.length;i++){
    const outcome=outcomes[i];
    if(outcome.status==='rejected'){
     const reason=String(outcome.reason?.message||'').slice(0,100);
     const category=/^IA_HTTP_\d{3}$/.test(reason)?reason:/^IA_(TIMEOUT|FETCH_FAILURE|INVALID_JSON)$/.test(reason)?reason.slice(3):'UNKNOWN_FAILURE';
+    failures.push({provider:jobs[i].engine,category});
     console.warn('[market-search] provider_failure',JSON.stringify({provider:jobs[i].engine,category}));
    }else if(outcome.value?.searched!==true){
+    failures.push({provider:jobs[i].engine,category:'WEB_SEARCH_NOT_COMPLETED'});
     console.warn('[market-search] provider_failure',JSON.stringify({provider:jobs[i].engine,category:'WEB_SEARCH_NOT_COMPLETED'}));
    }
   }
-  if(!results.length)return output({error:'AI_SEARCH_UNAVAILABLE',failedProviders},502,origin);
+  if(!results.length)return output({error:'AI_SEARCH_UNAVAILABLE',failedProviders,failures},502,origin);
   const partial=failedProviders.length>0;
-  return output({data:combineAI(results,f.limit,f),source:'Pesquisa web OpenAI / Claude',providers:results.map(x=>x.engine),failedProviders,partial,usage:results.map(x=>x.usage),retrievedAt:new Date().toISOString(),total:null,hasMore:null,coverage:'exploratoria',coverageStatus:'unknown',territoryVerified:false,warning:(partial?'Uma ou mais IAs nao concluiram a pesquisa; cobertura parcial. ':'')+'Pesquisa exploratoria; nao equivale ao universo integral de CNPJs. Nenhum registro foi importado.'},200,origin);
+  return output({data:combineAI(results,f.limit,f),source:'Pesquisa web OpenAI / Claude',providers:results.map(x=>x.engine),failedProviders,failures,partial,usage:results.map(x=>x.usage),retrievedAt:new Date().toISOString(),total:null,hasMore:null,coverage:'exploratoria',coverageStatus:'unknown',territoryVerified:false,warning:(partial?'Uma ou mais IAs nao concluiram a pesquisa; cobertura parcial. ':'')+'Pesquisa exploratoria; nao equivale ao universo integral de CNPJs. Nenhum registro foi importado.'},200,origin);
  }catch{return output({error:'SEARCH_UNAVAILABLE'},502,origin)}
 });
