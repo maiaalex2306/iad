@@ -576,3 +576,63 @@ test('faixas sem sobreposicao e DDD nao reconhecido: erro antes da quota',async(
  assert.equal(aiCalls(h).length,0);
  assert.equal(h.calls.filter(c=>c.url.includes('iad_market_search_reserve')).length,0);
 });
+
+test('RI-M03: todos os criterios declarados ainda sao nao verificados documentalmente',async()=>{
+ const mock={...marketMogi,ddd:'11',funcionarios:205};
+ const h=harness({openai:true,openaiResponse:multiProvider(mock)});
+ const response=await h.handle(request({action:'search',provider:'OpenAI',filters:multiFilters}));
+ assert.equal(response.status,200);
+ const item=(await response.json()).data[0];assert.ok(item);
+ assert.equal(item.qualificacaoICP.municipio,'declarado');
+ assert.equal(item.qualificacaoICP.ddd,'declarado');
+ assert.equal(item.qualificacaoICP.segmento,'declarado');
+ assert.equal(item.qualificacaoICP.funcionarios,'declarado');
+ assert.equal(item.qualificacaoICP.statusGeral,'declarado_nao_verificado');
+ assert.equal(item.territorioCorroborado,false);
+});
+test('RI-M03: sem DDD, sem funcionarios e sem segmento a candidata permanece pendente',async()=>{
+ const mock={...marketMogi,ddd:null,funcionarios:null,segmento:null};
+ const h=harness({openai:true,openaiResponse:multiProvider(mock)});
+ const response=await h.handle(request({action:'search',provider:'OpenAI',filters:multiFilters}));
+ assert.equal(response.status,200);
+ const item=(await response.json()).data[0];assert.ok(item);
+ assert.equal(item.qualificacaoICP.ddd,'pendente');
+ assert.equal(item.qualificacaoICP.funcionarios,'pendente');
+ assert.equal(item.qualificacaoICP.segmento,'pendente');
+ assert.equal(item.qualificacaoICP.statusGeral,'pendente');
+});
+test('RI-M03: sinonimo setorial nao recebe falsa confirmacao automatica',async()=>{
+ const mock={...marketMogi,ddd:'11',segmento:'Industria quimica'};
+ const h=harness({openai:true,openaiResponse:multiProvider(mock)});
+ const response=await h.handle(request({action:'search',provider:'OpenAI',filters:multiFilters}));
+ assert.equal(response.status,200);
+ const item=(await response.json()).data[0];assert.ok(item);
+ assert.equal(item.qualificacaoICP.segmento,'a_confirmar');
+ assert.equal(item.qualificacaoICP.statusGeral,'pendente');
+});
+test('RI-M03: DDD explicitamente divergente continua fora do recorte',async()=>{
+ const h=harness({openai:true,openaiResponse:multiProvider({...marketMogi,ddd:'12'})});
+ const response=await h.handle(request({action:'search',provider:'OpenAI',filters:multiFilters}));
+ assert.equal(response.status,200);assert.equal((await response.json()).data.length,0);
+});
+
+test('RI-M03: filtro legado de funcionarios rejeita numerico fora da faixa',async()=>{
+ const filters={uf:'SP',cidade:'Jacarei',segmento:'Quimico',funcionariosMin:201,funcionariosMax:500};
+ for(const [employees,size] of [[200,0],[201,1],[500,1],[501,0],[null,1]]){
+  const h=harness({openai:true,openaiResponse:multiProvider({...candidate,funcionarios:employees})});
+  const res=await h.handle(request({action:'search',provider:'OpenAI',filters}));
+  assert.equal(res.status,200);
+  assert.equal((await res.json()).data.length,size);
+ }
+});
+test('RI-M03: DDD singular divergente e rejeitado, ausente fica para verificacao',async()=>{
+ const filters={uf:'SP',cidade:'Jacarei',segmento:'Quimico',ddd:'012'};
+ for(const [ddd,size] of [['11',0],['12',1],[null,1]]){
+  const h=harness({openai:true,openaiResponse:multiProvider({...candidate,ddd})});
+  const res=await h.handle(request({action:'search',provider:'OpenAI',filters}));
+  assert.equal(res.status,200);
+  const list=(await res.json()).data;
+  assert.equal(list.length,size);
+  if(size)assert.equal(list[0].qualificacaoICP.ddd,ddd===null?'pendente':'declarado');
+ }
+});

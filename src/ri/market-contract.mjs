@@ -85,9 +85,19 @@ export function normalizeMarketCompanies(companies,{source='',retrievedAt=''}={}
   const key=cnpj?'cnpj:'+cnpj:'pending:'+folded(name)+'|'+folded(x.cidade)+'|'+str(x.uf,2).toUpperCase();
   if(seen.has(key))continue;seen.add(key);
   const contacts=Array.isArray(x.contatos)?x.contatos.slice(0,15):[];
+  // Never accept a user/LLM claim of "verified": only display
+  // declared, pending, or requiring separate source review.
+  const rawICP=x.qualificacaoICP&&typeof x.qualificacaoICP==='object'?x.qualificacaoICP:{};
+  const validICP=new Set(['declarado','pendente','a_confirmar','nao_solicitado']);
+  const qualificacaoICP={};
+  for(const field of ['municipio','ddd','segmento','funcionarios'])
+   qualificacaoICP[field]=validICP.has(rawICP[field])?rawICP[field]:'nao_solicitado';
+  const stages=Object.values(qualificacaoICP).filter(x=>x!=='nao_solicitado');
+  qualificacaoICP.statusGeral=stages.length&&stages.every(x=>x==='declarado')&&
+   rawICP.statusGeral==='declarado_nao_verificado'?'declarado_nao_verificado':'pendente';
   output.push({cnpj,identidadeStatus:cnpj?'cnpj_validado':'pendente_cnpj',nome:name,razaoSocial:str(x.razaoSocial),
    cidade:str(x.cidade),uf:str(x.uf,2).toUpperCase(),segmento:str(x.segmento||x.cnaePrimario),cnae:str(x.cnae),porte:str(x.porte),site:str(x.site),telefone:str(x.telefone),
-   funcionarios:x.funcionarios??null,faixaFuncionariosStatus:['pendente','aderente_nao_verificado','nao_solicitado'].includes(x.faixaFuncionariosStatus)?x.faixaFuncionariosStatus:'nao_solicitado',faturamento:x.faturamento??null,faturamentoStatus:'nao_confirmado',funcionariosStatus:'nao_confirmado',
+   qualificacaoICP,funcionarios:x.funcionarios??null,faixaFuncionariosStatus:['pendente','aderente_nao_verificado','nao_solicitado'].includes(x.faixaFuncionariosStatus)?x.faixaFuncionariosStatus:'nao_solicitado',faturamento:x.faturamento??null,faturamentoStatus:'nao_confirmado',funcionariosStatus:'nao_confirmado',
    source:str(source),retrievedAt:str(retrievedAt,40),
    fontes:Array.isArray(x.fontes)?x.fontes.slice(0,15).filter(v=>v&&/^https?:\/\//i.test(str(v.url,500))).map(v=>({url:str(v.url,500),titulo:str(v.titulo,180)})):[],
    providers:Array.isArray(x.providers)?x.providers.slice(0,3).filter(v=>v==='OpenAI'||v==='Anthropic'):[],
