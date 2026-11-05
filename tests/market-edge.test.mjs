@@ -615,3 +615,24 @@ test('RI-M03: DDD explicitamente divergente continua fora do recorte',async()=>{
  const response=await h.handle(request({action:'search',provider:'OpenAI',filters:multiFilters}));
  assert.equal(response.status,200);assert.equal((await response.json()).data.length,0);
 });
+
+test('RI-M03: filtro legado de funcionarios rejeita numerico fora da faixa',async()=>{
+ const filters={uf:'SP',cidade:'Jacarei',segmento:'Quimico',funcionariosMin:201,funcionariosMax:500};
+ for(const [employees,size] of [[200,0],[201,1],[500,1],[501,0],[null,1]]){
+  const h=harness({openai:true,openaiResponse:multiProvider({...candidate,funcionarios:employees})});
+  const res=await h.handle(request({action:'search',provider:'OpenAI',filters}));
+  assert.equal(res.status,200);
+  assert.equal((await res.json()).data.length,size);
+ }
+});
+test('RI-M03: DDD singular divergente e rejeitado, ausente fica para verificacao',async()=>{
+ const filters={uf:'SP',cidade:'Jacarei',segmento:'Quimico',ddd:'012'};
+ for(const [ddd,size] of [['11',0],['12',1],[null,1]]){
+  const h=harness({openai:true,openaiResponse:multiProvider({...candidate,ddd})});
+  const res=await h.handle(request({action:'search',provider:'OpenAI',filters}));
+  assert.equal(res.status,200);
+  const list=(await res.json()).data;
+  assert.equal(list.length,size);
+  if(size)assert.equal(list[0].qualificacaoICP.ddd,ddd===null?'pendente':'declarado');
+ }
+});
