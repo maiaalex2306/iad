@@ -67,7 +67,21 @@ function parseAI(s) {
 }
 function aiSummary(result,engine) {
  const blocks=engine==='OpenAI'?(Array.isArray(result.output)?result.output:[]):(Array.isArray(result.content)?result.content:[]);
- const searched=engine==='OpenAI'?blocks.some(b=>b.type==='web_search_call'):blocks.some(b=>b.type==='server_tool_use'&&b.name==='web_search');
+ // A web_search *attempt* is not evidence of a completed search.
+ // OpenAI exposes a per-tool status; Anthropic may return HTTP 200
+ // while embedding web_search_tool_result_error in the message body.
+ // Claude pause_turn/tool_use/max_tokens is not a finished research turn.
+ const finalResponse=engine==='OpenAI'
+  ? result.status==='completed' || result.status===undefined
+  : result.stop_reason==='end_turn' || result.stop_reason==null;
+ const completedSearch=engine==='OpenAI'
+  ? blocks.some(b=>b.type==='web_search_call'&&b.status==='completed')
+  : blocks.some(b=>{
+     if(b.type!=='server_tool_use'||b.name!=='web_search'||!b.id)return false;
+     return blocks.some(r=>r.type==='web_search_tool_result'&&r.tool_use_id===b.id&&
+      Array.isArray(r.content)&&!r.content.some(x=>x?.type==='web_search_tool_result_error'));
+    });
+ const searched=finalResponse&&completedSearch;
  const textBlocks=engine==='OpenAI'?blocks.filter(b=>b.type==='message').flatMap(b=>b.content||[]):blocks.filter(b=>b.type==='text');
  const texts=textBlocks.map(b=>b.text||'').join('\n');
  const urls=new Set();
