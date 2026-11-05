@@ -131,7 +131,7 @@ function aiSummary(result,engine) {
  return {engine,searched,urls,parsed:parseAI(texts),usage};
 }
 function prompt(f) {
- return 'PESQUISE NA WEB empresas reais com recorte '+JSON.stringify(f)+'. Busque sites corporativos, bases publicas e noticias. Responda somente JSON com chave empresas (array): cada empresa possui cnpj, razaoSocial, nome, cidade, uf, segmento, porte, site, telefone, funcionarios, faturamento, fontes:[{url,titulo}], contatos:[{nome,cargo,email,telefone,fonte}], noticias:[{titulo,url,data}], insights:[]. Quando uma empresa mencionada nas fontes ainda nao tiver CNPJ encontrado, use cnpj=null e preserve-a como candidata pendente. Nunca invente CNPJ. Toda empresa precisa ter nome e URL realmente citada pela ferramenta web. Valores nao encontrados=null. NUNCA invente empresa ou pessoa. Para DDD/regiao pesquisa e exploratoria, sem promessa de cobertura total. Para filtros em listas aplique OU dentro do campo e E entre campos (municipios, DDDs, segmentos e faixas de empregados). Informe o numero de funcionarios apenas com fonte verificavel; caso contrario use null. Maximo '+f.limit+' empresas.';
+ return 'PESQUISE NA WEB empresas reais com recorte '+JSON.stringify(f)+'. Busque sites corporativos, bases publicas e noticias. Responda somente JSON com chave empresas (array): cada empresa possui cnpj, razaoSocial, nome, cidade, uf, ddd, segmento, porte, site, telefone, funcionarios, faturamento, fontes:[{url,titulo}], contatos:[{nome,cargo,email,telefone,fonte}], noticias:[{titulo,url,data}], insights:[]. Quando uma empresa mencionada nas fontes ainda nao tiver CNPJ encontrado, use cnpj=null e preserve-a como candidata pendente. Nunca invente CNPJ. Toda empresa precisa ter nome e URL realmente citada pela ferramenta web. Valores nao encontrados=null. NUNCA invente empresa ou pessoa. Para DDD/regiao pesquisa e exploratoria, sem promessa de cobertura total. Para filtros em listas aplique OU dentro do campo e E entre campos (municipios, DDDs, segmentos e faixas de empregados). Informe o numero de funcionarios apenas com fonte verificavel; caso contrario use null. Maximo '+f.limit+' empresas.';
 }
 async function queryAI(engine,key,f) {
  const instructions='Pesquisador B2B: use sempre a ferramenta web_search, inclua URLs citadas e retorne JSON sem inventar fatos.';
@@ -179,6 +179,25 @@ function inRequestedPlace(entry,f) {
  if(f.ddds.length&&sourceDDD&&!f.ddds.includes(sourceDDD))return false;
  return true;
 }
+// Qualification reflects only self-reported fields from an AI result. Even
+// exact matches are NOT independently verified against the linked sources.
+function reportedICP(entry,f,employees){
+ const asked={
+  municipio:f.municipios.length>0,
+  ddd:f.ddds.length>0,
+  segmento:f.segmentos.length>0,
+  funcionarios:f.faixasFuncionarios.length>0
+ };
+ const segment=normalizedPlace(entry.segmento),ddd=digits(entry.ddd).replace(/^0+(?=\d)/,'');
+ const values={
+  municipio:asked.municipio?(entry.cidade?'declarado':'pendente'):'nao_solicitado',
+  ddd:asked.ddd?(ddd?'declarado':'pendente'):'nao_solicitado',
+  segmento:asked.segmento?(segment?(f.segmentos.some(x=>normalizedPlace(x)===segment)?'declarado':'a_confirmar'):'pendente'):'nao_solicitado',
+  funcionarios:asked.funcionarios?(Number.isSafeInteger(employees)&&employees>=0?'declarado':'pendente'):'nao_solicitado'
+ };
+ const requested=Object.values(values).filter(x=>x!=='nao_solicitado');
+ return {...values,statusGeral:requested.every(x=>x==='declarado')?'declarado_nao_verificado':'pendente'};
+}
 function combineAI(results,limit,f) {
  const out=new Map();
  for(const r of results){
@@ -193,6 +212,7 @@ function combineAI(results,limit,f) {
    const employees=typeof reported==='number'?reported:(typeof reported==='string'&&/^\d+$/.test(reported)?Number(reported):null);
    if(f.faixasFuncionarios.length&&Number.isSafeInteger(employees)&&employees>=0&&
       !f.faixasFuncionarios.some(id=>{const [min,max]=BAND_LIMITS[id];return employees>=min&&(max===null||employees<=max)}))continue;
+   const icp=reportedICP(entry,f,employees);
    const rawCnpj=str(entry.cnpj,40),cnpj=cnpjReal(rawCnpj);
    // Invalid supplied CNPJ is discarded; genuinely missing CNPJ can be
    // displayed as a non-importable research candidate with web evidence.
@@ -219,6 +239,13 @@ function combineAI(results,limit,f) {
      }
     }
     if(!existing.providers.includes(r.engine))existing.providers.push(r.engine);
+    // Never promote a conflicting field to confirmed merely because two
+    // providers cite URLs; declarations stay explicitly unverified.
+    if(existing.conflitos.length)existing.qualificacaoICP.statusGeral='pendente';
+    for(const key of ['municipio','ddd','segmento','funcionarios']){
+     if(existing.qualificacaoICP[key]!=='declarado'&&icp[key]==='declarado')
+      existing.qualificacaoICP[key]='declarado';
+    }
     for(const src of sources)if(!existing.fontes.some(x=>x.url===src.url))existing.fontes.push(src);
     // Merge only contacts whose source was independently cited by this
     // provider; never borrow another provider's global citation set.
@@ -232,7 +259,7 @@ function combineAI(results,limit,f) {
     }
     continue;
    }
-   out.set(researchKey,{cnpj,identidadeStatus:cnpj?'cnpj_validado':'pendente_cnpj',razaoSocial:str(entry.razaoSocial||entry.nome),nome:str(entry.nome||entry.razaoSocial),cidade:str(entry.cidade),uf:str(entry.uf,2).toUpperCase(),porte:str(entry.porte),segmento:str(entry.segmento),site:str(entry.site,200),telefone:str(entry.telefone,60),funcionarios:entry.funcionarios??null,faixaFuncionariosStatus:f.faixasFuncionarios.length?(Number.isSafeInteger(employees)?'aderente_nao_verificado':'pendente'):'nao_solicitado',faturamento:entry.faturamento??null,contatos,noticias,insights:Array.isArray(entry.insights)?entry.insights.slice(0,6).map(s=>str(s,250)):[],fontes:sources,providers:[r.engine],conflitos:[],territorioCorroborado:false});
+   out.set(researchKey,{cnpj,identidadeStatus:cnpj?'cnpj_validado':'pendente_cnpj',razaoSocial:str(entry.razaoSocial||entry.nome),nome:str(entry.nome||entry.razaoSocial),cidade:str(entry.cidade),uf:str(entry.uf,2).toUpperCase(),porte:str(entry.porte),segmento:str(entry.segmento),site:str(entry.site,200),telefone:str(entry.telefone,60),funcionarios:entry.funcionarios??null,faixaFuncionariosStatus:f.faixasFuncionarios.length?(Number.isSafeInteger(employees)?'aderente_nao_verificado':'pendente'):'nao_solicitado',qualificacaoICP:icp,faturamento:entry.faturamento??null,contatos,noticias,insights:Array.isArray(entry.insights)?entry.insights.slice(0,6).map(s=>str(s,250)):[],fontes:sources,providers:[r.engine],conflitos:[],territorioCorroborado:false});
   }
  }
  return [...out.values()].slice(0,limit);
