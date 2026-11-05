@@ -19,10 +19,10 @@ const responseClaude=(search=true,cited=true)=>({
  {type:'text',text:marketJSON,citations:cited?[{type:'webpage_citation',url:URL_COMPANY,title:'Registro verificado'}]:[]}],
  usage:{input_tokens:100,output_tokens:150,server_tool_use:{web_search_requests:1}}
 });
-function harness({anonMode='legacy',openai=false,claude=false,role='usuario',quotaAllowed=true,quotaUnavailable=false,openaiStatus=200,claudeStatus=200,openaiResponse=responseOpenAI(),claudeResponse=responseClaude()}={}){
+function harness({supabaseUrl='https://safe.supabase.co',anonMode='legacy',openai=false,claude=false,role='usuario',quotaAllowed=true,quotaUnavailable=false,openaiStatus=200,claudeStatus=200,openaiResponse=responseOpenAI(),claudeResponse=responseClaude()}={}){
  const calls=[];let handler=null;
  const sandbox={Request,Response,AbortSignal,URL,TextDecoder,console,Deno:{env:{get(k){
-  if(k==='SUPABASE_URL')return 'https://safe.supabase.co';
+  if(k==='SUPABASE_URL')return supabaseUrl;
   if(k==='SUPABASE_ANON_KEY')return anonMode==='legacy'?'safe-public-key':undefined;
   if(k==='IAD_CHAVE_PUBLICA')return anonMode==='iad'?'safe-public-key':undefined;
   if(k==='SUPABASE_PUBLISHABLE_KEY')return anonMode==='publishable'?'safe-public-key':undefined;
@@ -393,4 +393,26 @@ test('nao permite pesquisa com auth sem chave publica alguma',async()=>{
  assert.equal(res.status,503);
  assert.equal((await res.json()).error,'SERVER_NOT_CONFIGURED');
  assert.equal(aiCalls(h).length,0);
+});
+
+test('piloto de producao bloqueia vendedor sem papel admin antes da quota e das IAs',async()=>{
+ const h=harness({supabaseUrl:'https://drhonmdffhnwamwzynrs.supabase.co',openai:true,role:'gestor'});
+ const res=await h.handle(request(query));
+ assert.equal(res.status,403);
+ assert.equal((await res.json()).error,'PILOT_ADMIN_ONLY');
+ assert.equal(aiCalls(h).length,0);
+ assert.ok(!h.calls.some(x=>x.url.includes('/rpc/iad_market_search_reserve')));
+});
+test('piloto de producao permite administrador autenticado, respeitando quota',async()=>{
+ const h=harness({supabaseUrl:'https://drhonmdffhnwamwzynrs.supabase.co',openai:true,role:'admin'});
+ const res=await h.handle(request(query));
+ assert.equal(res.status,200);
+ assert.equal(aiCalls(h).length,1);
+ assert.ok(h.calls.some(x=>x.url.includes('/rpc/iad_market_search_reserve')));
+});
+test('ambiente de homologacao continua permitindo papel usuario com quota',async()=>{
+ const h=harness({supabaseUrl:'https://bvlfzeblpewlqhssprpv.supabase.co',openai:true,role:'usuario'});
+ const res=await h.handle(request(query));
+ assert.equal(res.status,200);
+ assert.equal(aiCalls(h).length,1);
 });
