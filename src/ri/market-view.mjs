@@ -98,7 +98,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem}={
      let requestId=importKeys.get(company.cnpj);
      if(!requestId){requestId=globalThis.crypto.randomUUID();importKeys.set(company.cnpj,requestId);}
      const body=buildMarketImportRequest(company,snapshot,{tenantId:scope.tenantId,userId:scope.userId},requestId);
-     const response=await fetch(config.url.replace(/\\/$/,'')+'/rest/v1/rpc/iad_market_import_confirmed',{
+     const response=await fetch(config.url.replace(/\/$/,'')+'/rest/v1/rpc/iad_market_import_confirmed',{
       method:'POST',headers:{'Content-Type':'application/json','apikey':config.chave,'Authorization':'Bearer '+session.access_token},
       body:JSON.stringify(body)
      });
