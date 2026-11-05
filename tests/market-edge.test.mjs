@@ -181,8 +181,8 @@ test('ChatGPT e Claude complementam decisores de mesmo CNPJ sem perder fontes',a
    {nome:'Contato Inventado',cargo:'CEO',email:'',telefone:'',fonte:unverified}
   ]};
  const claudeResponse=responseClaude();
- claudeResponse.content[1].text=JSON.stringify({empresas:[second]});
- claudeResponse.content[1].citations=[{type:'webpage_citation',url:verified,title:'Equipe executiva'}];
+ claudeResponse.content.find(b=>b.type==='text').text=JSON.stringify({empresas:[second]});
+ claudeResponse.content.find(b=>b.type==='text').citations=[{type:'webpage_citation',url:verified,title:'Equipe executiva'}];
  const h=harness({openai:true,claude:true,claudeResponse});
  const res=await h.handle(request(query));
  assert.equal(res.status,200);
@@ -196,7 +196,7 @@ test('ChatGPT e Claude complementam decisores de mesmo CNPJ sem perder fontes',a
 test('mesmo CNPJ com cidades divergentes entre IAs sinaliza conflito em vez de confirmar localizacao',async()=>{
  const second={...candidate,cidade:'Campinas'};
  const claudeResponse=responseClaude();
- claudeResponse.content[1].text=JSON.stringify({empresas:[second]});
+ claudeResponse.content.find(b=>b.type==='text').text=JSON.stringify({empresas:[second]});
  const h=harness({openai:true,claude:true,claudeResponse});
  const ufOnly={action:'search',filters:{uf:'SP',segmento:'Quimico',limit:10}};
  const res=await h.handle(request(ufOnly));
