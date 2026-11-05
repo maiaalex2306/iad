@@ -39,4 +39,6 @@ window.IADConfig = {
 window.IAD_RI_ENABLED = true;
 /* RI-M01: pesquisa externa manual, cota no servidor e importação confirmada pelo vendedor. */
 window.IAD_MARKET_ENABLED = true;
-window.IADVersao = { numero: 'v286.47', data: '2026-11-05' };
+/* Piloto de pesquisa: a importação permanece bloqueada no servidor e no navegador. */
+window.IAD_MARKET_IMPORT_ENABLED = false;
+window.IADVersao = { numero: 'v286.48', data: '2026-11-05' };
