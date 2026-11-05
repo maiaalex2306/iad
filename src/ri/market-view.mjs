@@ -2,6 +2,8 @@
  * Nenhum resultado e importado; a revisao de duplicidades e somente leitura.
  */
 import {normalizeMarketFilters,normalizeMarketCompanies,proposePipelineAction,buildMarketImportRequest} from './market-contract.mjs';
+export function marketPilotAllowsImport(flag){return flag===true;}
+
 /**
  * Pull only the server-confirmed RI-M01 import into the local Pipeline.
  * Never upload local edits. Refuse the pull when CAS/pending state is unknown.
@@ -115,6 +117,10 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   }
   review.appendChild(el('p','A importacao cria somente conta e oportunidade em Prospeccao. Contatos nao sao gravados automaticamente. Confirme CNPJ, municipio e evidencia diretamente nas fontes.','small muted'));
   if(!eligible.length)return;
+  if(!marketPilotAllowsImport(globalThis.IAD_MARKET_IMPORT_ENABLED)){
+   review.appendChild(el('p','PILOTO DE PESQUISA: importacao no Pipeline permanece desativada ate a homologacao completa. Revise as empresas e fontes, sem gravar dados comerciais.','small muted'));
+   return;
+  }
   const approval=el('label','Confirmo que verifiquei a identidade, localizacao e fontes de cada empresa elegivel e autorizo a inclusao no Pipeline.','campo');
   const agree=doc.createElement('input');agree.type='checkbox';agree.checked=false;
   approval.prepend(agree);review.appendChild(approval);
