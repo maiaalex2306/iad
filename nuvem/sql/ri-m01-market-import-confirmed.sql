@@ -61,7 +61,7 @@ BEGIN
  END IF;
  v_cnpj := pg_catalog.upper(pg_catalog.regexp_replace(COALESCE(p_empresa->>'cnpj',''),'[^0-9A-Za-z]','','g'));
  IF v_cnpj !~ '^[0-9A-Z]{12}[0-9]{2}$' OR
-    v_cnpj = pg_catalog.repeat(pg_catalog.left(v_cnpj,1),14) THEN
+    pg_catalog.left(v_cnpj,12) = pg_catalog.repeat(pg_catalog.left(v_cnpj,1),12) THEN
   RETURN pg_catalog.jsonb_build_object('status','invalid_cnpj');
  END IF;
  -- Brazilian alphanumeric CNPJ checksum, mapping ASCII character code - 48.
