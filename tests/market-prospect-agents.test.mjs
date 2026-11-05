@@ -52,6 +52,8 @@ test('identidade pendente, fontes não seguras e divergência bloqueiam shortlis
  assert.ok(a.candidates.every(x=>x.status!=='candidata_para_revisao'));
  assert.ok(a.candidates.some(x=>x.evidence.fontesCitadas===0));
  assert.ok(a.candidates.some(x=>x.evidence.conflitos===1));
+ assert.ok(a.candidates.some(x=>/Localizar e conferir o CNPJ/.test(x.nextAction)));
+ assert.ok(a.candidates.some(x=>/Reconciliar informações/.test(x.nextAction)));
 });
 test('não expõe conta de outro tenant nem transforma matriz/filial em novo prospect aprovado',()=>{
  const cross={id:'confidencial-outro-tenant',tenantId:'tenant-b',cnpj:raw.cnpj,nome:'Empresa Secreta'};
