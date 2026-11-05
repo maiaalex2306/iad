@@ -19,7 +19,7 @@ const responseClaude=(search=true,cited=true)=>({
  {type:'text',text:marketJSON,citations:cited?[{type:'webpage_citation',url:URL_COMPANY,title:'Registro verificado'}]:[]}],
  usage:{input_tokens:100,output_tokens:150,server_tool_use:{web_search_requests:1}}
 });
-function harness({supabaseUrl='https://safe.supabase.co',anonMode='legacy',openai=false,claude=false,role='usuario',quotaAllowed=true,quotaUnavailable=false,openaiStatus=200,claudeStatus=200,openaiResponse=responseOpenAI(),claudeResponse=responseClaude()}={}){
+function harness({supabaseUrl='https://safe.supabase.co',anonMode='legacy',openai=false,claude=false,role='usuario',quotaAllowed=true,quotaUnavailable=false,openaiStatus=200,claudeStatus=200,catalogNames=['Química e Petroquímica'],catalogStatus=200,openaiResponse=responseOpenAI(),claudeResponse=responseClaude()}={}){
  const calls=[];let handler=null;
  const sandbox={Request,Response,AbortSignal,URL,TextDecoder,console,Deno:{env:{get(k){
   if(k==='SUPABASE_URL')return supabaseUrl;
@@ -34,6 +34,7 @@ function harness({supabaseUrl='https://safe.supabase.co',anonMode='legacy',opena
   calls.push({url:String(url),method:opt.method||'GET',headers:opt.headers,body:opt.body?JSON.parse(opt.body):null});
   if(String(url).includes('/auth/v1/user'))return new Response(JSON.stringify({id:'11111111-1111-1111-1111-111111111111'}),{status:200});
   if(String(url).includes('/rest/v1/perfis'))return new Response(JSON.stringify([{tenant_id:'tenant-a',papel:role,ativo:true}]),{status:200});
+  if(String(url).includes('/rest/v1/segmentos'))return new Response(JSON.stringify(catalogNames.map(nome=>({nome,ativo:true}))),{status:catalogStatus});
   if(String(url).includes('/rest/v1/rpc/iad_market_search_reserve'))return quotaUnavailable?new Response(JSON.stringify({message:'quota backend unavailable'}),{status:503}):new Response(JSON.stringify({allowed:quotaAllowed,scope:quotaAllowed?'ok':'user',remaining:quotaAllowed?2:0}),{status:200});
   if(String(url).includes('api.openai.com/v1/responses'))return new Response(JSON.stringify(openaiResponse),{status:openaiStatus});
   if(String(url).includes('api.anthropic.com/v1/messages'))return new Response(JSON.stringify(claudeResponse),{status:claudeStatus});
@@ -504,4 +505,74 @@ test('falha de Claude retorna 200 parcial com motivo e dados de OpenAI',async()=
  assert.equal(body.partial,true);
  assert.deepEqual(Array.from(body.failures.map(x=>x.category)),['IA_HTTP_429']);
  assert.equal(body.data.length,1);
+});
+
+const multiFilters={uf:'SP',municipios:[{codigoIBGE:'3530607',nome:'Mogi das Cruzes',uf:'SP'}],
+ ddds:['11'],segmentos:['Química e Petroquímica'],faixasFuncionarios:['201_500','501_1000'],limit:20};
+const marketMogi={...candidate,cidade:'Mogi das Cruzes',segmento:'Química e Petroquímica',funcionarios:205};
+function multiProvider(candidateEntry){
+ const response=responseOpenAI();
+ response.output.find(b=>b.type==='message').content[0].text=JSON.stringify({empresas:[candidateEntry]});
+ return response;
+}
+test('filtros de demonstracao SP/Mogi/DDD11/quimica/faixas: valida catalogo do tenant antes da quota',async()=>{
+ const h=harness({openai:true,openaiResponse:multiProvider(marketMogi)});
+ const res=await h.handle(request({action:'search',provider:'OpenAI',filters:multiFilters}));
+ assert.equal(res.status,200);const body=await res.json();
+ assert.equal(body.data.length,1);
+ assert.equal(body.data[0].faixaFuncionariosStatus,'aderente_nao_verificado');
+ const segmentCall=h.calls.find(c=>c.url.includes('/rest/v1/segmentos'));
+ const quotaCall=h.calls.find(c=>c.url.includes('iad_market_search_reserve'));
+ assert.ok(segmentCall.url.includes('tenant_id=eq.tenant-a'));
+ assert.ok(h.calls.indexOf(segmentCall)<h.calls.indexOf(quotaCall));
+ assert.equal(aiCalls(h).length,1);
+ assert.deepEqual(Array.from(aiCalls(h)[0].body?.input.match(/"faixasFuncionarios":\[[^\]]+\]/g)||[]).length,1);
+});
+test('OR entre faixas inclui 600 funcionarios, exclui 200 e mantem ausentes pendentes',async()=>{
+ for(const [employees,size,status] of [[600,1,'aderente_nao_verificado'],[200,0,null],[null,1,'pendente']]){
+  const h=harness({openai:true,openaiResponse:multiProvider({...marketMogi,funcionarios:employees})});
+  const res=await h.handle(request({action:'search',provider:'OpenAI',filters:multiFilters}));
+  assert.equal(res.status,200);
+  const body=await res.json();assert.equal(body.data.length,size);
+  if(size)assert.equal(body.data[0].faixaFuncionariosStatus,status);
+ }
+});
+test('municipio com prefixo IBGE de outro estado falha antes de reservar quota',async()=>{
+ const h=harness({openai:true});
+ const res=await h.handle(request({action:'search',filters:{...multiFilters,municipios:[{codigoIBGE:'3304557',nome:'Rio de Janeiro',uf:'SP'}]}}));
+ assert.equal(res.status,422);assert.equal(aiCalls(h).length,0);
+ assert.ok(!h.calls.some(c=>c.url.includes('iad_market_search_reserve')));
+});
+test('segmento de outro tenant falha antes da quota, sem vazamento de catalogo',async()=>{
+ const h=harness({openai:true,catalogNames:['Alimentos']});
+ const res=await h.handle(request({action:'search',filters:multiFilters}));
+ assert.equal(res.status,422);
+ assert.equal((await res.json()).error,'SEGMENT_NOT_AUTHORIZED');
+ assert.ok(!h.calls.some(c=>c.url.includes('iad_market_search_reserve')));
+ assert.equal(aiCalls(h).length,0);
+});
+test('falha na consulta do catalogo falha fechada antes de gastar credito',async()=>{
+ const h=harness({openai:true,catalogStatus:503});
+ const res=await h.handle(request({action:'search',filters:multiFilters}));
+ assert.equal(res.status,503);
+ assert.equal((await res.json()).error,'SEGMENT_CATALOG_UNAVAILABLE');
+ assert.equal(aiCalls(h).length,0);
+});
+test('múltiplos municipios respeitam OR, cidade fora do conjunto nao entra',async()=>{
+ const filters={...multiFilters,municipios:[multiFilters.municipios[0],{codigoIBGE:'3549904',nome:'São José dos Campos',uf:'SP'}]};
+ for(const [name,count] of [['Mogi das Cruzes',1],['São José dos Campos',1],['Campinas',0]]){
+  const h=harness({openai:true,openaiResponse:multiProvider({...marketMogi,cidade:name})});
+  const res=await h.handle(request({action:'search',filters}));
+  assert.equal(res.status,200);
+  assert.equal((await res.json()).data.length,count);
+ }
+});
+test('faixas sem sobreposicao e DDD nao reconhecido: erro antes da quota',async()=>{
+ const h=harness({openai:true});
+ for(const invalid of [{...multiFilters,faixasFuncionarios:['0_10','201_500','invalid']},{...multiFilters,ddds:['00']},{...multiFilters,municipios:Array.from({length:16},(_,i)=>({...multiFilters.municipios[0],codigoIBGE:String(3530607+i)}))}]){
+  const res=await h.handle(request({action:'search',filters:invalid}));
+  assert.equal(res.status,422);
+ }
+ assert.equal(aiCalls(h).length,0);
+ assert.equal(h.calls.filter(c=>c.url.includes('iad_market_search_reserve')).length,0);
 });
