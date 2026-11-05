@@ -176,6 +176,7 @@ function inRequestedPlace(entry,f) {
  if(f.cidade && entry.cidade && normalizedPlace(entry.cidade)!==normalizedPlace(f.cidade))return false;
  if(f.municipios.length&&entry.cidade&&!f.municipios.some(m=>normalizedPlace(m.nome)===normalizedPlace(entry.cidade)))return false;
  const sourceDDD=digits(entry.ddd).replace(/^0+(?=\d)/,'');
+ if(f.ddd&&sourceDDD&&sourceDDD!==f.ddd)return false;
  if(f.ddds.length&&sourceDDD&&!f.ddds.includes(sourceDDD))return false;
  return true;
 }
@@ -183,20 +184,21 @@ function inRequestedPlace(entry,f) {
 // exact matches are NOT independently verified against the linked sources.
 function reportedICP(entry,f,employees){
  const asked={
-  municipio:f.municipios.length>0,
-  ddd:f.ddds.length>0,
-  segmento:f.segmentos.length>0,
-  funcionarios:f.faixasFuncionarios.length>0
+  municipio:f.municipios.length>0||!!f.cidade,
+  ddd:f.ddds.length>0||!!f.ddd,
+  segmento:f.segmentos.length>0||!!f.segmento,
+  funcionarios:f.faixasFuncionarios.length>0||f.funcionariosMin!==null||f.funcionariosMax!==null
  };
  const segment=normalizedPlace(entry.segmento),ddd=digits(entry.ddd).replace(/^0+(?=\d)/,'');
+ const selectedSegments=f.segmentos.length?f.segmentos:(f.segmento?[f.segmento]:[]);
  const values={
   municipio:asked.municipio?(entry.cidade?'declarado':'pendente'):'nao_solicitado',
   ddd:asked.ddd?(ddd?'declarado':'pendente'):'nao_solicitado',
-  segmento:asked.segmento?(segment?(f.segmentos.some(x=>normalizedPlace(x)===segment)?'declarado':'a_confirmar'):'pendente'):'nao_solicitado',
+  segmento:asked.segmento?(segment?(selectedSegments.some(x=>normalizedPlace(x)===segment)?'declarado':'a_confirmar'):'pendente'):'nao_solicitado',
   funcionarios:asked.funcionarios?(Number.isSafeInteger(employees)&&employees>=0?'declarado':'pendente'):'nao_solicitado'
  };
  const requested=Object.values(values).filter(x=>x!=='nao_solicitado');
- return {...values,statusGeral:requested.every(x=>x==='declarado')?'declarado_nao_verificado':'pendente'};
+ return {...values,statusGeral:requested.length&&requested.every(x=>x==='declarado')?'declarado_nao_verificado':'pendente'};
 }
 function combineAI(results,limit,f) {
  const out=new Map();
@@ -213,6 +215,11 @@ function combineAI(results,limit,f) {
    if(f.faixasFuncionarios.length&&Number.isSafeInteger(employees)&&employees>=0&&
       !f.faixasFuncionarios.some(id=>{const [min,max]=BAND_LIMITS[id];return employees>=min&&(max===null||employees<=max)}))continue;
    const icp=reportedICP(entry,f,employees);
+   // Preserve legacy numeric employee filters: an explicit out-of-band
+   // number is not a prospect that matches this requested ICP.
+   if(Number.isSafeInteger(employees)&&employees>=0&&(
+      (f.funcionariosMin!==null&&employees<f.funcionariosMin)||
+      (f.funcionariosMax!==null&&employees>f.funcionariosMax)))continue;
    const rawCnpj=str(entry.cnpj,40),cnpj=cnpjReal(rawCnpj);
    // Invalid supplied CNPJ is discarded; genuinely missing CNPJ can be
    // displayed as a non-importable research candidate with web evidence.
