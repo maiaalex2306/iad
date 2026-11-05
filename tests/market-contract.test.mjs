@@ -116,3 +116,26 @@ test('sync so e confirmada com IDs de conta e oportunidade visiveis no Store cor
  assert.equal((await refreshMarketPipelineAfterImport({...args,getSnapshot:()=>({
   contas:[{id:'ri-a',tenantId:'outro'}],oportunidades:[{id:'ri-b',contaId:'ri-a',tenantId:'outro'}]})})).status,'pending');
 });
+
+test('pesquisa preserva empresa sem CNPJ como pendente sem permitir importacao',()=>{
+ const raw={nome:'Empresa de Pesquisa',razaoSocial:'Empresa de Pesquisa Ltda',cidade:'Mogi das Cruzes',uf:'SP',segmento:'Quimico',cnpj:null,fontes:[{url:'https://example.org/candidata',titulo:'Fonte publicada'}]};
+ const rows=normalizeMarketCompanies([raw],{source:'IA Web'});
+ assert.equal(rows.length,1);
+ assert.equal(rows[0].identidadeStatus,'pendente_cnpj');
+ assert.equal(rows[0].cnpj,'');
+ assert.equal(rows[0].fontes.length,1);
+ const plan=proposePipelineAction(rows[0],{contas:[],oportunidades:[]},{tenantId,userId:'u1'});
+ assert.equal(plan.operation,'review_existing');
+ assert.throws(()=>buildMarketImportRequest(rows[0],{contas:[],oportunidades:[]},{tenantId,userId:'u1'},'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),/revisao|CNPJ|cadastrada/i);
+});
+test('identidade pendente requer fonte e nome e nunca transforma CNPJ invalido em pendencia',()=>{
+ const items=[
+  {cnpj:null,nome:'Com Evidencia',fontes:[{url:'https://example.org/fonte'}]},
+  {cnpj:null,nome:'Sem Evidencia',fontes:[]},
+  {cnpj:null,fontes:[{url:'https://example.org/fonte'}]},
+  {cnpj:'123invalid',nome:'Documento Invalido',fontes:[{url:'https://example.org/fonte'}]}
+ ];
+ const found=normalizeMarketCompanies(items,{source:'IA Web'});
+ assert.equal(found.length,1);
+ assert.equal(found[0].nome,'Com Evidencia');
+});
