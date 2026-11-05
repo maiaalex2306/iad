@@ -38,6 +38,7 @@ DECLARE
  v_account text;
  v_opportunity text;
  v_existing text;
+ v_existing_owner uuid;
  v_replay record;
  v_dig integer;
  v_sum integer;
@@ -114,20 +115,26 @@ BEGIN
  END IF;
 
  -- Do not create a second company when existing identity, root or name is ambiguous.
- SELECT c.id INTO v_existing FROM public.contas c
+ SELECT c.id,c.dono_id INTO v_existing,v_existing_owner FROM public.contas c
  WHERE c.tenant_id=v_tenant AND
  pg_catalog.upper(pg_catalog.regexp_replace(COALESCE(c.cnpj,''),'[^0-9A-Za-z]','','g'))=v_cnpj
  LIMIT 1;
  IF v_existing IS NOT NULL THEN
-  RETURN pg_catalog.jsonb_build_object('status','existing','accountId',v_existing);
+  IF v_papel IN ('gestor','admin') OR v_existing_owner IS NULL OR v_existing_owner=v_user THEN
+   RETURN pg_catalog.jsonb_build_object('status','existing','accountId',v_existing);
+  END IF;
+  RETURN pg_catalog.jsonb_build_object('status','review_duplicate');
  END IF;
- SELECT c.id INTO v_existing FROM public.contas c
+ SELECT c.id,c.dono_id INTO v_existing,v_existing_owner FROM public.contas c
  WHERE c.tenant_id=v_tenant AND (
   pg_catalog.left(pg_catalog.upper(pg_catalog.regexp_replace(COALESCE(c.cnpj,''),'[^0-9A-Za-z]','','g')),8)=pg_catalog.left(v_cnpj,8)
   OR (pg_catalog.lower(pg_catalog.btrim(c.nome))=pg_catalog.lower(v_nome) AND pg_catalog.lower(pg_catalog.btrim(c.cidade))=pg_catalog.lower(v_cidade))
  ) LIMIT 1;
  IF v_existing IS NOT NULL THEN
-  RETURN pg_catalog.jsonb_build_object('status','review_duplicate','accountId',v_existing);
+  IF v_papel IN ('gestor','admin') OR v_existing_owner IS NULL OR v_existing_owner=v_user THEN
+   RETURN pg_catalog.jsonb_build_object('status','review_duplicate','accountId',v_existing);
+  END IF;
+  RETURN pg_catalog.jsonb_build_object('status','review_duplicate');
  END IF;
 
  v_account := 'ri-m01-'||pg_catalog.gen_random_uuid()::text;
