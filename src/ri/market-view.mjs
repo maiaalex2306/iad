@@ -100,7 +100,8 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
  const cityCache=new Map();
  async function loadCities(uf){
   cityPick.clear();cityPick.setItems([]);
-  if(cityRequest)cityRequest.abort();
+  if(cityRequest){cityRequest.abort();cityRequest=null;}
+  cityLoading=false;
   if(!uf)return [];
   if(cityCache.has(uf)){cityPick.setItems(cityCache.get(uf));return cityCache.get(uf);}
   const request=new AbortController();cityRequest=request;cityLoading=true;
