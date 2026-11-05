@@ -10,19 +10,42 @@ function output(body,status,origin){return new Response(JSON.stringify(body),{st
 const str=(v,n=120)=>typeof v==='string'?v.trim().slice(0,n):'';
 const digits=v=>String(v??'').replace(/\D/g,'');
 function number(v,max=1e12){if(v===null||v===undefined||v==='')return null;const n=Number(v);if(!Number.isSafeInteger(n)||n<0||n>max)throw Error('Faixa numerica invalida');return n;}
+// Allowed catalog keys; labels for segments are independently authorized
+// through the tenant-scoped segmentos table before any paid provider call.
+const UF_IBGE={AC:12,AL:27,AP:16,AM:13,BA:29,CE:23,DF:53,ES:32,GO:52,MA:21,MT:51,MS:50,MG:31,PA:15,PB:25,PR:41,PE:26,PI:22,RJ:33,RN:24,RS:43,RO:11,RR:14,SC:42,SP:35,SE:28,TO:17};
+const MARKET_DDDS=new Set([11,12,13,14,15,16,17,18,19,21,22,24,27,28,31,32,33,34,35,37,38,41,42,43,44,45,46,47,48,49,51,53,54,55,61,62,63,64,65,66,67,68,69,71,73,74,75,77,79,81,82,83,84,85,86,87,88,89,91,92,93,94,95,96,97,98,99].map(String));
+const BAND_LIMITS={ '0_10':[0,10],'11_100':[11,100],'101_200':[101,200],'201_500':[201,500],'501_1000':[501,1000],'1001_5000':[1001,5000],'5001_10000':[5001,10000],'10001_plus':[10001,null] };
+function boundedList(value,name,max,map){
+ if(value===undefined||value===null)return [];
+ if(!Array.isArray(value)||value.length>max)throw Error(name+' invalido');
+ const mapped=value.map(map);
+ if(mapped.some(v=>v===null||v===''))throw Error(name+' invalido');
+ return [...new Map(mapped.map(x=>[typeof x==='string'?x:JSON.stringify(x),x])).values()];
+}
 function filters(raw){
  if(!raw||typeof raw!=='object'||Array.isArray(raw))throw Error('Filtros ausentes');
  const uf=str(raw.uf,2).toUpperCase(),cidade=str(raw.cidade),regiao=str(raw.regiao),ddd=digits(raw.ddd).replace(/^0+(?=\d)/,''),segmento=str(raw.segmento),cnae=digits(raw.cnae).slice(0,7),porte=str(raw.porte,40);
- if(uf&&!/^[A-Z]{2}$/.test(uf))throw Error('UF invalida');
- if(ddd&&!/^\d{2}$/.test(ddd))throw Error('DDD invalido');
- if(!uf&&!cidade&&!regiao&&!ddd)throw Error('Informe territorio');
- if(!segmento&&!cnae)throw Error('Informe segmento ou CNAE');
+ if(uf&&!Object.hasOwn(UF_IBGE,uf))throw Error('UF invalida');
+ if(ddd&&!MARKET_DDDS.has(ddd))throw Error('DDD invalido');
+ const municipios=boundedList(raw.municipios,'Municipios',15,v=>{
+  if(!v||typeof v!=='object'||Array.isArray(v))return null;
+  const codigoIBGE=String(v.codigoIBGE??''),nome=str(v.nome,120),state=str(v.uf,2).toUpperCase();
+  return /^\d{7}$/.test(codigoIBGE)&&nome&&state===uf&&Number(codigoIBGE.slice(0,2))===UF_IBGE[state]?{codigoIBGE,nome,uf:state}:null;
+ });
+ const ddds=boundedList(raw.ddds,'DDDs',20,v=>{const c=digits(v).replace(/^0+(?=\d)/,'');return MARKET_DDDS.has(c)?c:null;});
+ const segmentos=boundedList(raw.segmentos,'Segmentos',12,v=>{const name=str(v,120);return name&&name.length>=2?name:null;});
+ const faixasFuncionarios=boundedList(raw.faixasFuncionarios,'Faixas de funcionarios',8,v=>Object.hasOwn(BAND_LIMITS,v)?v:null);
+ if((cidade&&municipios.length)||(ddd&&ddds.length)||(segmento&&segmentos.length))throw Error('Filtros singulares e multiplos simultaneos');
+ if(!uf&&!cidade&&!regiao&&!ddd&&!municipios.length&&!ddds.length)throw Error('Informe territorio');
+ if(!segmento&&!segmentos.length&&!cnae)throw Error('Informe segmento ou CNAE');
  const funcionariosMin=number(raw.funcionariosMin,1e9),funcionariosMax=number(raw.funcionariosMax,1e9),faturamentoMin=number(raw.faturamentoMin),faturamentoMax=number(raw.faturamentoMax);
+ if(faixasFuncionarios.length&&(funcionariosMin!==null||funcionariosMax!==null))throw Error('Nao misture faixas e limites de empregados');
  if(funcionariosMax!==null&&funcionariosMin!==null&&funcionariosMax<funcionariosMin)throw Error('Faixa de empregados invertida');
  if(faturamentoMax!==null&&faturamentoMin!==null&&faturamentoMax<faturamentoMin)throw Error('Faixa de faturamento invertida');
  const limit=raw.limit===undefined?20:Number(raw.limit);if(!Number.isInteger(limit)||limit<1||limit>50)throw Error('Limite 1 a 50');
- return {uf,cidade,regiao,ddd,segmento,cnae,porte,funcionariosMin,funcionariosMax,faturamentoMin,faturamentoMax,limit};
+ return {uf,cidade,regiao,ddd,segmento,cnae,porte,municipios,ddds,segmentos,faixasFuncionarios,funcionariosMin,funcionariosMax,faturamentoMin,faturamentoMax,limit,catalogRequired:Array.isArray(raw.segmentos)};
 }
+
 function normalize(data){
  const rows=Array.isArray(data)?data:Array.isArray(data?.empresas)?data.empresas:Array.isArray(data?.companies)?data.companies:Array.isArray(data?.data)?data.data:Array.isArray(data?.resultados)?data.resultados:null;
  if(!rows)throw Error('Resposta do fornecedor nao reconhecida');
@@ -108,7 +131,7 @@ function aiSummary(result,engine) {
  return {engine,searched,urls,parsed:parseAI(texts),usage};
 }
 function prompt(f) {
- return 'PESQUISE NA WEB empresas reais com recorte '+JSON.stringify(f)+'. Busque sites corporativos, bases publicas e noticias. Responda somente JSON com chave empresas (array): cada empresa possui cnpj, razaoSocial, nome, cidade, uf, segmento, porte, site, telefone, funcionarios, faturamento, fontes:[{url,titulo}], contatos:[{nome,cargo,email,telefone,fonte}], noticias:[{titulo,url,data}], insights:[]. Quando uma empresa mencionada nas fontes ainda nao tiver CNPJ encontrado, use cnpj=null e preserve-a como candidata pendente. Nunca invente CNPJ. Toda empresa precisa ter nome e URL realmente citada pela ferramenta web. Valores nao encontrados=null. NUNCA invente empresa ou pessoa. Para DDD/regiao pesquisa e exploratoria, sem promessa de cobertura total. Maximo '+f.limit+' empresas.';
+ return 'PESQUISE NA WEB empresas reais com recorte '+JSON.stringify(f)+'. Busque sites corporativos, bases publicas e noticias. Responda somente JSON com chave empresas (array): cada empresa possui cnpj, razaoSocial, nome, cidade, uf, segmento, porte, site, telefone, funcionarios, faturamento, fontes:[{url,titulo}], contatos:[{nome,cargo,email,telefone,fonte}], noticias:[{titulo,url,data}], insights:[]. Quando uma empresa mencionada nas fontes ainda nao tiver CNPJ encontrado, use cnpj=null e preserve-a como candidata pendente. Nunca invente CNPJ. Toda empresa precisa ter nome e URL realmente citada pela ferramenta web. Valores nao encontrados=null. NUNCA invente empresa ou pessoa. Para DDD/regiao pesquisa e exploratoria, sem promessa de cobertura total. Para filtros em listas aplique OU dentro do campo e E entre campos (municipios, DDDs, segmentos e faixas de empregados). Informe o numero de funcionarios apenas com fonte verificavel; caso contrario use null. Maximo '+f.limit+' empresas.';
 }
 async function queryAI(engine,key,f) {
  const instructions='Pesquisador B2B: use sempre a ferramenta web_search, inclua URLs citadas e retorne JSON sem inventar fatos.';
@@ -151,6 +174,9 @@ function normalizedPlace(value) {
 function inRequestedPlace(entry,f) {
  if(f.uf && entry.uf && normalizedPlace(entry.uf)!==normalizedPlace(f.uf))return false;
  if(f.cidade && entry.cidade && normalizedPlace(entry.cidade)!==normalizedPlace(f.cidade))return false;
+ if(f.municipios.length&&entry.cidade&&!f.municipios.some(m=>normalizedPlace(m.nome)===normalizedPlace(entry.cidade)))return false;
+ const sourceDDD=digits(entry.ddd).replace(/^0+(?=\d)/,'');
+ if(f.ddds.length&&sourceDDD&&!f.ddds.includes(sourceDDD))return false;
  return true;
 }
 function combineAI(results,limit,f) {
@@ -161,6 +187,12 @@ function combineAI(results,limit,f) {
   for(const entry of list.slice(0,limit)){
    if(!entry||typeof entry!=='object')continue;
    if(!inRequestedPlace(entry,f))continue;
+   // OR between the selected ranges; missing/ambiguous employee counts stay
+   // visible for research, never labeled as confirmed ICP matches.
+   const reported=entry.funcionarios;
+   const employees=typeof reported==='number'?reported:(typeof reported==='string'&&/^\d+$/.test(reported)?Number(reported):null);
+   if(f.faixasFuncionarios.length&&Number.isSafeInteger(employees)&&employees>=0&&
+      !f.faixasFuncionarios.some(id=>{const [min,max]=BAND_LIMITS[id];return employees>=min&&(max===null||employees<=max)}))continue;
    const rawCnpj=str(entry.cnpj,40),cnpj=cnpjReal(rawCnpj);
    // Invalid supplied CNPJ is discarded; genuinely missing CNPJ can be
    // displayed as a non-importable research candidate with web evidence.
@@ -200,7 +232,7 @@ function combineAI(results,limit,f) {
     }
     continue;
    }
-   out.set(researchKey,{cnpj,identidadeStatus:cnpj?'cnpj_validado':'pendente_cnpj',razaoSocial:str(entry.razaoSocial||entry.nome),nome:str(entry.nome||entry.razaoSocial),cidade:str(entry.cidade),uf:str(entry.uf,2).toUpperCase(),porte:str(entry.porte),segmento:str(entry.segmento),site:str(entry.site,200),telefone:str(entry.telefone,60),funcionarios:entry.funcionarios??null,faturamento:entry.faturamento??null,contatos,noticias,insights:Array.isArray(entry.insights)?entry.insights.slice(0,6).map(s=>str(s,250)):[],fontes:sources,providers:[r.engine],conflitos:[],territorioCorroborado:false});
+   out.set(researchKey,{cnpj,identidadeStatus:cnpj?'cnpj_validado':'pendente_cnpj',razaoSocial:str(entry.razaoSocial||entry.nome),nome:str(entry.nome||entry.razaoSocial),cidade:str(entry.cidade),uf:str(entry.uf,2).toUpperCase(),porte:str(entry.porte),segmento:str(entry.segmento),site:str(entry.site,200),telefone:str(entry.telefone,60),funcionarios:entry.funcionarios??null,faixaFuncionariosStatus:f.faixasFuncionarios.length?(Number.isSafeInteger(employees)?'aderente_nao_verificado':'pendente'):'nao_solicitado',faturamento:entry.faturamento??null,contatos,noticias,insights:Array.isArray(entry.insights)?entry.insights.slice(0,6).map(s=>str(s,250)):[],fontes:sources,providers:[r.engine],conflitos:[],territorioCorroborado:false});
   }
  }
  return [...out.values()].slice(0,limit);
@@ -262,6 +294,22 @@ Deno.serve(async req=>{
   const provider=body.provider===undefined?'both':body.provider;
   if(!['both','OpenAI','Anthropic'].includes(provider))
    return output({error:'INVALID_PROVIDER'},422,origin);
+  // User-provided segment names must belong to this authenticated tenant,
+  // not to a catalog controlled by another tenant or an arbitrary prompt.
+  if(f.catalogRequired){
+   if(!profile.tenant_id)return output({error:'SEGMENT_CATALOG_UNAVAILABLE'},503,origin);
+   let catalog;
+   try{
+    const response=await fetch(url+'/rest/v1/segmentos?select=nome,ativo&tenant_id=eq.'+encodeURIComponent(profile.tenant_id)+'&ativo=eq.true&limit=120',{
+     headers:{Authorization:access,apikey:anon},signal:AbortSignal.timeout(6500)});
+    if(!response.ok)return output({error:'SEGMENT_CATALOG_UNAVAILABLE'},503,origin);
+    catalog=await response.json();
+   }catch{return output({error:'SEGMENT_CATALOG_UNAVAILABLE'},503,origin)}
+   if(!Array.isArray(catalog))return output({error:'SEGMENT_CATALOG_UNAVAILABLE'},503,origin);
+   const allowed=new Set(catalog.filter(x=>x?.ativo!==false).map(x=>normalizedPlace(x.nome)));
+   if(!f.segmentos.length||f.segmentos.some(x=>!allowed.has(normalizedPlace(x))))
+    return output({error:'SEGMENT_NOT_AUTHORIZED'},422,origin);
+  }
   const openai=aiKey('openai'),claude=aiKey('anthropic');
   if((provider==='OpenAI'&&!openai)||(provider==='Anthropic'&&!claude))
    return output({error:'AI_PROVIDER_NOT_CONFIGURED',provider},503,origin);
