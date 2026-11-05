@@ -23,6 +23,15 @@
       },
       ajuda: 'Consulta sob demanda da carteira, com perguntas para reuniões e lacunas de informação; não envia mensagens nem altera negócios.'
     }] : []),
+    ...(global.IAD_MARKET_ENABLED === true ? [{
+      hash: '#/mercado', ico: '🌐', nome: 'Inteligência de Mercado',
+      render: function () {
+        return '<section class="card"><h1>Inteligência de Mercado</h1>' +
+          '<p class="small muted">Pesquisa externa acionada manualmente; nenhuma empresa é importada automaticamente.</p>' +
+          '<div id="iad-market-root" aria-live="polite">Preparando a pesquisa...</div></section>';
+      },
+      ajuda: 'BUSCAR empresas externas por territorio e segmento, revisar contatos e conferir duplicidades. Importacao somente com aprovacao.'
+    }] : []),
     /* Debaixo do Pipeline de propósito: o pipeline é a foto das contas, a
        tarefa é o que muda a foto. Quem abre o app para trabalhar desce um
        item e está no lugar certo. */
@@ -458,6 +467,7 @@
          usado e busca os leads na ponte; Cadastros lista quem está no
          servidor. Nenhuma das duas pode segurar o render. */
       if (rota.hash === '#/inteligencia') iniciarInteligenciaComercial();
+      else if (rota.hash === '#/mercado') iniciarMercadoManual();
       else if (rota.hash === '#/dados') { pintarUso(); pintarLeads(); pintarVersao(); }
       else pintarUsuariosNuvem();
       /* O ditado vivia dentro de formulário, onde alguem sempre chamava
@@ -534,6 +544,57 @@
       if(token===geracaoInteligencia&&root.isConnected&&
           location.hash==='#/inteligencia'&&assinatura===assinaturaInteligencia())
         root.textContent='Não foi possível carregar a inteligência comercial. A carteira não foi alterada.';
+    });
+  }
+
+
+  /* RI-M01: carregamento lazy; flag desligada ate existir provedor homologado.
+     A pesquisa exige clique BUSCAR e nao altera o Store nem o CAS. */
+  let moduloMercado = null;
+  let geracaoMercado = 0;
+  function iniciarMercadoManual() {
+    const root = document.getElementById('iad-market-root');
+    if (!root || global.IAD_MARKET_ENABLED !== true) return;
+    const token = ++geracaoMercado;
+    const assinatura = assinaturaInteligencia(), usuario = A.atual();
+    const ctx = Store.contexto(), filtros = ctx.filtros || {}, nuvem = global.IADNuvem;
+    if (!assinatura || !usuario || !nuvem) {
+      root.textContent = 'Sessão autenticada necessária.';
+      return;
+    }
+    // Pilot release: production AI spend is limited to the tenant administrator.
+    // The Edge Function enforces the same boundary before reserving quota.
+    if (String(nuvem.config()?.url || '').includes('drhonmdffhnwamwzynrs.supabase.co') &&
+        usuario.papel !== 'admin') {
+      root.textContent = 'Inteligência de Mercado em piloto: acesso inicial exclusivo do administrador.';
+      return;
+    }
+    if (ctx.admin && (!filtros.tenant || filtros.tenant === 'todas')) {
+      root.textContent = 'Selecione uma empresa no filtro administrativo antes de pesquisar o mercado.';
+      return;
+    }
+    const tenantId = ctx.admin ? filtros.tenant : ctx.tenantId;
+    if (!tenantId) {
+      root.textContent = 'Selecione uma empresa autorizada.';
+      return;
+    }
+    const endereco = new URL('src/ri/market-view.mjs', document.baseURI).href;
+    const pendente = moduloMercado || (moduloMercado = import(endereco).catch(function (e) {
+      moduloMercado = null; throw e;
+    }));
+    pendente.then(function (m) {
+      if (token !== geracaoMercado || !root.isConnected ||
+          location.hash !== '#/mercado' || assinatura !== assinaturaInteligencia()) return;
+      m.mountMarketDiscovery({
+        root, snapshot: Store.dados(),
+        scope: {userId: usuario.id, tenantId, role: usuario.papel, token: assinatura},
+        getScopeToken: assinaturaInteligencia, nuvem,
+        getSnapshot: function () { return Store.dados(); }
+      });
+    }).catch(function () {
+      if (token === geracaoMercado && root.isConnected &&
+          location.hash === '#/mercado' && assinatura === assinaturaInteligencia())
+        root.textContent = 'Não foi possível abrir a pesquisa. A carteira não foi alterada.';
     });
   }
 

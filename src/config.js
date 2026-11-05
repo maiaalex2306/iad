@@ -37,4 +37,6 @@ window.IADConfig = {
    disso vale mais do que a coincidência dos dois números. */
 /* RI-01C: ativar somente a análise de contas existentes, sem envios ou gravações. */
 window.IAD_RI_ENABLED = true;
-window.IADVersao = { numero: 'v286.46', data: '2026-11-04' };
+/* RI-M01: pesquisa externa manual, cota no servidor e importação confirmada pelo vendedor. */
+window.IAD_MARKET_ENABLED = true;
+window.IADVersao = { numero: 'v286.47', data: '2026-11-05' };
