@@ -298,3 +298,24 @@ test('limite de 20 ou 50 empresas nao significa exaustao do universo territorial
  assert.equal(result.coverage,'exploratoria');
  assert.equal(result.coverageStatus,'unknown');
 });
+
+test('rejeita no motor de pesquisa CNPJ com raiz repetitiva e digitos coerentes',async()=>{
+ const fake={...candidate,cnpj:'11111111111180'};
+ const provider=responseOpenAI();
+ provider.output.find(x=>x.type==='message').content[0].text=JSON.stringify({empresas:[fake]});
+ const h=harness({openai:true,openaiResponse:provider});
+ const response=await h.handle(request(query));
+ assert.equal(response.status,200);
+ const body=await response.json();
+ assert.equal(body.data.length,0,'raiz CNPJ repetitiva jamais deve entrar nos leads do vendedor');
+});
+test('rejeita no motor de pesquisa CNPJ com digitos verificadores incorretos',async()=>{
+ const fake={...candidate,cnpj:'11222333000182'};
+ const provider=responseOpenAI();
+ provider.output.find(x=>x.type==='message').content[0].text=JSON.stringify({empresas:[fake]});
+ const h=harness({openai:true,openaiResponse:provider});
+ const response=await h.handle(request(query));
+ assert.equal(response.status,200);
+ const body=await response.json();
+ assert.equal(body.data.length,0);
+});
