@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import vm from 'node:vm';
 import {normalizeCnpj, normalizeMarketFilters, matchCrmAccount, normalizeMarketCompanies, proposePipelineAction, buildMarketImportRequest} from '../src/ri/market-contract.mjs';
 const tenantId='tenant-a',existing={id:'a1',tenantId,cnpj:'11.222.333/0001-81',nome:'Acme Indústria',razaoSocial:'Acme Indústria',site:'https://acme.example'};
 test('CNPJ numerico e alfanumerico validos; DV incorreto rejeitado',()=>{
@@ -123,4 +125,14 @@ test('piloto pesquisa sem disponibilizar importacao quando flag ausente',async()
  assert.equal(marketPilotAllowsImport(false),false);
  assert.equal(marketPilotAllowsImport('true'),false);
  assert.equal(marketPilotAllowsImport(true),true);
+});
+
+test('pilot link enables market menu but never enables Pipeline import',()=>{
+ const src=readFileSync(new URL('../src/config.js',import.meta.url),'utf8');
+ for(const [query,enabled] of [['',false],['?riMarketPilot=0',false],['?riMarketPilot=1',true]]){
+  const context={window:{},location:{search:query},URLSearchParams};
+  vm.runInNewContext(src,context);
+  assert.equal(context.window.IAD_MARKET_ENABLED,enabled,'pilot flag for '+query);
+  assert.equal(context.window.IAD_MARKET_IMPORT_ENABLED,false,'Pipeline import always off');
+ }
 });
