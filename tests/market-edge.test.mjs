@@ -19,7 +19,7 @@ const responseClaude=(search=true,cited=true)=>({
  {type:'text',text:marketJSON,citations:cited?[{type:'webpage_citation',url:URL_COMPANY,title:'Registro verificado'}]:[]}],
  usage:{input_tokens:100,output_tokens:150,server_tool_use:{web_search_requests:1}}
 });
-function harness({supabaseUrl='https://safe.supabase.co',anonMode='legacy',openai=false,claude=false,role='usuario',quotaAllowed=true,quotaUnavailable=false,openaiStatus=200,claudeStatus=200,catalogNames=['Química e Petroquímica'],catalogStatus=200,openaiResponse=responseOpenAI(),claudeResponse=responseClaude()}={}){
+function harness({supabaseUrl='https://safe.supabase.co',anonMode='legacy',openai=false,claude=false,role='usuario',quotaAllowed=true,quotaUnavailable=false,openaiStatus=200,claudeStatus=200,openaiModelStatus=200,claudeModelStatus=200,claudeWebSearchSupported=true,catalogNames=['Química e Petroquímica'],catalogStatus=200,openaiResponse=responseOpenAI(),claudeResponse=responseClaude()}={}){
  const calls=[];let handler=null;
  const sandbox={Request,Response,AbortSignal,URL,TextDecoder,console,Deno:{env:{get(k){
   if(k==='SUPABASE_URL')return supabaseUrl;
@@ -36,6 +36,10 @@ function harness({supabaseUrl='https://safe.supabase.co',anonMode='legacy',opena
   if(String(url).includes('/rest/v1/perfis'))return new Response(JSON.stringify([{tenant_id:'tenant-a',papel:role,ativo:true}]),{status:200});
   if(String(url).includes('/rest/v1/segmentos'))return new Response(JSON.stringify(catalogNames.map(nome=>({nome,ativo:true}))),{status:catalogStatus});
   if(String(url).includes('/rest/v1/rpc/iad_market_search_reserve'))return quotaUnavailable?new Response(JSON.stringify({message:'quota backend unavailable'}),{status:503}):new Response(JSON.stringify({allowed:quotaAllowed,scope:quotaAllowed?'ok':'user',remaining:quotaAllowed?2:0}),{status:200});
+  if(String(url).includes('api.openai.com/v1/models/'))
+   return new Response(JSON.stringify({object:'model',id:'gpt-5'}),{status:openaiModelStatus});
+  if(String(url).includes('api.anthropic.com/v1/models/'))
+   return new Response(JSON.stringify({type:'model',id:'claude-opus-5',capabilities:{server_tools:{web_search:{supported:claudeWebSearchSupported}}}}),{status:claudeModelStatus});
   if(String(url).includes('api.openai.com/v1/responses'))return new Response(JSON.stringify(openaiResponse),{status:openaiStatus});
   if(String(url).includes('api.anthropic.com/v1/messages'))return new Response(JSON.stringify(claudeResponse),{status:claudeStatus});
   throw Error('unexpected request '+url);
@@ -635,4 +639,91 @@ test('RI-M03: DDD singular divergente e rejeitado, ausente fica para verificacao
   assert.equal(list.length,size);
   if(size)assert.equal(list[0].qualificacaoICP.ddd,ddd===null?'pendente':'declarado');
  }
+});
+
+test('RI-M04: preflight de ambas IAs retorna modelos, nao pesquisa web nem reserva quota',async()=>{
+ const h=harness({openai:true,claude:true,role:'gestor'});
+ const response=await h.handle(request({action:'preflight',provider:'both'}));
+ assert.equal(response.status,200);
+ const body=await response.json();
+ assert.equal(body.action,'preflight');
+ assert.equal(body.results.length,2);
+ assert.deepEqual(Array.from(body.results.map(x=>x.provider)),['OpenAI','Anthropic']);
+ assert.deepEqual(Array.from(body.results.map(x=>x.status)),['MODEL_AVAILABLE','MODEL_AVAILABLE']);
+ assert.equal(body.results[0].webSearchSupport,'unknown');
+ assert.equal(body.results[1].webSearchSupport,'supported');
+ assert.equal(h.calls.filter(x=>x.url.includes('iad_market_search_reserve')).length,0);
+ assert.equal(h.calls.filter(x=>/\/v1\/(responses|messages)/.test(x.url)).length,0);
+ assert.equal(h.calls.filter(x=>x.method==='GET'&&/api\.(openai|anthropic)\.com\/v1\/models\//.test(x.url)).length,2);
+ assert.ok(!JSON.stringify(body).includes('sk-test-openai'));
+ assert.ok(!JSON.stringify(body).includes('sk-ant-test-claude'));
+});
+test('RI-M04: preflight somente Claude nao solicita modelo OpenAI',async()=>{
+ const h=harness({openai:true,claude:true});
+ const response=await h.handle(request({action:'preflight',provider:'Anthropic'}));
+ assert.equal(response.status,200);
+ const body=await response.json();
+ assert.deepEqual(Array.from(body.results.map(x=>x.provider)),['Anthropic']);
+ assert.equal(h.calls.filter(x=>x.url.includes('api.openai.com')).length,0);
+ assert.equal(h.calls.filter(x=>x.url.includes('iad_market_search_reserve')).length,0);
+});
+test('RI-M04: preflight detecta erro de credencial 401 sem corpo sensivel',async()=>{
+ const h=harness({openai:true,openaiModelStatus:401});
+ const response=await h.handle(request({action:'preflight',provider:'OpenAI'}));
+ assert.equal(response.status,200);
+ const body=await response.json();
+ assert.equal(body.results[0].status,'AUTH_REJECTED');
+ assert.equal(body.results[0].httpStatus,401);
+ assert.equal(h.calls.filter(x=>x.url.includes('iad_market_search_reserve')).length,0);
+});
+test('RI-M04: preflight identifica modelo inexistente, sem consumir quota',async()=>{
+ const h=harness({claude:true,claudeModelStatus:404});
+ const response=await h.handle(request({action:'preflight',provider:'Anthropic'}));
+ assert.equal(response.status,200);
+ const body=await response.json();
+ assert.equal(body.results[0].status,'MODEL_NOT_FOUND');
+ assert.equal(body.results[0].httpStatus,404);
+});
+test('RI-M04: modelo Claude sem web_search nao recebe falsa certificacao',async()=>{
+ const h=harness({claude:true,claudeWebSearchSupported:false});
+ const response=await h.handle(request({action:'preflight',provider:'Anthropic'}));
+ assert.equal(response.status,200);
+ const body=await response.json();
+ assert.equal(body.results[0].status,'MODEL_NO_WEB_SEARCH');
+ assert.equal(body.results[0].webSearchSupport,'not_supported');
+});
+test('RI-M04: preflight sem chave nao consulta provedor nem cota',async()=>{
+ const h=harness({openai:false,claude:true});
+ const response=await h.handle(request({action:'preflight',provider:'both'}));
+ assert.equal(response.status,200);
+ const body=await response.json();
+ assert.equal(body.results[0].status,'NOT_CONFIGURED');
+ assert.equal(body.results[1].status,'MODEL_AVAILABLE');
+ assert.equal(h.calls.filter(x=>x.url.includes('api.openai.com')).length,0);
+ assert.equal(h.calls.filter(x=>x.url.includes('iad_market_search_reserve')).length,0);
+});
+test('RI-M04: preflight invalido retorna 422 sem acessar IAs ou quota',async()=>{
+ const h=harness({openai:true,claude:true});
+ const response=await h.handle(request({action:'preflight',provider:'unknown'}));
+ assert.equal(response.status,422);
+ assert.equal((await response.json()).error,'INVALID_PROVIDER');
+ assert.equal(aiCalls(h).length,0);
+ assert.equal(h.calls.filter(x=>x.url.includes('iad_market_search_reserve')).length,0);
+});
+test('RI-M04: preflight exige tenant/role permitido antes de consultar IAs',async()=>{
+ const h=harness({supabaseUrl:'https://drhonmdffhnwamwzynrs.supabase.co',openai:true,claude:true,role:'usuario'});
+ const response=await h.handle(request({action:'preflight',provider:'both'}));
+ assert.equal(response.status,403);
+ assert.equal(aiCalls(h).length,0);
+ assert.equal(h.calls.filter(x=>x.url.includes('iad_market_search_reserve')).length,0);
+});
+test('RI-M04: preflight tem cooldown e segunda chamada nao solicita provider nem quota',async()=>{
+ const h=harness({openai:true,claude:true});
+ const first=await h.handle(request({action:'preflight',provider:'both'}));
+ const second=await h.handle(request({action:'preflight',provider:'both'}));
+ assert.equal(first.status,200);
+ assert.equal(second.status,429);
+ assert.equal((await second.json()).error,'PREFLIGHT_RATE_LIMIT');
+ assert.equal(h.calls.filter(x=>/api\.(openai|anthropic)\.com/.test(x.url)).length,2);
+ assert.equal(h.calls.filter(x=>x.url.includes('iad_market_search_reserve')).length,0);
 });

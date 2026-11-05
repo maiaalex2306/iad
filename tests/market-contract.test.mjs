@@ -297,3 +297,37 @@ test('RI-M03: interface identifica individualmente municipio DDD segmento e faix
  for(const part of ['Aderencia ao ICP','Municipio','DDD','Segmento','Faixa de funcionarios','nao verificados'])
   assert.ok(source.includes(part),'missing ICP label '+part);
 });
+
+test('RI-M04: DOM de Mercado verifica modelos autenticados sem filtros, quotas ou importacao',async()=>{
+ const {mountMarketDiscovery}=await import('../src/ri/market-view.mjs');
+ const {root,walk}=fakeMarketDOM(),oldFetch=globalThis.fetch,requests=[];
+ const scope={tenantId:'tenant-a',userId:'u1',token:'scope-preflight'};
+ globalThis.fetch=async(url,opt={})=>{
+  requests.push({url:String(url),options:opt});
+  if(String(url).includes('/functions/v1/market-search')){
+   const request=JSON.parse(opt.body);
+   assert.equal(request.action,'preflight');
+   assert.equal(request.provider,'both');
+   assert.ok(!request.filters);
+   return new Response(JSON.stringify({action:'preflight',results:[
+    {provider:'OpenAI',status:'MODEL_AVAILABLE',webSearchSupport:'unknown'},
+    {provider:'Anthropic',status:'MODEL_AVAILABLE',webSearchSupport:'supported'}
+   ]}),{status:200});
+  }
+  throw Error('Unexpected URL '+url);
+ };
+ try{
+  const cleanup=mountMarketDiscovery({root,snapshot:{contas:[],oportunidades:[],segmentos:[]},scope,
+   getScopeToken:()=>scope.token,
+   nuvem:{sessao:()=>({access_token:'jwt-test'}),config:()=>({url:'https://safe.supabase.co',chave:'public-key'})}});
+  const button=walk(root,n=>n.tagName==='button'&&n.textContent.includes('VERIFICAR ACESSO'));
+  assert.ok(button);
+  await button.fire('click');
+  assert.equal(requests.length,1);
+  assert.match(String(requests[0].options.headers.Authorization),/^Bearer /);
+  assert.ok(!requests.some(x=>x.url.includes('iad_market_import_confirmed')||x.url.includes('iad_market_search_reserve')));
+  const status=walk(root,n=>typeof n.textContent==='string'&&n.textContent.includes('Nenhuma cota de pesquisa consumida'));
+  assert.ok(status,'diagnostic result missing in UI');
+  cleanup();
+ }finally{globalThis.fetch=oldFetch;}
+});
