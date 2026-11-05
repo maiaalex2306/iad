@@ -287,3 +287,14 @@ test('provedor sem ferramenta web e contabilizado como falha parcial',async()=>{
  assert.equal(body.partial,true);
  assert.deepEqual(Array.from(body.failedProviders),['Anthropic']);
 });
+
+test('limite de 20 ou 50 empresas nao significa exaustao do universo territorial',async()=>{
+ const h=harness({openai:true,claude:true});
+ const res=await h.handle(request({action:'search',filters:{uf:'SP',regiao:'Vale do Paraiba',segmento:'Quimico',limit:50}}));
+ assert.equal(res.status,200);
+ const result=await res.json();
+ assert.equal(result.total,null);
+ assert.equal(result.hasMore,null,'A busca exploratoria nao possui conhecimento sobre paginas restantes');
+ assert.equal(result.coverage,'exploratoria');
+ assert.equal(result.coverageStatus,'unknown');
+});
