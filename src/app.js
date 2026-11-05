@@ -581,7 +581,8 @@
       m.mountMarketDiscovery({
         root, snapshot: Store.dados(),
         scope: {userId: usuario.id, tenantId, role: usuario.papel, token: assinatura},
-        getScopeToken: assinaturaInteligencia, nuvem
+        getScopeToken: assinaturaInteligencia, nuvem,
+        getSnapshot: function () { return Store.dados(); }
       });
     }).catch(function () {
       if (token === geracaoMercado && root.isConnected &&
