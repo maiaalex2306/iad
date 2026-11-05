@@ -67,3 +67,31 @@ export function proposePipelineAction(company,snapshot,scope){
  existingOpportunityId:opportunities.find(o=>o.etapa==='Prospecção')?.id||null,
  requiresExplicitConfirmation:true,writePerformed:false};
 }
+/**
+ * Build a reviewed, single-company transactional import request.
+ * This is only a command payload; the server must independently validate
+ * JWT ownership, tenant, CNPJ checksum, deduplication and idempotency.
+ * Contacts are deliberately not imported automatically.
+ */
+export function buildMarketImportRequest(company,snapshot,scope,requestId){
+ const plan=proposePipelineAction(company,snapshot,scope);
+ if(plan.match.status!=='new')throw Error('Empresa ja cadastrada ou exige revisao de duplicidade.');
+ if(!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(requestId||'')))
+  throw Error('Identificador da importacao invalido.');
+ if(Array.isArray(company?.conflitos)&&company.conflitos.length)
+  throw Error('Divergencias entre IAs exigem revisao antes da importacao.');
+ if(!normalizeCnpj(company?.cnpj))throw Error('CNPJ invalido.');
+ const fontes=(Array.isArray(company?.fontes)?company.fontes:[])
+  .slice(0,8).map(x=>({url:str(x?.url,400),titulo:str(x?.titulo,160)}))
+  .filter(x=>{try{const u=new URL(x.url);return u.protocol==='https:'&&!u.username&&!u.password}catch{return false}});
+ if(!fontes.length)throw Error('Fonte HTTPS obrigatoria antes da importacao.');
+ const uf=str(company?.uf,2).toUpperCase(),cidade=str(company?.cidade,120),segmento=str(company?.segmento,120);
+ if(!/^[A-Z]{2}$/.test(uf)||!cidade||!segmento||!str(company?.nome||company?.razaoSocial))
+  throw Error('Dados de identidade e localizacao exigem revisao.');
+ return {
+  p_tenant:scope.tenantId,p_request_id:requestId,p_confirmed:true,
+  p_empresa:{cnpj:normalizeCnpj(company.cnpj),nome:str(company.nome||company.razaoSocial),
+   razaoSocial:str(company.razaoSocial),cidade,uf,segmento,porte:str(company.porte,70),
+   site:str(company.site,200),telefone:str(company.telefone,50),fontes}
+ };
+}
