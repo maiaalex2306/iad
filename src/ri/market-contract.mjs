@@ -87,7 +87,7 @@ export function normalizeMarketCompanies(companies,{source='',retrievedAt=''}={}
   const contacts=Array.isArray(x.contatos)?x.contatos.slice(0,15):[];
   output.push({cnpj,identidadeStatus:cnpj?'cnpj_validado':'pendente_cnpj',nome:name,razaoSocial:str(x.razaoSocial),
    cidade:str(x.cidade),uf:str(x.uf,2).toUpperCase(),segmento:str(x.segmento||x.cnaePrimario),cnae:str(x.cnae),porte:str(x.porte),site:str(x.site),telefone:str(x.telefone),
-   funcionarios:x.funcionarios??null,faturamento:x.faturamento??null,faturamentoStatus:'nao_confirmado',funcionariosStatus:'nao_confirmado',
+   funcionarios:x.funcionarios??null,faixaFuncionariosStatus:['pendente','aderente_nao_verificado','nao_solicitado'].includes(x.faixaFuncionariosStatus)?x.faixaFuncionariosStatus:'nao_solicitado',faturamento:x.faturamento??null,faturamentoStatus:'nao_confirmado',funcionariosStatus:'nao_confirmado',
    source:str(source),retrievedAt:str(retrievedAt,40),
    fontes:Array.isArray(x.fontes)?x.fontes.slice(0,15).filter(v=>v&&/^https?:\/\//i.test(str(v.url,500))).map(v=>({url:str(v.url,500),titulo:str(v.titulo,180)})):[],
    providers:Array.isArray(x.providers)?x.providers.slice(0,3).filter(v=>v==='OpenAI'||v==='Anthropic'):[],
