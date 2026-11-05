@@ -400,7 +400,20 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
     const searches=Number.isSafeInteger(u.webSearchRequests)?u.webSearchRequests:'nao informado';
     return u.provider+': '+inTokens+' tokens entrada, '+outTokens+' saida, '+searches+' buscas web';
    }).join(' | '):'';
-   show(partialWarning+'Pesquisa exploratoria: '+companies.length+' candidatas com fontes, '+companies.filter(c=>!c.cnpj).length+' com CNPJ pendente; cobertura total desconhecida. Nenhuma gravacao realizada.'+(usageText?' Consumo informado: '+usageText+'. Custo em R$ a apurar.':''));
+   const diagnostics=payload?.diagnostics;
+   const rejectedText=diagnostics&&Number.isSafeInteger(diagnostics.candidates)&&
+    Number.isSafeInteger(diagnostics.accepted)&&diagnostics.candidates>=0&&
+    diagnostics.accepted>=0&&diagnostics.accepted<=diagnostics.candidates
+     ?' Registros relatados pelas IAs: '+diagnostics.candidates+
+      '; apos deduplicacao e filtros: '+diagnostics.accepted+
+      '; rejeitados por territorio: '+(Number.isSafeInteger(diagnostics.rejectedTerritory)?diagnostics.rejectedTerritory:0)+
+      ', quantidade de funcionarios: '+(Number.isSafeInteger(diagnostics.rejectedEmployees)?diagnostics.rejectedEmployees:0)+
+      ', CNPJ invalido: '+(Number.isSafeInteger(diagnostics.rejectedInvalidCnpj)?diagnostics.rejectedInvalidCnpj:0)+
+      ', nome insuficiente: '+(Number.isSafeInteger(diagnostics.rejectedMissingName)?diagnostics.rejectedMissingName:0)+
+      ', falta de fonte citada pela IA: '+(Number.isSafeInteger(diagnostics.rejectedUncitedSource)?diagnostics.rejectedUncitedSource:0)+
+      ', duplicados agrupados: '+(Number.isSafeInteger(diagnostics.mergedDuplicates)?diagnostics.mergedDuplicates:0)+'.'
+     :'';
+   show(partialWarning+'Pesquisa exploratoria: '+companies.length+' candidatas com fontes, '+companies.filter(c=>!c.cnpj).length+' com CNPJ pendente; cobertura total desconhecida. Nenhuma gravacao realizada.'+rejectedText+(usageText?' Consumo informado: '+usageText+'. Custo em R$ a apurar.':''));
    renderCompanies(companies,payload.source||'Fornecedor',payload.retrievedAt||'data nao fornecida');
   }catch(e){if(seq===currentRequest&&valid()&&e.name!=='AbortError')show('Falha de rede ao consultar fonte empresarial. Nenhuma alteracao no CRM.');}
   finally{if(seq===currentRequest&&valid())btn.disabled=false;}

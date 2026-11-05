@@ -331,3 +331,12 @@ test('RI-M04: DOM de Mercado verifica modelos autenticados sem filtros, quotas o
   cleanup();
  }finally{globalThis.fetch=oldFetch;}
 });
+
+test('RI-M05: interface apresenta metricas de rejeicao sem dados de empresa e sem importacao',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const source=readFileSync(new URL('../src/ri/market-view.mjs',import.meta.url),'utf8');
+ for(const label of ['rejectedTerritory','rejectedEmployees','rejectedInvalidCnpj',
+  'rejectedMissingName','rejectedUncitedSource','mergedDuplicates'])
+  assert.ok(source.includes(label),'missing visual diagnostic '+label);
+ assert.match(source,/IAD_MARKET_IMPORT_ENABLED!==true/);
+});
