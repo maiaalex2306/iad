@@ -265,6 +265,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
    const row=workflow.shortlist[i],company=row.company;
    top.appendChild(el('p','#'+(i+1)+' · '+(company.nome||company.razaoSocial)+
     ' · índice de revisão '+row.score+'/100 · '+row.reasons.slice(0,2).join('; '),'small'));
+   top.appendChild(el('p','Próxima ação sugerida: '+row.nextAction,'small muted'));
   }
   machine.appendChild(top);
   results.appendChild(machine);
@@ -284,6 +285,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
    if(evaluation){
     card.appendChild(el('p','Índice de prontidão para revisão: '+evaluation.score+'/100 · '+evaluation.status.replace(/_/g,' '),'small'));
     card.appendChild(el('p',evaluation.reasons.join(' · '),'small muted'));
+    card.appendChild(el('p','Próximo passo recomendado: '+evaluation.nextAction,'small'));
    }
    card.appendChild(el('p',(company.cnpj?'CNPJ '+company.cnpj:'CNPJ pendente — validar identidade')+' · '+(company.segmento||'Setor nao informado')+' · '+(company.porte||'Porte nao informado'),'small muted'));
    card.appendChild(el('p','Situacao CRM: '+statusMatch+(plan.existingOpportunityId?' · Ja existe oportunidade em Prospecção':''),'small'));
