@@ -24,6 +24,7 @@ test('seis agentes têm métricas reais sobre o mesmo resultado externo, sem inv
  assert.deepEqual(a.stages.map(x=>x.count),[1,1,1,1,1,1]);
  assert.equal(a.summary.shortlisted,1);
  assert.equal(a.shortlist[0].score,100);
+ assert.match(a.shortlist[0].nextAction,/Conferir a notícia/);
  assert.equal(a.shortlist[0].status,'candidata_para_revisao');
  assert.equal(a.shortlist[0].evidence.contatosVerificados,0);
  assert.equal(a.shortlist[0].evidence.sinaisCompraConfirmados,0);
