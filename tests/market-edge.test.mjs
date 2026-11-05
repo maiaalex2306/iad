@@ -337,7 +337,7 @@ test('Claude com erro interno no web_search_tool_result nao certifica pesquisa H
  const bad=responseClaude(true,true);
  const call=bad.content.find(b=>b.type==='server_tool_use');
  call.id='srvtoolu_mockfailed';
- bad.content.splice(1,0,{
+ bad.content.splice(1,1,{
   type:'web_search_tool_result',
   tool_use_id:call.id,
   content:{type:'web_search_tool_result_error',error_code:'unavailable'}
@@ -353,7 +353,7 @@ test('Claude que falha ferramenta web e OpenAI que conclui deve retornar pesquis
  const bad=responseClaude(true,true);
  const call=bad.content.find(b=>b.type==='server_tool_use');
  call.id='srvtoolu_mockfailed';
- bad.content.splice(1,0,{type:'web_search_tool_result',tool_use_id:call.id,content:{type:'web_search_tool_result_error',error_code:'too_many_requests'}});
+ bad.content.splice(1,1,{type:'web_search_tool_result',tool_use_id:call.id,content:{type:'web_search_tool_result_error',error_code:'too_many_requests'}});
  const h=harness({openai:true,claude:true,claudeResponse:bad});
  const res=await h.handle(request(query));
  assert.equal(res.status,200);
