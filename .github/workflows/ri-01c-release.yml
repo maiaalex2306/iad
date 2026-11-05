@@ -26,7 +26,7 @@ jobs:
         run: |
           node --test scripts/ri01-release-shell.test.cjs
           node scripts/verificar-versao-shell.cjs
-          node --test scripts/ri-account-view.test.cjs scripts/ri-account-briefing.test.cjs
+          node --test scripts/ri-account-view.test.cjs scripts/ri-account-briefing.test.cjs scripts/ri-portfolio-analytics.test.cjs
           node --test scripts/p0-cas-readonly-portfolio.test.cjs
       - name: JavaScript modules syntax
         run: |
@@ -34,6 +34,7 @@ jobs:
           node --check sw.js
           node --check src/ri/account-view.mjs
           node --check src/ri/account-briefing.mjs
+          node --check src/ri/portfolio-analytics.mjs
   offline:
     runs-on: ubuntu-latest
     timeout-minutes: 12
