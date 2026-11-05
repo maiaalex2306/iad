@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {normalizeCnpj, normalizeMarketFilters, matchCrmAccount, normalizeMarketCompanies, proposePipelineAction, buildMarketImportRequest} from '../src/ri/market-contract.mjs';
+import {normalizeCnpj, normalizeMarketFilters, matchCrmAccount, normalizeMarketCompanies, proposePipelineAction, buildMarketImportRequest, UF_IBGE, MARKET_DDDS, MARKET_BANDS} from '../src/ri/market-contract.mjs';
 const tenantId='tenant-a',existing={id:'a1',tenantId,cnpj:'11.222.333/0001-81',nome:'Acme Indústria',razaoSocial:'Acme Indústria',site:'https://acme.example'};
 test('CNPJ numerico e alfanumerico validos; DV incorreto rejeitado',()=>{
  assert.equal(normalizeCnpj('11.222.333/0001-81'),'11222333000181');
@@ -138,4 +138,57 @@ test('identidade pendente requer fonte e nome e nunca transforma CNPJ invalido e
  const found=normalizeMarketCompanies(items,{source:'IA Web'});
  assert.equal(found.length,1);
  assert.equal(found[0].nome,'Com Evidencia');
+});
+
+test('contrato JSON multisselecao usa UF SP, Mogi IBGE, DDD 11, quimica e 2 faixas',()=>{
+ const input={uf:'SP',municipios:[{codigoIBGE:'3530607',nome:'Mogi das Cruzes',uf:'SP'}],
+  ddds:['11'],segmentos:['Química e Petroquímica'],faixasFuncionarios:['201_500','501_1000']};
+ const f=normalizeMarketFilters(input);
+ assert.equal(f.uf,'SP');
+ assert.deepEqual(f.municipios,input.municipios);
+ assert.deepEqual(f.ddds,['11']);
+ assert.deepEqual(f.segmentos,['Química e Petroquímica']);
+ assert.deepEqual(f.faixasFuncionarios,['201_500','501_1000']);
+ assert.equal(f.funcionariosMin,null);
+ assert.equal(f.funcionariosMax,null);
+});
+test('27 UFs, faixas sem lacunas e DDDs validos no contrato',()=>{
+ assert.equal(Object.keys(UF_IBGE).length,27);
+ assert.ok(MARKET_DDDS.includes('11'));
+ assert.equal(MARKET_BANDS.length,8);
+ let next=0;
+ for(const band of MARKET_BANDS){
+  assert.equal(band.min,next);
+  next=band.max===null?null:band.max+1;
+ }
+ assert.equal(next,null);
+});
+test('deduplicacao dos filtros e rejeicao de codigo IBGE/DDD invalidos',()=>{
+ const base={uf:'SP',municipios:[{codigoIBGE:'3530607',nome:'Mogi das Cruzes',uf:'SP'}],
+  ddds:['11','11'],segmentos:['Química e Petroquímica','Química e Petroquímica'],faixasFuncionarios:['201_500','201_500']};
+ const v=normalizeMarketFilters(base);
+ assert.deepEqual(v.ddds,['11']);
+ assert.deepEqual(v.segmentos,['Química e Petroquímica']);
+ assert.deepEqual(v.faixasFuncionarios,['201_500']);
+ assert.throws(()=>normalizeMarketFilters({...base,ddds:['00']}),/DDD/i);
+ assert.throws(()=>normalizeMarketFilters({...base,municipios:[{...base.municipios[0],codigoIBGE:'3304557'}]}),/Municipios/i);
+ assert.throws(()=>normalizeMarketFilters({...base,faixasFuncionarios:['invalid']}),/Faixas/i);
+ assert.throws(()=>normalizeMarketFilters({...base,funcionariosMin:200}),/faixas ou limites/i);
+});
+test('resultado preserva qualificacao pendente das faixas de funcionarios sem confirmar porte',()=>{
+ const c=normalizeMarketCompanies([{cnpj:null,nome:'Empresa exemplo',cidade:'Mogi das Cruzes',uf:'SP',
+  funcionarios:null,faixaFuncionariosStatus:'pendente',fontes:[{url:'https://example.org/empresa'}]}]);
+ assert.equal(c.length,1);
+ assert.equal(c[0].faixaFuncionariosStatus,'pendente');
+ assert.equal(c[0].funcionariosStatus,'nao_confirmado');
+});
+test('interface de Mercado nao usa lista global de segmentos nem executa pesquisa no boot',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const source=readFileSync(new URL('../src/ri/market-view.mjs',import.meta.url),'utf8');
+ assert.match(source,/snapshot\.segmentos/);
+ assert.match(source,/x\.tenantId===scope\.tenantId/);
+ assert.match(source,/servicodados\.ibge\.gov\.br\/api\/v1\/localidades\/estados/);
+ assert.match(source,/faixasFuncionarios:bandPick\.get\(\)/);
+ assert.match(source,/Aplicar exemplo: Mogi\/SP/);
+ assert.match(source,/IAD_MARKET_IMPORT_ENABLED!==true/);
 });
