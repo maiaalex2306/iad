@@ -18,6 +18,17 @@ CREATE TABLE IF NOT EXISTS iad_private.market_import_receipts (
 ALTER TABLE iad_private.market_import_receipts ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON iad_private.market_import_receipts FROM PUBLIC, anon, authenticated;
 
+-- Gate controlado SOMENTE pelo administrador do banco. Ausência de linha = bloqueado.
+-- Não permitir ao navegador habilitar importações nem ler a tabela privada.
+CREATE TABLE IF NOT EXISTS iad_private.market_import_release_gate (
+ tenant_id uuid PRIMARY KEY REFERENCES public.tenants(id),
+ enabled boolean NOT NULL DEFAULT false,
+ updated_at timestamptz NOT NULL DEFAULT pg_catalog.now()
+);
+ALTER TABLE iad_private.market_import_release_gate ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON iad_private.market_import_release_gate FROM PUBLIC, anon, authenticated;
+
+
 CREATE OR REPLACE FUNCTION public.iad_market_import_confirmed(
  p_empresa jsonb, p_tenant uuid, p_request_id uuid, p_confirmed boolean
 ) RETURNS jsonb
@@ -57,6 +68,16 @@ BEGIN
  IF v_tenant IS NULL OR v_papel NOT IN ('usuario','gestor','admin') OR v_tenant<>p_tenant THEN
   RETURN pg_catalog.jsonb_build_object('status','forbidden_scope');
  END IF;
+
+ -- FAIL CLOSED: UI flag does not authorize DB writes. Tenant-specific DB switch
+ -- must be enabled only after a real authenticated E2E and security approval.
+ IF NOT EXISTS (
+  SELECT 1 FROM iad_private.market_import_release_gate g
+  WHERE g.tenant_id=v_tenant AND g.enabled IS TRUE
+ ) THEN
+  RETURN pg_catalog.jsonb_build_object('status','import_disabled');
+ END IF;
+
  IF p_empresa IS NULL OR pg_catalog.jsonb_typeof(p_empresa)<>'object' THEN
   RETURN pg_catalog.jsonb_build_object('status','invalid_company');
  END IF;
@@ -157,3 +178,4 @@ $func$;
 
 REVOKE ALL ON FUNCTION public.iad_market_import_confirmed(jsonb,uuid,uuid,boolean) FROM PUBLIC,anon;
 GRANT EXECUTE ON FUNCTION public.iad_market_import_confirmed(jsonb,uuid,uuid,boolean) TO authenticated;
+-- This GRANT exposes only the validation endpoint; the database gate is OFF by default.
