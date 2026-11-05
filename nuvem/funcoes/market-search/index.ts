@@ -81,6 +81,15 @@ function cnpjReal(s){
  const digit=(s,w)=>{const mod=[...s].reduce((sum,c,i)=>sum+(c.charCodeAt(0)-48)*w[i],0)%11;return mod<2?'0':String(11-mod)};
  return v[12]===digit(v.slice(0,12),[5,4,3,2,9,8,7,6,5,4,3,2])&&v[13]===digit(v.slice(0,13),[6,5,4,3,2,9,8,7,6,5,4,3,2])?v:'';
 }
+// Investigação individual explícita: somente CNPJ com DV válido, nome limitado.
+// Não usar o alvo para conceder privilégios; a RPC de quota continua obrigatória.
+function targetedCompany(raw){
+ if(!raw||typeof raw!=='object'||Array.isArray(raw)||
+  Object.keys(raw).some(k=>!['cnpj','nome'].includes(k)))throw Error('Alvo de investigação inválido');
+ const cnpj=cnpjReal(raw.cnpj),nome=str(raw.nome,160);
+ if(!cnpj||nome.length<3||/[\r\n\u0000-\u001f<>]/.test(nome))throw Error('CNPJ ou nome inválido para investigação');
+ return {cnpj,nome};
+}
 function parseAI(s) {
  const text=String(s||'').trim();
  const fence=text.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -130,18 +139,19 @@ function aiSummary(result,engine) {
  };
  return {engine,searched,urls,parsed:parseAI(texts),usage};
 }
-function prompt(f) {
+function prompt(f,target=null) {
+ if(target)return 'INVESTIGAÇÃO INDEPENDENTE DE UMA EMPRESA ESPECÍFICA. Pesquise na WEB somente a empresa com CNPJ e nome '+JSON.stringify(target)+', localizada no recorte '+JSON.stringify(f)+'. Use fontes primárias e páginas corporativas quando disponíveis. Responda somente JSON com chave empresas, com NO MÁXIMO UMA empresa, contendo cnpj, razaoSocial, nome, cidade, uf, ddd, segmento, porte, site, telefone, funcionarios, faturamento, fontes:[{url,titulo}], contatos:[{nome,cargo,email,telefone,fonte}], noticias:[{titulo,url,data}], insights:[]. Se não conseguir obter o MESMO CNPJ com fonte web citada, devolva {"empresas":[]}. Nunca substitua por CNPJ parecido ou outra filial. Contatos, cargos, números e notícias somente com URL citada; desconhecidos devem ser null ou lista vazia. Evite inventar conclusões e intenção de compra.';
  return 'PESQUISE NA WEB empresas reais com recorte '+JSON.stringify(f)+'. Busque sites corporativos, bases publicas e noticias. Responda somente JSON com chave empresas (array): cada empresa possui cnpj, razaoSocial, nome, cidade, uf, ddd, segmento, porte, site, telefone, funcionarios, faturamento, fontes:[{url,titulo}], contatos:[{nome,cargo,email,telefone,fonte}], noticias:[{titulo,url,data}], insights:[]. Quando uma empresa mencionada nas fontes ainda nao tiver CNPJ encontrado, use cnpj=null e preserve-a como candidata pendente. Nunca invente CNPJ. Toda empresa precisa ter nome e URL realmente citada pela ferramenta web. Valores nao encontrados=null. NUNCA invente empresa ou pessoa. Para DDD/regiao pesquisa e exploratoria, sem promessa de cobertura total. Para filtros em listas aplique OU dentro do campo e E entre campos (municipios, DDDs, segmentos e faixas de empregados). Informe o numero de funcionarios apenas com fonte verificavel; caso contrario use null. Maximo '+f.limit+' empresas.';
 }
-async function queryAI(engine,key,f) {
+async function queryAI(engine,key,f,target=null) {
  const instructions='Pesquisador B2B: use sempre a ferramenta web_search, inclua URLs citadas e retorne JSON sem inventar fatos.';
  let uri,headers,body;
  if(engine==='OpenAI') {
   uri='https://api.openai.com/v1/responses';headers={authorization:'Bearer '+key,'content-type':'application/json'};
-  body={model:Deno.env.get('IA_MODELO_PESQUISA_OPENAI')||Deno.env.get('IA_MODELO_OPENAI')||'gpt-5',instructions,input:prompt(f),tools:[{type:'web_search',search_context_size:'low'}],tool_choice:'required',max_tool_calls:2,max_output_tokens:2200,store:false};
+  body={model:Deno.env.get('IA_MODELO_PESQUISA_OPENAI')||Deno.env.get('IA_MODELO_OPENAI')||'gpt-5',instructions,input:prompt(f,target),tools:[{type:'web_search',search_context_size:'low'}],tool_choice:'required',max_tool_calls:2,max_output_tokens:2200,store:false};
  } else {
   uri='https://api.anthropic.com/v1/messages';headers={'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json'};
-  body={model:Deno.env.get('IA_MODELO_PESQUISA_ANTHROPIC')||Deno.env.get('IA_MODELO_ANTHROPIC')||'claude-opus-5',system:instructions,max_tokens:2200,messages:[{role:'user',content:prompt(f)}],tools:[{type:'web_search_20250305',name:'web_search',max_uses:2}]};
+  body={model:Deno.env.get('IA_MODELO_PESQUISA_ANTHROPIC')||Deno.env.get('IA_MODELO_ANTHROPIC')||'claude-opus-5',system:instructions,max_tokens:2200,messages:[{role:'user',content:prompt(f,target)}],tools:[{type:'web_search_20250305',name:'web_search',max_uses:2}]};
  }
  // Short searches need enough time for the hosted web tool, but always stay
  // below Supabase's 150s request idle limit. No hidden retry or extra quota.
@@ -391,8 +401,19 @@ Deno.serve(async req=>{
    return output({action:'preflight',results,
     note:'Metadados de modelo: nao executa web_search, nao usa quota de pesquisa e nao homologa a busca real.'},200,origin);
   }
-  if(body?.action!=='search')return output({error:'SEARCH_ONLY'},400,origin);
+  const action=body?.action;
+  if(action!=='search'&&action!=='investigate')return output({error:'SEARCH_ONLY'},400,origin);
+  let target=null;
+  if(action==='investigate'){
+   try{target=targetedCompany(body.target)}
+   catch{return output({error:'INVALID_INVESTIGATION_TARGET'},422,origin)}
+  }
   let f;try{f=filters(body.filters)}catch(e){return output({error:'INVALID_FILTERS',message:e.message},422,origin)}
+  if(target){
+   if(!f.uf||!f.cidade||!f.segmento||f.municipios.length||f.ddds.length||f.segmentos.length)
+    return output({error:'INVESTIGATION_REQUIRES_EXACT_TERRITORY'},422,origin);
+   f={...f,limit:1};
+  }
   // Explicit provider selection helps diagnose a failed provider without
   // charging for both. Invalid values are rejected before quota reservation.
   const provider=body.provider===undefined?'both':body.provider;
@@ -435,8 +456,8 @@ Deno.serve(async req=>{
   if(quota?.allowed===false)return output({error:'SEARCH_QUOTA_EXCEEDED',scope:quota.scope||'unknown'},429,origin);
   if(quota?.allowed!==true)return output({error:'SEARCH_QUOTA_UNAVAILABLE'},503,origin);
   const jobs=[];
-  if(openai&&provider!=='Anthropic')jobs.push({engine:'OpenAI',promise:queryAI('OpenAI',openai,f)});
-  if(claude&&provider!=='OpenAI')jobs.push({engine:'Anthropic',promise:queryAI('Anthropic',claude,f)});
+  if(openai&&provider!=='Anthropic')jobs.push({engine:'OpenAI',promise:queryAI('OpenAI',openai,f,target)});
+  if(claude&&provider!=='OpenAI')jobs.push({engine:'Anthropic',promise:queryAI('Anthropic',claude,f,target)});
   const outcomes=await Promise.allSettled(jobs.map(x=>x.promise));
   // A provider returning JSON without a recorded web_search execution
   // is not a successful market search, even when its text looks plausible.
@@ -459,8 +480,22 @@ Deno.serve(async req=>{
   if(!results.length)return output({error:'AI_SEARCH_UNAVAILABLE',failedProviders,failures},502,origin);
   const partial=failedProviders.length>0;
   const diagnostics={};
-  const companies=combineAI(results,f.limit,f,diagnostics);
+  // Um provedor pode mencionar outras empresas no texto. Nunca permitir que
+  // elas contaminem uma investigação com CNPJ exato, nem herdar suas fontes.
+  const focusedResults=target?results.map(r=>({...r,parsed:{empresas:
+   (Array.isArray(r.parsed?.empresas)?r.parsed.empresas:[])
+    .filter(entry=>cnpjReal(entry?.cnpj)===target.cnpj).slice(0,1)}})):results;
+  const companies=combineAI(focusedResults,f.limit,f,diagnostics);
   console.info('[market-search] filtering_summary',JSON.stringify({completedProviders:results.length,...diagnostics}));
-  return output({data:companies,diagnostics,source:'Pesquisa web OpenAI / Claude',providers:results.map(x=>x.engine),failedProviders,failures,partial,usage:results.map(x=>x.usage),retrievedAt:new Date().toISOString(),total:null,hasMore:null,coverage:'exploratoria',coverageStatus:'unknown',territoryVerified:false,warning:(partial?'Uma ou mais IAs nao concluiram a pesquisa; cobertura parcial. ':'')+'Pesquisa exploratoria; nao equivale ao universo integral de CNPJs. Nenhum registro foi importado.'},200,origin);
+  return output({action,data:companies,diagnostics,
+   source:'Pesquisa web OpenAI / Claude',
+   providers:results.map(x=>x.engine),failedProviders,failures,partial,
+   usage:results.map(x=>x.usage),retrievedAt:new Date().toISOString(),
+   ...(target?{targetMatch:companies.length?'CNPJ_RELATADO_PELO_PROVEDOR':'CNPJ_NAO_CORROBORADO'}:{}),
+   total:null,hasMore:target?false:null,coverage:'exploratoria',coverageStatus:'unknown',
+   territoryVerified:false,warning:(partial?'Uma ou mais IAs nao concluiram a pesquisa; cobertura parcial. ':'')+
+   (target?'Investigação adicional com pesquisa web independente. O CNPJ foi relatado pela IA, mas vínculo empresarial e fontes exigem revisão humana. ':
+    'Pesquisa exploratoria; nao equivale ao universo integral de CNPJs. ')+
+   'Nenhum registro foi importado.'},200,origin);
  }catch{return output({error:'SEARCH_UNAVAILABLE'},502,origin)}
 });
