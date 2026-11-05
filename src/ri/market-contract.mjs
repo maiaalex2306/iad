@@ -3,6 +3,23 @@ const str=(v,max=160)=>typeof v==='string'?v.trim().slice(0,max):'';
 const folded=v=>str(v,300).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
 const digits=v=>String(v??'').replace(/\D/g,'');
 const domain=v=>{const s=str(v,300).toLowerCase();try{return new URL(s.match(/^https?:\/\//)?s:'https://'+s).hostname.replace(/^www\./,'')}catch{return ''}};
+// A URL citada pela IA pode ser aberta para revisão, nunca é prova independente.
+// Bloquear esquema inseguro, credenciais e hosts internos mesmo com HTTPS.
+export function isReviewableSourceURL(raw){
+ if(typeof raw!=='string'||raw.length>500)return false;
+ try{
+  const u=new URL(raw.trim());
+  if(u.protocol!=='https:'||!u.hostname||u.username||u.password||
+     (u.port&&u.port!=='443'))return false;
+  const host=u.hostname.toLowerCase().replace(/\.$/,'');
+  if(host==='localhost'||host.endsWith('.localhost')||host.endsWith('.local')||
+     host.endsWith('.internal')||host.endsWith('.lan')||
+     host.endsWith('.home.arpa')||host.endsWith('.onion'))return false;
+  if(host.startsWith('[')||/^[0-9.]+$/.test(host)||!host.includes('.'))return false;
+  return true;
+ }catch{return false;}
+}
+
 export function normalizeCnpj(raw){
  const v=String(raw??'').toUpperCase().replace(/[^A-Z0-9]/g,'');
  if(!/^[A-Z0-9]{12}[0-9]{2}$/.test(v)||/^([0-9A-Z])\1{11}/.test(v.slice(0,12)))return '';
@@ -134,7 +151,7 @@ export function buildMarketImportRequest(company,snapshot,scope,requestId){
  if(!normalizeCnpj(company?.cnpj))throw Error('CNPJ invalido.');
  const fontes=(Array.isArray(company?.fontes)?company.fontes:[])
   .slice(0,8).map(x=>({url:str(x?.url,400),titulo:str(x?.titulo,160)}))
-  .filter(x=>{try{const u=new URL(x.url);return u.protocol==='https:'&&!u.username&&!u.password}catch{return false}});
+  .filter(x=>isReviewableSourceURL(x.url));
  if(!fontes.length)throw Error('Fonte HTTPS obrigatoria antes da importacao.');
  const uf=str(company?.uf,2).toUpperCase(),cidade=str(company?.cidade,120),segmento=str(company?.segmento,120);
  if(!/^[A-Z]{2}$/.test(uf)||!cidade||!segmento||!str(company?.nome||company?.razaoSocial))
