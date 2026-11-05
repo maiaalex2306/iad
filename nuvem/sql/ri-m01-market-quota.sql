@@ -34,7 +34,7 @@ BEGIN
  END IF;
  SELECT p.tenant_id INTO v_tenant
  FROM public.perfis p
- WHERE p.id=v_user AND p.ativo IS TRUE AND p.papel IN ('vendedor','gestor','admin');
+ WHERE p.id=v_user AND p.ativo IS TRUE AND p.papel IN ('usuario','gestor','admin');
  -- Admin without tenant context must not pool research costs across companies.
  IF v_tenant IS NULL THEN
   RETURN pg_catalog.jsonb_build_object('allowed',false,'scope','tenant');
