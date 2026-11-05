@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - "src/ri/market-*.mjs"
+      - "src/ri/prospect-agents.mjs"
       - "nuvem/funcoes/market-search/**"
       - "tests/market-*.test.mjs"
       - "nuvem/sql/ri-m01-*.sql"
@@ -21,9 +22,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - run: node --test tests/market-contract.test.mjs tests/market-edge.test.mjs tests/market-sql.test.mjs tests/market-import-gate.test.mjs tests/market-staging-e2e.test.mjs
+      - run: node --test tests/market-prospect-agents.test.mjs tests/market-contract.test.mjs tests/market-edge.test.mjs tests/market-sql.test.mjs tests/market-import-gate.test.mjs tests/market-staging-e2e.test.mjs
       - run: node --check src/ri/market-contract.mjs
       - run: node --check src/ri/market-view.mjs
+      - run: node --check src/ri/prospect-agents.mjs
       - run: node --check scripts/ri-m01-staging-e2e.mjs
       # Live perimeter smoke against homologation only. No API keys or paid AI calls.
       - name: Smoke homologation market-search (unauthenticated)

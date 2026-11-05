@@ -2,6 +2,7 @@
  * Nenhum resultado e importado; a revisao de duplicidades e somente leitura.
  */
 import {normalizeMarketFilters,normalizeMarketCompanies,proposePipelineAction,buildMarketImportRequest,UF_IBGE,MARKET_DDDS,MARKET_BANDS} from './market-contract.mjs';
+import {buildProspectWorkflow} from './prospect-agents.mjs';
 /**
  * Pull only the server-confirmed RI-M01 import into the local Pipeline.
  * Never upload local edits. Refuse the pull when CAS/pending state is unknown.
@@ -238,7 +239,36 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
  const researchKey=c=>c.cnpj||'pending:'+String(c.nome||c.razaoSocial||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()+'|'+String(c.cidade||'').toLowerCase()+'|'+String(c.uf||'');
  function renderCompanies(data,source,asOf){
   if(!valid())return;
+  const workflow=buildProspectWorkflow({companies:data,snapshot,scope});
+  const ranked=new Map(workflow.candidates.map(x=>[x.company,x]));
+  const ordered=workflow.candidates.map(x=>x.company);
   selected.clear();importKeys.clear();review.replaceChildren();results.replaceChildren();
+  const machine=el('section','','card');machine.id='iad-prospect-agents';
+  machine.appendChild(el('h3','Máquina de Prospecção — seis etapas auditáveis'));
+  machine.appendChild(el('p','As seis etapas organizam a pesquisa já retornada pelo ChatGPT/Claude. Não representam seis buscas independentes, nem validam automaticamente intenção de compra, e-mail ou CNPJ de uma empresa.','small muted'));
+  const jobs=el('div','','iad-prospect-jobs');
+  jobs.style.display='grid';jobs.style.gridTemplateColumns='repeat(auto-fit,minmax(155px,1fr))';jobs.style.gap='8px';
+  for(const stage of workflow.stages){
+   const job=el('section','','card');job.style.padding='10px';
+   job.appendChild(el('strong',stage.name+' · '+stage.count));
+   job.appendChild(el('p',stage.note,'small muted'));
+   jobs.appendChild(job);
+  }
+  machine.appendChild(jobs);
+  const totals=workflow.summary;
+  machine.appendChild(el('p','Triagem: '+totals.candidates+' candidatas; '+totals.shortlisted+' na fila priorizada de revisão, '+totals.awaitingReview+' exigem checagem extra, '+totals.existing+' já cadastradas.','small'));
+  machine.appendChild(el('p',workflow.method,'small muted'));
+  const top=el('section');
+  top.appendChild(el('h4','Shortlist para investigação — até 10 candidatas'));
+  if(!workflow.shortlist.length)top.appendChild(el('p','Nenhuma candidata reúne as condições mínimas para entrar na shortlist de revisão.','small muted'));
+  for(let i=0;i<workflow.shortlist.length;i++){
+   const row=workflow.shortlist[i],company=row.company;
+   top.appendChild(el('p','#'+(i+1)+' · '+(company.nome||company.razaoSocial)+
+    ' · índice de revisão '+row.score+'/100 · '+row.reasons.slice(0,2).join('; '),'small'));
+   top.appendChild(el('p','Próxima ação sugerida: '+row.nextAction,'small muted'));
+  }
+  machine.appendChild(top);
+  results.appendChild(machine);
   const pending=data.filter(c=>!c.cnpj).length;
   const pendingICP=data.filter(c=>c.qualificacaoICP?.statusGeral!=='declarado_nao_verificado').length;
   results.appendChild(el('h3',data.length+' empresas candidatas encontradas na web · '+source));
@@ -246,11 +276,17 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   results.appendChild(el('p',pending+' candidata(s) com CNPJ pendente, somente para revisao; nenhuma pode ser importada sem validacao.','small muted'));
   results.appendChild(el('p','Dados consultados em '+asOf+'. Esta pagina nao representa necessariamente todas as empresas da regiao.','small muted'));
   const snapshotNow=snapshot;
-  for(const company of data){
+  for(const company of ordered){
    const plan=proposePipelineAction(company,snapshotNow,{tenantId:scope.tenantId,userId:scope.userId});
    const card=el('section','','card'),title=el('h4',(company.nome||company.razaoSocial)+' · '+company.cidade+'/'+company.uf);
    const statusMatch=plan.match.status==='existing'?'Ja cadastrada — CNPJ exato':plan.match.status==='related'?'Possivel matriz/filial':plan.match.status==='review'?'Revisar possivel duplicidade':'Nao cadastrada';
    card.appendChild(title);
+   const evaluation=ranked.get(company);
+   if(evaluation){
+    card.appendChild(el('p','Índice de prontidão para revisão: '+evaluation.score+'/100 · '+evaluation.status.replace(/_/g,' '),'small'));
+    card.appendChild(el('p',evaluation.reasons.join(' · '),'small muted'));
+    card.appendChild(el('p','Próximo passo recomendado: '+evaluation.nextAction,'small'));
+   }
    card.appendChild(el('p',(company.cnpj?'CNPJ '+company.cnpj:'CNPJ pendente — validar identidade')+' · '+(company.segmento||'Setor nao informado')+' · '+(company.porte||'Porte nao informado'),'small muted'));
    card.appendChild(el('p','Situacao CRM: '+statusMatch+(plan.existingOpportunityId?' · Ja existe oportunidade em Prospecção':''),'small'));
    card.appendChild(el('p','Funcionarios: '+(company.funcionarios===null?'indisponivel':String(company.funcionarios))+' (nao confirmado) · Faturamento: '+(company.faturamento===null?'indisponivel':String(company.faturamento))+' (nao confirmado)','small'));
@@ -413,7 +449,11 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
       ', falta de fonte citada pela IA: '+(Number.isSafeInteger(diagnostics.rejectedUncitedSource)?diagnostics.rejectedUncitedSource:0)+
       ', duplicados agrupados: '+(Number.isSafeInteger(diagnostics.mergedDuplicates)?diagnostics.mergedDuplicates:0)+'.'
      :'';
-   show(partialWarning+'Pesquisa exploratoria: '+companies.length+' candidatas com fontes, '+companies.filter(c=>!c.cnpj).length+' com CNPJ pendente; cobertura total desconhecida. Nenhuma gravacao realizada.'+rejectedText+(usageText?' Consumo informado: '+usageText+'. Custo em R$ a apurar.':''));
+   const sourcedCount=companies.filter(c=>(c.fontes||[]).some(f=>{
+    try{const u=new URL(f.url);return u.protocol==='https:'&&!!u.hostname&&!u.username&&!u.password}
+    catch{return false;}
+   })).length;
+   show(partialWarning+'Pesquisa exploratoria: '+companies.length+' candidatas relatadas; '+sourcedCount+' com URL HTTPS citada pelo provedor; '+companies.filter(c=>!c.cnpj).length+' com CNPJ pendente. Cobertura total desconhecida, fontes ainda nao verificadas. Nenhuma gravacao realizada.'+rejectedText+(usageText?' Consumo informado: '+usageText+'. Custo em R$ a apurar.':''));
    renderCompanies(companies,payload.source||'Fornecedor',payload.retrievedAt||'data nao fornecida');
   }catch(e){if(seq===currentRequest&&valid()&&e.name!=='AbortError')show('Falha de rede ao consultar fonte empresarial. Nenhuma alteracao no CRM.');}
   finally{if(seq===currentRequest&&valid())btn.disabled=false;}
