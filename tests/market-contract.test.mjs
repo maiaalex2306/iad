@@ -373,6 +373,12 @@ test('RI-M06 DOM: seis etapas e shortlist aparecem na pesquisa real simulada sem
   assert.ok(walk(root,n=>n.textContent?.includes('Shortlist para investigação')));
   assert.ok(walk(root,n=>n.textContent?.includes('Índice de prontidão para revisão')));
   assert.ok(walk(root,n=>n.textContent?.includes('Próximo passo recomendado:')));
+  const reviewLabel=walk(root,n=>n.tagName==='label'&&n.textContent==='Selecionar para revisao comercial');
+  assert.ok(reviewLabel,'empresa precisa permitir seleção de revisão');
+  const check=walk(reviewLabel,n=>n.tagName==='input'&&n.type==='checkbox');
+  assert.ok(check);check.checked=true;await check.fire('change');
+  assert.ok(walk(root,n=>n.textContent?.includes('ICP, fonte ou duplicidade exige revisão antes de importar')),
+   'ICP incompleto não pode ser enviado à importação, mesmo após seleção humana');
   assert.ok(!requests.some(x=>x.includes('iad_market_import_confirmed')));
   cleanup();
  }finally{globalThis.fetch=oldFetch;}
