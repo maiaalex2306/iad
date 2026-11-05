@@ -197,6 +197,11 @@ Deno.serve(async req=>{
   const profile=(await profileRes.json())?.[0];
   if(!profile||profile.ativo===false||!['usuario','gestor','admin'].includes(profile.papel)||(!profile.tenant_id&&profile.papel!=='admin'))
    return output({error:'AUTH_SCOPE_UNAVAILABLE'},403,origin);
+  // Release pilot: only an authenticated tenant admin may spend provider credits
+  // in the production project. Homologation remains available to normal users.
+  // Use the trusted server-side Supabase project URL, never a client header.
+  if(url==='https://drhonmdffhnwamwzynrs.supabase.co'&&profile.papel!=='admin')
+   return output({error:'PILOT_ADMIN_ONLY'},403,origin);
   // Byte-limited streaming read: never buffer an unbounded body even if the
   // client omits or lies about Content-Length. Enforce the same 12 KB cap
   // for multibyte UTF-8 input, before contacting any AI provider.
