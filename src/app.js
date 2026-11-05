@@ -562,6 +562,13 @@
       root.textContent = 'Sessão autenticada necessária.';
       return;
     }
+    // Pilot release: production AI spend is limited to the tenant administrator.
+    // The Edge Function enforces the same boundary before reserving quota.
+    if (String(nuvem.config()?.url || '').includes('drhonmdffhnwamwzynrs.supabase.co') &&
+        usuario.papel !== 'admin') {
+      root.textContent = 'Inteligência de Mercado em piloto: acesso inicial exclusivo do administrador.';
+      return;
+    }
     if (ctx.admin && (!filtros.tenant || filtros.tenant === 'todas')) {
       root.textContent = 'Selecione uma empresa no filtro administrativo antes de pesquisar o mercado.';
       return;
