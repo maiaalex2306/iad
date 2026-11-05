@@ -17,6 +17,12 @@ test('vendedor vê apenas próprias contas e contas sem dono na própria empresa
  const rows=await select(snapshot,seller,'',50);
  assert.deepEqual(rows.map(x=>x.id),['c1','c4']);
 });
+test('perfil usuario nativo do IaD equivale ao vendedor: escopo próprio e sem dono',async()=>{
+ const rows=await select(snapshot,{...seller,role:'usuario'},'',50);
+ assert.deepEqual(rows.map(x=>x.id),['c1','c4']);
+ const wrongTenant=await select(snapshot,{...seller,role:'usuario',tenantId:'tenant-b'},'',50);
+ assert.deepEqual(wrongTenant.map(x=>x.id),['c3']);
+});
 test('gestor vê todas as contas apenas na empresa atual',async()=>{
  const rows=await select(snapshot,{...seller,role:'gestor'},'',50);
  assert.deepEqual(rows.map(x=>x.id),['c1','c2','c4']);
@@ -32,6 +38,10 @@ test('busca ignora acentos e caixa e respeita limite de saída',async()=>{
  assert.deepEqual(rows.map(x=>x.id),['c1']);
  const limit=await select(snapshot,{...seller,role:'gestor'},'',1);
  assert.equal(limit.length,1);
+});
+test('admin sem sinalizador autenticado deve negar acesso em vez de herdar carteira de gestor',async()=>{
+ const bad={...seller,role:'admin',admin:false,tenantFilter:'todas'};
+ assert.deepEqual(await select(snapshot,bad,'',50),[]);
 });
 test('escopo sem sessão, conta não identificada ou lista inválida é negado',async()=>{
  assert.deepEqual(await select(snapshot,{...seller,userId:''},'',50),[]);

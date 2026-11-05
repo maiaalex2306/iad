@@ -9,6 +9,11 @@ const day=x=>typeof x==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(x)&&
 const days=(earlier,later)=>Math.floor((Date.parse(later+'T12:00:00Z')-Date.parse(earlier+'T12:00:00Z'))/86400000);
 const money=x=>typeof x==='number'&&Number.isFinite(x)&&x>=0?x:null;
 const key=(tenant,id)=>JSON.stringify([tenant,id]);
+// Datas de vencimento são interpretadas no calendário do usuário, não no UTC.
+export function localBusinessDate(now=new Date()){
+ if(!(now instanceof Date)||!Number.isFinite(now.getTime()))throw Error('Data local inválida');
+ return [now.getFullYear(),String(now.getMonth()+1).padStart(2,'0'),String(now.getDate()).padStart(2,'0')].join('-');
+}
 function allowed(row,scope){
  if(!row||!hasId(row.id)||!hasId(row.tenantId)||!scope||!hasId(scope.userId))return false;
  if(scope.role==='admin'&&scope.admin===true){
@@ -16,14 +21,18 @@ function allowed(row,scope){
     (scope.ownerFilter==='todos'||scope.ownerFilter===row.donoId);
  }
  if(!hasId(scope.tenantId)||row.tenantId!==scope.tenantId)return false;
- return scope.role==='gestor'||(scope.role==='vendedor'&&(!row.donoId||row.donoId===scope.userId));
+ return scope.role==='gestor'||(['usuario','vendedor'].includes(scope.role)&&(!row.donoId||row.donoId===scope.userId));
 }
-const ownerVisible=(row,scope)=>scope.role!=='vendedor'||!row.donoId||row.donoId===scope.userId;
+const ownerVisible=(row,scope)=>{
+ if(scope.role==='admin'&&scope.admin===true)
+   return scope.ownerFilter==='todos'||scope.ownerFilter===row.donoId;
+ return !['usuario','vendedor'].includes(scope.role)||!row.donoId||row.donoId===scope.userId;
+};
 const finalType=o=>norm(o?.desfecho?.tipo).toLowerCase();
 export function buildPortfolioAnalytics({snapshot,scope,asOf}={}){
  if(!snapshot||!Array.isArray(snapshot.contas)||!Array.isArray(snapshot.oportunidades)||
     !Array.isArray(snapshot.tarefas)||!scope||!hasId(scope.userId)||
-    !['vendedor','gestor','admin'].includes(scope.role)||
+    !['usuario','vendedor','gestor','admin'].includes(scope.role)||
     (scope.role==='admin'&&scope.admin!==true)||!day(asOf))
   throw Error('Carteira, sessão e data de referência válidas são obrigatórias');
  const accounts=new Map();

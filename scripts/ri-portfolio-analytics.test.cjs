@@ -33,6 +33,34 @@ test('calcula receita e taxa de ganho apenas com negócios autorizados',async()=
  assert.ok(!JSON.stringify(x).includes('Privada'));
  assert.ok(!JSON.stringify(x).includes('Outro tenant'));
 });
+test('papel usuario usa permissão real do IaD e ignora contas e tarefas de terceiros',async()=>{
+ const f=fixture();f.scope={...scope,role:'usuario'};
+ f.snapshot.oportunidades.push({id:'o6',tenantId:'t1',contaId:'a1',donoId:'u2',valor:888888,etapa:'Proposta',desfecho:null});
+ f.snapshot.tarefas.push({id:'t6',tenantId:'t1',oportunidadeId:'o6',donoId:'u2',status:'aberta',vencimento:'2026-11-01'});
+ const x=await run(f);
+ assert.equal(x.metrics.accounts,1);
+ assert.equal(x.metrics.open,1);
+ assert.equal(x.metrics.openValue,2000);
+ assert.equal(x.metrics.overdueTasks,1);
+ assert.ok(!JSON.stringify(x).includes('888888'));
+});
+test('admin com filtro de responsável não herda oportunidades ou tarefas de outro usuário',async()=>{
+ const f=fixture();f.scope={...scope,role:'admin',admin:true,tenantFilter:'t1',ownerFilter:'u1'};
+ f.snapshot.oportunidades.push({id:'o6',tenantId:'t1',contaId:'a1',donoId:'u2',valor:888888,etapa:'Proposta',desfecho:null});
+ const x=await run(f);
+ assert.equal(x.metrics.accounts,1);
+ assert.equal(x.metrics.open,1);
+ assert.equal(x.metrics.overdueTasks,1);
+ assert.equal(x.metrics.openValue,2000);
+});
+test('indicadores de prazo usam data civil local mesmo quando UTC já mudou de dia',async()=>{
+ const {localBusinessDate}=await import('../src/ri/portfolio-analytics.mjs');
+ const prev=process.env.TZ;
+ try{
+  process.env.TZ='America/Sao_Paulo';
+  assert.equal(localBusinessDate(new Date('2026-11-06T01:30:00.000Z')),'2026-11-05');
+ }finally{if(prev===undefined)delete process.env.TZ;else process.env.TZ=prev;}
+});
 test('não transforma desistência em perda nem ausência de histórico em conversão zero',async()=>{
  const f=fixture();f.snapshot.oportunidades=f.snapshot.oportunidades.map(o=>({...o,desfecho:{tipo:'desistencia'}}));
  const x=await run(f);assert.equal(x.metrics.abandoned,3);assert.equal(x.metrics.winRate,null);
