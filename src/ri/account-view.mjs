@@ -11,6 +11,7 @@ const fold = value => String(value == null ? '' : value).normalize('NFD').replac
 const str = (value,fallback='') => typeof value==='string' && value.trim() ? value.trim().slice(0,200) : fallback;
 const usableScope = scope => !!scope && id(scope.userId) &&
   ['usuario','vendedor','gestor','admin'].includes(scope.role) &&
+  (scope.role !== 'admin' || scope.admin === true) &&
   (id(scope.tenantId) || (scope.role === 'admin' && scope.admin === true));
 function allowedAccount(a,scope) {
   if(!usableScope(scope) || !a || !id(a.id) || !id(a.tenantId))return false;
