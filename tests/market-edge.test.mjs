@@ -453,3 +453,55 @@ test('sem CNPJ e sem citacao registrada nao gera candidata',async()=>{
  assert.equal(res.status,200);
  assert.equal((await res.json()).data.length,0);
 });
+
+test('modo ChatGPT consulta apenas OpenAI e preserva quota',async()=>{
+ const h=harness({openai:true,claude:true});
+ const res=await h.handle(request({...query,provider:'OpenAI'}));
+ assert.equal(res.status,200);
+ assert.equal(aiCalls(h).length,1);
+ assert.match(aiCalls(h)[0].url,/api.openai.com/);
+ assert.deepEqual(Array.from((await res.json()).providers),['OpenAI']);
+});
+test('modo Claude consulta apenas Anthropic e preserva quota',async()=>{
+ const h=harness({openai:true,claude:true});
+ const res=await h.handle(request({...query,provider:'Anthropic'}));
+ assert.equal(res.status,200);
+ assert.equal(aiCalls(h).length,1);
+ assert.match(aiCalls(h)[0].url,/api.anthropic.com/);
+ assert.deepEqual(Array.from((await res.json()).providers),['Anthropic']);
+});
+test('provedor desconhecido retorna 422 antes de reservar quota',async()=>{
+ const h=harness({openai:true,claude:true});
+ const res=await h.handle(request({...query,provider:'external'}));
+ assert.equal(res.status,422);
+ assert.equal((await res.json()).error,'INVALID_PROVIDER');
+ assert.equal(h.calls.some(x=>x.url.includes('/iad_market_search_reserve')),false);
+ assert.equal(aiCalls(h).length,0);
+});
+test('provedor sem chave retorna 503 antes de reservar quota',async()=>{
+ const h=harness({openai:true,claude:false});
+ const res=await h.handle(request({...query,provider:'Anthropic'}));
+ assert.equal(res.status,503);
+ assert.equal((await res.json()).error,'AI_PROVIDER_NOT_CONFIGURED');
+ assert.equal(h.calls.some(x=>x.url.includes('/iad_market_search_reserve')),false);
+ assert.equal(aiCalls(h).length,0);
+});
+test('erro HTTP classificado aparece por motor sem dados privados',async()=>{
+ const h=harness({openai:true,claude:true,openaiStatus:429,claudeStatus:503});
+ const res=await h.handle(request(query));
+ assert.equal(res.status,502);
+ const body=await res.json();
+ assert.equal(body.error,'AI_SEARCH_UNAVAILABLE');
+ assert.deepEqual(Array.from(body.failures.map(x=>x.provider)),['OpenAI','Anthropic']);
+ assert.deepEqual(Array.from(body.failures.map(x=>x.category)),['IA_HTTP_429','IA_HTTP_503']);
+ assert.equal(JSON.stringify(body).includes('sk-test-openai'),false);
+});
+test('falha de Claude retorna 200 parcial com motivo e dados de OpenAI',async()=>{
+ const h=harness({openai:true,claude:true,claudeStatus:429});
+ const res=await h.handle(request(query));
+ assert.equal(res.status,200);
+ const body=await res.json();
+ assert.equal(body.partial,true);
+ assert.deepEqual(Array.from(body.failures.map(x=>x.category)),['IA_HTTP_429']);
+ assert.equal(body.data.length,1);
+});
