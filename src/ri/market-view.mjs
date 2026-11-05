@@ -1,7 +1,7 @@
 /* RI-M01 / interface manual de mercado (pesquisa nunca roda no boot).
  * Nenhum resultado e importado; a revisao de duplicidades e somente leitura.
  */
-import {normalizeMarketFilters,normalizeMarketCompanies,proposePipelineAction,buildMarketImportRequest,UF_IBGE,MARKET_DDDS,MARKET_BANDS} from './market-contract.mjs';
+import {normalizeMarketFilters,normalizeMarketCompanies,proposePipelineAction,buildMarketImportRequest,isReviewableSourceURL,UF_IBGE,MARKET_DDDS,MARKET_BANDS} from './market-contract.mjs';
 import {buildProspectWorkflow} from './prospect-agents.mjs';
 /**
  * Pull only the server-confirmed RI-M01 import into the local Pipeline.
@@ -257,6 +257,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   machine.appendChild(jobs);
   const totals=workflow.summary;
   machine.appendChild(el('p','Triagem: '+totals.candidates+' candidatas; '+totals.shortlisted+' na fila priorizada de revisão, '+totals.awaitingReview+' exigem checagem extra, '+totals.existing+' já cadastradas.','small'));
+  machine.appendChild(el('p',totals.icpIncomplete+' candidata(s) com ICP incompleto ou ausente — pendentes de revisão.','small muted'));
   machine.appendChild(el('p',workflow.method,'small muted'));
   const top=el('section');
   top.appendChild(el('h4','Shortlist para investigação — até 10 candidatas'));
@@ -308,13 +309,14 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
    }else card.appendChild(el('p','Nenhum decisor validado pela fonte nesta consulta.','small muted'));
    if(company.noticias.length){for(const n of company.noticias)card.appendChild(el('p','Noticia: '+n.titulo+' · '+n.data,'small'));}
    else card.appendChild(el('p','Noticias e oportunidades especificas ainda nao verificadas.','small muted'));
-   if(company.fontes.length) {
-    card.appendChild(el('h5','Fontes consultadas — abrir para verificar'));
-    for(const f of company.fontes.slice(0,8)) {
+   const safeSources=company.fontes.filter(f=>isReviewableSourceURL(f?.url));
+   if(safeSources.length) {
+    card.appendChild(el('h5','URLs HTTPS citadas — conferir conteúdo'));
+    for(const f of safeSources.slice(0,8)) {
      const link=doc.createElement('a');link.href=f.url;link.target='_blank';link.rel='noopener noreferrer';
      link.textContent=(f.titulo||f.url);card.appendChild(link);card.appendChild(el('p',''));
     }
-   }else card.appendChild(el('p','Sem fontes verificaveis: nao utilizar como fato.','small muted'));
+   }else card.appendChild(el('p','Sem URL HTTPS pública para revisão: não utilizar como fato.','small muted'));
    if(company.insights.length){card.appendChild(el('h5','Insights — hipoteses a investigar'));for(const insight of company.insights)card.appendChild(el('p',insight,'small'));}
    if(company.conflitos?.length){
     card.appendChild(el('h5','Divergencias entre IAs — verificar antes de qualificar'));
@@ -332,11 +334,13 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   review.appendChild(el('h3','Selecao: '+selected.size+' empresa(s)'));
   if(!selected.size)return;
   const chosen=data.filter(c=>selected.has(researchKey(c))),eligible=[];
+  const evaluation=buildProspectWorkflow({companies:chosen,snapshot,scope});
+  const qualifying=new Set(evaluation.candidates.filter(x=>x.status==='candidata_para_revisao').map(x=>researchKey(x.company)));
   for(const c of chosen){
    const plan=proposePipelineAction(c,snapshot,{tenantId:scope.tenantId,userId:scope.userId});
-   const rejected=!c.cnpj||plan.match.status!=='new'||!!c.conflitos?.length||!c.fontes?.length;
+   const rejected=!qualifying.has(researchKey(c))||!c.cnpj||plan.match.status!=='new'||!!c.conflitos?.length||!c.fontes?.some(f=>isReviewableSourceURL(f?.url));
    if(!rejected)eligible.push(c);
-   review.appendChild(el('p',(c.nome||c.razaoSocial)+' — '+(rejected?'Exige revisao ou ja esta cadastrada':'Nova empresa elegivel para confirmacao')+(plan.existingOpportunityId?' (oportunidade existente)':''),'small'));
+   review.appendChild(el('p',(c.nome||c.razaoSocial)+' — '+(rejected?'ICP, fonte ou duplicidade exige revisão antes de importar':'Candidata com ICP declarado completo, sujeita à confirmação')+(plan.existingOpportunityId?' (oportunidade existente)':''),'small'));
   }
   review.appendChild(el('p','A importacao cria somente conta e oportunidade em Prospeccao. Contatos nao sao gravados automaticamente. Confirme CNPJ, municipio e evidencia diretamente nas fontes.','small muted'));
   if(!eligible.length)return;
@@ -449,10 +453,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
       ', falta de fonte citada pela IA: '+(Number.isSafeInteger(diagnostics.rejectedUncitedSource)?diagnostics.rejectedUncitedSource:0)+
       ', duplicados agrupados: '+(Number.isSafeInteger(diagnostics.mergedDuplicates)?diagnostics.mergedDuplicates:0)+'.'
      :'';
-   const sourcedCount=companies.filter(c=>(c.fontes||[]).some(f=>{
-    try{const u=new URL(f.url);return u.protocol==='https:'&&!!u.hostname&&!u.username&&!u.password}
-    catch{return false;}
-   })).length;
+   const sourcedCount=companies.filter(c=>(c.fontes||[]).some(f=>isReviewableSourceURL(f?.url))).length;
    show(partialWarning+'Pesquisa exploratoria: '+companies.length+' candidatas relatadas; '+sourcedCount+' com URL HTTPS citada pelo provedor; '+companies.filter(c=>!c.cnpj).length+' com CNPJ pendente. Cobertura total desconhecida, fontes ainda nao verificadas. Nenhuma gravacao realizada.'+rejectedText+(usageText?' Consumo informado: '+usageText+'. Custo em R$ a apurar.':''));
    renderCompanies(companies,payload.source||'Fornecedor',payload.retrievedAt||'data nao fornecida');
   }catch(e){if(seq===currentRequest&&valid()&&e.name!=='AbortError')show('Falha de rede ao consultar fonte empresarial. Nenhuma alteracao no CRM.');}

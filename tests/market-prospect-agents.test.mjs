@@ -10,8 +10,8 @@ const raw={
  cnpj:'11222333000181',nome:'Indústria Exemplo',cidade:'Mogi das Cruzes',uf:'SP',
  segmento:'Indústria química',territorioCorroborado:true,
  qualificacaoICP:{municipio:'declarado',ddd:'declarado',segmento:'declarado',funcionarios:'declarado',statusGeral:'declarado_nao_verificado'},
- fontes:[{url:'https://example.org/empresa'}],
- contatos:[{nome:'Ana Exemplo',cargo:'Diretora Industrial',email:'ana@example.org'}],
+ fontes:[{url:'https://example.org/empresa'},{url}],
+ contatos:[{nome:'Ana Exemplo',cargo:'Diretora Industrial',email:'ana@example.org',fonte:'https://example.org/empresa'}],
  noticias:[{titulo:'Empresa anuncia expansão',url,data:'2026-11-05'}],
  providers:['OpenAI','Anthropic']
 };
@@ -26,10 +26,11 @@ test('seis agentes têm métricas reais sobre o mesmo resultado externo, sem inv
  assert.equal(a.shortlist[0].score,100);
  assert.match(a.shortlist[0].nextAction,/Conferir a notícia/);
  assert.equal(a.shortlist[0].status,'candidata_para_revisao');
+ assert.equal(a.shortlist[0].evidence.icpProntoParaRevisao,true);
  assert.equal(a.shortlist[0].evidence.contatosVerificados,0);
  assert.equal(a.shortlist[0].evidence.sinaisCompraConfirmados,0);
  assert.equal(a.networkCalls,0);assert.equal(a.writes,0);
- assert.match(a.method,/Não significa probabilidade de compra/);
+ assert.match(a.method,/não significa probabilidade de compra/i);
 });
 test('notícia e insight sem URL https não viram sinal citado ou sinal de compra',()=>{
  const a=run([{...raw,noticias:[{titulo:'Aumento de produção',url:'http://localhost/teste'}],
@@ -74,6 +75,7 @@ test('não infere dados ausentes de decisões, contatos ou aderência ICP',()=>{
   contatos:[{nome:'Pessoa Sem Cargo'}],noticias:[],qualificacaoICP:{municipio:'pendente',funcionarios:'pendente'}}]);
  assert.equal(a.stages.find(x=>x.id==='enricher').count,1);
  assert.equal(a.stages.find(x=>x.id==='qualifier').count,0);
+ assert.equal(a.summary.icpIncomplete,1);
  assert.equal(a.candidates[0].evidence.potenciaisDecisores,0);
  assert.equal(a.candidates[0].evidence.icpDeclarados,0);
  assert.equal(a.candidates[0].evidence.contatosVerificados,0);
@@ -99,4 +101,48 @@ test('fluxo vazio oferece etapas rastreáveis sem inventar uma shortlist',()=>{
  assert.equal(a.summary.candidates,0);
  assert.equal(a.shortlist.length,0);
  assert.deepEqual(a.stages.map(x=>x.count),[0,0,0,0,0,0]);
+});
+
+test('P0: CNPJ e fonte pública não qualificam uma empresa sem ICP solicitado',()=>{
+ const missing=run([{cnpj:raw.cnpj,nome:'Empresa sem ICP',cidade:'Mogi das Cruzes',uf:'SP',
+  fontes:[{url:'https://example.org/empresa'}]}]);
+ assert.equal(missing.summary.shortlisted,0);
+ assert.equal(missing.summary.icpIncomplete,1);
+ assert.equal(missing.candidates[0].status,'verificacao_obrigatoria');
+ assert.equal(missing.stages.find(x=>x.id==='qualifier').count,0);
+ assert.ok(missing.candidates[0].score<=69);
+ assert.match(missing.candidates[0].nextAction,/Completar e revisar todos os critérios ICP/);
+});
+
+test('P0: ICP parcialmente informado não entra em shortlist, mesmo com CNPJ e URL válidos',()=>{
+ const incomplete=run([{...raw,qualificacaoICP:{
+  municipio:'declarado',ddd:'pendente',segmento:'declarado',
+  funcionarios:'pendente',statusGeral:'pendente'}}]);
+ assert.equal(incomplete.summary.shortlisted,0);
+ assert.equal(incomplete.summary.icpIncomplete,1);
+ assert.equal(incomplete.candidates[0].evidence.icpSolicitados,4);
+ assert.equal(incomplete.candidates[0].evidence.icpDeclarados,2);
+ assert.equal(incomplete.candidates[0].evidence.icpProntoParaRevisao,false);
+ assert.ok(incomplete.candidates[0].score<=69);
+});
+
+test('P0: decisores e notícias sem vínculo a URLs citadas não aumentam a prontidão',()=>{
+ const falseEvidence=run([{...raw,
+  fontes:[{url:'https://example.org/empresa'}],
+  contatos:[{nome:'Ana Exemplo',cargo:'Diretora Industrial',fonte:'https://example.org/outra'}],
+  noticias:[{titulo:'Expansão não citada',url:'https://example.org/outra',data:'2026-11-01'}]}]);
+ assert.equal(falseEvidence.candidates[0].evidence.potenciaisDecisores,0);
+ assert.equal(falseEvidence.candidates[0].evidence.noticiasCitadas,0);
+ assert.equal(falseEvidence.stages.find(x=>x.id==='signal-hunter').count,0);
+ assert.equal(falseEvidence.stages.find(x=>x.id==='enricher').count,1);
+ assert.equal(falseEvidence.summary.shortlisted,1);
+});
+
+test('P0: URLs locais ou com credenciais não sustentam shortlist nem notícias',()=>{
+ const local=run([{...raw,fontes:[{url:'https://127.0.0.1/empresa'},
+  {url:'https://admin:senha@example.org/empresa'}]}]);
+ assert.equal(local.candidates[0].evidence.fontesCitadas,0);
+ assert.equal(local.candidates[0].evidence.noticiasCitadas,0);
+ assert.equal(local.summary.shortlisted,0);
+ assert.equal(local.candidates[0].status,'verificacao_obrigatoria');
 });

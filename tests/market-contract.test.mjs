@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {normalizeCnpj, normalizeMarketFilters, matchCrmAccount, normalizeMarketCompanies, proposePipelineAction, buildMarketImportRequest, UF_IBGE, MARKET_DDDS, MARKET_BANDS} from '../src/ri/market-contract.mjs';
+import {normalizeCnpj, normalizeMarketFilters, matchCrmAccount, normalizeMarketCompanies, proposePipelineAction, buildMarketImportRequest, isReviewableSourceURL, UF_IBGE, MARKET_DDDS, MARKET_BANDS} from '../src/ri/market-contract.mjs';
 const tenantId='tenant-a',existing={id:'a1',tenantId,cnpj:'11.222.333/0001-81',nome:'Acme Indústria',razaoSocial:'Acme Indústria',site:'https://acme.example'};
 test('CNPJ numerico e alfanumerico validos; DV incorreto rejeitado',()=>{
  assert.equal(normalizeCnpj('11.222.333/0001-81'),'11222333000181');
@@ -373,7 +373,40 @@ test('RI-M06 DOM: seis etapas e shortlist aparecem na pesquisa real simulada sem
   assert.ok(walk(root,n=>n.textContent?.includes('Shortlist para investigação')));
   assert.ok(walk(root,n=>n.textContent?.includes('Índice de prontidão para revisão')));
   assert.ok(walk(root,n=>n.textContent?.includes('Próximo passo recomendado:')));
+  const reviewLabel=walk(root,n=>n.tagName==='label'&&n.textContent==='Selecionar para revisao comercial');
+  assert.ok(reviewLabel,'empresa precisa permitir seleção de revisão');
+  const check=walk(reviewLabel,n=>n.tagName==='input'&&n.type==='checkbox');
+  assert.ok(check);check.checked=true;await check.fire('change');
+  assert.ok(walk(root,n=>n.textContent?.includes('ICP, fonte ou duplicidade exige revisão antes de importar')),
+   'ICP incompleto não pode ser enviado à importação, mesmo após seleção humana');
   assert.ok(!requests.some(x=>x.includes('iad_market_import_confirmed')));
   cleanup();
  }finally{globalThis.fetch=oldFetch;}
+});
+
+test('P0: URLs públicas HTTPS são revisáveis, mas hosts locais/privados nunca são habilitados',()=>{
+ for(const valid of ['https://example.org/empresa','https://www.empresa.com.br/pesquisa?q=teste'])
+  assert.equal(isReviewableSourceURL(valid),true,valid);
+ for(const invalid of ['http://example.org','https://localhost/empresa',
+  'https://127.0.0.1:8443/empresa','https://192.168.0.1/empresa',
+  'https://[::1]/','https://corp.internal/api',
+  'https://admin:senha@example.org/empresa','https://empresa.local/info',
+  'https://example.org:8443/','javascript:alert(1)','ftp://empresa.com.br'])
+  assert.equal(isReviewableSourceURL(invalid),false,invalid);
+});
+test('P0: importação rejeita fonte HTTPS interna ou com credenciais',()=>{
+ const scope={tenantId,userId:'u1'},rid='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+ const base={cnpj:'11222333000181',nome:'Empresa A',cidade:'Jacareí',uf:'SP',
+  segmento:'Química',fontes:[{url:'https://example.org/empresa-a'}]};
+ for(const url of ['https://localhost/empresa','https://127.0.0.1/empresa',
+  'https://usuario:senha@example.org/empresa','http://example.org/empresa']){
+  assert.throws(()=>buildMarketImportRequest({...base,fontes:[{url}]},
+   {contas:[],oportunidades:[]},scope,rid),/Fonte HTTPS/i);
+ }
+});
+test('P0: interface só torna clicáveis fontes públicas e mostra lacunas de ICP',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const source=readFileSync(new URL('../src/ri/market-view.mjs',import.meta.url),'utf8');
+ assert.match(source,/safeSources=company\.fontes\.filter\(f=>isReviewableSourceURL\(f\?\.url\)\)/);
+ assert.match(source,/totals\.icpIncomplete/);
 });
