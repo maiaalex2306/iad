@@ -334,11 +334,13 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   review.appendChild(el('h3','Selecao: '+selected.size+' empresa(s)'));
   if(!selected.size)return;
   const chosen=data.filter(c=>selected.has(researchKey(c))),eligible=[];
+  const evaluation=buildProspectWorkflow({companies:chosen,snapshot,scope});
+  const qualifying=new Set(evaluation.candidates.filter(x=>x.status==='candidata_para_revisao').map(x=>researchKey(x.company)));
   for(const c of chosen){
    const plan=proposePipelineAction(c,snapshot,{tenantId:scope.tenantId,userId:scope.userId});
-   const rejected=!c.cnpj||plan.match.status!=='new'||!!c.conflitos?.length||!c.fontes?.length;
+   const rejected=!qualifying.has(researchKey(c))||!c.cnpj||plan.match.status!=='new'||!!c.conflitos?.length||!c.fontes?.some(f=>isReviewableSourceURL(f?.url));
    if(!rejected)eligible.push(c);
-   review.appendChild(el('p',(c.nome||c.razaoSocial)+' — '+(rejected?'Exige revisao ou ja esta cadastrada':'Nova empresa elegivel para confirmacao')+(plan.existingOpportunityId?' (oportunidade existente)':''),'small'));
+   review.appendChild(el('p',(c.nome||c.razaoSocial)+' — '+(rejected?'ICP, fonte ou duplicidade exige revisão antes de importar':'Candidata com ICP declarado completo, sujeita à confirmação')+(plan.existingOpportunityId?' (oportunidade existente)':''),'small'));
   }
   review.appendChild(el('p','A importacao cria somente conta e oportunidade em Prospeccao. Contatos nao sao gravados automaticamente. Confirme CNPJ, municipio e evidencia diretamente nas fontes.','small muted'));
   if(!eligible.length)return;
@@ -451,10 +453,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
       ', falta de fonte citada pela IA: '+(Number.isSafeInteger(diagnostics.rejectedUncitedSource)?diagnostics.rejectedUncitedSource:0)+
       ', duplicados agrupados: '+(Number.isSafeInteger(diagnostics.mergedDuplicates)?diagnostics.mergedDuplicates:0)+'.'
      :'';
-   const sourcedCount=companies.filter(c=>(c.fontes||[]).some(f=>{
-    try{const u=new URL(f.url);return u.protocol==='https:'&&!!u.hostname&&!u.username&&!u.password}
-    catch{return false;}
-   })).length;
+   const sourcedCount=companies.filter(c=>(c.fontes||[]).some(f=>isReviewableSourceURL(f?.url))).length;
    show(partialWarning+'Pesquisa exploratoria: '+companies.length+' candidatas relatadas; '+sourcedCount+' com URL HTTPS citada pelo provedor; '+companies.filter(c=>!c.cnpj).length+' com CNPJ pendente. Cobertura total desconhecida, fontes ainda nao verificadas. Nenhuma gravacao realizada.'+rejectedText+(usageText?' Consumo informado: '+usageText+'. Custo em R$ a apurar.':''));
    renderCompanies(companies,payload.source||'Fornecedor',payload.retrievedAt||'data nao fornecida');
   }catch(e){if(seq===currentRequest&&valid()&&e.name!=='AbortError')show('Falha de rede ao consultar fonte empresarial. Nenhuma alteracao no CRM.');}
