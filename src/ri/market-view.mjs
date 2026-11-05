@@ -7,7 +7,7 @@ import {normalizeMarketFilters,normalizeMarketCompanies,proposePipelineAction,bu
  * Never upload local edits. Refuse the pull when CAS/pending state is unknown.
  * The server transaction remains committed even if local refresh fails.
  */
-export async function refreshMarketPipelineAfterImport({nuvem,importedCount,valid}={}){
+export async function refreshMarketPipelineAfterImport({nuvem,importedCount,valid,tenantId,importedIds,getSnapshot}={}){
  if(!Number.isSafeInteger(importedCount)||importedCount<1)return {status:'unchanged',serverCommitted:false};
  if(typeof valid!=='function'||!valid())return {status:'pending',serverCommitted:true};
  if(!nuvem||typeof nuvem.puxar!=='function'||
@@ -19,7 +19,22 @@ export async function refreshMarketPipelineAfterImport({nuvem,importedCount,vali
      nuvem.haMudancas())return {status:'pending',serverCommitted:true};
   if(!valid())return {status:'pending',serverCommitted:true};
   await nuvem.puxar();
-  return {status:valid()?'synced':'pending',serverCommitted:true};
+  if(!valid())return {status:'pending',serverCommitted:true};
+  // A successful HTTP pull is not evidence that the imported records
+  // reached this tenant's local portfolio. Verify both entity types.
+  if(Array.isArray(importedIds)&&importedIds.length){
+   if(!tenantId||typeof getSnapshot!=='function')return {status:'pending',serverCommitted:true};
+   const current=getSnapshot();
+   if(!current||!Array.isArray(current.contas)||!Array.isArray(current.oportunidades))
+    return {status:'pending',serverCommitted:true};
+   const visible=importedIds.every(({accountId,opportunityId})=>
+    typeof accountId==='string'&&!!accountId&&typeof opportunityId==='string'&&!!opportunityId&&
+    current.contas.some(x=>x?.id===accountId&&x.tenantId===tenantId)&&
+    current.oportunidades.some(x=>x?.id===opportunityId&&x.contaId===accountId&&x.tenantId===tenantId)
+   );
+   if(!visible)return {status:'pending',serverCommitted:true};
+  }
+  return {status:'synced',serverCommitted:true};
  }catch{
   return {status:'pending',serverCommitted:true};
  }
@@ -30,7 +45,7 @@ const fields=[
  ['porte','Porte','text'],['funcionariosMin','Funcionarios min.','number'],['funcionariosMax','Funcionarios max.','number'],
  ['faturamentoMin','Faturamento min. R$','number'],['faturamentoMax','Faturamento max. R$','number']
 ];
-export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem}={}){
+export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,getSnapshot}={}){
  if(!root||!root.ownerDocument||!snapshot||!scope||typeof getScopeToken!=='function'||!nuvem)throw Error('Sessao e dados autorizados obrigatorios');
  const doc=root.ownerDocument,els=new Map();let currentRequest=0,controller=null,selected=new Set(),importKeys=new Map(),importing=false;
  const valid=()=>root.isConnected&&getScopeToken()===scope.token;
@@ -113,7 +128,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem}={
    if(!session?.access_token||!config?.url||!config?.chave){resultArea.textContent='Sessao de nuvem obrigatoria para importar.';return;}
    if(!globalThis.crypto?.randomUUID){resultArea.textContent='O navegador precisa suportar identificadores seguros para importar.';return;}
    importing=true;importBtn.disabled=true;agree.disabled=true;
-   let imported=0,reviewed=0,failed=0;
+   let imported=0,reviewed=0,failed=0;const importedIds=[];
    for(const company of eligible){
     if(!valid())break;
     try{
@@ -126,12 +141,16 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem}={
      });
      if(!response.ok){failed++;continue;}
      const data=await response.json();
-     if(data?.status==='imported'||data?.status==='already_imported'){imported++;selected.delete(company.cnpj);}
+     if(data?.status==='imported'||data?.status==='already_imported'){
+      imported++;
+      importedIds.push({accountId:data.accountId,opportunityId:data.opportunityId});
+      selected.delete(company.cnpj);
+     }
      else if(data?.status==='existing'||data?.status==='review_duplicate'){reviewed++;selected.delete(company.cnpj);}
      else failed++;
     }catch{failed++;}
    }
-   const reconciliation=await refreshMarketPipelineAfterImport({nuvem,importedCount:imported,valid});
+   const reconciliation=await refreshMarketPipelineAfterImport({nuvem,importedCount:imported,valid,tenantId:scope.tenantId,importedIds,getSnapshot});
    if(valid()){
     const stateMessage=reconciliation.status==='synced'
      ?'Carteira local atualizada de forma segura. Confira as oportunidades no Pipeline.'
