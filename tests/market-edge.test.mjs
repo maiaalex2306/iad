@@ -86,7 +86,7 @@ test('OpenAI usa Responses API, ferramenta web_search e nao reivindica cobertura
  const h=harness({openai:true}),res=await h.handle(request(query));
  assert.equal(res.status,200);const result=await res.json();assert.equal(result.data.length,1);
  assert.equal(result.data[0].cnpj,candidate.cnpj);assert.equal(result.data[0].fontes[0].url,URL_COMPANY);
- assert.equal(result.total,null);assert.equal(result.coverage,'exploratoria');assert.equal(result.hasMore,false);
+ assert.equal(result.total,null);assert.equal(result.coverage,'exploratoria');assert.equal(result.hasMore,null);assert.equal(result.coverageStatus,'unknown');
  const ai=aiCalls(h);assert.equal(ai.length,1);assert.match(ai[0].url,/openai.com\/v1\/responses/);
  assert.equal(ai[0].body.tools[0].type,'web_search');assert.ok(ai[0].body.max_tool_calls<=3);
 });
