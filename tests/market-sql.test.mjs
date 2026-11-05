@@ -24,3 +24,9 @@ test('RPC de importacao nao expõe IDs de contas de outro vendedor',()=>{
  assert.match(baseline,/v_papel IN \('gestor','admin'\) OR v_existing_owner IS NULL OR v_existing_owner=v_user/);
  assert.match(baseline,/RETURN pg_catalog\.jsonb_build_object\('status','review_duplicate'\);/);
 });
+
+test('migracao de piloto na producao mantem importacao fechada ate homologacao E2E',()=>{
+ const canary=readFileSync(new URL('../nuvem/sql/ri-m01-market-production-canary.sql',import.meta.url),'utf8');
+ assert.match(canary,/REVOKE\s+EXECUTE\s+ON\s+FUNCTION\s+public\.iad_market_import_confirmed\(jsonb,uuid,uuid,boolean\)\s+FROM\s+authenticated/i);
+ assert.doesNotMatch(canary,/GRANT\s+EXECUTE\s+ON\s+FUNCTION\s+public\.iad_market_import_confirmed/i);
+});
