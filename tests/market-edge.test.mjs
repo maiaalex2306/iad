@@ -92,7 +92,10 @@ test('OpenAI usa Responses API, ferramenta web_search e nao reivindica cobertura
 });
 test('se IA nao realizou pesquisa web, descartar dados gerados',async()=>{
  const h=harness({openai:true,openaiResponse:responseOpenAI(false)}),res=await h.handle(request(query));
- assert.equal(res.status,200);assert.equal((await res.json()).data.length,0);
+ assert.equal(res.status,502);
+ const body=await res.json();
+ assert.equal(body.error,'AI_SEARCH_UNAVAILABLE');
+ assert.deepEqual(Array.from(body.failedProviders),['OpenAI']);
 });
 test('sem fonte citada pela ferramenta web nao retornar empresa inventada',async()=>{
  const h=harness({openai:true,openaiResponse:responseOpenAI(true,false)}),res=await h.handle(request(query));
