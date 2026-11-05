@@ -69,3 +69,29 @@ test('importacao exige revisao, cnpj novo, fonte e ausencia de conflitos',()=>{
  assert.throws(()=>buildMarketImportRequest(company,{contas:[existing]},scope,rid),/cadastrad|exist/i);
  assert.throws(()=>buildMarketImportRequest(company,{contas:[]},scope,'bad'),/identificador/i);
 });
+
+test('pos-importacao confirma sincronizacao local apenas depois de puxar seguro',async()=>{
+ const {refreshMarketPipelineAfterImport}=await import('../src/ri/market-view.mjs');
+ const calls=[];
+ const nuvem={diagnosticoPendenciasCAS:()=>({disponivel:true,quantidade:0}),haMudancas:()=>false,puxar:async()=>{calls.push('puxar');}};
+ const result=await refreshMarketPipelineAfterImport({nuvem,importedCount:1,valid:()=>true});
+ assert.equal(result.status,'synced');
+ assert.deepEqual(calls,['puxar']);
+});
+test('pos-importacao nao baixa carteira com CAS pendente ou diagnostico indisponivel',async()=>{
+ const {refreshMarketPipelineAfterImport}=await import('../src/ri/market-view.mjs');
+ let called=0;
+ for(const pending of [{disponivel:true,quantidade:1},{disponivel:false,quantidade:null}]){
+  const nuvem={diagnosticoPendenciasCAS:()=>pending,haMudancas:()=>false,puxar:async()=>{called++}};
+  const state=await refreshMarketPipelineAfterImport({nuvem,importedCount:1,valid:()=>true});
+  assert.equal(state.status,'pending');
+ }
+ assert.equal(called,0,'Nunca sobrescrever estado local com CAS nao reconciliado');
+});
+test('falha de download nao desfaz importacao confirmada no servidor',async()=>{
+ const {refreshMarketPipelineAfterImport}=await import('../src/ri/market-view.mjs');
+ const nuvem={diagnosticoPendenciasCAS:()=>({disponivel:true,quantidade:0}),haMudancas:()=>false,puxar:async()=>{throw Error('rede fora')}};
+ const state=await refreshMarketPipelineAfterImport({nuvem,importedCount:1,valid:()=>true});
+ assert.equal(state.status,'pending');
+ assert.equal(state.serverCommitted,true);
+});
