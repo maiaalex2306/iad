@@ -35,7 +35,7 @@ test('E2E staging blocks partial results rather than certifying only one provide
  await assert.rejects(runMarketResearchE2E({fetchImpl:stubFetch({providers:['OpenAI']}),env,log:()=>{}}),/both providers/i);
 });
 test('E2E staging blocks unknown or fabricated total coverage',async()=>{
- await assert.rejects(runMarketResearchE2E({fetchImpl:stubFetch({claim:{data:[],providers:['OpenAI','Anthropic'],coverageStatus:'complete',total:100,hasMore:false}}),env,log:()=>{}}),/coverage/i);
+ await assert.rejects(runMarketResearchE2E({fetchImpl:stubFetch({claim:{data:[],providers:['OpenAI','Anthropic'],partial:false,failedProviders:[],coverage:'exploratoria',coverageStatus:'complete',total:100,hasMore:false}}),env,log:()=>{}}),/coverage/i);
 });
 test('E2E refuses to run when staging credentials are absent, with no HTTP requests',async()=>{
  let count=0;
