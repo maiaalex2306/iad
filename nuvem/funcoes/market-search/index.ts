@@ -272,6 +272,53 @@ function combineAI(results,limit,f) {
  return [...out.values()].slice(0,limit);
 }
 
+
+/* Autenticacao e permissao precedem esta leitura de metadados.
+ * Nunca realiza geracao de tokens, pesquisa web ou reserva de quota.
+ * GET /models e documentado pelas APIs, mas NAO comprova web_search. */
+const preflightCooldown=new Map();
+function selectedModel(engine){
+ return engine==='OpenAI'
+  ? Deno.env.get('IA_MODELO_PESQUISA_OPENAI')||Deno.env.get('IA_MODELO_OPENAI')||'gpt-5'
+  : Deno.env.get('IA_MODELO_PESQUISA_ANTHROPIC')||Deno.env.get('IA_MODELO_ANTHROPIC')||'claude-opus-5';
+}
+async function modelPreflight(engine){
+ const started=Date.now(),key=aiKey(engine==='OpenAI'?'openai':'anthropic');
+ if(!key)return {provider:engine,status:'NOT_CONFIGURED',elapsedMs:0,webSearchSupport:'unknown'};
+ const model=str(selectedModel(engine),110);
+ const url=engine==='OpenAI'
+  ?'https://api.openai.com/v1/models/'+encodeURIComponent(model)
+  :'https://api.anthropic.com/v1/models/'+encodeURIComponent(model);
+ const headers=engine==='OpenAI'
+  ?{Authorization:'Bearer '+key}
+  :{'x-api-key':key,'anthropic-version':'2023-06-01'};
+ let status='UNAVAILABLE',webSearchSupport='unknown',httpStatus=null,resolvedModel=null;
+ try{
+  const response=await fetch(url,{method:'GET',headers,signal:AbortSignal.timeout(8000)});
+  httpStatus=response.status;
+  if(response.ok){
+   try{
+    const meta=await response.json();
+    if(meta?.id&&typeof meta.id==='string'){
+     resolvedModel=str(meta.id,110);
+     const supported=meta?.capabilities?.server_tools?.web_search?.supported;
+     webSearchSupport=supported===true?'supported':supported===false?'not_supported':'unknown';
+     status=webSearchSupport==='not_supported'?'MODEL_NO_WEB_SEARCH':'MODEL_AVAILABLE';
+    }else status='INVALID_RESPONSE';
+   }catch{status='INVALID_RESPONSE';}
+  }else if(response.status===401)status='AUTH_REJECTED';
+  else if(response.status===403)status='ACCESS_DENIED';
+  else if(response.status===404)status='MODEL_NOT_FOUND';
+  else if(response.status===429)status='PROVIDER_RATE_LIMIT';
+  else status='PROVIDER_HTTP_ERROR';
+ }catch(e){status=e?.name==='TimeoutError'||e?.name==='AbortError'?'TIMEOUT':'NETWORK_ERROR';}
+ const out={provider:engine,status,elapsedMs:Date.now()-started,webSearchSupport};
+ if(resolvedModel)out.model=resolvedModel;
+ if(httpStatus!==null)out.httpStatus=httpStatus;
+ console.info('[market-search] model_preflight',JSON.stringify({provider:engine,status,elapsedMs:out.elapsedMs}));
+ return out;
+}
+
 Deno.serve(async req=>{
  const origin=req.headers.get('origin')||'';
  if(req.method==='OPTIONS')return new Response(null,{status:204,headers:headers(origin)});
@@ -321,6 +368,21 @@ Deno.serve(async req=>{
    if(overflow)return output({error:'REQUEST_TOO_LARGE'},413,origin);
    body=JSON.parse(raw);
   }catch{return output({error:'INVALID_JSON'},400,origin)}
+  if(body?.action==='preflight'){
+   const selected=body.provider===undefined?'both':body.provider;
+   if(!['both','OpenAI','Anthropic'].includes(selected))
+    return output({error:'INVALID_PROVIDER'},422,origin);
+   // Best-effort per-isolate cooldown; no paid model generation or search.
+   const cooldownKey=user.id+'|'+selected;
+   const last=preflightCooldown.get(cooldownKey)||0;
+   if(Date.now()-last<30000)return output({error:'PREFLIGHT_RATE_LIMIT'},429,origin);
+   if(preflightCooldown.size>500)preflightCooldown.clear();
+   preflightCooldown.set(cooldownKey,Date.now());
+   const choices=selected==='both'?['OpenAI','Anthropic']:[selected];
+   const results=await Promise.all(choices.map(modelPreflight));
+   return output({action:'preflight',results,
+    note:'Metadados de modelo: nao executa web_search, nao usa quota de pesquisa e nao homologa a busca real.'},200,origin);
+  }
   if(body?.action!=='search')return output({error:'SEARCH_ONLY'},400,origin);
   let f;try{f=filters(body.filters)}catch(e){return output({error:'INVALID_FILTERS',message:e.message},422,origin)}
   // Explicit provider selection helps diagnose a failed provider without
