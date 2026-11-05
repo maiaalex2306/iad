@@ -9,11 +9,12 @@ const cfg=fs.readFileSync('src/config.js','utf8');
 const sw=fs.readFileSync('sw.js','utf8');
 const index=fs.readFileSync('index.html','utf8');
 const app=fs.readFileSync('src/app.js','utf8');
-const desired='v286.46';
-
 test('release version is coherent between application and service worker',()=>{
-  assert.match(cfg,/window\.IADVersao\s*=\s*\{[^}]*numero:\s*'v286\.46'/);
-  assert.match(sw,/const\s+CACHE\s*=\s*'iad-crm-v286\.46'/);
+  const version=cfg.match(/window\.IADVersao\s*=\s*\{[^}]*numero:\s*'(v\d+(?:\.\d+)*)'/);
+  const cache=sw.match(/const\s+CACHE\s*=\s*'([^']+)'/);
+  assert.ok(version,'IADVersao required');
+  assert.ok(cache,'service worker cache required');
+  assert.equal(cache[1],'iad-crm-'+version[1]);
 });
 test('Inteligência Comercial is enabled explicitly in release config',()=>{
   assert.match(cfg,/window\.IAD_RI_ENABLED\s*=\s*true\s*;/);
