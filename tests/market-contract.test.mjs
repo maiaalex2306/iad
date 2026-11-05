@@ -116,3 +116,11 @@ test('sync so e confirmada com IDs de conta e oportunidade visiveis no Store cor
  assert.equal((await refreshMarketPipelineAfterImport({...args,getSnapshot:()=>({
   contas:[{id:'ri-a',tenantId:'outro'}],oportunidades:[{id:'ri-b',contaId:'ri-a',tenantId:'outro'}]})})).status,'pending');
 });
+
+test('piloto pesquisa sem disponibilizar importacao quando flag ausente',async()=>{
+ const {marketPilotAllowsImport}=await import('../src/ri/market-view.mjs');
+ assert.equal(marketPilotAllowsImport(undefined),false);
+ assert.equal(marketPilotAllowsImport(false),false);
+ assert.equal(marketPilotAllowsImport('true'),false);
+ assert.equal(marketPilotAllowsImport(true),true);
+});
