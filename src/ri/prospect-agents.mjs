@@ -73,8 +73,16 @@ export function buildProspectWorkflow({companies,snapshot,scope}={}){
   const status=action.match.status==='existing'?'ja_cadastrada':
    possibleDuplicate?'duplicidade_a_revisar':
    !identity||!sources.length||conflicted?'verificacao_obrigatoria':'candidata_para_revisao';
+  const nextAction=action.match.status==='existing'?'Revisar o histórico da conta existente antes de nova abordagem':
+   possibleDuplicate?'Confirmar matriz, filial ou identidade para evitar duplicação':
+   !identity?'Localizar e conferir o CNPJ em fonte confiável':
+   !sources.length?'Localizar fonte HTTPS que sustente a identidade empresarial':
+   conflicted?'Reconciliar informações divergentes antes de qualificar':
+   !decisionMakers.length?'Identificar e confirmar um decisor e seu vínculo profissional':
+   !news.length?'Investigar contexto e possíveis projetos antes de contatar':
+   'Conferir a notícia e o vínculo do decisor antes de preparar a abordagem';
   candidates.push({
-   company,score,status,reasons,matchStatus:action.match.status,
+   company,score,status,reasons,nextAction,matchStatus:action.match.status,
    evidence:{cnpjFormatoValido:identity,fontesCitadas:sources.length,territorioCorroborado:company.territorioCorroborado===true,
     icpDeclarados:claimed.length,icpSolicitados:required.length,contatosInformados:contacts.length,
     potenciaisDecisores:decisionMakers.length,contatosComCanalInformado:exposedContact.length,
