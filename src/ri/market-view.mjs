@@ -1,7 +1,7 @@
 /* RI-M01 / interface manual de mercado (pesquisa nunca roda no boot).
  * Nenhum resultado e importado; a revisao de duplicidades e somente leitura.
  */
-import {normalizeMarketFilters,normalizeMarketCompanies,proposePipelineAction,buildMarketImportRequest} from './market-contract.mjs';
+import {normalizeMarketFilters,normalizeMarketCompanies,proposePipelineAction,buildMarketImportRequest,UF_IBGE,MARKET_DDDS,MARKET_BANDS} from './market-contract.mjs';
 /**
  * Pull only the server-confirmed RI-M01 import into the local Pipeline.
  * Never upload local edits. Refuse the pull when CAS/pending state is unknown.
@@ -39,33 +39,114 @@ export async function refreshMarketPipelineAfterImport({nuvem,importedCount,vali
   return {status:'pending',serverCommitted:true};
  }
 }
+// Advanced legacy criteria remain supported without mixing singular and
+// multiple filters. City/DDD/segments and employees use the new facet contract.
 const fields=[
- ['uf','UF (ex.: SP)','text'],['cidade','Cidade (ex.: Jacarei)','text'],['ddd','DDD (ex.: 012)','text'],
- ['regiao','Regiao','text'],['segmento','Segmento (ex.: quimico)','text'],['cnae','CNAE','text'],
- ['porte','Porte','text'],['funcionariosMin','Funcionarios min.','number'],['funcionariosMax','Funcionarios max.','number'],
- ['faturamentoMin','Faturamento min. R$','number'],['faturamentoMax','Faturamento max. R$','number']
+ ['regiao','Regiao','text'],['cnae','CNAE','text'],
+ ['porte','Porte','text'],['faturamentoMin','Faturamento min. R$','number'],
+ ['faturamentoMax','Faturamento max. R$','number']
 ];
 export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,getSnapshot}={}){
  if(!root||!root.ownerDocument||!snapshot||!scope||typeof getScopeToken!=='function'||!nuvem)throw Error('Sessao e dados autorizados obrigatorios');
  const doc=root.ownerDocument,els=new Map();let currentRequest=0,controller=null,selected=new Set(),importKeys=new Map(),importing=false;
  const valid=()=>root.isConnected&&getScopeToken()===scope.token;
  const el=(tag,text='',className='')=>{const n=doc.createElement(tag);n.textContent=String(text);if(className)n.className=className;return n};
- const form=doc.createElement('form'),grid=el('div','','grid'),status=el('p','Defina o mercado desejado e clique em BUSCAR. Nenhuma empresa sera incluida no CRM.','small muted');
+ const form=doc.createElement('form'),grid=el('div','','grid'),status=el('p','Selecione o territorio, o segmento e as faixas de funcionarios. Nada sera importado automaticamente.','small muted');
+ grid.style.display='grid';grid.style.gridTemplateColumns='repeat(auto-fit,minmax(245px,1fr))';grid.style.gap='14px';grid.style.alignItems='start';
+ // Every picker derives its options from a versioned source, never free text.
+ function picker(label,placeholder,limit=15){
+  const wrapper=el('div','','campo'),title=el('span',label,'small'),details=doc.createElement('details'),summary=doc.createElement('summary'),search=doc.createElement('input'),options=el('div','','market-options');
+  details.style.border='1px solid var(--borda,#ded8e5)';details.style.borderRadius='9px';details.style.padding='9px';
+  summary.textContent=placeholder;summary.style.cursor='pointer';
+  search.type='search';search.placeholder='Filtrar opcoes';search.autocomplete='off';search.style.width='100%';search.style.margin='8px 0';
+  options.style.maxHeight='190px';options.style.overflow='auto';options.style.display='grid';options.style.gap='5px';
+  details.append(summary,search,options);wrapper.append(title,details);
+  let items=[],chosen=new Map();
+  function render(){
+   summary.textContent=chosen.size?chosen.size+' selecionado(s): '+[...chosen.values()].slice(0,2).map(x=>x.label).join(', ')+(chosen.size>2?'…':''):placeholder;
+   options.replaceChildren();
+   const term=search.value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+   const shown=items.filter(x=>x.label.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().includes(term)).slice(0,65);
+   if(!shown.length)options.appendChild(el('span','Nenhuma opcao encontrada','small muted'));
+   for(const item of shown){
+    const lbl=el('label','','campo'),input=doc.createElement('input');
+    input.type='checkbox';input.checked=chosen.has(item.key);
+    input.addEventListener('change',()=>{
+     if(input.checked&&chosen.size>=limit){input.checked=false;status.textContent='Limite de '+limit+' opcoes nesse filtro.';return;}
+     if(input.checked)chosen.set(item.key,item);else chosen.delete(item.key);
+     render();
+    });
+    lbl.style.display='flex';lbl.style.alignItems='center';lbl.style.gap='8px';
+    lbl.append(input,doc.createTextNode(item.label));options.appendChild(lbl);
+   }
+   if(items.length>65&&!term)options.appendChild(el('span','Digite para localizar outras opcoes.','small muted'));
+  }
+  search.addEventListener('input',render);
+  return {wrapper,get:()=>[...chosen.values()],setItems(next){
+   items=next;const keys=new Set(items.map(x=>x.key));chosen=new Map([...chosen].filter(([k])=>keys.has(k)));render();
+  },choose(keys){const wanted=new Set(keys);chosen=new Map(items.filter(x=>wanted.has(x.key)).slice(0,limit).map(x=>[x.key,x]));render();},clear(){chosen.clear();render();}};
+ }
+ const ufBox=el('label','Estado (UF)','campo'),ufSelect=doc.createElement('select');
+ ufSelect.name='uf';ufSelect.appendChild(new Option('Selecione o estado',''));
+ for(const uf of Object.keys(UF_IBGE).sort()){const opt=doc.createElement('option');opt.value=uf;opt.textContent=uf;ufSelect.appendChild(opt);}
+ ufBox.appendChild(ufSelect);
+ const cityPick=picker('Cidades (codigos IBGE)','Selecione uma ou mais cidades',15),dddPick=picker('DDDs','Selecione um ou mais DDDs',20),segmentPick=picker('Segmentos cadastrados','Selecione um ou mais segmentos',12),bandPick=picker('Faixas de funcionarios','Selecione uma ou mais faixas',8);
+ dddPick.setItems(MARKET_DDDS.map(k=>({key:k,label:'DDD '+k,value:k})));
+ bandPick.setItems(MARKET_BANDS.map(b=>({key:b.id,label:b.label,value:b.id})));
+ const tenantSegments=Array.isArray(snapshot.segmentos)?snapshot.segmentos.filter(x=>x&&x.tenantId===scope.tenantId&&x.ativo!==false):[];
+ const segmentSeen=new Set();
+ segmentPick.setItems(tenantSegments.filter(x=>{const n=String(x.nome||'').trim();if(!n||segmentSeen.has(n.toLowerCase()))return false;segmentSeen.add(n.toLowerCase());return true;}).map(x=>({key:String(x.nome),label:String(x.nome),value:String(x.nome)})).sort((a,b)=>a.label.localeCompare(b.label,'pt-BR')));
+ let cityRequest=null,cityLoading=false;
+ const cityCache=new Map();
+ async function loadCities(uf){
+  cityPick.clear();cityPick.setItems([]);
+  if(cityRequest)cityRequest.abort();
+  if(!uf)return [];
+  if(cityCache.has(uf)){cityPick.setItems(cityCache.get(uf));return cityCache.get(uf);}
+  const request=new AbortController();cityRequest=request;cityLoading=true;
+  status.textContent='Consultando municipios oficiais do IBGE para '+uf+'…';
+  try{
+   const res=await fetch('https://servicodados.ibge.gov.br/api/v1/localidades/estados/'+UF_IBGE[uf]+'/municipios?orderBy=nome',{signal:request.signal});
+   if(!res.ok)throw Error('IBGE HTTP '+res.status);
+   const rows=await res.json();
+   if(!Array.isArray(rows)||rows.length===0||rows.length>2000)throw Error('Catalogo IBGE inesperado');
+   const items=rows.filter(x=>Number.isSafeInteger(x?.id)&&String(x.id).startsWith(String(UF_IBGE[uf]))&&typeof x.nome==='string').map(x=>({key:String(x.id),label:x.nome,value:{codigoIBGE:String(x.id),nome:x.nome,uf}}));
+   if(ufSelect.value!==uf||!valid())return [];
+   cityCache.set(uf,items);cityPick.setItems(items);status.textContent=items.length+' municipios carregados do IBGE. Selecione as cidades.';
+   return items;
+  }catch(error){
+   if(error?.name!=='AbortError'&&ufSelect.value===uf&&valid())status.textContent='Nao foi possivel carregar o catalogo oficial de municipios. Tente selecionar o estado novamente.';
+   return [];
+  }finally{if(cityRequest===request)cityLoading=false;}
+ }
+ ufSelect.addEventListener('change',()=>{loadCities(ufSelect.value);});
+ const demoBtn=el('button','Aplicar exemplo: Mogi/SP · Quimica · 201–1.000 funcionarios','btn');
+ demoBtn.type='button';demoBtn.style.gridColumn='1/-1';
+ demoBtn.addEventListener('click',async()=>{
+  ufSelect.value='SP';const cities=await loadCities('SP');
+  const mogi=cities.find(x=>x.label==='Mogi das Cruzes');
+  if(mogi)cityPick.choose([mogi.key]);
+  dddPick.choose(['11']);
+  const chemical=segmentPick.get; // Resolve against tenant-authorized names, not hardcoded segment IDs.
+  const selected=tenantSegments.find(x=>/qu[ií]mic/i.test(String(x.nome||'')));
+  if(selected)segmentPick.choose([String(selected.nome)]);
+  bandPick.choose(['201_500','501_1000']);
+  aiSelect.value='both';
+ });
+ const advanced=doc.createElement('details'),advancedGrid=el('div','','grid');
+ advanced.style.gridColumn='1/-1';advanced.style.padding='7px';advanced.style.border='1px solid var(--borda,#ded8e5)';advanced.style.borderRadius='9px';
+ const advancedHead=doc.createElement('summary');advancedHead.textContent='Filtros avancados (regiao, CNAE, porte e faturamento)';advanced.append(advancedHead,advancedGrid);
+ advancedGrid.style.display='grid';advancedGrid.style.gridTemplateColumns='repeat(auto-fit,minmax(170px,1fr))';advancedGrid.style.gap='8px';
  for(const [name,label,type] of fields){
-  const holder=el('label',label,'campo'),input=doc.createElement('input');
-  input.type=type;input.name=name;input.autocomplete='off';input.maxLength=150;
+  const holder=el('label',label,'campo'),input=doc.createElement('input');input.type=type;input.name=name;input.autocomplete='off';input.maxLength=150;
   if(type==='number'){input.min='0';input.step='1';}
-  holder.appendChild(input);grid.appendChild(holder);els.set(name,input);
+  holder.appendChild(input);advancedGrid.appendChild(holder);els.set(name,input);
  }
- // Selection is sent separately from market filters, and authenticated/validated by the backend.
- const aiHolder=el('label','Motor de pesquisa','campo'),aiSelect=doc.createElement('select');
- for(const [value,label] of [['both','ChatGPT + Claude'],['OpenAI','Somente ChatGPT'],['Anthropic','Somente Claude']]){
-  const opt=doc.createElement('option');opt.value=value;opt.textContent=label;aiSelect.appendChild(opt);
- }
- aiHolder.appendChild(aiSelect);grid.appendChild(aiHolder);
+ grid.append(ufBox,cityPick.wrapper,dddPick.wrapper,segmentPick.wrapper,bandPick.wrapper,advanced);
+ if(!tenantSegments.length)status.textContent='Nenhum segmento autorizado encontrado na carteira. Consulte o cadastro de segmentos.';
  const btn=el('button','BUSCAR EMPRESAS','btn');btn.type='submit';
  const results=el('div','','iad-market-results'),review=el('div','','iad-market-review');
- form.appendChild(grid);form.appendChild(btn);
+ form.appendChild(grid);form.appendChild(demoBtn);form.appendChild(btn);
  root.replaceChildren(el('h2','Pesquisar empresas fora do CRM'),el('p','Pesquisa iniciada manualmente. Fontes, custos e cobertura dependem do provedor contratado. Os dados nao sao fatos confirmados ate verificacao.','small muted'),form,status,results,review);
  const show=(message)=>{if(valid())status.textContent=message;};
  const failureDescription=failures=>{
@@ -191,7 +272,15 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
  }
  form.addEventListener('submit',async ev=>{
   ev.preventDefault();if(!valid())return;
-  let filters;try{filters=normalizeMarketFilters(Object.fromEntries([...els].map(([k,v])=>[k,v.value])));}catch(e){show(e.message);return;}
+  if(cityLoading){show('Aguarde a consulta de cidades no IBGE.');return;}
+  let filters;try{filters=normalizeMarketFilters({
+   ...Object.fromEntries([...els].map(([k,v])=>[k,v.value])),
+   uf:ufSelect.value,
+   municipios:cityPick.get().map(x=>x.value),
+   ddds:dddPick.get().map(x=>x.value),
+   segmentos:segmentPick.get().map(x=>x.value),
+   faixasFuncionarios:bandPick.get().map(x=>x.value)
+  });}catch(e){show(e.message);return;}
   const session=nuvem.sessao(),config=nuvem.config();
   if(!session?.access_token||!config?.url||!config?.chave){show('Autenticacao de nuvem necessaria para pesquisar empresas.');return;}
   if(controller)controller.abort();controller=new AbortController();const seq=++currentRequest;
@@ -227,5 +316,5 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   }catch(e){if(seq===currentRequest&&valid()&&e.name!=='AbortError')show('Falha de rede ao consultar fonte empresarial. Nenhuma alteracao no CRM.');}
   finally{if(seq===currentRequest&&valid())btn.disabled=false;}
  });
- return ()=>{if(controller)controller.abort();currentRequest++;};
+ return ()=>{if(controller)controller.abort();if(cityRequest)cityRequest.abort();currentRequest++;};
 }
