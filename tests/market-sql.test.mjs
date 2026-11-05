@@ -14,3 +14,11 @@ test('RPC requer confirmacao explicita, tenant autorizado e recibo de idempotenc
  assert.match(baseline,/market_import_receipts/);
  assert.match(baseline,/pg_advisory_xact_lock/);
 });
+
+test('RPC de importacao nao expõe IDs de contas de outro vendedor',()=>{
+ // A rotina SECURITY DEFINER consulta contas alem das politicas RLS.
+ // O retorno de um duplicado deve testar a visibilidade antes de divulgar ID.
+ assert.match(baseline,/SELECT c\.id,c\.dono_id INTO v_existing,v_existing_owner FROM public\.contas c/);
+ assert.match(baseline,/v_papel IN \('gestor','admin'\) OR v_existing_owner IS NULL OR v_existing_owner=v_user/);
+ assert.match(baseline,/RETURN pg_catalog\.jsonb_build_object\('status','review_duplicate'\);/);
+});
