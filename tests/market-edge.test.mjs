@@ -395,13 +395,20 @@ test('nao permite pesquisa com auth sem chave publica alguma',async()=>{
  assert.equal(aiCalls(h).length,0);
 });
 
-test('piloto de producao bloqueia vendedor sem papel admin antes da quota e das IAs',async()=>{
- const h=harness({supabaseUrl:'https://drhonmdffhnwamwzynrs.supabase.co',openai:true,role:'gestor'});
+test('piloto de producao bloqueia usuario comum antes da quota e das IAs',async()=>{
+ const h=harness({supabaseUrl:'https://drhonmdffhnwamwzynrs.supabase.co',openai:true,role:'usuario'});
  const res=await h.handle(request(query));
  assert.equal(res.status,403);
- assert.equal((await res.json()).error,'PILOT_ADMIN_ONLY');
+ assert.equal((await res.json()).error,'PILOT_ADMIN_OR_MANAGER_ONLY');
  assert.equal(aiCalls(h).length,0);
  assert.ok(!h.calls.some(x=>x.url.includes('/rpc/iad_market_search_reserve')));
+});
+test('piloto de producao permite gestor autenticado com quota e pesquisa',async()=>{
+ const h=harness({supabaseUrl:'https://drhonmdffhnwamwzynrs.supabase.co',openai:true,role:'gestor'});
+ const res=await h.handle(request(query));
+ assert.equal(res.status,200);
+ assert.equal(aiCalls(h).length,1);
+ assert.ok(h.calls.some(x=>x.url.includes('/rpc/iad_market_search_reserve')));
 });
 test('piloto de producao permite administrador autenticado, respeitando quota',async()=>{
  const h=harness({supabaseUrl:'https://drhonmdffhnwamwzynrs.supabase.co',openai:true,role:'admin'});
