@@ -39,6 +39,10 @@ test('busca ignora acentos e caixa e respeita limite de saída',async()=>{
  const limit=await select(snapshot,{...seller,role:'gestor'},'',1);
  assert.equal(limit.length,1);
 });
+test('admin sem sinalizador autenticado deve negar acesso em vez de herdar carteira de gestor',async()=>{
+ const bad={...seller,role:'admin',admin:false,tenantFilter:'todas'};
+ assert.deepEqual(await select(snapshot,bad,'',50),[]);
+});
 test('escopo sem sessão, conta não identificada ou lista inválida é negado',async()=>{
  assert.deepEqual(await select(snapshot,{...seller,userId:''},'',50),[]);
  assert.deepEqual(await select({contas:[{id:'',tenantId:'tenant-a',nome:'Sem id'}]},seller,'',50),[]);
