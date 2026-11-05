@@ -340,3 +340,39 @@ test('RI-M05: interface apresenta metricas de rejeicao sem dados de empresa e se
   assert.ok(source.includes(label),'missing visual diagnostic '+label);
  assert.match(source,/IAD_MARKET_IMPORT_ENABLED!==true/);
 });
+
+test('RI-M06 DOM: seis etapas e shortlist aparecem na pesquisa real simulada sem gravar CRM',async()=>{
+ const {mountMarketDiscovery}=await import('../src/ri/market-view.mjs');
+ const {root,walk}=fakeMarketDOM(),oldFetch=globalThis.fetch,requests=[];
+ const scope={tenantId:'tenant-a',userId:'user1',token:'ri-m06'};
+ const snapshot={contas:[],oportunidades:[],segmentos:[{tenantId:'tenant-a',ativo:true,nome:'Química e Petroquímica'}]};
+ globalThis.fetch=async(url,options={})=>{
+  requests.push(String(url));
+  if(String(url).includes('servicodados.ibge.gov.br'))
+   return new Response(JSON.stringify([{id:3530607,nome:'Mogi das Cruzes'}]),{status:200});
+  if(String(url).includes('/functions/v1/market-search'))return new Response(JSON.stringify({
+   source:'OpenAI + Claude',retrievedAt:'2026-11-05',usage:[],
+   data:[{cnpj:'11222333000181',nome:'Indústria Exemplo',cidade:'Mogi das Cruzes',uf:'SP',
+    segmento:'Química',fontes:[{url:'https://example.org/industria'}],
+    contatos:[{nome:'Ana Exemplo',cargo:'Diretora Industrial'}],
+    qualificacaoICP:{municipio:'declarado',segmento:'declarado'},
+    providers:['OpenAI','Anthropic']}]
+  }),{status:200});
+  throw Error('URL inesperada '+url);
+ };
+ try{
+  const cleanup=mountMarketDiscovery({root,snapshot,scope,getScopeToken:()=>scope.token,
+   nuvem:{sessao:()=>({access_token:'jwt-test'}),config:()=>({url:'https://safe.supabase.co',chave:'test'})}});
+  const demo=walk(root,n=>n.tagName==='button'&&n.textContent.includes('Aplicar exemplo: Mogi/SP'));
+  assert.ok(demo);await demo.fire('click');
+  const form=walk(root,n=>n.tagName==='form');assert.ok(form);
+  await form.fire('submit');
+  assert.ok(walk(root,n=>n.id==='iad-prospect-agents'));
+  for(const stage of ['Finder','Analyst','Signal Hunter','Enricher','Qualifier','Prioritizer'])
+   assert.ok(walk(root,n=>n.textContent?.startsWith(stage+' · ')),stage+' não aparece no painel');
+  assert.ok(walk(root,n=>n.textContent?.includes('Shortlist para investigação')));
+  assert.ok(walk(root,n=>n.textContent?.includes('Índice de prontidão para revisão')));
+  assert.ok(!requests.some(x=>x.includes('iad_market_import_confirmed')));
+  cleanup();
+ }finally{globalThis.fetch=oldFetch;}
+});
