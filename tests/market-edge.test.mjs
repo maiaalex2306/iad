@@ -576,3 +576,42 @@ test('faixas sem sobreposicao e DDD nao reconhecido: erro antes da quota',async(
  assert.equal(aiCalls(h).length,0);
  assert.equal(h.calls.filter(c=>c.url.includes('iad_market_search_reserve')).length,0);
 });
+
+test('RI-M03: todos os criterios declarados ainda sao nao verificados documentalmente',async()=>{
+ const mock={...marketMogi,ddd:'11',funcionarios:205};
+ const h=harness({openai:true,openaiResponse:multiProvider(mock)});
+ const response=await h.handle(request({action:'search',provider:'OpenAI',filters:multiFilters}));
+ assert.equal(response.status,200);
+ const item=(await response.json()).data[0];assert.ok(item);
+ assert.equal(item.qualificacaoICP.municipio,'declarado');
+ assert.equal(item.qualificacaoICP.ddd,'declarado');
+ assert.equal(item.qualificacaoICP.segmento,'declarado');
+ assert.equal(item.qualificacaoICP.funcionarios,'declarado');
+ assert.equal(item.qualificacaoICP.statusGeral,'declarado_nao_verificado');
+ assert.equal(item.territorioCorroborado,false);
+});
+test('RI-M03: sem DDD, sem funcionarios e sem segmento a candidata permanece pendente',async()=>{
+ const mock={...marketMogi,ddd:null,funcionarios:null,segmento:null};
+ const h=harness({openai:true,openaiResponse:multiProvider(mock)});
+ const response=await h.handle(request({action:'search',provider:'OpenAI',filters:multiFilters}));
+ assert.equal(response.status,200);
+ const item=(await response.json()).data[0];assert.ok(item);
+ assert.equal(item.qualificacaoICP.ddd,'pendente');
+ assert.equal(item.qualificacaoICP.funcionarios,'pendente');
+ assert.equal(item.qualificacaoICP.segmento,'pendente');
+ assert.equal(item.qualificacaoICP.statusGeral,'pendente');
+});
+test('RI-M03: sinonimo setorial nao recebe falsa confirmacao automatica',async()=>{
+ const mock={...marketMogi,ddd:'11',segmento:'Industria quimica'};
+ const h=harness({openai:true,openaiResponse:multiProvider(mock)});
+ const response=await h.handle(request({action:'search',provider:'OpenAI',filters:multiFilters}));
+ assert.equal(response.status,200);
+ const item=(await response.json()).data[0];assert.ok(item);
+ assert.equal(item.qualificacaoICP.segmento,'a_confirmar');
+ assert.equal(item.qualificacaoICP.statusGeral,'pendente');
+});
+test('RI-M03: DDD explicitamente divergente continua fora do recorte',async()=>{
+ const h=harness({openai:true,openaiResponse:multiProvider({...marketMogi,ddd:'12'})});
+ const response=await h.handle(request({action:'search',provider:'OpenAI',filters:multiFilters}));
+ assert.equal(response.status,200);assert.equal((await response.json()).data.length,0);
+});
