@@ -87,7 +87,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   },choose(keys){const wanted=new Set(keys);chosen=new Map(items.filter(x=>wanted.has(x.key)).slice(0,limit).map(x=>[x.key,x]));render();},clear(){chosen.clear();render();}};
  }
  const ufBox=el('label','Estado (UF)','campo'),ufSelect=doc.createElement('select');
- ufSelect.name='uf';ufSelect.appendChild(new Option('Selecione o estado',''));
+ ufSelect.name='uf';const emptyState=doc.createElement('option');emptyState.value='';emptyState.textContent='Selecione o estado';ufSelect.appendChild(emptyState);
  for(const uf of Object.keys(UF_IBGE).sort()){const opt=doc.createElement('option');opt.value=uf;opt.textContent=uf;ufSelect.appendChild(opt);}
  ufBox.appendChild(ufSelect);
  const cityPick=picker('Cidades (codigos IBGE)','Selecione uma ou mais cidades',15),dddPick=picker('DDDs','Selecione um ou mais DDDs',20),segmentPick=picker('Segmentos cadastrados','Selecione um ou mais segmentos',12),bandPick=picker('Faixas de funcionarios','Selecione uma ou mais faixas',8);
@@ -127,7 +127,6 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   const mogi=cities.find(x=>x.label==='Mogi das Cruzes');
   if(mogi)cityPick.choose([mogi.key]);
   dddPick.choose(['11']);
-  const chemical=segmentPick.get; // Resolve against tenant-authorized names, not hardcoded segment IDs.
   const selected=tenantSegments.find(x=>/qu[ií]mic/i.test(String(x.nome||'')));
   if(selected)segmentPick.choose([String(selected.nome)]);
   bandPick.choose(['201_500','501_1000']);
