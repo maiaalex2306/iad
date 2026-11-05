@@ -19,11 +19,13 @@ const responseClaude=(search=true,cited=true)=>({
  {type:'text',text:marketJSON,citations:cited?[{type:'webpage_citation',url:URL_COMPANY,title:'Registro verificado'}]:[]}],
  usage:{input_tokens:100,output_tokens:150,server_tool_use:{web_search_requests:1}}
 });
-function harness({openai=false,claude=false,role='usuario',quotaAllowed=true,quotaUnavailable=false,openaiStatus=200,claudeStatus=200,openaiResponse=responseOpenAI(),claudeResponse=responseClaude()}={}){
+function harness({anonMode='legacy',openai=false,claude=false,role='usuario',quotaAllowed=true,quotaUnavailable=false,openaiStatus=200,claudeStatus=200,openaiResponse=responseOpenAI(),claudeResponse=responseClaude()}={}){
  const calls=[];let handler=null;
  const sandbox={Request,Response,AbortSignal,URL,TextDecoder,console,Deno:{env:{get(k){
   if(k==='SUPABASE_URL')return 'https://safe.supabase.co';
-  if(k==='SUPABASE_ANON_KEY')return 'safe-public-key';
+  if(k==='SUPABASE_ANON_KEY')return anonMode==='legacy'?'safe-public-key':undefined;
+  if(k==='IAD_CHAVE_PUBLICA')return anonMode==='iad'?'safe-public-key':undefined;
+  if(k==='SUPABASE_PUBLISHABLE_KEY')return anonMode==='publishable'?'safe-public-key':undefined;
   if(k==='IA_CHAVE_OPENAI')return openai?'sk-test-openai':undefined;
   if(k==='IA_CHAVE_ANTHROPIC')return claude?'sk-ant-test-claude':undefined;
   if(k==='IA_MODELO_OPENAI')return 'gpt-5';
@@ -374,4 +376,21 @@ test('Claude com pause_turn nao certifica pesquisa terminada',async()=>{
  const h=harness({claude:true,claudeResponse:incomplete});
  const res=await h.handle(request(query));
  assert.equal(res.status,502);
+});
+
+test('usa chave publica IAD ja existente quando SUPABASE_ANON_KEY nao esta definida',async()=>{
+ const h=harness({openai:true,anonMode:'iad'}),res=await h.handle(request(query));
+ assert.equal(res.status,200);
+ assert.equal(aiCalls(h).length,1);
+});
+test('aceita SUPABASE_PUBLISHABLE_KEY existente com login e cota validados',async()=>{
+ const h=harness({claude:true,anonMode:'publishable'}),res=await h.handle(request(query));
+ assert.equal(res.status,200);
+ assert.equal(aiCalls(h).length,1);
+});
+test('nao permite pesquisa com auth sem chave publica alguma',async()=>{
+ const h=harness({openai:true,anonMode:'missing'}),res=await h.handle(request(query));
+ assert.equal(res.status,503);
+ assert.equal((await res.json()).error,'SERVER_NOT_CONFIGURED');
+ assert.equal(aiCalls(h).length,0);
 });
