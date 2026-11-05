@@ -423,3 +423,15 @@ test('ambiente de homologacao continua permitindo papel usuario com quota',async
  assert.equal(res.status,200);
  assert.equal(aiCalls(h).length,1);
 });
+
+// Prevent regression to the 35s abort that caused both production providers
+// to fail after ~36s. Supabase request idle timeout is 150s.
+test('tempo maximo de busca maior que 35s e menor que idle 150s, sem retry',()=>{
+ // The timeout is now in an explicit transport try/catch.
+ assert.match(source,/AbortSignal\.timeout\(80000\)/);
+ assert.doesNotMatch(source,/AbortSignal\.timeout\(35000\)/);
+ assert.match(source,/category:code,elapsedMs:/);
+ assert.match(source,/provider_http/);
+ assert.match(source,/provider_invalid_json/);
+ assert.match(source,/search_context_size:'low'/);
+});
