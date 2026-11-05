@@ -57,11 +57,28 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   if(type==='number'){input.min='0';input.step='1';}
   holder.appendChild(input);grid.appendChild(holder);els.set(name,input);
  }
+ // Selection is sent separately from market filters, and authenticated/validated by the backend.
+ const aiHolder=el('label','Motor de pesquisa','campo'),aiSelect=doc.createElement('select');
+ for(const [value,label] of [['both','ChatGPT + Claude'],['OpenAI','Somente ChatGPT'],['Anthropic','Somente Claude']]){
+  const opt=doc.createElement('option');opt.value=value;opt.textContent=label;aiSelect.appendChild(opt);
+ }
+ aiHolder.appendChild(aiSelect);grid.appendChild(aiHolder);
  const btn=el('button','BUSCAR EMPRESAS','btn');btn.type='submit';
  const results=el('div','','iad-market-results'),review=el('div','','iad-market-review');
  form.appendChild(grid);form.appendChild(btn);
  root.replaceChildren(el('h2','Pesquisar empresas fora do CRM'),el('p','Pesquisa iniciada manualmente. Fontes, custos e cobertura dependem do provedor contratado. Os dados nao sao fatos confirmados ate verificacao.','small muted'),form,status,results,review);
  const show=(message)=>{if(valid())status.textContent=message;};
+ const failureDescription=failures=>{
+  if(!Array.isArray(failures))return '';
+  const labels={TIMEOUT:'tempo limite excedido',FETCH_FAILURE:'falha de conexao',INVALID_JSON:'resposta invalida',
+   WEB_SEARCH_NOT_COMPLETED:'busca web nao concluida',UNKNOWN_FAILURE:'erro nao classificado'};
+  const safe=failures.slice(0,2).filter(x=>x&&['OpenAI','Anthropic'].includes(x.provider)).map(x=>{
+   const category=String(x.category||'');
+   const description=labels[category]||(/^IA_HTTP_(4|5)[0-9]{2}$/.test(category)?'API HTTP '+category.slice(-3):'erro do provedor');
+   return (x.provider==='OpenAI'?'ChatGPT':'Claude')+': '+description;
+  });
+  return safe.join(' | ');
+ };
  // Stable review key for candidates without CNPJ; never an import identity.
  const researchKey=c=>c.cnpj||'pending:'+String(c.nome||c.razaoSocial||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()+'|'+String(c.cidade||'').toLowerCase()+'|'+String(c.uf||'');
  function renderCompanies(data,source,asOf){
@@ -182,20 +199,23 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   try{
    const response=await fetch(config.url.replace(/\/$/,'')+'/functions/v1/market-search',{method:'POST',
     headers:{'Content-Type':'application/json','apikey':config.chave,'Authorization':'Bearer '+session.access_token},
-    body:JSON.stringify({action:'search',filters}),signal:controller.signal});
+    body:JSON.stringify({action:'search',filters,provider:aiSelect.value}),signal:controller.signal});
    const payload=await response.json();
    if(seq!==currentRequest||!valid())return;
    if(!response.ok){
     const messages={'AI_NOT_CONFIGURED':'Nenhum motor de IA habilitado para pesquisa no IaD.',
-      'AI_SEARCH_UNAVAILABLE':'As IAs configuradas nao conseguiram consultar a web agora.',
+      'AI_SEARCH_UNAVAILABLE':'A pesquisa web nao foi concluida.',
+      'INVALID_PROVIDER':'Motor de IA invalido.',
+      'AI_PROVIDER_NOT_CONFIGURED':'O motor selecionado nao esta configurado.',
       'SEARCH_QUOTA_EXCEEDED':'Limite diario de pesquisas atingido. Nao houve nova chamada as IAs.',
       'SEARCH_QUOTA_UNAVAILABLE':'Controle de quota indisponivel. Pesquisa interrompida sem consultar as IAs.',
       'DDD_MAPPING_PENDING':'O DDD precisa ser mapeado para municipios antes da pesquisa.'};
-    show(payload?.message||messages[payload?.error]||'Pesquisa indisponivel: '+(payload?.error||response.status));return;
+    const failure=failureDescription(payload?.failures);
+    show((payload?.message||messages[payload?.error]||'Pesquisa indisponivel: '+(payload?.error||response.status))+(failure?' Motivo: '+failure+'.':''));return;
    }
    const companies=normalizeMarketCompanies(payload.data||[],{source:payload.source||'Nao identificada',retrievedAt:payload.retrievedAt||''});
    const unavailable=Array.isArray(payload.failedProviders)?payload.failedProviders.filter(p=>p==='OpenAI'||p==='Anthropic'):[];
-   const partialWarning=payload.partial===true?('ATENCAO: pesquisa parcial. Falha em '+(unavailable.join(' e ')||'um provedor')+'. '):'';
+   const partialWarning=payload.partial===true?('ATENCAO: pesquisa parcial. Falha em '+(unavailable.join(' e ')||'um provedor')+'. '+failureDescription(payload.failures)+'. '):'';
    const usageText=Array.isArray(payload.usage)?payload.usage.filter(u=>u&&['OpenAI','Anthropic'].includes(u.provider)).map(u=>{
     const inTokens=Number.isSafeInteger(u.inputTokens)?u.inputTokens:'nao informado';
     const outTokens=Number.isSafeInteger(u.outputTokens)?u.outputTokens:'nao informado';
