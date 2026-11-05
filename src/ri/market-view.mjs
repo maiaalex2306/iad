@@ -194,7 +194,9 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   if(!valid())return;
   selected.clear();importKeys.clear();review.replaceChildren();results.replaceChildren();
   const pending=data.filter(c=>!c.cnpj).length;
+  const pendingICP=data.filter(c=>c.qualificacaoICP?.statusGeral!=='declarado_nao_verificado').length;
   results.appendChild(el('h3',data.length+' empresas candidatas encontradas na web · '+source));
+  results.appendChild(el('p',pendingICP+' candidata(s) com pelo menos um criterio ICP pendente ou sem detalhamento; nenhum dado de porte foi confirmado independentemente.','small muted'));
   results.appendChild(el('p',pending+' candidata(s) com CNPJ pendente, somente para revisao; nenhuma pode ser importada sem validacao.','small muted'));
   results.appendChild(el('p','Dados consultados em '+asOf+'. Esta pagina nao representa necessariamente todas as empresas da regiao.','small muted'));
   const snapshotNow=snapshot;
@@ -206,7 +208,17 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
    card.appendChild(el('p',(company.cnpj?'CNPJ '+company.cnpj:'CNPJ pendente — validar identidade')+' · '+(company.segmento||'Setor nao informado')+' · '+(company.porte||'Porte nao informado'),'small muted'));
    card.appendChild(el('p','Situacao CRM: '+statusMatch+(plan.existingOpportunityId?' · Ja existe oportunidade em Prospecção':''),'small'));
    card.appendChild(el('p','Funcionarios: '+(company.funcionarios===null?'indisponivel':String(company.funcionarios))+' (nao confirmado) · Faturamento: '+(company.faturamento===null?'indisponivel':String(company.faturamento))+' (nao confirmado)','small'));
-   if(company.faixaFuncionariosStatus==='pendente')card.appendChild(el('p','Faixa de funcionarios pendente: a IA nao encontrou quantidade verificavel.','small muted'));
+   const icp=company.qualificacaoICP;
+   if(icp){
+    const labels={municipio:'Municipio',ddd:'DDD',segmento:'Segmento',funcionarios:'Faixa de funcionarios'};
+    const desc={declarado:'informado pela IA (verificar fonte)',pendente:'pendente de informacao',a_confirmar:'classificacao a confirmar',nao_solicitado:'nao solicitado'};
+    card.appendChild(el('h5','Aderencia ao ICP — declaracoes ainda nao verificadas'));
+    for(const key of Object.keys(labels)){
+     if(icp[key]==='nao_solicitado')continue;
+     card.appendChild(el('p',labels[key]+': '+(desc[icp[key]]||'pendente de verificacao'),'small muted'));
+    }
+   }
+   if(company.faixaFuncionariosStatus==='pendente')card.appendChild(el('p','Faixa de funcionarios pendente: a IA nao informou quantidade comprovada.','small muted'));
    if(company.telefone)card.appendChild(el('p','Telefone corporativo informado: '+company.telefone,'small'));
    if(company.contatos.length){
     card.appendChild(el('h5','Contatos fornecidos pela fonte — confirmar antes de usar'));
