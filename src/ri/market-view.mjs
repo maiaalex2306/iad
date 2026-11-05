@@ -166,6 +166,11 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
  }
  grid.append(ufBox,cityPick.wrapper,dddPick.wrapper,segmentPick.wrapper,bandPick.wrapper,advanced);
  if(!tenantSegments.length)status.textContent='Nenhum segmento autorizado encontrado na carteira. Consulte o cadastro de segmentos.';
+ const aiHolder=el('label','Motor de pesquisa','campo'),aiSelect=doc.createElement('select');
+ for(const [value,label] of [['both','ChatGPT + Claude'],['OpenAI','Somente ChatGPT'],['Anthropic','Somente Claude']]){
+  const option=doc.createElement('option');option.value=value;option.textContent=label;aiSelect.appendChild(option);
+ }
+ aiHolder.appendChild(aiSelect);grid.appendChild(aiHolder);aiSelect.value='both';
  const btn=el('button','BUSCAR EMPRESAS','btn');btn.type='submit';
  const results=el('div','','iad-market-results'),review=el('div','','iad-market-review');
  form.appendChild(grid);form.appendChild(demoBtn);form.appendChild(btn);
