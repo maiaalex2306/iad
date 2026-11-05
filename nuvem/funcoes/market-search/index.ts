@@ -186,7 +186,7 @@ Deno.serve(async req=>{
  if(Number(req.headers.get('content-length')||0)>12000)return output({error:'REQUEST_TOO_LARGE'},413,origin);
  const access=req.headers.get('authorization')||'';
  if(!/^Bearer [A-Za-z0-9._-]{60,}$/.test(access))return output({error:'AUTH_REQUIRED'},401,origin);
- const url=Deno.env.get('SUPABASE_URL'),anon=Deno.env.get('SUPABASE_ANON_KEY');
+ const url=Deno.env.get('SUPABASE_URL'),anon=Deno.env.get('IAD_CHAVE_PUBLICA')||Deno.env.get('SUPABASE_PUBLISHABLE_KEY')||Deno.env.get('SUPABASE_ANON_KEY');
  if(!url||!anon)return output({error:'SERVER_NOT_CONFIGURED'},503,origin);
  try {
   const identity=await fetch(url+'/auth/v1/user',{headers:{Authorization:access,apikey:anon},signal:AbortSignal.timeout(6500)});
