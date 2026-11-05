@@ -3,6 +3,7 @@
  */
 import {normalizeMarketFilters,normalizeMarketCompanies,proposePipelineAction,buildMarketImportRequest,isReviewableSourceURL,UF_IBGE,MARKET_DDDS,MARKET_BANDS} from './market-contract.mjs';
 import {buildProspectWorkflow} from './prospect-agents.mjs';
+import {mountMarketInvestigation} from './market-investigation.mjs';
 /**
  * Pull only the server-confirmed RI-M01 import into the local Pipeline.
  * Never upload local edits. Refuse the pull when CAS/pending state is unknown.
@@ -50,6 +51,7 @@ const fields=[
 export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,getSnapshot}={}){
  if(!root||!root.ownerDocument||!snapshot||!scope||typeof getScopeToken!=='function'||!nuvem)throw Error('Sessao e dados autorizados obrigatorios');
  const doc=root.ownerDocument,els=new Map();let currentRequest=0,controller=null,selected=new Set(),importKeys=new Map(),importing=false;
+ const cancelInvestigations=new Set();
  const valid=()=>root.isConnected&&getScopeToken()===scope.token;
  const el=(tag,text='',className='')=>{const n=doc.createElement(tag);n.textContent=String(text);if(className)n.className=className;return n};
  const form=doc.createElement('form'),grid=el('div','','grid'),status=el('p','Selecione o territorio, o segmento e as faixas de funcionarios. Nada sera importado automaticamente.','small muted');
@@ -242,6 +244,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   const workflow=buildProspectWorkflow({companies:data,snapshot,scope});
   const ranked=new Map(workflow.candidates.map(x=>[x.company,x]));
   const ordered=workflow.candidates.map(x=>x.company);
+  for(const stop of cancelInvestigations)stop();cancelInvestigations.clear();
   selected.clear();importKeys.clear();review.replaceChildren();results.replaceChildren();
   const machine=el('section','','card');machine.id='iad-prospect-agents';
   machine.appendChild(el('h3','Máquina de Prospecção — seis etapas auditáveis'));
@@ -290,6 +293,8 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
    }
    card.appendChild(el('p',(company.cnpj?'CNPJ '+company.cnpj:'CNPJ pendente — validar identidade')+' · '+(company.segmento||'Setor nao informado')+' · '+(company.porte||'Porte nao informado'),'small muted'));
    card.appendChild(el('p','Situacao CRM: '+statusMatch+(plan.existingOpportunityId?' · Ja existe oportunidade em Prospecção':''),'small'));
+   cancelInvestigations.add(mountMarketInvestigation({card,company,doc,nuvem,valid,
+    provider:()=>aiSelect.value,getSequence:()=>currentRequest}));
    card.appendChild(el('p','Funcionarios: '+(company.funcionarios===null?'indisponivel':String(company.funcionarios))+' (nao confirmado) · Faturamento: '+(company.faturamento===null?'indisponivel':String(company.faturamento))+' (nao confirmado)','small'));
    const icp=company.qualificacaoICP;
    if(icp){
@@ -410,7 +415,9 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   });}catch(e){show(e.message);return;}
   const session=nuvem.sessao(),config=nuvem.config();
   if(!session?.access_token||!config?.url||!config?.chave){show('Autenticacao de nuvem necessaria para pesquisar empresas.');return;}
-  if(controller)controller.abort();controller=new AbortController();const seq=++currentRequest;
+  if(controller)controller.abort();
+  for(const stop of cancelInvestigations)stop();cancelInvestigations.clear();
+  controller=new AbortController();const seq=++currentRequest;
   results.replaceChildren();review.replaceChildren();btn.disabled=true;show('Pesquisando sites e noticias com as IAs configuradas no IaD...');
   try{
    const response=await fetch(config.url.replace(/\/$/,'')+'/functions/v1/market-search',{method:'POST',
@@ -459,5 +466,5 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   }catch(e){if(seq===currentRequest&&valid()&&e.name!=='AbortError')show('Falha de rede ao consultar fonte empresarial. Nenhuma alteracao no CRM.');}
   finally{if(seq===currentRequest&&valid())btn.disabled=false;}
  });
- return ()=>{if(controller)controller.abort();if(preflightController)preflightController.abort();if(cityRequest)cityRequest.abort();currentRequest++;};
+ return ()=>{if(controller)controller.abort();for(const stop of cancelInvestigations)stop();cancelInvestigations.clear();if(preflightController)preflightController.abort();if(cityRequest)cityRequest.abort();currentRequest++;};
 }
