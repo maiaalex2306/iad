@@ -17,6 +17,12 @@ test('vendedor vê apenas próprias contas e contas sem dono na própria empresa
  const rows=await select(snapshot,seller,'',50);
  assert.deepEqual(rows.map(x=>x.id),['c1','c4']);
 });
+test('perfil usuario nativo do IaD equivale ao vendedor: escopo próprio e sem dono',async()=>{
+ const rows=await select(snapshot,{...seller,role:'usuario'},'',50);
+ assert.deepEqual(rows.map(x=>x.id),['c1','c4']);
+ const wrongTenant=await select(snapshot,{...seller,role:'usuario',tenantId:'tenant-b'},'',50);
+ assert.deepEqual(wrongTenant.map(x=>x.id),['c3']);
+});
 test('gestor vê todas as contas apenas na empresa atual',async()=>{
  const rows=await select(snapshot,{...seller,role:'gestor'},'',50);
  assert.deepEqual(rows.map(x=>x.id),['c1','c2','c4']);
