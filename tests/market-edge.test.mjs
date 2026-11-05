@@ -395,13 +395,20 @@ test('nao permite pesquisa com auth sem chave publica alguma',async()=>{
  assert.equal(aiCalls(h).length,0);
 });
 
-test('piloto de producao bloqueia vendedor sem papel admin antes da quota e das IAs',async()=>{
- const h=harness({supabaseUrl:'https://drhonmdffhnwamwzynrs.supabase.co',openai:true,role:'gestor'});
+test('piloto de producao bloqueia usuario comum antes da quota e das IAs',async()=>{
+ const h=harness({supabaseUrl:'https://drhonmdffhnwamwzynrs.supabase.co',openai:true,role:'usuario'});
  const res=await h.handle(request(query));
  assert.equal(res.status,403);
- assert.equal((await res.json()).error,'PILOT_ADMIN_ONLY');
+ assert.equal((await res.json()).error,'PILOT_ADMIN_OR_MANAGER_ONLY');
  assert.equal(aiCalls(h).length,0);
  assert.ok(!h.calls.some(x=>x.url.includes('/rpc/iad_market_search_reserve')));
+});
+test('piloto de producao permite gestor autenticado com quota e pesquisa',async()=>{
+ const h=harness({supabaseUrl:'https://drhonmdffhnwamwzynrs.supabase.co',openai:true,role:'gestor'});
+ const res=await h.handle(request(query));
+ assert.equal(res.status,200);
+ assert.equal(aiCalls(h).length,1);
+ assert.ok(h.calls.some(x=>x.url.includes('/rpc/iad_market_search_reserve')));
 });
 test('piloto de producao permite administrador autenticado, respeitando quota',async()=>{
  const h=harness({supabaseUrl:'https://drhonmdffhnwamwzynrs.supabase.co',openai:true,role:'admin'});
@@ -415,4 +422,16 @@ test('ambiente de homologacao continua permitindo papel usuario com quota',async
  const res=await h.handle(request(query));
  assert.equal(res.status,200);
  assert.equal(aiCalls(h).length,1);
+});
+
+// Prevent regression to the 35s abort that caused both production providers
+// to fail after ~36s. Supabase request idle timeout is 150s.
+test('tempo maximo de busca maior que 35s e menor que idle 150s, sem retry',()=>{
+ // The timeout is now in an explicit transport try/catch.
+ assert.match(source,/AbortSignal\.timeout\(80000\)/);
+ assert.doesNotMatch(source,/AbortSignal\.timeout\(35000\)/);
+ assert.match(source,/category:code,elapsedMs:/);
+ assert.match(source,/provider_http/);
+ assert.match(source,/provider_invalid_json/);
+ assert.match(source,/search_context_size:'low'/);
 });
