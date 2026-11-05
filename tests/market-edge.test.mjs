@@ -792,3 +792,64 @@ test('RI-M05: pesquisa web completada sem candidatas e distinguida de candidatos
  assert.equal(body.diagnostics.rejectedUncitedSource,0);
  assert.equal(body.diagnostics.accepted,0);
 });
+
+test('RI-M08: investigação individual exige alvo válido antes de reservar crédito',async()=>{
+ const h=harness({openai:true});
+ const bad={action:'investigate',filters:query.filters,target:{cnpj:'12345678901234',nome:'Empresa A'}};
+ const res=await h.handle(request(bad));
+ assert.equal(res.status,422);
+ assert.equal((await res.json()).error,'INVALID_INVESTIGATION_TARGET');
+ assert.equal(aiCalls(h).length,0);
+ assert.ok(!h.calls.some(c=>c.url.includes('iad_market_search_reserve')));
+});
+test('RI-M08: investigação exige cidade, UF e segmento, sem custo quando inválida',async()=>{
+ const h=harness({openai:true});
+ const res=await h.handle(request({action:'investigate',
+  target:{cnpj:candidate.cnpj,nome:candidate.nome},
+  filters:{uf:'SP',segmento:'Quimico'}}));
+ assert.equal(res.status,422);
+ assert.equal((await res.json()).error,'INVESTIGATION_REQUIRES_EXACT_TERRITORY');
+ assert.equal(aiCalls(h).length,0);
+});
+test('RI-M08: Analyst executa nova pesquisa web com CNPJ exato e fonte citada',async()=>{
+ const h=harness({openai:true});
+ const q={action:'investigate',target:{cnpj:candidate.cnpj,nome:candidate.nome},filters:query.filters};
+ const res=await h.handle(request(q));
+ assert.equal(res.status,200);
+ const body=await res.json();
+ assert.equal(body.action,'investigate');
+ assert.equal(body.targetMatch,'CNPJ_RELATADO_PELO_PROVEDOR');
+ assert.equal(body.data.length,1);assert.equal(body.data[0].cnpj,candidate.cnpj);
+ assert.equal(body.hasMore,false);assert.equal(body.coverage,'exploratoria');
+ const calls=aiCalls(h);assert.equal(calls.length,1);
+ assert.match(JSON.stringify(calls[0].body),new RegExp(candidate.cnpj));
+ assert.match(JSON.stringify(calls[0].body),/INVESTIGA/);
+ const reserve=h.calls.findIndex(c=>c.url.includes('iad_market_search_reserve'));
+ const api=h.calls.findIndex(c=>c.url.includes('api.openai.com/v1/responses'));
+ assert.ok(reserve>=0&&api>reserve);
+ assert.equal(h.calls.filter(c=>c.url.includes('/rpc/iad_market_search_reserve')).length,1);
+});
+test('RI-M08: um resultado com outro CNPJ nunca é promovido à empresa investigada',async()=>{
+ const h=harness({openai:true});
+ const q={action:'investigate',
+  target:{cnpj:'22333444000181',nome:'Empresa B'},filters:query.filters};
+ const res=await h.handle(request(q));
+ assert.equal(res.status,200);
+ const body=await res.json();
+ assert.equal(body.data.length,0);
+ assert.equal(body.targetMatch,'CNPJ_NAO_CORROBORADO');
+ assert.equal(body.diagnostics.accepted,0);
+});
+test('RI-M08: cota e autorização bloqueiam novas pesquisas de investigação',async()=>{
+ const q={action:'investigate',target:{cnpj:candidate.cnpj,nome:candidate.nome},filters:query.filters};
+ const quota=harness({openai:true,quotaAllowed:false}),a=await quota.handle(request(q));
+ assert.equal(a.status,429);assert.equal(aiCalls(quota).length,0);
+ const prod=harness({openai:true,supabaseUrl:'https://drhonmdffhnwamwzynrs.supabase.co',role:'usuario'});
+ const b=await prod.handle(request(q));
+ assert.equal(b.status,403);assert.equal(aiCalls(prod).length,0);
+});
+test('RI-M08: provedor sem web_search real não pode corroborar alvo',async()=>{
+ const q={action:'investigate',target:{cnpj:candidate.cnpj,nome:candidate.nome},filters:query.filters};
+ const h=harness({openai:true,openaiResponse:responseOpenAI(false)}),res=await h.handle(request(q));
+ assert.equal(res.status,502);assert.equal((await res.json()).error,'AI_SEARCH_UNAVAILABLE');
+});

@@ -410,3 +410,51 @@ test('P0: interface só torna clicáveis fontes públicas e mostra lacunas de IC
  assert.match(source,/safeSources=company\.fontes\.filter\(f=>isReviewableSourceURL\(f\?\.url\)\)/);
  assert.match(source,/totals\.icpIncomplete/);
 });
+
+test('RI-M08 DOM: botão Analyst consulta CNPJ individual sem atualizar Pipeline ou shortlist',async()=>{
+ const {mountMarketInvestigation}=await import('../src/ri/market-investigation.mjs');
+ const {root,walk}=fakeMarketDOM(),doc=root.ownerDocument,requests=[],original=globalThis.fetch;
+ const candidate={cnpj:'11222333000181',nome:'Empresa A',cidade:'Jacarei',uf:'SP',segmento:'Quimico'};
+ let seq=1;
+ globalThis.fetch=async(url,opts={})=>{
+  requests.push({url:String(url),method:opts.method,body:JSON.parse(opts.body)});
+  return new Response(JSON.stringify({
+   action:'investigate',source:'Busca web independente',retrievedAt:'2026-11-05',providers:['OpenAI'],usage:[{provider:'OpenAI',webSearchRequests:1}],
+   data:[{...candidate,razaoSocial:'Empresa A',fontes:[{url:'https://example.org/empresa-a',titulo:'Página citada'}],contatos:[],noticias:[]}]
+  }),{status:200});
+ };
+ try{
+  const stop=mountMarketInvestigation({card:root,company:candidate,doc,
+   nuvem:{sessao:()=>({access_token:'test-auth'}),config:()=>({url:'https://safe.supabase.co',chave:'public-test'})},
+   valid:()=>true,provider:()=> 'OpenAI',getSequence:()=>seq});
+  const b=walk(root,x=>x.tagName==='button'&&x.textContent.includes('INVESTIGAR EMPRESA'));
+  assert.ok(b);
+  await b.fire('click');
+  assert.equal(requests.length,1);
+  assert.equal(requests[0].method,'POST');
+  assert.equal(requests[0].body.action,'investigate');
+  assert.deepEqual(requests[0].body.target,{cnpj:candidate.cnpj,nome:candidate.nome});
+  assert.equal(requests[0].body.filters.limit,1);
+  assert.ok(!requests.some(x=>x.url.includes('iad_market_import_confirmed')));
+  assert.ok(walk(root,x=>x.tagName==='h5'&&x.textContent.includes('Analyst')));
+  assert.ok(walk(root,x=>x.tagName==='a'&&x.href==='https://example.org/empresa-a'));
+  assert.ok(walk(root,x=>x.textContent?.includes('NÃO foi incorporado ao CRM')));
+  assert.equal(b.disabled,true);
+  await b.fire('click');assert.equal(requests.length,1,'Um segundo clique não deve cobrar nova pesquisa');
+  stop();seq++;
+ }finally{globalThis.fetch=original;}
+});
+test('RI-M08 DOM: sem sessão não consome pesquisa nem quota',async()=>{
+ const {mountMarketInvestigation}=await import('../src/ri/market-investigation.mjs');
+ const {root,walk}=fakeMarketDOM(),doc=root.ownerDocument,old=globalThis.fetch;let calls=0;
+ globalThis.fetch=async()=>{calls++;throw Error('No HTTP expected');};
+ try{
+  const stop=mountMarketInvestigation({card:root,
+   company:{cnpj:'11222333000181',nome:'Empresa A',uf:'SP',cidade:'Jacarei',segmento:'Quimico'},
+   doc,nuvem:{sessao:()=>null,config:()=>({})},valid:()=>true,provider:()=> 'both',getSequence:()=>0});
+  const b=walk(root,x=>x.tagName==='button'&&x.textContent.includes('INVESTIGAR'));
+  assert.ok(b);await b.fire('click');assert.equal(calls,0);
+  assert.ok(walk(root,x=>x.textContent?.includes('Sessão de nuvem necessária')));
+  stop();
+ }finally{globalThis.fetch=old;}
+});
