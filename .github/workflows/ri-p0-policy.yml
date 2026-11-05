@@ -1,0 +1,35 @@
+name: RI-00 — Authorization and dry-run policy
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - 'nuvem/revenue-intelligence/**'
+      - 'scripts/ri-*.test.cjs'
+      - '.github/workflows/ri-p0-policy.yml'
+      - 'docs/superpowers/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  authorization:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: RI-00 syntax
+        run: |
+          node --check nuvem/revenue-intelligence/dispatch-policy.mjs
+          node --check nuvem/revenue-intelligence/intent.mjs
+          node --check nuvem/revenue-intelligence/dry-run.mjs
+      - name: RI-00 policy, fingerprints and dry-run
+        run: node --test scripts/ri-*.test.cjs
+      - name: Existing PWA and CAS no-regression gates
+        run: |
+          node scripts/verificar-versao-shell.cjs
+          node --test scripts/p0-cas-cross-instance.test.cjs
+          node --test scripts/p0-cas-missing-base.test.cjs
+          node --test scripts/p0-cas-readonly-portfolio.test.cjs
+          node --test scripts/p0-cas-failclosed.test.cjs
