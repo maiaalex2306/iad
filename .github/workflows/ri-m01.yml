@@ -19,7 +19,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - run: node --test tests/market-contract.test.mjs tests/market-edge.test.mjs tests/market-sql.test.mjs
+      - run: node --test tests/market-contract.test.mjs tests/market-edge.test.mjs tests/market-sql.test.mjs tests/market-staging-e2e.test.mjs
       - run: node --check src/ri/market-contract.mjs
       - run: node --check src/ri/market-view.mjs
       # Live perimeter smoke against homologation only. No API keys or paid AI calls.
