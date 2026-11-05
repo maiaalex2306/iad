@@ -4,13 +4,13 @@
  * DOM strings are displayed with textContent only.
  */
 import {buildAccountBriefing} from './account-briefing.mjs';
-import {buildPortfolioAnalytics} from './portfolio-analytics.mjs';
+import {buildPortfolioAnalytics, localBusinessDate} from './portfolio-analytics.mjs';
 
 const id = value => typeof value === 'string' && value.trim().length > 0;
 const fold = value => String(value == null ? '' : value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 const str = (value,fallback='') => typeof value==='string' && value.trim() ? value.trim().slice(0,200) : fallback;
 const usableScope = scope => !!scope && id(scope.userId) &&
-  ['vendedor','gestor','admin'].includes(scope.role) &&
+  ['usuario','vendedor','gestor','admin'].includes(scope.role) &&
   (id(scope.tenantId) || (scope.role === 'admin' && scope.admin === true));
 function allowedAccount(a,scope) {
   if(!usableScope(scope) || !a || !id(a.id) || !id(a.tenantId))return false;
@@ -20,7 +20,7 @@ function allowedAccount(a,scope) {
       (scope.ownerFilter==='todos'||a.donoId===scope.ownerFilter);
   }
   return a.tenantId===scope.tenantId &&
-    (scope.role!=='vendedor'||!a.donoId||a.donoId===scope.userId);
+    (!['usuario','vendedor'].includes(scope.role)||!a.donoId||a.donoId===scope.userId);
 }
 
 export function findVisibleAccount(snapshot,scope,accountId,tenantId=null) {
@@ -74,7 +74,7 @@ export function mountAccountIntelligence({root,snapshot,scope,getScopeToken}={})
   // RI-02: cálculo factual e auditável sobre o mesmo snapshot autorizado.
   // Nenhum request, mutação ou score preditivo. A sessão invalida interações.
   const overview=el('section','','iad-ri-portfolio');
-  const portfolio=buildPortfolioAnalytics({snapshot,scope,asOf:new Date().toISOString().slice(0,10)});
+  const portfolio=buildPortfolioAnalytics({snapshot,scope,asOf:localBusinessDate()});
   const metrics=portfolio.metrics;
   const reais=value=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(value);
   const overviewTitle=el('h2','Visão da carteira — indicadores internos');
