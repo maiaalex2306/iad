@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict');
 const {pathToFileURL}=require('node:url'),{resolve}=require('node:path');
-let mod;async function run(data){mod??=import(pathToFileURL(resolve(__dirname,'../src/ri/portfolio-analytics.mjs')));return mod.buildPortfolioAnalytics(data);}
+let mod;async function run(data){mod??=import(pathToFileURL(resolve(__dirname,'../src/ri/portfolio-analytics.mjs')));return (await mod).buildPortfolioAnalytics(data);}
 const date='2026-11-05';
 const scope={userId:'u1',tenantId:'t1',role:'vendedor',admin:false,tenantFilter:'t1',ownerFilter:'todos'};
 function fixture(){return {
