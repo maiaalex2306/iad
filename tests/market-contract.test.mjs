@@ -372,6 +372,7 @@ test('RI-M06 DOM: seis etapas e shortlist aparecem na pesquisa real simulada sem
    assert.ok(walk(root,n=>n.textContent?.startsWith(stage+' · ')),stage+' não aparece no painel');
   assert.ok(walk(root,n=>n.textContent?.includes('Shortlist para investigação')));
   assert.ok(walk(root,n=>n.textContent?.includes('Índice de prontidão para revisão')));
+  assert.ok(walk(root,n=>n.textContent?.includes('Próximo passo recomendado:')));
   assert.ok(!requests.some(x=>x.includes('iad_market_import_confirmed')));
   cleanup();
  }finally{globalThis.fetch=oldFetch;}
