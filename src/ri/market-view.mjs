@@ -447,7 +447,11 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
       ', falta de fonte citada pela IA: '+(Number.isSafeInteger(diagnostics.rejectedUncitedSource)?diagnostics.rejectedUncitedSource:0)+
       ', duplicados agrupados: '+(Number.isSafeInteger(diagnostics.mergedDuplicates)?diagnostics.mergedDuplicates:0)+'.'
      :'';
-   show(partialWarning+'Pesquisa exploratoria: '+companies.length+' candidatas com fontes, '+companies.filter(c=>!c.cnpj).length+' com CNPJ pendente; cobertura total desconhecida. Nenhuma gravacao realizada.'+rejectedText+(usageText?' Consumo informado: '+usageText+'. Custo em R$ a apurar.':''));
+   const sourcedCount=companies.filter(c=>(c.fontes||[]).some(f=>{
+    try{const u=new URL(f.url);return u.protocol==='https:'&&!!u.hostname&&!u.username&&!u.password}
+    catch{return false;}
+   })).length;
+   show(partialWarning+'Pesquisa exploratoria: '+companies.length+' candidatas relatadas; '+sourcedCount+' com URL HTTPS citada pelo provedor; '+companies.filter(c=>!c.cnpj).length+' com CNPJ pendente. Cobertura total desconhecida, fontes ainda nao verificadas. Nenhuma gravacao realizada.'+rejectedText+(usageText?' Consumo informado: '+usageText+'. Custo em R$ a apurar.':''));
    renderCompanies(companies,payload.source||'Fornecedor',payload.retrievedAt||'data nao fornecida');
   }catch(e){if(seq===currentRequest&&valid()&&e.name!=='AbortError')show('Falha de rede ao consultar fonte empresarial. Nenhuma alteracao no CRM.');}
   finally{if(seq===currentRequest&&valid())btn.disabled=false;}
