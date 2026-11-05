@@ -67,6 +67,14 @@ const server=http.createServer((req,res)=>{
    const t0=Date.now();
    await page.evaluate(()=>window.App.ir('#/inteligencia'));
    await page.locator('#iad-ri-root button[data-account-id="a1"]').waitFor({timeout:12000});
+   const riOverview=await page.locator('#iad-ri-root .iad-ri-portfolio').textContent();
+   assert.match(riOverview,/Visão da carteira/,'o painel de inteligência precisa mostrar indicadores internos');
+   assert.match(riOverview,/Contas visíveis/);
+   assert.match(riOverview,/Pipeline registrado/);
+   assert.match(riOverview,/Tarefas vencidas/);
+   assert.match(riOverview,/Sem compromisso futuro/);
+   assert.match(riOverview,/Prioridades identificadas/);
+   assert.doesNotMatch(riOverview,/EMPRESA SECRETA|NEGÓCIO SECRETO/,'KPI ou alerta não revela dados de outro tenant');
    const linkCount=await page.locator('nav.tabs a[href="#/inteligencia"]').count();
    assert.equal(linkCount,1,'a rota protegida deve estar no menu somente com flag ativa');
    assert.equal(await page.locator('#iad-ri-root button[data-account-id="b1"]').count(),0,'não listar conta de outra empresa');

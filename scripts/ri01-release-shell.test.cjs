@@ -22,7 +22,7 @@ test('Inteligência Comercial is enabled explicitly in release config',()=>{
   assert.match(app,/global\.IAD_RI_ENABLED\s*===\s*true/);
 });
 test('offline cache contains both ES modules, without sensitive application data',()=>{
-  const paths=['./src/ri/account-view.mjs','./src/ri/account-briefing.mjs'];
+  const paths=['./src/ri/account-view.mjs','./src/ri/account-briefing.mjs','./src/ri/portfolio-analytics.mjs'];
   for(const p of paths)assert.ok(sw.includes("'"+p+"'"),'Missing static cache asset '+p);
   assert.match(sw,/url\.origin\s*!==\s*self\.location\.origin/);
   assert.match(sw,/CAMINHOS_ESTATICOS/);
