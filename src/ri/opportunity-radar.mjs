@@ -40,7 +40,7 @@ export function buildCommercialOpportunityRadar({snapshot,scope,asOf}={}){
   throw Error('Escopo, carteira e data de referência válidos são obrigatórios');
  const accounts=new Map();
  for(const a of snapshot.contas)if(allowed(a,scope))accounts.set(itemKey(a),a);
- const opByAccount=new Map(),wonProducts=new Map(),productPeers=new Map(),lastTouch=new Map(),upcoming=new Set();
+ const opByAccount=new Map(),opIndex=new Map(),wonProducts=new Map(),productPeers=new Map(),lastTouch=new Map(),upcoming=new Set();
  const catalog=new Map();
  for(const p of snapshot.produtos||[]){
   if(!allowed(p,scope)||p.ativo===false)continue;
@@ -67,8 +67,9 @@ export function buildCommercialOpportunityRadar({snapshot,scope,asOf}={}){
   if(!account)continue;
   if(!opByAccount.has(ak))opByAccount.set(ak,[]);
   opByAccount.get(ak).push(op);
+  opIndex.set(JSON.stringify([op.tenantId,op.id]),op);
   for(const ev of Array.isArray(op.eventos)?op.eventos:[]) {
-   if(ev&&['activity','decision','sistema','contato','interacao'].includes(ev.tipo))touch(op.tenantId,op.contaId,ev.data||ev.quando);
+   if(ev&&['activity','decision','contato','interacao'].includes(ev.tipo))touch(op.tenantId,op.contaId,ev.data||ev.quando);
   }
   if(isWon(op)){
    let purchased=wonProducts.get(ak);if(!purchased){purchased=new Map();wonProducts.set(ak,purchased);}
@@ -98,7 +99,7 @@ export function buildCommercialOpportunityRadar({snapshot,scope,asOf}={}){
  }
  for(const t of snapshot.tarefas||[]){
   if(!t||!id(t.tenantId)||!ownerAllowed(t,scope))continue;
-  const op=t.oportunidadeId?snapshot.oportunidades.find(o=>o&&o.id===t.oportunidadeId&&o.tenantId===t.tenantId):null;
+  const op=t.oportunidadeId?opIndex.get(JSON.stringify([t.tenantId,t.oportunidadeId])):null;
   const ak=JSON.stringify([t.tenantId,t.contaId||op?.contaId]);
   if(!accounts.has(ak))continue;
   if(t.status==='concluida'||t.status==='concluido')touch(t.tenantId,t.contaId||op?.contaId,t.concluidoEm||t.atualizadoEm||t.vencimento);
