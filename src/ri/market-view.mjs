@@ -277,7 +277,15 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
  const failureDescription=failures=>{
   if(!Array.isArray(failures))return '';
   const labels={TIMEOUT:'tempo limite excedido',FETCH_FAILURE:'falha de conexao',INVALID_JSON:'resposta invalida',
-   WEB_SEARCH_NOT_COMPLETED:'busca web nao concluida',UNKNOWN_FAILURE:'erro nao classificado'};
+   WEB_SEARCH_NOT_COMPLETED:'busca web não concluída',
+    OUTPUT_TOKEN_LIMIT:'limite de saída atingido antes de concluir a pesquisa',
+    WEB_TOOL_MISSING:'ferramenta de busca não foi executada',
+    WEB_TOOL_INCOMPLETE:'ferramenta de busca interrompida',
+    WEB_TOOL_FAILED:'ferramenta de busca retornou erro',
+    SERVER_TOOL_PAUSED:'pesquisa interrompida pelo provedor antes da resposta final',
+    PROVIDER_RESPONSE_INCOMPLETE:'resposta encerrada antes da conclusão',
+    PROVIDER_RESPONSE_FAILED:'provedor não concluiu a resposta',
+    UNKNOWN_FAILURE:'erro não classificado'};
   const safe=failures.slice(0,2).filter(x=>x&&['OpenAI','Anthropic'].includes(x.provider)).map(x=>{
    const category=String(x.category||'');
    const description=labels[category]||(/^IA_HTTP_(4|5)[0-9]{2}$/.test(category)?'API HTTP '+category.slice(-3):'erro do provedor');

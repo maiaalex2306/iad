@@ -1154,3 +1154,66 @@ test('RI-M11: sem JWT os indicadores não retornam detalhes de pesquisas',async(
  const h=harness({openai:true}),res=await h.handle(request({action:'metrics'},'invalid'));
  assert.equal(res.status,401);assert.equal(h.calls.length,0);
 });
+
+
+test('RI-M20: OpenAI HTTP 200 incompleto por max_output_tokens não é sucesso',async()=>{
+ const incomplete=responseOpenAI();
+ incomplete.status='incomplete';
+ incomplete.incomplete_details={reason:'max_output_tokens'};
+ const h=harness({openai:true,openaiResponse:incomplete});
+ const response=await h.handle(request(query));
+ assert.equal(response.status,502);
+ const body=await response.json();
+ assert.equal(body.error,'AI_SEARCH_UNAVAILABLE');
+ assert.equal(body.failures[0].category,'OUTPUT_TOKEN_LIMIT');
+ const calls=aiCalls(h);
+ assert.equal(calls.length,1,'não repetir pesquisas pagas automaticamente');
+ assert.equal(calls[0].body.max_output_tokens,4000);
+ assert.equal(calls[0].body.reasoning.effort,'low');
+ assert.equal(calls[0].body.max_tool_calls,2);
+ assert.equal(calls[0].body.tool_choice,'required');
+});
+test('RI-M20: Claude max_tokens distingue truncamento de erro de ferramenta',async()=>{
+ const incomplete=responseClaude();
+ incomplete.stop_reason='max_tokens';
+ const h=harness({claude:true,claudeResponse:incomplete});
+ const response=await h.handle(request(query));
+ assert.equal(response.status,502);
+ const body=await response.json();
+ assert.equal(body.failures[0].category,'OUTPUT_TOKEN_LIMIT');
+ assert.equal(aiCalls(h).length,1);
+ assert.equal(aiCalls(h)[0].body.max_tokens,4096);
+ assert.equal(aiCalls(h)[0].body.tools[0].max_uses,2);
+});
+test('RI-M20: Claude pause_turn permanece falha até haver resposta final',async()=>{
+ const paused=responseClaude();paused.stop_reason='pause_turn';
+ const h=harness({claude:true,claudeResponse:paused});
+ const response=await h.handle(request(query));
+ assert.equal(response.status,502);
+ assert.equal((await response.json()).failures[0].category,'SERVER_TOOL_PAUSED');
+ assert.equal(aiCalls(h).length,1,'não continuar automaticamente uma busca com custo adicional');
+});
+test('RI-M20: busca OpenAI ausente e resultado da ferramenta com falha são diagnosticados sem falsos positivos',async()=>{
+ const noSearch=harness({openai:true,openaiResponse:responseOpenAI(false)});
+ const a=await noSearch.handle(request(query));
+ assert.equal(a.status,502);
+ assert.equal((await a.json()).failures[0].category,'WEB_TOOL_MISSING');
+ const failed=responseOpenAI();failed.output[0].status='failed';
+ const noSuccess=harness({openai:true,openaiResponse:failed});
+ const b=await noSuccess.handle(request(query));
+ assert.equal(b.status,502);
+ assert.equal((await b.json()).failures[0].category,'WEB_TOOL_FAILED');
+});
+test('RI-M20: pesquisa parcial indica apenas IA que realmente concluiu a web search',async()=>{
+ const bad=responseOpenAI();bad.status='incomplete';bad.incomplete_details={reason:'max_output_tokens'};
+ const h=harness({openai:true,claude:true,openaiResponse:bad});
+ const response=await h.handle(request(query));assert.equal(response.status,200);
+ const body=await response.json();
+ assert.equal(body.partial,true);
+ assert.deepEqual(Array.from(body.providers),['Anthropic']);
+ assert.deepEqual(Array.from(body.failedProviders),['OpenAI']);
+ assert.equal(body.failures[0].category,'OUTPUT_TOKEN_LIMIT');
+ assert.equal(body.source,'Pesquisa web Claude');
+ assert.equal(body.data.length,1,'resultado legítimo do Claude preservado sem importar');
+ assert.equal(aiCalls(h).length,2,'nenhum retry ou chamada extra');
+});

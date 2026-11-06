@@ -97,6 +97,44 @@ function parseAI(s) {
   try{return JSON.parse(text.slice(text.indexOf('{'),text.lastIndexOf('}')+1))}catch{return {}}
  }
 }
+/* RI-M20 — classificar interrupções sem registrar resposta, prompts, URLs ou PII.
+ * A API pode retornar HTTP 200 com status=incomplete/max_output_tokens,
+ * stop_reason=max_tokens/pause_turn ou erro de web tool. Nenhum desses
+ * estados pode ser promovido a pesquisa web concluída.
+ */
+function researchCompletion(engine,result,blocks,finalResponse,completedSearch) {
+ const openai=engine==='OpenAI';
+ const calls=openai
+  ?blocks.filter(b=>b.type==='web_search_call')
+  :blocks.filter(b=>b.type==='server_tool_use'&&b.name==='web_search');
+ const completed=openai
+  ?calls.filter(b=>b.status==='completed').length
+  :calls.filter(b=>blocks.some(r=>r.type==='web_search_tool_result'&&
+   r.tool_use_id===b.id&&Array.isArray(r.content)&&
+   !r.content.some(c=>c?.type==='web_search_tool_result_error'))).length;
+ const toolErrors=openai
+  ?calls.filter(b=>b.status==='failed').length
+  :blocks.filter(b=>b.type==='web_search_tool_result'&&
+   Array.isArray(b.content)&&b.content.some(c=>c?.type==='web_search_tool_result_error')).length;
+ const status=openai?String(result?.status||'unknown'):String(result?.stop_reason||'unknown');
+ const incompleteReason=openai?String(result?.incomplete_details?.reason||''):''; 
+ let failureCategory=null;
+ if(!finalResponse||!completedSearch){
+  if((openai&&incompleteReason==='max_output_tokens')||(!openai&&status==='max_tokens'))
+   failureCategory='OUTPUT_TOKEN_LIMIT';
+  else if(!openai&&status==='pause_turn')failureCategory='SERVER_TOOL_PAUSED';
+  else if(toolErrors)failureCategory='WEB_TOOL_FAILED';
+  else if(!calls.length)failureCategory='WEB_TOOL_MISSING';
+  else if(!completedSearch)failureCategory='WEB_TOOL_INCOMPLETE';
+  else failureCategory='PROVIDER_RESPONSE_INCOMPLETE';
+ }
+ // Somente categorias fechadas e contadores: sem dados de empresas, URLs ou tokens secretos.
+ return {failureCategory,diagnostic:{status:status.slice(0,40),
+  incompleteReason:incompleteReason==='max_output_tokens'?'max_output_tokens':
+   incompleteReason==='content_filter'?'content_filter':'',
+  webCalls:Math.min(20,calls.length),webCompleted:Math.min(20,completed),
+  webErrors:Math.min(20,toolErrors)}};
+}
 function aiSummary(result,engine) {
  const blocks=engine==='OpenAI'?(Array.isArray(result.output)?result.output:[]):(Array.isArray(result.content)?result.content:[]);
  // A web_search *attempt* is not evidence of a completed search.
@@ -114,6 +152,7 @@ function aiSummary(result,engine) {
       Array.isArray(r.content)&&!r.content.some(x=>x?.type==='web_search_tool_result_error'));
     });
  const searched=finalResponse&&completedSearch;
+ const completion=researchCompletion(engine,result,blocks,finalResponse,completedSearch);
  const textBlocks=engine==='OpenAI'?blocks.filter(b=>b.type==='message').flatMap(b=>b.content||[]):blocks.filter(b=>b.type==='text');
  const texts=textBlocks.map(b=>b.text||'').join('\n');
  const urls=new Set();
@@ -137,7 +176,8 @@ function aiSummary(result,engine) {
    :safeCount(metering.server_tool_use?.web_search_requests),
   costBRL:null
  };
- return {engine,searched,urls,parsed:parseAI(texts),usage};
+ return {engine,searched,urls,parsed:parseAI(texts),usage,
+  failureCategory:completion.failureCategory,diagnostic:completion.diagnostic};
 }
 // RI-M09: sinais externos são HIPÓTESES auditáveis, não intenção de compra.
 const SIGNAL_TYPES=new Set(['expansao','investimento','contratacao','licenciamento',
@@ -264,10 +304,16 @@ async function queryAI(engine,key,f,target=null,mode='investigate') {
  let uri,headers,body;
  if(engine==='OpenAI') {
   uri='https://api.openai.com/v1/responses';headers={authorization:'Bearer '+key,'content-type':'application/json'};
-  body={model:Deno.env.get('IA_MODELO_PESQUISA_OPENAI')||Deno.env.get('IA_MODELO_OPENAI')||'gpt-5',instructions,input:prompt(f,target,mode),tools:[{type:'web_search',search_context_size:'low'}],tool_choice:'required',max_tool_calls:2,max_output_tokens:2200,store:false};
+  const model=Deno.env.get('IA_MODELO_PESQUISA_OPENAI')||Deno.env.get('IA_MODELO_OPENAI')||'gpt-5';
+  // GPT-5: esforço baixo deixa orçamento para a busca e a resposta JSON.
+  // Não aplicar reasoning a modelos sem suporte (por exemplo gpt-4.1).
+  body={model,instructions,input:prompt(f,target,mode),
+   tools:[{type:'web_search',search_context_size:'low'}],tool_choice:'required',
+   max_tool_calls:2,max_output_tokens:4000,store:false,
+   ...(/^gpt-[56](?:[.-]|$)/i.test(model)?{reasoning:{effort:'low'}}:{})};
  } else {
   uri='https://api.anthropic.com/v1/messages';headers={'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json'};
-  body={model:Deno.env.get('IA_MODELO_PESQUISA_ANTHROPIC')||Deno.env.get('IA_MODELO_ANTHROPIC')||'claude-opus-5',system:instructions,max_tokens:2200,messages:[{role:'user',content:prompt(f,target,mode)}],tools:[{type:'web_search_20250305',name:'web_search',max_uses:2}]};
+  body={model:Deno.env.get('IA_MODELO_PESQUISA_ANTHROPIC')||Deno.env.get('IA_MODELO_ANTHROPIC')||'claude-opus-5',system:instructions,max_tokens:4096,messages:[{role:'user',content:prompt(f,target,mode)}],tools:[{type:'web_search_20250305',name:'web_search',max_uses:2}]};
  }
  // Short searches need enough time for the hosted web tool, but always stay
  // below Supabase's 150s request idle limit. No hidden retry or extra quota.
@@ -290,7 +336,11 @@ async function queryAI(engine,key,f,target=null,mode='investigate') {
   throw Error('IA_INVALID_JSON');
  }
  const summary=aiSummary(data,engine);
- console.info('[market-search] provider_result',JSON.stringify({provider:engine,searched:summary.searched,elapsedMs:Date.now()-started}));
+ console.info('[market-search] provider_result',JSON.stringify({provider:engine,searched:summary.searched,
+  category:summary.failureCategory,status:summary.diagnostic.status,
+  incompleteReason:summary.diagnostic.incompleteReason,
+  webCalls:summary.diagnostic.webCalls,webCompleted:summary.diagnostic.webCompleted,
+  webErrors:summary.diagnostic.webErrors,elapsedMs:Date.now()-started}));
  return summary;
 }
 // Filter only explicit geographic contradictions; missing fields remain unverified.
@@ -679,8 +729,9 @@ Deno.serve(async req=>{
     failures.push({provider:jobs[i].engine,category});
     console.warn('[market-search] provider_failure',JSON.stringify({provider:jobs[i].engine,category}));
    }else if(outcome.value?.searched!==true){
-    failures.push({provider:jobs[i].engine,category:'WEB_SEARCH_NOT_COMPLETED'});
-    console.warn('[market-search] provider_failure',JSON.stringify({provider:jobs[i].engine,category:'WEB_SEARCH_NOT_COMPLETED'}));
+    const category=outcome.value?.failureCategory||'WEB_SEARCH_NOT_COMPLETED';
+    failures.push({provider:jobs[i].engine,category});
+    console.warn('[market-search] provider_failure',JSON.stringify({provider:jobs[i].engine,category}));
    }
   }
   if(!results.length){
@@ -725,7 +776,7 @@ Deno.serve(async req=>{
   const stored=await auditFinish(url,service,auditId,auditActor,results,failedProviders,companies.length);
   return output({researchId:auditId,auditStatus:stored?'RECORDED':'INCOMPLETE',
    action,data:companies,diagnostics,
-   source:'Pesquisa web OpenAI / Claude',
+   source:'Pesquisa web '+results.map(x=>x.engine==='OpenAI'?'ChatGPT':'Claude').join(' + '),
    providers:results.map(x=>x.engine),failedProviders,failures,partial,
    usage:results.map(x=>x.usage),retrievedAt:new Date().toISOString(),
    ...(target?{targetMatch:companies.length?'CNPJ_RELATADO_PELO_PROVEDOR':'CNPJ_NAO_CORROBORADO'}:{}),
