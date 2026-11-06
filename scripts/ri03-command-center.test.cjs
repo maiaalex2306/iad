@@ -100,7 +100,9 @@ test('RI-03: tela não contém fontes externas, escrita ou HTML comercial insegu
   assert.ok(css.includes('#iad-ri-root'));
   assert.ok(css.includes('@media (max-width:640px)'));
   assert.ok(sw.includes("'./assets/ri-commercial.css'"));
-  assert.ok(sw.includes("iad-crm-v286.78"));
+  const version=config.match(/numero:\s*'(v286\.\d+)'/);
+  assert.ok(version,'versão requerida');
+  assert.ok(sw.includes('iad-crm-'+version[1]),'SW e config devem ter mesma versão');
   assert.ok(sw.includes("'./src/ri/opportunity-radar.mjs'"));
-  assert.ok(config.includes("numero: 'v286.78'"));
+  assert.ok(version[1].startsWith('v286.'));
 });
