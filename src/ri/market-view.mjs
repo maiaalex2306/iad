@@ -8,6 +8,7 @@ import {mountMarketSignals} from './market-signals.mjs';
 import {mountMarketEnricher} from './market-enricher.mjs';
 import {mountMarketResearchMetrics} from './market-audit.mjs';
 import {interpretSector} from './sector-intelligence.mjs';
+import {verifyMarketTenantScope,marketTenantMessage} from './market-tenant-scope.mjs';
 /**
  * Pull only the server-confirmed RI-M01 import into the local Pipeline.
  * Never upload local edits. Refuse the pull when CAS/pending state is unknown.
@@ -102,7 +103,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
    if(items.length>65&&!term)options.appendChild(el('span','Digite para localizar outras opcoes.','small muted'));
   }
   search.addEventListener('input',render);
-  return {wrapper,get:()=>[...chosen.values()],setItems(next){
+  return {wrapper,get:()=>[...chosen.values()],getItems:()=>[...items],setItems(next){
    items=next;const keys=new Set(items.map(x=>x.key));chosen=new Map([...chosen].filter(([k])=>keys.has(k)));render();
   },choose(keys){const wanted=new Set(keys);chosen=new Map(items.filter(x=>wanted.has(x.key)).slice(0,limit).map(x=>[x.key,x]));render();},clear(){chosen.clear();render();}};
  }
@@ -167,12 +168,13 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
  demoBtn.type='button';
  demoBtn.addEventListener('click',async()=>{
   ufSelect.value='SP';const cities=await loadCities('SP');
+  if(!catalogReady){show('Aguarde a validação do catálogo e da empresa autenticada.');return;}
   const mogi=cities.find(x=>x.label==='Mogi das Cruzes');
   if(!mogi){show('Nao foi possivel validar Mogi das Cruzes no catalogo de municipios. Exemplo nao aplicado.');return;}
   cityPick.choose([mogi.key]);
   dddPick.choose(['11']);
-  const selected=tenantSegments.find(x=>/qu[ií]mic/i.test(String(x.nome||'')));
-  if(selected)segmentPick.choose([String(selected.nome)]);
+  const selected=segmentPick.getItems().find(x=>/qu[ií]mic/i.test(x.label));
+  if(selected)segmentPick.choose([selected.key]);
   bandPick.choose(['201_500','501_1000']);
   aiSelect.value='both';
  });
@@ -217,11 +219,25 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
    }
    show('Conferindo segmentos autorizados desta empresa no servidor...');
    try{
-    const url=cfg.url.replace(/\/$/,'')+'/rest/v1/segmentos?select=nome,ativo&tenant_id=eq.'+
-     encodeURIComponent(scope.tenantId)+'&ativo=eq.true&limit=120';
-    const response=await fetch(url,{headers:{apikey:cfg.chave,Authorization:'Bearer '+session.access_token},signal:catalogController.signal});
-    if(!response.ok)throw Error('catalog-http');
-    const rows=await response.json();
+    const base=cfg.url.replace(/\/$/,'');
+    const headers={apikey:cfg.chave,Authorization:'Bearer '+session.access_token};
+    // Parallel reads: verify the active profile/tenant before any paid search.
+    // The backend uses profile.tenant_id to scope catalog, quotas and audit.
+    const [profileResponse,catalogResponse]=await Promise.all([
+     fetch(base+'/rest/v1/perfis?select=tenant_id,papel,ativo&id=eq.'+
+      encodeURIComponent(scope.userId)+'&limit=1',{headers,signal:catalogController.signal}),
+     fetch(base+'/rest/v1/segmentos?select=nome,ativo&tenant_id=eq.'+
+      encodeURIComponent(scope.tenantId)+'&ativo=eq.true&limit=120',
+      {headers,signal:catalogController.signal})
+    ]);
+    if(!valid())return;
+    if(!profileResponse.ok){show('Falha ao validar o perfil autenticado. Nenhuma pesquisa foi realizada.');return;}
+    const profiles=await profileResponse.json();
+    const auth=verifyMarketTenantScope({selectedTenant:scope.tenantId,selectedUser:scope.userId,
+     profile:Array.isArray(profiles)?profiles[0]:null});
+    if(!auth.ok){show(marketTenantMessage(auth.code));return;}
+    if(!catalogResponse.ok)throw Error('catalog-http');
+    const rows=await catalogResponse.json();
     if(!Array.isArray(rows))throw Error('catalog-format');
     if(!valid())return;
     const seen=new Set(),options=[];
