@@ -169,7 +169,7 @@ export function buildCommercialOpportunityRadar({snapshot,scope,asOf}={}){
   if(v.previous.size<3||v.recent.size<5||v.accounts.size<3||
      v.recent.size<Math.ceil(v.previous.size*1.25))continue;
   // Crescimento de negócios ganhos no CRM, NÃO crescimento do setor externo.
-  const a=[...accounts.values()].find(x=>x.tenantId===v.tenantId&&norm(x.segmento)===v.segment);
+  const a=[...accounts.values()].find(x=>x.tenantId===v.tenantId&&norm(x.segmento)===norm(v.segment));
   if(!a)continue;
   results.growth.push(format(a,'growth','Mais vendas ganhas registradas em '+v.segment,
    'Na carteira do CRM, as vendas ganhas datadas nos últimos 180 dias superam em pelo menos 25% os 180 dias anteriores, com amostra mínima. Isso não comprova crescimento do mercado.',
