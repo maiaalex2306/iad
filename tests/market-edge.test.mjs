@@ -19,7 +19,7 @@ const responseClaude=(search=true,cited=true)=>({
  {type:'text',text:marketJSON,citations:cited?[{type:'webpage_citation',url:URL_COMPANY,title:'Registro verificado'}]:[]}],
  usage:{input_tokens:100,output_tokens:150,server_tool_use:{web_search_requests:1}}
 });
-function harness({supabaseUrl='https://safe.supabase.co',anonMode='legacy',openai=false,claude=false,role='usuario',quotaAllowed=true,quotaUnavailable=false,openaiStatus=200,claudeStatus=200,openaiModelStatus=200,claudeModelStatus=200,claudeWebSearchSupported=true,catalogNames=['Química e Petroquímica'],catalogStatus=200,openaiResponse=responseOpenAI(),claudeResponse=responseClaude()}={}){
+function harness({supabaseUrl='https://safe.supabase.co',anonMode='legacy',openai=false,claude=false,role='usuario',quotaAllowed=true,quotaUnavailable=false,openaiStatus=200,claudeStatus=200,openaiModelStatus=200,claudeModelStatus=200,claudeWebSearchSupported=true,catalogNames=['Química e Petroquímica'],catalogStatus=200,openaiResponse=responseOpenAI(),claudeResponse=responseClaude(),auditAvailable=true,auditFinishAvailable=true,serviceKey=true}={}){
  const calls=[];let handler=null;
  const sandbox={Request,Response,AbortSignal,URL,TextDecoder,console,Deno:{env:{get(k){
   if(k==='SUPABASE_URL')return supabaseUrl;
@@ -28,6 +28,7 @@ function harness({supabaseUrl='https://safe.supabase.co',anonMode='legacy',opena
   if(k==='SUPABASE_PUBLISHABLE_KEY')return anonMode==='publishable'?'safe-public-key':undefined;
   if(k==='IA_CHAVE_OPENAI')return openai?'sk-test-openai':undefined;
   if(k==='IA_CHAVE_ANTHROPIC')return claude?'sk-ant-test-claude':undefined;
+  if(k==='SUPABASE_SERVICE_ROLE_KEY')return serviceKey?'server-only-service-role-test-key':undefined;
   if(k==='IA_MODELO_OPENAI')return 'gpt-5';
   if(k==='IA_MODELO_ANTHROPIC')return 'claude-opus-5';
  }},serve(fn){handler=fn}},fetch:async(url,opt={})=>{
@@ -35,6 +36,16 @@ function harness({supabaseUrl='https://safe.supabase.co',anonMode='legacy',opena
   if(String(url).includes('/auth/v1/user'))return new Response(JSON.stringify({id:'11111111-1111-1111-1111-111111111111'}),{status:200});
   if(String(url).includes('/rest/v1/perfis'))return new Response(JSON.stringify([{tenant_id:'tenant-a',papel:role,ativo:true}]),{status:200});
   if(String(url).includes('/rest/v1/segmentos'))return new Response(JSON.stringify(catalogNames.map(nome=>({nome,ativo:true}))),{status:catalogStatus});
+  if(String(url).includes('/rest/v1/iad_market_research_runs?select=')){
+   return new Response(JSON.stringify([{action:'signals',status:'completed',
+    started_at:'2026-11-05T20:00:00Z',finished_at:'2026-11-05T20:00:02Z',
+    completed_providers:1,failed_providers:0,web_searches:1,cited_sources:2,records_returned:1}]),{status:auditAvailable?200:503});
+  }
+  if(String(url).includes('/rest/v1/iad_market_research_runs')){
+   if(opt.method==='POST')return new Response(JSON.stringify([{id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'}]),{
+    status:auditAvailable?201:503});
+   if(opt.method==='PATCH')return new Response(null,{status:auditFinishAvailable?204:503});
+  }
   if(String(url).includes('/rest/v1/rpc/iad_market_search_reserve'))return quotaUnavailable?new Response(JSON.stringify({message:'quota backend unavailable'}),{status:503}):new Response(JSON.stringify({allowed:quotaAllowed,scope:quotaAllowed?'ok':'user',remaining:quotaAllowed?2:0}),{status:200});
   if(String(url).includes('api.openai.com/v1/models/'))
    return new Response(JSON.stringify({object:'model',id:'gpt-5'}),{status:openaiModelStatus});
@@ -151,7 +162,7 @@ test('importacao e qualquer acao diferente de buscar nao dispara IA',async()=>{
 test('consulta de IA nao executa mutacoes no Supabase',async()=>{
  const h=harness({openai:true,claude:true}),res=await h.handle(request(query));
  assert.equal(res.status,200);
- assert.equal(h.calls.filter(c=>c.url.includes('safe.supabase.co')&&c.method!=='GET'&&!c.url.includes('/rpc/iad_market_search_reserve')).length,0);
+ assert.equal(h.calls.filter(c=>c.url.includes('safe.supabase.co')&&c.method!=='GET'&&!c.url.includes('/rpc/iad_market_search_reserve')&&!c.url.includes('/rest/v1/iad_market_research_runs')).length,0);
 });
 test('cada pesquisa reserva quota transacional antes de chamar provedores',async()=>{
  const h=harness({openai:true,claude:true}),res=await h.handle(request(query));
@@ -1078,4 +1089,68 @@ test('RI-M10: alvo inválido, falta de quota, perfil proibido e ausência de web
  const noWeb=harness({openai:true,openaiResponse:responseOpenAI(false)});
  const d=await noWeb.handle(request(enrichRequest()));
  assert.equal(d.status,502);assert.equal((await d.json()).error,'AI_SEARCH_UNAVAILABLE');
+});
+
+test('RI-M11: pesquisa registra início e conclusão com fonte, sem armazenar conteúdo de prospect',async()=>{
+ const h=harness({openai:true}),res=await h.handle(request(query));
+ assert.equal(res.status,200);
+ const out=await res.json();assert.equal(out.auditStatus,'RECORDED');
+ assert.equal(out.researchId,'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+ const audit=h.calls.filter(x=>x.url.includes('/rest/v1/iad_market_research_runs'));
+ assert.equal(audit.length,2);
+ assert.equal(audit[0].method,'POST');assert.equal(audit[1].method,'PATCH');
+ assert.equal(audit[0].body.action,'search');assert.equal(audit[0].body.tenant_id,'tenant-a');
+ assert.equal(audit[1].body.status,'completed');
+ assert.equal(audit[1].body.completed_providers,1);
+ assert.ok(audit[1].body.web_searches>=1);
+ assert.ok(audit[1].body.cited_sources>=1);
+ const auditBody=JSON.stringify(audit.map(x=>x.body));
+ assert.doesNotMatch(auditBody,/Empresa A|Ana Exemplo|https:\/\/example.org\/empresa-a|sk-test-openai/);
+ const quotaIndex=h.calls.findIndex(x=>x.url.includes('/rpc/iad_market_search_reserve'));
+ const startIndex=h.calls.indexOf(audit[0]);
+ const aiIndex=h.calls.findIndex(x=>x.url.includes('api.openai.com/v1/responses'));
+ assert.ok(quotaIndex<startIndex&&startIndex<aiIndex);
+});
+test('RI-M11: falha ao iniciar diário impede custo pago, mesmo após reserva de cota',async()=>{
+ const h=harness({openai:true,auditAvailable:false}),res=await h.handle(request(query));
+ assert.equal(res.status,503);assert.equal((await res.json()).error,'RESEARCH_AUDIT_UNAVAILABLE');
+ assert.equal(aiCalls(h).length,0);
+ assert.equal(h.calls.filter(x=>x.url.includes('iad_market_search_reserve')).length,1);
+});
+test('RI-M11: chave de auditoria ausente impede reserva e qualquer custo pago',async()=>{
+ const h=harness({openai:true,serviceKey:false}),res=await h.handle(request(query));
+ assert.equal(res.status,503);assert.equal((await res.json()).error,'RESEARCH_AUDIT_UNAVAILABLE');
+ assert.equal(h.calls.filter(x=>x.url.includes('iad_market_search_reserve')).length,0);
+ assert.equal(aiCalls(h).length,0);
+});
+test('RI-M11: falha de finalização nunca vira pesquisa ficticiamente homologada',async()=>{
+ const h=harness({openai:true,auditFinishAvailable:false}),res=await h.handle(request(query));
+ assert.equal(res.status,200);assert.equal((await res.json()).auditStatus,'INCOMPLETE');
+});
+test('RI-M11: falha dos dois provedores é gravada como falha real de execução',async()=>{
+ const h=harness({openai:true,openaiResponse:responseOpenAI(false)}),res=await h.handle(request(query));
+ assert.equal(res.status,502);
+ const body=await res.json();assert.equal(body.auditStatus,'RECORDED');
+ const finish=h.calls.find(x=>x.method==='PATCH'&&x.url.includes('iad_market_research_runs'));
+ assert.equal(finish.body.status,'failed');
+ assert.equal(finish.body.failed_providers,1);
+ assert.equal(finish.body.records_returned,0);
+});
+test('RI-M11: indicadores agregados são limitados pelo tenant autenticado, sem consumo de quota',async()=>{
+ const h=harness({openai:true}),res=await h.handle(request({action:'metrics'}));
+ assert.equal(res.status,200);
+ const data=await res.json();assert.equal(data.action,'metrics');
+ assert.equal(data.metrics.executions,1);
+ assert.equal(data.metrics.completed,1);
+ assert.equal(data.metrics.actions.signals,1);
+ assert.equal(data.metrics.citedSources,2);
+ assert.equal(aiCalls(h).length,0);
+ assert.equal(h.calls.filter(x=>x.url.includes('/rpc/iad_market_search_reserve')).length,0);
+ const list=h.calls.find(x=>x.url.includes('/rest/v1/iad_market_research_runs?select='));
+ assert.ok(list.url.includes('tenant_id=eq.tenant-a'));
+ assert.ok(!JSON.stringify(data).includes('tenant-a'));
+});
+test('RI-M11: sem JWT os indicadores não retornam detalhes de pesquisas',async()=>{
+ const h=harness({openai:true}),res=await h.handle(request({action:'metrics'},'invalid'));
+ assert.equal(res.status,401);assert.equal(h.calls.length,0);
 });

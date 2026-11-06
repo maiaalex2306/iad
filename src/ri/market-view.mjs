@@ -6,6 +6,7 @@ import {buildProspectWorkflow} from './prospect-agents.mjs';
 import {mountMarketInvestigation} from './market-investigation.mjs';
 import {mountMarketSignals} from './market-signals.mjs';
 import {mountMarketEnricher} from './market-enricher.mjs';
+import {mountMarketResearchMetrics} from './market-audit.mjs';
 /**
  * Pull only the server-confirmed RI-M01 import into the local Pipeline.
  * Never upload local edits. Refuse the pull when CAS/pending state is unknown.
@@ -183,6 +184,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
  const results=el('div','','iad-market-results'),review=el('div','','iad-market-review');
  form.appendChild(grid);form.appendChild(demoBtn);form.appendChild(preflightBtn);form.appendChild(btn);
  root.replaceChildren(el('h2','Pesquisar empresas fora do CRM'),el('p','Pesquisa iniciada manualmente. Fontes, custos e cobertura dependem do provedor contratado. Os dados nao sao fatos confirmados ate verificacao.','small muted'),form,status,results,review);
+ const stopResearchMetrics=mountMarketResearchMetrics({root,doc,nuvem,valid});
  const show=(message)=>{if(valid())status.textContent=message;};
  const failureDescription=failures=>{
   if(!Array.isArray(failures))return '';
@@ -472,5 +474,5 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   }catch(e){if(seq===currentRequest&&valid()&&e.name!=='AbortError')show('Falha de rede ao consultar fonte empresarial. Nenhuma alteracao no CRM.');}
   finally{if(seq===currentRequest&&valid())btn.disabled=false;}
  });
- return ()=>{if(controller)controller.abort();for(const stop of cancelInvestigations)stop();cancelInvestigations.clear();if(preflightController)preflightController.abort();if(cityRequest)cityRequest.abort();currentRequest++;};
+ return ()=>{stopResearchMetrics();if(controller)controller.abort();for(const stop of cancelInvestigations)stop();cancelInvestigations.clear();if(preflightController)preflightController.abort();if(cityRequest)cityRequest.abort();currentRequest++;};
 }

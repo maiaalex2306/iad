@@ -453,6 +453,82 @@ async function modelPreflight(engine){
  return out;
 }
 
+
+/* RI-M11: observabilidade sem prompts, nomes, URLs ou dados de prospects.
+ * Service role somente em memória da Edge Function, jamais no navegador.
+ */
+function auditHeaders(service,returnRows=false){
+ return {apikey:service,Authorization:'Bearer '+service,'Content-Type':'application/json',
+  ...(returnRows?{Prefer:'return=representation'}:{Prefer:'return=minimal'})};
+}
+async function auditStart(base,service,actor,action,provider){
+ try{
+  const response=await fetch(base+'/rest/v1/iad_market_research_runs',{
+   method:'POST',headers:auditHeaders(service,true),
+   body:JSON.stringify({tenant_id:actor.tenant_id,user_id:actor.id,action,
+    provider_requested:provider,status:'started'}),signal:AbortSignal.timeout(6500)});
+  if(!response.ok)return null;
+  const rows=await response.json(),id=rows?.[0]?.id;
+  return /^[0-9a-f-]{36}$/i.test(String(id||''))?id:null;
+ }catch{return null;}
+}
+async function auditFinish(base,service,id,actor,results,failedProviders,records){
+ if(!id)return false;
+ const fulfilled=results.length,failed=failedProviders.length;
+ const citations=new Set(),used={web:0,input:0,output:0};
+ for(const r of results){
+  for(const url of (r.urls||[]))if(citations.size<100)citations.add(url);
+  used.web+=Number.isSafeInteger(r.usage?.webSearchRequests)?r.usage.webSearchRequests:0;
+  used.input+=Number.isSafeInteger(r.usage?.inputTokens)?r.usage.inputTokens:0;
+  used.output+=Number.isSafeInteger(r.usage?.outputTokens)?r.usage.outputTokens:0;
+ }
+ const status=fulfilled===0?'failed':failed>0?'partial':'completed';
+ try{
+  const response=await fetch(base+'/rest/v1/iad_market_research_runs?id=eq.'+encodeURIComponent(id)+
+   '&tenant_id=eq.'+encodeURIComponent(actor.tenant_id)+'&user_id=eq.'+encodeURIComponent(actor.id)+
+   '&status=eq.started',{
+   method:'PATCH',headers:auditHeaders(service),
+   body:JSON.stringify({status,finished_at:new Date().toISOString(),
+    completed_providers:Math.min(2,fulfilled),failed_providers:Math.min(2,failed),
+    web_searches:Math.min(20,used.web),cited_sources:citations.size,
+    records_returned:Math.min(50,Math.max(0,records)),
+    input_tokens:Math.min(1000000,used.input),output_tokens:Math.min(1000000,used.output),
+    failure_category:fulfilled===0?'ALL_PROVIDERS_FAILED':
+     failed>0?'PARTIAL_PROVIDER_FAILURE':null
+   }),signal:AbortSignal.timeout(6500)});
+  return response.ok;
+ }catch{return false;}
+}
+async function auditMetrics(base,service,tenantId){
+ const since=new Date(Date.now()-7*86400000).toISOString();
+ const request=base+'/rest/v1/iad_market_research_runs?select=action,status,started_at,finished_at,completed_providers,failed_providers,web_searches,cited_sources,records_returned'+
+  '&tenant_id=eq.'+encodeURIComponent(tenantId)+'&started_at=gte.'+encodeURIComponent(since)+
+  '&order=started_at.desc&limit=400';
+ try{
+  const response=await fetch(request,{headers:auditHeaders(service),signal:AbortSignal.timeout(6500)});
+  if(!response.ok)return null;
+  const rows=await response.json();
+  if(!Array.isArray(rows))return null;
+  const metrics={periodDays:7,scope:'tenant',executions:rows.length,completed:0,partial:0,
+   failed:0,inProgress:0,staleStarted:0,webSearches:0,citedSources:0,recordsReturned:0,
+   actions:{search:0,investigate:0,signals:0,enrich:0},truncated:rows.length===400};
+  for(const row of rows){
+   if(Object.hasOwn(metrics.actions,row.action))metrics.actions[row.action]++;
+   if(row.status==='completed')metrics.completed++;
+   else if(row.status==='partial')metrics.partial++;
+   else if(row.status==='failed')metrics.failed++;
+   else if(row.status==='started'){
+    metrics.inProgress++;
+    if(Date.now()-new Date(row.started_at).getTime()>5*60000)metrics.staleStarted++;
+   }
+   metrics.webSearches+=Number(row.web_searches)||0;
+   metrics.citedSources+=Number(row.cited_sources)||0;
+   metrics.recordsReturned+=Number(row.records_returned)||0;
+  }
+  return metrics;
+ }catch{return null;}
+}
+
 Deno.serve(async req=>{
  const origin=req.headers.get('origin')||'';
  if(req.method==='OPTIONS')return new Response(null,{status:204,headers:headers(origin)});
@@ -517,6 +593,14 @@ Deno.serve(async req=>{
    return output({action:'preflight',results,
     note:'Metadados de modelo: nao executa web_search, nao usa quota de pesquisa e nao homologa a busca real.'},200,origin);
   }
+  const service=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||'';
+  if(body?.action==='metrics'){
+   if(!service)return output({error:'RESEARCH_AUDIT_UNAVAILABLE'},503,origin);
+   const metrics=await auditMetrics(url,service,profile.tenant_id);
+   if(!metrics)return output({error:'RESEARCH_AUDIT_UNAVAILABLE'},503,origin);
+   return output({action:'metrics',metrics,
+    note:'Somente metadados agregados da empresa autorizada. Reservas anteriores ao diário não estão incluídas.'},200,origin);
+  }
   const action=body?.action;
   if(!['search','investigate','signals','enrich'].includes(action))return output({error:'SEARCH_ONLY'},400,origin);
   let target=null;
@@ -555,6 +639,7 @@ Deno.serve(async req=>{
   if((provider==='OpenAI'&&!openai)||(provider==='Anthropic'&&!claude))
    return output({error:'AI_PROVIDER_NOT_CONFIGURED',provider},503,origin);
   if(!openai&&!claude)return output({error:'AI_NOT_CONFIGURED',message:'A pesquisa precisa de uma das IAs ja configuradas no IaD.'},503,origin);
+  if(!service)return output({error:'RESEARCH_AUDIT_UNAVAILABLE'},503,origin);
   // Reserve one research credit in Postgres BEFORE any external paid API call.
   // This RPC authenticates the actor from JWT, checks active tenant membership,
   // serializes concurrent requests per tenant and enforces daily quotas.
@@ -571,6 +656,11 @@ Deno.serve(async req=>{
   }catch{return output({error:'SEARCH_QUOTA_UNAVAILABLE'},503,origin)}
   if(quota?.allowed===false)return output({error:'SEARCH_QUOTA_EXCEEDED',scope:quota.scope||'unknown'},429,origin);
   if(quota?.allowed!==true)return output({error:'SEARCH_QUOTA_UNAVAILABLE'},503,origin);
+  // Após a reserva, iniciar diário ANTES de custear qualquer provedor.
+  const auditId=await auditStart(url,service,{tenant_id:profile.tenant_id,id:user.id},action,provider);
+  if(!auditId)return output({error:'RESEARCH_AUDIT_UNAVAILABLE',
+   note:'A cota pode ter sido reservada, mas nenhuma IA foi chamada.'},503,origin);
+  const auditActor={tenant_id:profile.tenant_id,id:user.id};
   const jobs=[];
   if(openai&&provider!=='Anthropic')jobs.push({engine:'OpenAI',promise:queryAI('OpenAI',openai,f,target,action)});
   if(claude&&provider!=='OpenAI')jobs.push({engine:'Anthropic',promise:queryAI('Anthropic',claude,f,target,action)});
@@ -593,13 +683,19 @@ Deno.serve(async req=>{
     console.warn('[market-search] provider_failure',JSON.stringify({provider:jobs[i].engine,category:'WEB_SEARCH_NOT_COMPLETED'}));
    }
   }
-  if(!results.length)return output({error:'AI_SEARCH_UNAVAILABLE',failedProviders,failures},502,origin);
+  if(!results.length){
+   const stored=await auditFinish(url,service,auditId,auditActor,results,failedProviders,0);
+   return output({error:'AI_SEARCH_UNAVAILABLE',failedProviders,failures,
+    researchId:auditId,auditStatus:stored?'RECORDED':'INCOMPLETE'},502,origin);
+  }
   const partial=failedProviders.length>0;
   if(action==='enrich'){
    const enriched=combineProfessionalContacts(results,target);
    console.info('[market-search] enrichment_summary',JSON.stringify({
     completedProviders:results.length,...enriched.diagnostico}));
-   return output({action:'enrich',decisores:enriched.decisores,diagnostico:enriched.diagnostico,
+   const stored=await auditFinish(url,service,auditId,auditActor,results,failedProviders,enriched.decisores.length);
+   return output({researchId:auditId,auditStatus:stored?'RECORDED':'INCOMPLETE',
+    action:'enrich',decisores:enriched.decisores,diagnostico:enriched.diagnostico,
     providers:results.map(x=>x.engine),failedProviders,failures,partial,
     usage:results.map(x=>x.usage),retrievedAt:new Date().toISOString(),
     verifiedContacts:0,contactStatus:'PROFISSIONAIS_CITADOS_NAO_VERIFICADOS',
@@ -610,7 +706,9 @@ Deno.serve(async req=>{
    // Não inserir eventos nas tabelas nem afetar score ou Pipeline.
    console.info('[market-search] signals_summary',JSON.stringify({
     completedProviders:results.length,...signals.diagnostico}));
-   return output({action:'signals',sinais:signals.sinais,diagnostico:signals.diagnostico,
+   const stored=await auditFinish(url,service,auditId,auditActor,results,failedProviders,signals.sinais.length);
+   return output({researchId:auditId,auditStatus:stored?'RECORDED':'INCOMPLETE',
+    action:'signals',sinais:signals.sinais,diagnostico:signals.diagnostico,
     providers:results.map(x=>x.engine),failedProviders,failures,partial,
     usage:results.map(x=>x.usage),retrievedAt:new Date().toISOString(),
     verifiedSignals:0,signalStatus:'HIPOTESES_COM_URL_CITADA',
@@ -624,7 +722,9 @@ Deno.serve(async req=>{
     .filter(entry=>cnpjReal(entry?.cnpj)===target.cnpj).slice(0,1)}})):results;
   const companies=combineAI(focusedResults,f.limit,f,diagnostics);
   console.info('[market-search] filtering_summary',JSON.stringify({completedProviders:results.length,...diagnostics}));
-  return output({action,data:companies,diagnostics,
+  const stored=await auditFinish(url,service,auditId,auditActor,results,failedProviders,companies.length);
+  return output({researchId:auditId,auditStatus:stored?'RECORDED':'INCOMPLETE',
+   action,data:companies,diagnostics,
    source:'Pesquisa web OpenAI / Claude',
    providers:results.map(x=>x.engine),failedProviders,failures,partial,
    usage:results.map(x=>x.usage),retrievedAt:new Date().toISOString(),

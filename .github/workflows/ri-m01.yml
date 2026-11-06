@@ -7,6 +7,7 @@ on:
       - "nuvem/funcoes/market-search/**"
       - "tests/market-*.test.mjs"
       - "nuvem/sql/ri-m01-*.sql"
+      - "nuvem/sql/ri-m11-*.sql"
       - "scripts/ri-m01-staging-e2e.mjs"
       - ".github/workflows/ri-m01-live-e2e.yml"
       - ".github/workflows/ri-m01.yml"
@@ -22,12 +23,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - run: node --test tests/market-prospect-agents.test.mjs tests/market-contract.test.mjs tests/market-edge.test.mjs tests/market-sql.test.mjs tests/market-import-gate.test.mjs tests/market-staging-e2e.test.mjs
+      - run: node --test tests/market-prospect-agents.test.mjs tests/market-contract.test.mjs tests/market-edge.test.mjs tests/market-sql.test.mjs tests/market-import-gate.test.mjs tests/market-staging-e2e.test.mjs tests/market-audit.test.mjs
       - run: node --check src/ri/market-contract.mjs
       - run: node --check src/ri/market-view.mjs
       - run: node --check src/ri/market-investigation.mjs
       - run: node --check src/ri/market-signals.mjs
       - run: node --check src/ri/market-enricher.mjs
+      - run: node --check src/ri/market-audit.mjs
       - run: node --check src/ri/prospect-agents.mjs
       - run: node --check scripts/ri-m01-staging-e2e.mjs
       # Live perimeter smoke against homologation only. No API keys or paid AI calls.
