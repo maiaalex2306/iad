@@ -123,13 +123,13 @@ test('PERF-36I: refresh sem dados renova TTL das marcas sem regravar Store',asyn
  assert.deepEqual(now.tabelas,old.tabelas,'mesmos IDs e hashes confirmados');
  assert.equal(now.conta,old.conta);
 });
-test('PERF-36I: ausência de marcas usa recomputação segura, nunca inventa ACK',async()=>{
+test('PERF-36I: sem marcas o gate de edições pendentes falha fechado',async()=>{
  const a=ambiente();await a.N.puxar();
  a.forgetMarks();
  const rev=a.S.revisao();
- assert.equal(await a.N.puxar(),0);
- assert.equal(a.S.revisao(),rev);
- assert.ok(a.getMarks()?.em>0,'marcas precisam ser reconstruídas a partir de registros reais');
+ await assert.rejects(()=>a.N.puxar(),/alterações locais não confirmadas/i);
+ assert.equal(a.S.revisao(),rev,'carteira original preservada após falta de ACK');
+ assert.equal(a.getMarks(),null,'não inventar marca de sincronização confirmada');
 });
 test('PERF-36I: sinais privados alterados sem evento público ainda são aplicados',async()=>{
  const a=ambiente();
