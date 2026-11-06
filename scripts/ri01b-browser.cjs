@@ -100,7 +100,7 @@ const server=http.createServer((req,res)=>{
    await page.evaluate(()=>{
      const S=window.IADStore,A=window.IADAuth;
      const user={id:'ri01-seller',nome:'Usuário de testes',login:'seller',papel:'usuario',ativo:true,tenantId:'tenant-a'};
-     S.obter().usuarios.push(user);A.abrirSessao(user);window.App.ir('#/hoje');
+     S.obter().usuarios.push(user);A.abrirSessao(user);window.App.ir('#/inteligencia');
    });
    assert.equal(await page.locator('nav.tabs a[href="#/inteligencia"]').count(),0);
    assert.equal(await page.locator('nav.tabs a[href="#/mercado"]').count(),0);
@@ -115,7 +115,7 @@ const server=http.createServer((req,res)=>{
      const S=window.IADStore,A=window.IADAuth;
      const admin={id:'ri01-admin',nome:'Administrador de testes',login:'admin',papel:'admin',ativo:true,tenantId:'tenant-a'};
      S.obter().usuarios.push(admin);A.abrirSessao(admin);A.definirFiltros({tenant:'tenant-a'});
-     window.App.ir('#/hoje');
+     window.App.ir('#/inteligencia');
    });
    assert.equal(await page.locator('nav.tabs a[href="#/inteligencia"]').count(),1);
    assert.equal(await page.locator('nav.tabs a[href="#/mercado"]').count(),1);
