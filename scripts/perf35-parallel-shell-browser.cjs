@@ -19,19 +19,20 @@ const timings={parallel:{active:0,max:0,start:[],end:[]},serial:{active:0,max:0,
 const mime={'.html':'text/html','.js':'text/javascript','.mjs':'text/javascript','.css':'text/css','.png':'image/png','.svg':'image/svg+xml','.webmanifest':'application/manifest+json'};
 const server=http.createServer((req,res)=>{
  const u=new URL(req.url,'http://127.0.0.1');
- const mode=u.searchParams.get('serial')==='1'?'serial':'parallel';
- if(u.pathname==='/'){
+ const mode=u.pathname.startsWith('/serial/')?'serial':'parallel';
+ if(u.pathname==='/serial/'||u.pathname==='/parallel/'){
   res.writeHead(200,{'content-type':'text/html','cache-control':'no-store'});
   return res.end(mode==='serial'?html.replace(/<script defer src=/g,'<script src='):html);
  }
- const filename=path.resolve(root,u.pathname.replace(/^\/+/,''));if(!filename.startsWith(root+path.sep)||!fs.existsSync(filename)||!fs.statSync(filename).isFile()){
+ const assetPath=u.pathname.replace(/^\/(?:serial|parallel)\//,'/');
+ const filename=path.resolve(root,assetPath.replace(/^\/+/,''));if(!filename.startsWith(root+path.sep)||!fs.existsSync(filename)||!fs.statSync(filename).isFile()){
   res.writeHead(404);return res.end('Not found');
  }
  const file=fs.readFileSync(filename);
  const respond=()=>{res.writeHead(200,{'content-type':mime[path.extname(filename)]||'application/octet-stream','cache-control':'no-store'});res.end(file);};
- if(target.has(u.pathname.slice(1))){
-  const t=timings[mode];t.active++;t.max=Math.max(t.max,t.active);t.start.push(u.pathname);
-  setTimeout(()=>{t.active--;t.end.push(u.pathname);respond();},140);
+ if(target.has(assetPath.slice(1))){
+  const t=timings[mode];t.active++;t.max=Math.max(t.max,t.active);t.start.push(assetPath);
+  setTimeout(()=>{t.active--;t.end.push(assetPath);respond();},140);
  }else respond();
 });
 (async()=>{
@@ -47,7 +48,7 @@ const server=http.createServer((req,res)=>{
    page.on('dialog',d=>d.dismiss());
    await page.route('**/*',r=>r.request().url().startsWith(base+'/')?r.continue():r.abort('blockedbyclient'));
    const begin=Date.now();
-   await page.goto(base+'/?serial='+(mode==='serial'?'1':'0')+'#/hoje',{waitUntil:'domcontentloaded',timeout:30000});
+   await page.goto(base+'/'+mode+'/#/hoje',{waitUntil:'domcontentloaded',timeout:30000});
    const totalMs=Date.now()-begin;
    const loaded=await page.evaluate(()=>({
     app:typeof window.App==='object',
