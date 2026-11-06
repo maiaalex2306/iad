@@ -131,8 +131,9 @@ test('integração: dados comerciais/IA intactos, sem recálculo no callback aut
  assert.match(views,/hoje\.fila/);
  assert.match(views,/hoje\.cartoes/);
  assert.match(app,/atualizarProgresso\(feitos, total/);
- assert.match(index,/<script src="src\/performance\.js"><\/script>/);
- assert.match(index,/<script src="src\/perf-hoje\.js"><\/script>/);
+ assert.match(index,/<script defer src="src\/performance\.js"><\/script>/);
+ assert.match(index,/<script defer src="src\/perf-hoje\.js"><\/script>/);
+ assert.ok(index.indexOf('src/performance.js')<index.indexOf('src/perf-hoje.js'),'instrumentação deve anteceder a tela Hoje');
  assert.match(worker,/iad-crm-v[0-9]+/);
  assert.match(worker,/src\/perf-hoje\.js/);
 });

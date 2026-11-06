@@ -3,6 +3,8 @@ on:
   pull_request:
     branches: [claude/decisoes-estagios-vendas-eckjo0]
     paths:
+      - 'index.html'
+      - 'scripts/perf35-parallel-shell-browser.cjs'
       - 'src/config.js'
       - 'sw.js'
       - 'scripts/ri01-release-shell.test.cjs'
@@ -50,3 +52,4 @@ jobs:
       - name: Browser PWA cache and navigation contract
         run: |
           node scripts/ri01-release-offline-browser.cjs
+          node scripts/perf35-parallel-shell-browser.cjs
