@@ -75,24 +75,26 @@ const server=http.createServer((req,res)=>{
     const before=await page.evaluate(()=>window.IADStore.revisao());
     await page.evaluate(()=>window.App.ir('#/inteligencia'));
     await page.locator('#iad-ri-root .iad-ri-workspace').count().catch(()=>0);
-    await page.locator('#iad-ri-root .iad-ri-motion[data-motion="fechar"]').waitFor({timeout:15000});
+    await page.locator('#iad-ri-root .iad-ri-radar-tab[data-radar="forgotten"]').waitFor({timeout:15000});
     await page.locator('#iad-ri-root button[data-account-id="a1"]').waitFor({timeout:15000});
     await page.waitForFunction(()=>document.getElementById('iad-ri-commercial-css')&&
       getComputedStyle(document.querySelector('.iad-ri-hero')).backgroundImage.includes('gradient'));
-    assert.equal(await page.locator('#iad-ri-root .iad-ri-kpi').count(),4);
-    assert.equal(await page.locator('#iad-ri-root .iad-ri-motion').count(),4);
+    assert.equal(await page.locator('#iad-ri-root .iad-ri-kpi').count(),0,
+      'Números e KPIs devem permanecer no Painel');
+    assert.equal(await page.locator('#iad-ri-root .iad-ri-radar-tab').count(),5);
     const text=await page.locator('#iad-ri-root').textContent();
-    for(const expected of ['Visão da carteira','Pipeline registrado','Tarefas vencidas',
-      'Sem compromisso futuro','Prioridades identificadas','Plano de ataque comercial',
-      'Onde estão as negociações','Explorar contas'])assert.ok(text.includes(expected),expected);
+    for(const expected of ['Radar de oportunidades comerciais','Upsell','Cross-sell',
+      'Contas esquecidas','Notícias e movimentos','Segmentos em crescimento',
+      'Por que apareceu','Próxima ação recomendada','Investigar uma conta'])
+      assert.ok(text.includes(expected),expected);
     assert.doesNotMatch(text,/SEGREDO-TENANT-B/,'nenhum dado de outra empresa na tela');
     assert.equal(await page.locator('#iad-ri-root img').count(),0,'injetar HTML não executa imagem');
-    assert.match(await page.locator('#iad-ri-root .iad-ri-work-queue').textContent(),/Modernização da ETE/);
-    await page.locator('#iad-ri-root .iad-ri-motion[data-motion="reativar"]').click();
-    assert.match(await page.locator('#iad-ri-root .iad-ri-work-queue').textContent(),/Recuperar contato/);
-    await page.locator('#iad-ri-root .iad-ri-motion[data-motion="qualificar"]').click();
-    assert.match(await page.locator('#iad-ri-root .iad-ri-work-queue').textContent(),/Descobrir necessidade/);
-    await page.locator('#iad-ri-root .iad-ri-motion[data-motion="fechar"]').click();
+    assert.match(await page.locator('#iad-ri-root .iad-ri-radar-results').textContent(),/Empresa|Aurora|Fábrica Azul/);
+    for(const tab of ['upsell','crossSell','news','growth']){
+      await page.locator('#iad-ri-root .iad-ri-radar-tab[data-radar="'+tab+'"]').click();
+      assert.ok((await page.locator('#iad-ri-root .iad-ri-radar-results').textContent()).length>40);
+    }
+    await page.locator('#iad-ri-root .iad-ri-radar-tab[data-radar="forgotten"]').click();
     await page.locator('#iad-ri-root button[data-account-id="a1"]').click();
     assert.match(await page.locator('#iad-ri-details').textContent(),/Maria Compradora/);
     assert.doesNotMatch(await page.locator('#iad-ri-details').textContent(),/CONTATO SEGREDO/);
@@ -104,9 +106,8 @@ const server=http.createServer((req,res)=>{
     await locator.fill('SEGREDO-TENANT-B');
     assert.equal(await page.locator('#iad-ri-root .iad-ri-account-row').count(),0);
     await locator.fill('');
-    await page.evaluate(()=>{window.__openTarget='';window.App.abrir=id=>{window.__openTarget=id;};});
-    await page.locator('#iad-ri-root .iad-ri-work-queue .iad-ri-primary-small').first().click();
-    assert.equal(await page.evaluate(()=>window.__openTarget),'o1','ação mantém id comercial autorizado');
+    await page.locator('#iad-ri-root .iad-ri-radar-results button:has-text("Analisar conta")').first().click();
+    assert.match(await page.locator('#iad-ri-details').textContent(),/DOSSIÊ INTERNO DA CONTA/);
     const after=await page.evaluate(()=>window.IADStore.revisao());
     assert.equal(after,before,'análise, busca e ações não gravam no Store');
 
