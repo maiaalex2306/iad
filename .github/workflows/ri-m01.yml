@@ -43,6 +43,9 @@ jobs:
           # mesmo com CNPJ válido. Sem JWT, nenhuma pesquisa paga ocorre.
           status="$(curl -sS --max-time 20 -o /tmp/market_investigate_auth -w '%{http_code}' -X POST "$URL" -H 'Origin: https://www.iadcrm.com.br' -H 'Content-Type: application/json' --data '{"action":"investigate","target":{"cnpj":"11222333000181","nome":"Empresa Exemplo"},"filters":{"uf":"SP","cidade":"Jacarei","segmento":"Quimico"}}')"
           test "$status" = "401" || { echo "Unauthenticated investigate expected 401, received $status"; exit 1; }
+          # RI-M09: busca de sinais não autenticada falha antes da quota e IA
+          status="$(curl -sS --max-time 20 -o /tmp/market_signals_auth -w '%{http_code}' -X POST "$URL" -H 'Origin: https://www.iadcrm.com.br' -H 'Content-Type: application/json' --data '{"action":"signals","target":{"cnpj":"11222333000181","nome":"Empresa Exemplo"},"filters":{"uf":"SP","cidade":"Jacarei","segmento":"Quimico"}}')"
+          test "$status" = "401" || { echo "Unauthenticated signals expected 401, received $status"; exit 1; }
           status="$(curl -sS --max-time 20 -o /tmp/market_options -w '%{http_code}' -X OPTIONS "$URL" -H 'Origin: https://www.iadcrm.com.br')"
           test "$status" = "204" || { echo "OPTIONS expected 204, received $status"; exit 1; }
           status="$(curl -sS --max-time 20 -o /tmp/market_bad_origin -w '%{http_code}' -X POST "$URL" -H 'Origin: https://attacker.example' -H 'Content-Type: application/json' --data '{"action":"search","filters":{"uf":"SP"}}')"
