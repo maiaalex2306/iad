@@ -101,6 +101,6 @@ test('limpar UF também limpa município; controles no local correto e PWA atual
  assert.ok(views.includes("campoGeografico('municipio', 'Município'"));
  assert.ok(views.includes("if (f.uf &&"));
  assert.ok(views.includes("if (f.municipio &&"));
- assert.ok(html.includes('<script src="src/localidades.js"></script>'));
+ assert.ok(html.includes('<script src="src/localidades.js" defer></script>'));
  assert.ok(sw.includes("'./src/localidades.js'"));
 });
