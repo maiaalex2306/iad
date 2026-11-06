@@ -90,7 +90,7 @@ test('RI-03: tela não contém fontes externas, escrita ou HTML comercial insegu
   const mod=await import(viewUrl);
   assert.equal(typeof mod.mountAccountIntelligence,'function');
   assert.equal(typeof mod.selectVisibleAccounts,'function');
-  for(const m of ['upsell','crossSell','forgotten','news','growth'])
+  for(const m of ['pistas','upsell','crossSell','forgotten','news','growth'])
     assert.ok(view.includes("id:'"+m+"'"));
   assert.ok(view.includes('textContent'));
   assert.ok(!view.includes('.innerHTML'));
