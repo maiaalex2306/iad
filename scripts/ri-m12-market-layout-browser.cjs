@@ -31,10 +31,14 @@ const server=http.createServer((req,res)=>{
       ?Promise.resolve(new Response(JSON.stringify([{tenant_id:'tenant-a',papel:'gestor',ativo:true}]),{status:200,headers:{'content-type':'application/json'}}))
       :String(url).includes('/rest/v1/segmentos?')
        ?Promise.resolve(new Response(JSON.stringify([{nome:'Química e Petroquímica',ativo:true},{nome:'Alimentos',ativo:true}]),{status:200,headers:{'content-type':'application/json'}}))
-       :original(url,opt);
+       :String(url).includes('servicodados.ibge.gov.br')
+        ?Promise.resolve(new Response(JSON.stringify([{id:3530607,nome:'Mogi das Cruzes'}]),{status:200,headers:{'content-type':'application/json'}}))
+        :String(url).includes('/functions/v1/market-search')
+         ?new Promise(resolve=>{window.__completeMarketSearch=()=>resolve(new Response(JSON.stringify({data:[],source:'Pesquisa simulada',retrievedAt:'2026-11-06',usage:[]}),{status:200,headers:{'content-type':'application/json'}}));})
+         :original(url,opt);
     const mod=await import('/src/ri/market-view.mjs');
     mod.mountMarketDiscovery({root:document.getElementById('market'),
-      snapshot:{segmentos:[{nome:'Química e Petroquímica',ativo:true,tenantId:'tenant-a'},{nome:'Segmento desatualizado',ativo:true,tenantId:'tenant-a'}]},
+      snapshot:{contas:[],oportunidades:[],segmentos:[{nome:'Química e Petroquímica',ativo:true,tenantId:'tenant-a'},{nome:'Segmento desatualizado',ativo:true,tenantId:'tenant-a'}]},
       scope:{tenantId:'tenant-a',userId:'user-a',token:'scope-token'},
       getScopeToken:()=> 'scope-token',nuvem:{sessao:()=>({access_token:'synthetic'}),config:()=>({url:'https://example.invalid',chave:'synthetic'})}});
     return true;
@@ -65,6 +69,31 @@ const server=http.createServer((req,res)=>{
    const layout=await page.evaluate(()=>({scrollWidth:document.documentElement.scrollWidth,viewport:window.innerWidth}));
    assert.ok(layout.scrollWidth<=layout.viewport+2,'sem overflow horizontal '+JSON.stringify(layout));
    await page.keyboard.press('Escape');assert.equal(await popup.getAttribute('open'),null,'escape fecha filtro');
+   if(width===1440){
+    // RI-M19: retorno IBGE bem-sucedido nunca herda um alerta anterior.
+    const status=page.locator('.iad-market-ui > p[role="status"]');
+    await status.evaluate(el=>el.classList.add('iad-market-error'));
+    await page.locator('.iad-market-btn-example').click();
+    await page.waitForFunction(()=>document.querySelector('.iad-market-ui > p[role="status"]')?.textContent.includes('Exemplo aplicado'));
+    assert.equal((await status.getAttribute('class')).includes('iad-market-error'),false,'IBGE é informação, não erro');
+    await page.locator('.iad-market-btn-search').click();
+    const modal=page.locator('.iad-market-progress');
+    await modal.waitFor({state:'visible'});
+    assert.equal(await page.locator('.iad-market-progress-dialog').getAttribute('role'),'dialog');
+    assert.equal(await page.locator('.iad-market-progress-dialog').getAttribute('aria-modal'),'true');
+    assert.match(await page.locator('.iad-market-progress-phase').textContent(),/Aguardando resposta/);
+    assert.equal(await page.locator('.iad-market-progress-bar').getAttribute('value'),null,'sem porcentagem fictícia');
+    await page.locator('.iad-market-progress-close').click();
+    assert.equal(await modal.isVisible(),false,'ocultar não cancela busca');
+    await page.locator('.iad-market-progress-reopen').click();
+    assert.equal(await modal.isVisible(),true,'usuário pode voltar a acompanhar');
+    await page.evaluate(()=>window.__completeMarketSearch());
+    await page.waitForFunction(()=>document.querySelector('.iad-market-progress-title')?.textContent.includes('Pesquisa concluída'));
+    assert.match(await page.locator('.iad-market-progress-description').textContent(),/Nenhuma empresa candidata/);
+    await page.locator('.iad-market-progress-close').click();
+    assert.equal(await modal.isVisible(),false,'modal de conclusão fecha');
+    assert.ok((await status.textContent()).includes('Pesquisa exploratoria'));
+   }
    assert.deepEqual(errors,[],'erros JS '+JSON.stringify(errors));
    console.log('RI_M12_LAYOUT_PASS '+JSON.stringify({width,fields:boxes,bold:labels,unchangedGridHeight:before.height,overlayWidth:panelBox.width,choices}));
    await context.close();
