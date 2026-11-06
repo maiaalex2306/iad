@@ -40,7 +40,7 @@ export function buildCommercialOpportunityRadar({snapshot,scope,asOf}={}){
   throw Error('Escopo, carteira e data de referência válidos são obrigatórios');
  const accounts=new Map();
  for(const a of snapshot.contas)if(allowed(a,scope))accounts.set(itemKey(a),a);
- const opByAccount=new Map(),opIndex=new Map(),wonProducts=new Map(),productPeers=new Map(),lastTouch=new Map(),upcoming=new Set();
+ const opByAccount=new Map(),opIndex=new Map(),wonProducts=new Map(),segmentProducts=new Map(),lastTouch=new Map(),upcoming=new Set();
  const catalog=new Map();
  for(const p of snapshot.produtos||[]){
   if(!allowed(p,scope)||p.ativo===false)continue;
@@ -77,12 +77,19 @@ export function buildCommercialOpportunityRadar({snapshot,scope,asOf}={}){
     const p=product(item,op.tenantId);if(p)purchased.set(p.key,p.name);
    }
    const segment=norm(account.segmento);
+   /* PERF-RI04: índice por segmento/produto criado uma vez por execução.
+      A primeira compra real de cada par (produto, conta) mantém a grafia
+      original da evidência e a ordem utilizada na comparação anterior.
+      Nunca armazenar esses dados entre tenants ou sessões. */
    if(segment&&purchased.size){
+    const segmentKey=JSON.stringify([op.tenantId,segment]);
+    let indexed=segmentProducts.get(segmentKey);
+    if(!indexed){indexed=new Map();segmentProducts.set(segmentKey,indexed);}
     for(const p of Array.isArray(op.itens)?op.itens:[]){
      const detail=product(p,op.tenantId);if(!detail)continue;
-     const pk=JSON.stringify([op.tenantId,segment,detail.key]);
-     if(!productPeers.has(pk))productPeers.set(pk,new Set());
-     productPeers.get(pk).add(ak);
+     let entry=indexed.get(detail.key);
+     if(!entry){entry={buyers:new Map()};indexed.set(detail.key,entry);}
+     if(!entry.buyers.has(ak))entry.buyers.set(ak,detail.name);
     }
    }
    const when=dateFrom(op.desfecho?.data||op.fechadoEm||op.dataFechamentoReal);
@@ -119,16 +126,13 @@ export function buildCommercialOpportunityRadar({snapshot,scope,asOf}={}){
   }
   if(purchased&&purchased.size){
    const suggestions=new Map();
-   for(const [pk,peerSet] of productPeers){
-    const [tenant,segment,pname]=JSON.parse(pk);
-    if(tenant!==account.tenantId||segment!==norm(account.segmento)||purchased.has(pname))continue;
-    // Dois clientes distintos no mesmo segmento são referência, não prova de fit.
-    if(peerSet.size<2)continue;
-    const peer=[...peerSet].find(key=>key!==ak);
-    if(!peer)continue;
-    const names=[...opByAccount.get(peer)||[]].filter(isWon).flatMap(o=>
-      (o.itens||[]).map(i=>product(i,tenant))).filter(x=>x?.key===pname);
-    if(names.length)suggestions.set(pname,names[0].name);
+   const candidates=segmentProducts.get(JSON.stringify([account.tenantId,norm(account.segmento)]));
+   if(candidates)for(const [pname,entry] of candidates){
+    if(purchased.has(pname)||entry.buyers.size<2)continue;
+    // Dois clientes do mesmo segmento que compraram o item = referência,
+    // nunca garantia de aderência comercial à conta analisada.
+    const peer=[...entry.buyers].find(([key])=>key!==ak);
+    if(peer)suggestions.set(pname,peer[1]);
    }
    for(const name of [...suggestions.values()].slice(0,2)){
     results.crossSell.push(format(account,'crossSell','Investigar aderência de '+name,
