@@ -5,7 +5,12 @@ const fs=require('node:fs'),http=require('node:http'),path=require('node:path');
 const {chromium}=require('playwright');
 const root=path.resolve(__dirname,'..'),html=fs.readFileSync(path.join(root,'index.html'),'utf8');
 const scripts=[...html.matchAll(/<script\s+defer\s+src="(src\/[^"]+\.js)"><\/script>/g)].map(m=>m[1]);
-assert.equal(scripts.length,37,'PERF-35 shell deve ter 37 scripts defer');
+assert.equal(scripts.length,35,'PERF-36B1 shell carrega 35 scripts defer');
+assert.ok(!scripts.includes('src/documentos.js'),'leitor de arquivos só por ação');
+assert.ok(!scripts.includes('src/seed.js'),'demonstração só por ação');
+const sw=fs.readFileSync(path.join(root,'sw.js'),'utf8');
+assert.ok(sw.includes("'./src/documentos.js'")&&sw.includes("'./src/seed.js'"),
+  'módulos sob demanda continuam disponíveis no PWA offline');
 assert.equal(scripts[0],'src/config.js');assert.equal(scripts.at(-1),'src/app.js');
 const mime={'.html':'text/html','.js':'text/javascript','.mjs':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.webmanifest':'application/manifest+json'};
 const server=http.createServer((req,res)=>{
@@ -43,12 +48,49 @@ const pct=(values,p)=>{const v=values.filter(Number.isFinite).sort((a,b)=>a-b);r
         const js=performance.getEntriesByType('resource').filter(r=>/\.m?js$/.test(new URL(r.name).pathname));
         const fcp=performance.getEntriesByType('paint').find(x=>x.name==='first-contentful-paint');
         const tasks=window.__perf36Tasks;
-        return {appReady:typeof window.App==='object',storeReady:typeof window.IADStore==='object',dclMs:nav?nav.domContentLoadedEventEnd-nav.startTime:null,fcpMs:fcp?fcp.startTime:null,jsFiles:js.length,jsBytes:js.reduce((n,r)=>n+(r.decodedBodySize||0),0),longTasks:tasks.length,longTaskMs:tasks.reduce((n,v)=>n+v,0)};
+        return {appReady:typeof window.App==='object',storeReady:typeof window.IADStore==='object',
+          optionalDocs:!!window.IADDocumentos,optionalSeed:!!window.IADSeed,
+          dclMs:nav?nav.domContentLoadedEventEnd-nav.startTime:null,fcpMs:fcp?fcp.startTime:null,jsFiles:js.length,jsBytes:js.reduce((n,r)=>n+(r.decodedBodySize||0),0),longTasks:tasks.length,longTaskMs:tasks.reduce((n,v)=>n+v,0)};
       });
       assert.equal(m.appReady,true,'App não iniciou');
       assert.equal(m.storeReady,true,'Store não iniciou');
+      assert.equal(m.optionalDocs,false,'Documentos parseado no boot sem ação');
+      assert.equal(m.optionalSeed,false,'Seed parseado no boot sem ação');
+      assert.equal(m.jsFiles,35,'O boot não pode buscar scripts opcionais');
       assert.deepEqual(errors,[],'JavaScript errors: '+errors.slice(0,3).join(' | '));
-      samples.push({wallMs,...m});await ctx.close();
+      samples.push({wallMs,...m});
+      if(i===0) {
+        /* PERF-36B1: reproduzir as ações reais no Chromium LOCAL, sem
+           autenticação, rede externa nem arquivos de clientes. A medição do
+           cold start é fechada ANTES dessas ações para não contaminá-la. */
+        page.on('dialog',dlg=>dlg.type()==='confirm'?dlg.accept():dlg.dismiss());
+        await page.evaluate(()=>window.App.carregarDemo());
+        const demo=await page.evaluate(()=>({
+          ok:!!window.IADSeed,op:window.IADStore.obter().oportunidades[0]?.id||null,
+          scripts:performance.getEntriesByType('resource')
+            .filter(r=>new URL(r.name).pathname.endsWith('/src/seed.js')).length
+        }));
+        assert.equal(demo.ok,true,'App.carregarDemo não carregou seed sob demanda');
+        assert.ok(demo.op,'demonstração não criou oportunidade no Store local');
+        assert.equal(demo.scripts,1,'seed precisa ser buscado uma única vez');
+        const chooserPromise=page.waitForEvent('filechooser',{timeout:12000});
+        await page.evaluate(id=>window.App.lerArquivosDaProposta(id),demo.op);
+        const chooser=await chooserPromise;
+        await chooser.setFiles({name:'arquivo-sintetico-corrompido.pdf',
+          mimeType:'application/pdf',buffer:Buffer.from('%PDF-1.0\\nTESTE SEM DADOS\\n')});
+        await page.waitForFunction(()=>!!window.IADDocumentos,null,{timeout:12000});
+        const docs=await page.evaluate(()=>({
+          accepted:window.IADDocumentos.aceito({name:'teste.txt'}),
+          scripts:performance.getEntriesByType('resource')
+            .filter(r=>new URL(r.name).pathname.endsWith('/src/documentos.js')).length
+        }));
+        assert.equal(docs.accepted,true,'leitor sob demanda indisponível');
+        assert.equal(docs.scripts,1,'documentos carregado por ação apenas uma vez');
+        console.log('PERF36B1_OPTIONAL_PASS '+JSON.stringify({scope:'chromium-local-no-auth',
+          initiallyParsed:false,demonstrationOnDemand:true,documentReaderOnDemand:true,
+          offlinePrecache:true}));
+      }
+      await ctx.close();
     }
     const keys=['wallMs','dclMs','fcpMs','jsBytes','longTasks','longTaskMs'];
     const percentis=Object.fromEntries(keys.map(k=>[k,{p50:pct(samples.map(x=>x[k]),.5),p95:pct(samples.map(x=>x[k]),.95)}]));
