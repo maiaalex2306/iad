@@ -218,6 +218,40 @@ async function waitForMarketReady(root,walk){
  throw Error('Catálogo de Mercado não ficou pronto no mock autenticado');
 }
 
+test('RI-M19 DOM: resposta HTTP de quota aparece no diálogo sem importar empresa',async()=>{
+ const {mountMarketDiscovery}=await import('../src/ri/market-view.mjs');
+ const {root,walk}=fakeMarketDOM(),oldFetch=globalThis.fetch,requests=[];
+ const scope={tenantId:'tenant-a',userId:'u1',token:'ri-m19'};
+ globalThis.fetch=async(url,opt={})=>{
+  const u=String(url);
+  if(u.includes('/rest/v1/perfis?'))return new Response(JSON.stringify([{tenant_id:'tenant-a',papel:'gestor',ativo:true}]),{status:200});
+  if(u.includes('/rest/v1/segmentos?'))return new Response(JSON.stringify([{nome:'Química e Petroquímica',ativo:true}]),{status:200});
+  requests.push(u);
+  if(u.includes('servicodados.ibge.gov.br'))return new Response(JSON.stringify([{id:3530607,nome:'Mogi das Cruzes'}]),{status:200});
+  if(u.includes('/functions/v1/market-search'))return new Response(JSON.stringify({error:'SEARCH_QUOTA_EXCEEDED'}),{status:429});
+  throw Error('URL inesperada '+u);
+ };
+ let cleanup;
+ try{
+  cleanup=mountMarketDiscovery({root,snapshot:{contas:[],oportunidades:[],segmentos:[]},scope,
+   getScopeToken:()=>scope.token,
+   nuvem:{sessao:()=>({access_token:'test'}),config:()=>({url:'https://safe.supabase.co',chave:'public'})}});
+  await waitForMarketReady(root,walk);
+  await walk(root,n=>n.tagName==='button'&&n.textContent.includes('Aplicar exemplo')).fire('click');
+  const form=walk(root,n=>n.tagName==='form');await form.fire('submit');
+  const dialog=walk(root,n=>n.attributes?.role==='dialog'||n.role==='dialog');
+  assert.ok(dialog,'janela de pesquisa não foi criada');
+  const title=walk(dialog,n=>n.className==='iad-market-progress-title');
+  assert.match(title.textContent,/Não foi possível concluir/);
+  const detail=walk(dialog,n=>n.className==='iad-market-progress-description');
+  assert.match(detail.textContent,/Limite diario de pesquisas atingido/);
+  const overlay=walk(root,n=>n.className==='iad-market-progress');
+  assert.equal(overlay.hidden,false,'erro visível até fechamento pelo usuário');
+  assert.equal(requests.filter(u=>u.includes('/functions/v1/market-search')).length,1);
+  assert.equal(requests.some(u=>u.includes('iad_market_import_confirmed')),false);
+ }finally{cleanup?.();globalThis.fetch=oldFetch;}
+});
+
 test('DOM: botao de exemplo gera pesquisa JSON autenticada sem importar, respeitando tenant e IBGE',async()=>{
  const {mountMarketDiscovery}=await import('../src/ri/market-view.mjs');
  const {root,walk}=fakeMarketDOM(),originalFetch=globalThis.fetch,requests=[];
