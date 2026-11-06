@@ -218,6 +218,7 @@ test('DOM: botao de exemplo gera pesquisa JSON autenticada sem importar, respeit
   {tenantId:'tenant-b',ativo:true,nome:'Segmento privado de outro tenant'}
  ]};
  globalThis.fetch=async(url,options={})=>{
+  if(String(url).includes('/rest/v1/perfis?'))return new Response(JSON.stringify([{tenant_id:'tenant-a',papel:'gestor',ativo:true}]),{status:200});
   if(String(url).includes('/rest/v1/segmentos?'))return new Response(JSON.stringify([{nome:'Química e Petroquímica',ativo:true}]),{status:200});
   requests.push({url:String(url),options});
   if(String(url).includes('servicodados.ibge.gov.br'))
@@ -251,6 +252,7 @@ test('DOM: falha de IBGE usa BrasilAPI e preserva codigo municipal de sete digit
  const {root,walk}=fakeMarketDOM(),originalFetch=globalThis.fetch,requests=[];
  const scope={tenantId:'tenant-a',userId:'u1',token:'scope-a'};
  globalThis.fetch=async(url,options={})=>{
+  if(String(url).includes('/rest/v1/perfis?'))return new Response(JSON.stringify([{tenant_id:'tenant-a',papel:'gestor',ativo:true}]),{status:200});
   if(String(url).includes('/rest/v1/segmentos?'))return new Response(JSON.stringify([{nome:'Química e Petroquímica',ativo:true}]),{status:200});
   requests.push({url:String(url),options});
   if(String(url).includes('servicodados.ibge.gov.br'))throw Error('IBGE temporariamente indisponivel');
@@ -306,6 +308,7 @@ test('RI-M04: DOM de Mercado verifica modelos autenticados sem filtros, quotas o
  const {root,walk}=fakeMarketDOM(),oldFetch=globalThis.fetch,requests=[];
  const scope={tenantId:'tenant-a',userId:'u1',token:'scope-preflight'};
  globalThis.fetch=async(url,opt={})=>{
+  if(String(url).includes('/rest/v1/perfis?'))return new Response(JSON.stringify([{tenant_id:'tenant-a',papel:'gestor',ativo:true}]),{status:200});
   if(String(url).includes('/rest/v1/segmentos?'))return new Response(JSON.stringify([]),{status:200});
   requests.push({url:String(url),options:opt});
   if(String(url).includes('/functions/v1/market-search')){
@@ -352,6 +355,7 @@ test('RI-M06 DOM: seis etapas e shortlist aparecem na pesquisa real simulada sem
  const scope={tenantId:'tenant-a',userId:'user1',token:'ri-m06'};
  const snapshot={contas:[],oportunidades:[],segmentos:[{tenantId:'tenant-a',ativo:true,nome:'Química e Petroquímica'}]};
  globalThis.fetch=async(url,options={})=>{
+  if(String(url).includes('/rest/v1/perfis?'))return new Response(JSON.stringify([{tenant_id:'tenant-a',papel:'gestor',ativo:true}]),{status:200});
   if(String(url).includes('/rest/v1/segmentos?'))return new Response(JSON.stringify([{nome:'Química e Petroquímica',ativo:true}]),{status:200});
   requests.push(String(url));
   if(String(url).includes('servicodados.ibge.gov.br'))
