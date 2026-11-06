@@ -38,7 +38,8 @@ export function buildPortfolioAnalytics({snapshot,scope,asOf}={}){
  const accounts=new Map();
  for(const a of snapshot.contas)if(allowed(a,scope))accounts.set(key(a.tenantId,a.id),a);
  const opportunities=[],opIndex=new Map(),byStage=new Map();
- let openValue=0,wonValue=0,lostValue=0,valuedOpen=0,unknownOpenValue=0,won=0,lost=0,abandoned=0,open=0,lateClosing=0,stalled=0;
+ let openValue=0,wonValue=0,lostValue=0,valuedOpen=0,positiveOpen=0,unknownOpenValue=0,won=0,lost=0,abandoned=0,open=0,lateClosing=0,stalled=0;
+ const accountWithOpen=new Set();
  for(const o of snapshot.oportunidades){
   if(!o||!hasId(o.id)||!hasId(o.contaId)||!hasId(o.tenantId)||
      !accounts.has(key(o.tenantId,o.contaId))||!ownerVisible(o,scope))continue;
@@ -48,7 +49,8 @@ export function buildPortfolioAnalytics({snapshot,scope,asOf}={}){
    value:v,stageDays:null};
   if(opened){
    open++;
-   if(v!==null){openValue+=v;valuedOpen++;}else unknownOpenValue++;
+   accountWithOpen.add(key(o.tenantId,o.contaId));
+   if(v!==null){openValue+=v;valuedOpen++;if(v>0)positiveOpen++;}else unknownOpenValue++;
    const stageDate=day(o.etapaDesde);
    row.stageDays=stageDate&&stageDate<=asOf?days(stageDate,asOf):null;
    row.stalled=row.stageDays!==null&&row.stageDays>=30;
@@ -81,6 +83,11 @@ export function buildPortfolioAnalytics({snapshot,scope,asOf}={}){
   if(due&&due<asOf){overdueTasks++;linked.overdueTasks++;}
   else if(due&&due>=asOf){upcomingTasks++;linked.upcoming=true;}
  }
+ /* RI-03: movimentos determinísticos, todos baseados no próprio CRM.
+    Nenhum campo significa probabilidade de compra nem substitui o vendedor.
+    Quantidades cobrem todo o escopo; detalhes são limitados por grupo. */
+ const motions={fechar:{count:0,items:[]},avancar:{count:0,items:[]},
+  reativar:{count:0,items:[]},qualificar:{count:0,items:[]}};
  const priorities=[],withoutUpcoming=[];
  for(const item of opportunities){
   if(item.closed)continue;
@@ -95,6 +102,22 @@ export function buildPortfolioAnalytics({snapshot,scope,asOf}={}){
   if(item.overdueTasks)reasons.push(item.overdueTasks+' tarefa(s) vencida(s)');
   if(item.stalled)reasons.push(item.stageDays+' dias na etapa atual');
   if(!item.withNextStep){reasons.push('Sem próximo compromisso futuro registrado');withoutUpcoming.push(item);}
+  const stage=(norm(op.etapa)||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  const motion=/proposta|negoci|fechamento|contrat/.test(stage) ? 'fechar'
+   : /diagnost|beneficio|avaliacao|solucao/.test(stage) ? 'avancar'
+   : item.stalled ? 'reativar' : 'qualificar';
+  const action=motion==='fechar' ? 'Validar decisão, interlocutores e data de fechamento'
+   :motion==='avancar' ? 'Validar impacto, critérios e próxima decisão do comprador'
+   :motion==='reativar' ? 'Requalificar o interesse ou encaminhar para nutrição'
+   :'Confirmar problema, interlocutor e próximo contato com data';
+  const work={accountId:account.id,tenantId:account.tenantId,opportunityId:op.id,
+   accountName:norm(account.nome||account.razaoSocial)||'Conta sem nome',
+   opportunityName:norm(op.titulo)||'Negociação sem título',stage:norm(op.etapa)||'Sem etapa',
+   value:item.value,overdueTasks:item.overdueTasks,stageDays:item.stageDays,
+   lateClosing:item.lateClosing,withNextStep:item.withNextStep,action,
+   reason:reasons[0]||'Próximo passo comercial a confirmar'};
+  const bucket=motions[motion];bucket.count++;
+  if(bucket.items.length<12)bucket.items.push(work);
   if(reasons.length){
    // Classificação determinística de atenção operacional, NÃO probabilidade de ganho.
    const attention=(item.lateClosing?4:0)+(item.overdueTasks?3:0)+(item.stalled?2:0)+(!item.withNextStep?1:0);
@@ -107,13 +130,17 @@ export function buildPortfolioAnalytics({snapshot,scope,asOf}={}){
  priorities.sort((a,b)=>b.attention-a.attention||
    (b.value??0)-(a.value??0)||a.accountName.localeCompare(b.accountName,'pt-BR')||
    a.opportunityId.localeCompare(b.opportunityId));
+ /* A ausência de oportunidade ativa numa conta é uma hipótese de trabalho,
+    não autorização para criar negociação ou inferir demanda. */
+ let accountsWithoutOpen=0;
+ for(const k of accounts.keys())if(!accountWithOpen.has(k))accountsWithoutOpen++;
  const eligible=won+lost;
  return {
   asOf,metrics:{accounts:accounts.size,opportunities:opportunities.length,open,won,lost,abandoned,
-   winRate:eligible?won/eligible:null,openValue,valuedOpen,unknownOpenValue,wonValue,lostValue,
+   winRate:eligible?won/eligible:null,openValue,valuedOpen,positiveOpen,unknownOpenValue,accountsWithoutOpen,wonValue,lostValue,
    overdueTasks,openTasks,upcomingTasks,lateClosing,stalled,withoutNextStep:withoutUpcoming.length},
   stages:[...byStage.values()].sort((a,b)=>b.valor-a.valor||b.quantidade-a.quantidade),
-  priorities:priorities.slice(0,15),priorityCount:priorities.length,
+  priorities:priorities.slice(0,15),priorityCount:priorities.length,motions,
   definitions:{winRate:'ganhas / (ganhas + perdidas); desistências fora do denominador',
    openValue:'soma de valor válido (R$) em oportunidades abertas; campos ausentes excluídos',
    attention:'alertas factuais do CRM; não representa chance de fechamento'}
