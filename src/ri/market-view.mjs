@@ -10,6 +10,7 @@ import {mountMarketResearchMetrics} from './market-audit.mjs';
 import {interpretSector} from './sector-intelligence.mjs';
 import {verifyMarketTenantScope,marketTenantMessage} from './market-tenant-scope.mjs';
 import {marketCityCacheForDocument} from './market-city-cache.mjs';
+import {mountMarketSearchProgress} from './market-progress.mjs';
 /**
  * Pull only the server-confirmed RI-M01 import into the local Pipeline.
  * Never upload local edits. Refuse the pull when CAS/pending state is unknown.
@@ -94,7 +95,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
     const lbl=el('label','','campo'),input=doc.createElement('input');
     input.type='checkbox';input.checked=chosen.has(item.key);
     input.addEventListener('change',()=>{
-     if(input.checked&&chosen.size>=limit){input.checked=false;status.textContent='Limite de '+limit+' opcoes nesse filtro.';return;}
+     if(input.checked&&chosen.size>=limit){input.checked=false;show('Limite de '+limit+' opcoes nesse filtro.');return;}
      if(input.checked)chosen.set(item.key,item);else chosen.delete(item.key);
      render();
     });
@@ -128,11 +129,11 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   const cached=cityCache.get(uf);
   if(cached&&valid()&&ufSelect.value===uf){
    cityPick.setItems(cached);
-   status.textContent=cached.length+' municípios reutilizados do catálogo público da sessão. Selecione as cidades.';
+   show(cached.length+' municípios reutilizados do catálogo público da sessão. Selecione as cidades.');
    return cached;
   }
   const request=new AbortController();cityRequest=request;cityLoading=true;
-  status.textContent='Consultando municipios oficiais do IBGE para '+uf+'…';
+  show('Consultando municipios oficiais do IBGE para '+uf+'…');
   try{
    // The public IBGE endpoint can be temporarily unavailable. A second
    // IBGE-derived catalog avoids blocking the entire region selector.
@@ -162,10 +163,10 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
    }).map(x=>({key:String(x.id),label:x.nome,value:{codigoIBGE:String(x.id),nome:x.nome,uf}})).sort((a,b)=>a.label.localeCompare(b.label,'pt-BR'));
    if(!items.length)throw Error('Nenhum municipio valido');
    if(ufSelect.value!==uf||!valid())return [];
-   cityCache.put(uf,items);cityPick.setItems(items);status.textContent=items.length+' municipios carregados via '+source+'. Selecione as cidades.';
+   cityCache.put(uf,items);cityPick.setItems(items);show(items.length+' municipios carregados via '+source+'. Selecione as cidades.');
    return items;
   }catch(error){
-   if(error?.name!=='AbortError'&&ufSelect.value===uf&&valid())status.textContent='Nao foi possivel carregar o catalogo oficial de municipios. Tente selecionar o estado novamente.';
+   if(error?.name!=='AbortError'&&ufSelect.value===uf&&valid())show('Nao foi possivel carregar o catalogo oficial de municipios. Tente selecionar o estado novamente.',{error:true});
    return [];
   }finally{if(cityRequest===request)cityLoading=false;}
  }
@@ -184,6 +185,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   if(selected)segmentPick.choose([selected.key]);
   bandPick.choose(['201_500','501_1000']);
   aiSelect.value='both';
+  show('Exemplo aplicado: Mogi das Cruzes, DDD 11 e filtros selecionados. Revise o segmento e clique em Buscar empresas.');
  });
  const advanced=doc.createElement('details'),advancedGrid=el('div','','grid');
  advanced.className='iad-market-advanced';
@@ -209,10 +211,15 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   actionButtons.append(demoBtn,preflightBtn,btn);actions.append(aiHolder,actionButtons);
   form.append(grid,actions);
  root.replaceChildren(el('h2','Pesquisar empresas fora do CRM'),el('p','Pesquisa iniciada manualmente. Fontes, custos e cobertura dependem do provedor contratado. Os dados nao sao fatos confirmados ate verificacao.','small muted'),form,status,results,review);
+ const progress=mountMarketSearchProgress({doc,host:root});
   const closePickers=(event)=>{for(const d of root.querySelectorAll('.iad-market-picker[open]')){if(event.type==='keydown'&&event.key==='Escape')d.open=false;else if(event.type==='pointerdown'&&!d.contains(event.target))d.open=false;}};
   doc.addEventListener('pointerdown',closePickers);doc.addEventListener('keydown',closePickers);
  const stopResearchMetrics=mountMarketResearchMetrics({root,doc,nuvem,valid});
- const show=(message)=>{if(valid()){status.textContent=message;status.classList.toggle('iad-market-error',/nao foi|não foi|indispon|erro|inválid|inval|autoriza|bloquead|falha/i.test(message));}};
+ const show=(message,{error=null}={})=>{if(valid()){
+  status.textContent=message;
+  const isError=error===null?/nao foi|não foi|indispon|erro|inválid|inval|autoriza|bloquead|falha/i.test(message):Boolean(error);
+  status.classList.toggle('iad-market-error',isError);
+ }};
   // RI-M12: the API authorizes segments using the LIVE tenant catalog, not
   // the stale Store snapshot. Populate the facet from the same source before
   // allowing a paid request; never bypass server-side validation.
@@ -508,11 +515,16 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   if(controller)controller.abort();
   for(const stop of cancelInvestigations)stop();cancelInvestigations.clear();
   controller=new AbortController();const seq=++currentRequest;
-  results.replaceChildren();review.replaceChildren();btn.disabled=true;show('Pesquisando sites e noticias com as IAs configuradas no IaD...');
+  results.replaceChildren();review.replaceChildren();btn.disabled=true;demoBtn.disabled=true;
+  const providerLabel=aiSelect.value==='both'?'ChatGPT e Claude':aiSelect.value==='OpenAI'?'ChatGPT':'Claude';
+  show('Pesquisando sites e noticias com as IAs configuradas no IaD...');
+  progress.start(providerLabel);progress.waiting();
+  let responseReceived=false;
   try{
    const response=await fetch(config.url.replace(/\/$/,'')+'/functions/v1/market-search',{method:'POST',
     headers:{'Content-Type':'application/json','apikey':config.chave,'Authorization':'Bearer '+session.access_token},
     body:JSON.stringify({action:'search',filters,provider:aiSelect.value}),signal:controller.signal});
+   responseReceived=true;
    const payload=await response.json();
    if(seq!==currentRequest||!valid())return;
    if(!response.ok){
@@ -526,8 +538,10 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
       'SEGMENT_NOT_AUTHORIZED':'O segmento selecionado não corresponde ao catálogo ativo autorizado no servidor para esta empresa. Confira os segmentos em Cadastros, selecione novamente e repita a pesquisa.',
       'SEGMENT_CATALOG_UNAVAILABLE':'Nao foi possivel validar os segmentos da empresa. Nenhum credito de pesquisa foi consumido.'};
     const failure=failureDescription(payload?.failures);
-    show((payload?.message||messages[payload?.error]||'Pesquisa indisponivel: '+(payload?.error||response.status))+(failure?' Motivo: '+failure+'.':''));return;
+    const message=(payload?.message||messages[payload?.error]||'Pesquisa indisponivel: '+(payload?.error||response.status))+(failure?' Motivo: '+failure+'.':'');
+    show(message,{error:true});progress.fail(message);return;
    }
+   progress.processing();
    const companies=normalizeMarketCompanies(payload.data||[],{source:payload.source||'Nao identificada',retrievedAt:payload.retrievedAt||''});
    const unavailable=Array.isArray(payload.failedProviders)?payload.failedProviders.filter(p=>p==='OpenAI'||p==='Anthropic'):[];
    const partialWarning=payload.partial===true?('ATENCAO: pesquisa parcial. Falha em '+(unavailable.join(' e ')||'um provedor')+'. '+failureDescription(payload.failures)+'. '):'';
@@ -553,8 +567,12 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
    const sourcedCount=companies.filter(c=>(c.fontes||[]).some(f=>isReviewableSourceURL(f?.url))).length;
    show(partialWarning+'Pesquisa exploratoria: '+companies.length+' candidatas relatadas; '+sourcedCount+' com URL HTTPS citada pelo provedor; '+companies.filter(c=>!c.cnpj).length+' com CNPJ pendente. Cobertura total desconhecida, fontes ainda nao verificadas. Nenhuma gravacao realizada.'+rejectedText+(usageText?' Consumo informado: '+usageText+'. Custo em R$ a apurar.':''));
    renderCompanies(companies,payload.source||'Fornecedor',payload.retrievedAt||'data nao fornecida');
-  }catch(e){if(seq===currentRequest&&valid()&&e.name!=='AbortError')show('Falha de rede ao consultar fonte empresarial. Nenhuma alteracao no CRM.');}
-  finally{if(seq===currentRequest&&valid())btn.disabled=false;}
+   progress.finish({count:companies.length,partial:payload.partial===true});
+  }catch(e){if(seq===currentRequest&&valid()&&e?.name!=='AbortError'){
+   const message=responseReceived?'A pesquisa respondeu, mas os resultados não puderam ser processados. Nenhuma alteração no CRM.':'Falha de conexão durante a pesquisa. Confira o resultado antes de repetir, pois a solicitação pode ter sido recebida pelo servidor.';
+   show(message,{error:true});progress.fail(message);
+  }}
+  finally{if(seq===currentRequest&&valid()){btn.disabled=false;demoBtn.disabled=false;}}
  });
- return ()=>{doc.removeEventListener('pointerdown',closePickers);doc.removeEventListener('keydown',closePickers);root.classList.remove('iad-market-ui');catalogController.abort();stopResearchMetrics();if(controller)controller.abort();for(const stop of cancelInvestigations)stop();cancelInvestigations.clear();if(preflightController)preflightController.abort();if(cityRequest)cityRequest.abort();currentRequest++;};
+ return ()=>{progress.dispose();doc.removeEventListener('pointerdown',closePickers);doc.removeEventListener('keydown',closePickers);root.classList.remove('iad-market-ui');catalogController.abort();stopResearchMetrics();if(controller)controller.abort();for(const stop of cancelInvestigations)stop();cancelInvestigations.clear();if(preflightController)preflightController.abort();if(cityRequest)cityRequest.abort();currentRequest++;};
 }
