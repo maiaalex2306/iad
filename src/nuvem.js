@@ -1601,6 +1601,23 @@
     });
   }
 
+  /* PERF-36I: atualizar apenas o prazo da marca já confirmada.
+     O antigo marcarOQueDesceu recalculava o hash de TODA a carteira mesmo
+     sem mudança no journal e nas coleções privadas. Sem renovar a data,
+     a política de 24 horas dispararia upsert completo indevido.
+     Nunca inventar marcas ausentes: nesse caso o caminho seguro é recalcular. */
+  function renovarMarcasSemRehash() {
+    const perfil = sessaoPerfil(), identidade = sessao();
+    if (!perfil || !identidade || !identidade.user) {
+      return Promise.reject(new Error('Sessão ausente durante atualização de marcas.'));
+    }
+    const chave = String(perfil.tenant_id || '') + '|' + identidade.user.id;
+    const marcas = lerMarcas(chave, true);
+    if (!marcas.em) return marcarOQueDesceu();
+    gravarMarcas({ conta: chave, em: Date.now(), tabelas: marcas.tabelas });
+    return Promise.resolve();
+  }
+
   function empurrarComPerfil(perfil, tudo) {
 
     /* Sem empresa no perfil, o envio parava aqui — para todo mundo. Certo para
@@ -2156,7 +2173,7 @@
           }
           return true;
         } catch (e) { return false; }
-      })) return 0;
+      })) return renovarMarcasSemRehash().then(function () { return 0; });
       const novas = {};
       partes.forEach(function (p) {
         if (p.completa) { novas[p.local] = p.linhas; return; }
