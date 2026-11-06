@@ -7,6 +7,7 @@
   'use strict';
   const P = global.IADPlaybook, Store = global.IADStore, E = global.IADEngine, U = global.IADUI;
   const esc = U.esc;
+  const FILTROS = global.IADViewsManualDados.FILTROS;
 
   /* ---------------- Playbook ---------------- */
   /* ---------------- O manual, dentro do app ----------------
