@@ -4,6 +4,7 @@
 import {normalizeMarketFilters,normalizeMarketCompanies,proposePipelineAction,buildMarketImportRequest,isReviewableSourceURL,UF_IBGE,MARKET_DDDS,MARKET_BANDS} from './market-contract.mjs';
 import {buildProspectWorkflow} from './prospect-agents.mjs';
 import {mountMarketInvestigation} from './market-investigation.mjs';
+import {mountMarketSignals} from './market-signals.mjs';
 /**
  * Pull only the server-confirmed RI-M01 import into the local Pipeline.
  * Never upload local edits. Refuse the pull when CAS/pending state is unknown.
@@ -294,6 +295,8 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
    card.appendChild(el('p',(company.cnpj?'CNPJ '+company.cnpj:'CNPJ pendente — validar identidade')+' · '+(company.segmento||'Setor nao informado')+' · '+(company.porte||'Porte nao informado'),'small muted'));
    card.appendChild(el('p','Situacao CRM: '+statusMatch+(plan.existingOpportunityId?' · Ja existe oportunidade em Prospecção':''),'small'));
    cancelInvestigations.add(mountMarketInvestigation({card,company,doc,nuvem,valid,
+    provider:()=>aiSelect.value,getSequence:()=>currentRequest}));
+   cancelInvestigations.add(mountMarketSignals({card,company,doc,nuvem,valid,
     provider:()=>aiSelect.value,getSequence:()=>currentRequest}));
    card.appendChild(el('p','Funcionarios: '+(company.funcionarios===null?'indisponivel':String(company.funcionarios))+' (nao confirmado) · Faturamento: '+(company.faturamento===null?'indisponivel':String(company.faturamento))+' (nao confirmado)','small'));
    const icp=company.qualificacaoICP;

@@ -853,3 +853,108 @@ test('RI-M08: provedor sem web_search real não pode corroborar alvo',async()=>{
  const h=harness({openai:true,openaiResponse:responseOpenAI(false)}),res=await h.handle(request(q));
  assert.equal(res.status,502);assert.equal((await res.json()).error,'AI_SEARCH_UNAVAILABLE');
 });
+
+const eventSignal=(overrides={})=>({
+ cnpj:candidate.cnpj,tipo:'expansao',titulo:'Expansão da unidade industrial',
+ resumo:'Anúncio de expansão para revisão independente',dataPublicacao:'2026-11-01',
+ url:URL_COMPANY,...overrides
+});
+const signalsRequest=(target={cnpj:candidate.cnpj,nome:candidate.nome})=>({
+ action:'signals',target,filters:query.filters,provider:'OpenAI'
+});
+const openaiSignals=(events,[cited]=[true])=>{
+ const response=responseOpenAI(true,cited);
+ response.output.find(b=>b.type==='message').content[0].text=JSON.stringify({sinais:events});
+ return response;
+};
+const claudeSignals=(events)=>{
+ const response=responseClaude();
+ response.content.find(b=>b.type==='text').text=JSON.stringify({sinais:events});
+ return response;
+};
+test('RI-M09: Signal Hunter executa pesquisa web REAL pelo provedor e devolve hipóteses, nunca intenção de compra',async()=>{
+ const h=harness({openai:true,openaiResponse:openaiSignals([eventSignal()])});
+ const res=await h.handle(request(signalsRequest()));
+ assert.equal(res.status,200);
+ const body=await res.json();
+ assert.equal(body.action,'signals');
+ assert.equal(body.sinais.length,1);
+ assert.equal(body.sinais[0].tipo,'expansao');
+ assert.equal(body.sinais[0].dataPublicacao,'2026-11-01');
+ assert.equal(body.sinais[0].url,URL_COMPANY);
+ assert.equal(body.sinais[0].status,'FONTE_CITADA_NAO_VERIFICADA');
+ assert.equal(body.verifiedSignals,0);
+ assert.equal(body.signalStatus,'HIPOTESES_COM_URL_CITADA');
+ assert.ok(!body.data,'investigação de sinais não é importação ou mutação de empresas');
+ const ai=aiCalls(h);assert.equal(ai.length,1);
+ assert.match(JSON.stringify(ai[0].body),/PESQUISA WEB EXTERNA DE SINAIS/);
+ const credit=h.calls.findIndex(c=>c.url.includes('iad_market_search_reserve'));
+ const search=h.calls.findIndex(c=>c.url.includes('api.openai.com/v1/responses'));
+ assert.ok(credit>=0&&search>credit,'cota deve ser consumida antes da busca');
+});
+test('RI-M09: Signal Hunter descarta CNPJ de outra empresa e nunca contamina o alvo',async()=>{
+ const h=harness({openai:true,openaiResponse:openaiSignals([
+  eventSignal({cnpj:'22333444000181'})
+ ])});
+ const res=await h.handle(request(signalsRequest()));
+ assert.equal(res.status,200);
+ const data=await res.json();
+ assert.equal(data.sinais.length,0);
+ assert.equal(data.diagnostico.semCnpjExato,1);
+ assert.equal(data.verifiedSignals,0);
+});
+test('RI-M09: evento sem URL citada, localhost, data futura e tipo não aceito são rejeitados',async()=>{
+ const h=harness({openai:true,openaiResponse:openaiSignals([
+  eventSignal({url:'https://example.org/nao-citada'}),
+  eventSignal({url:'https://localhost/segredo'}),
+  eventSignal({dataPublicacao:'2999-01-01'}),
+  eventSignal({tipo:'pronto_para_comprar'}),
+  eventSignal({dataPublicacao:'2026-02-30'})
+ ])});
+ const res=await h.handle(request(signalsRequest()));
+ assert.equal(res.status,200);
+ const data=await res.json();
+ assert.equal(data.sinais.length,0);
+ assert.equal(data.diagnostico.semFonteCitada,2);
+ assert.equal(data.diagnostico.dataInvalida,2);
+ assert.equal(data.diagnostico.tipoInvalido,1);
+});
+test('RI-M09: eventos repetidos por ChatGPT e Claude são deduplicados por tipo e fonte',async()=>{
+ const event=eventSignal();
+ const h=harness({openai:true,claude:true,
+  openaiResponse:openaiSignals([event]),claudeResponse:claudeSignals([event])});
+ const res=await h.handle(request({...signalsRequest(),provider:'both'}));
+ assert.equal(res.status,200);
+ const data=await res.json();
+ assert.equal(data.sinais.length,1);
+ assert.equal(data.diagnostico.duplicados,1);
+ assert.equal(aiCalls(h).length,2);
+ assert.equal(data.providers.length,2);
+});
+test('RI-M09: sinal com data ausente é explicitamente não datado, sem inferir atualidade',async()=>{
+ const h=harness({openai:true,openaiResponse:openaiSignals([eventSignal({dataPublicacao:null})])});
+ const res=await h.handle(request(signalsRequest()));
+ assert.equal(res.status,200);
+ const data=await res.json();
+ assert.equal(data.sinais.length,1);
+ assert.equal(data.sinais[0].dataPublicacao,null);
+});
+test('RI-M09: sinal inválido não cobra IA nem quota e pesquisa sem web_search não passa',async()=>{
+ const invalid=harness({openai:true});
+ const res=await invalid.handle(request(signalsRequest({cnpj:'000',nome:'Empresa'})));
+ assert.equal(res.status,422);
+ assert.equal(aiCalls(invalid).length,0);
+ assert.ok(!invalid.calls.some(c=>c.url.includes('iad_market_search_reserve')));
+ const bad=harness({openai:true,openaiResponse:responseOpenAI(false)});
+ const r=await bad.handle(request(signalsRequest()));
+ assert.equal(r.status,502);
+ assert.equal((await r.json()).error,'AI_SEARCH_UNAVAILABLE');
+});
+test('RI-M09: bloqueio por quota ou perfil impede pesquisa paga do Signal Hunter',async()=>{
+ const quota=harness({openai:true,quotaAllowed:false});
+ const a=await quota.handle(request(signalsRequest()));
+ assert.equal(a.status,429);assert.equal(aiCalls(quota).length,0);
+ const prod=harness({openai:true,role:'usuario',supabaseUrl:'https://drhonmdffhnwamwzynrs.supabase.co'});
+ const b=await prod.handle(request(signalsRequest()));
+ assert.equal(b.status,403);assert.equal(aiCalls(prod).length,0);
+});
