@@ -348,6 +348,8 @@
       return;
     }
 
+    /* RI-M18: atualização de menu somente quando o papel muda; não repinta a cada render. */
+    montarNav();
     document.body.classList.toggle('sem-sessao', !logado);
     if (!logado) {
       conteudo.innerHTML = V.acesso();
@@ -402,6 +404,14 @@
        aparecia como um risco laranja de dez pixels. Aqui ela herda o
        espaçamento que já existe e não precisa saber a altura do topo. */
     const faixa = faixaDeAviso();
+    /* RI-M18: URL direta, histórico e App.ir também exigem Gestor/Admin.
+       Não importar módulos restritos, não consumir IA, não ler a carteira RI. */
+    if ((hash === '#/inteligencia' || hash === '#/mercado') && !A.ehGestor()) {
+      conteudo.innerHTML = faixa + '<section class="card" role="alert">' +
+        '<h2>Acesso restrito</h2><p>Inteligência Comercial e Inteligência de Mercado ' +
+        'estão disponíveis apenas para Gestores e Administradores.</p></section>';
+      return;
+    }
 
     if (hash.indexOf('#/op/') === 0) {
       const id = hash.slice(5);
@@ -523,6 +533,7 @@
     const token=++geracaoInteligencia;
     const assinatura=assinaturaInteligencia(),usuario=A.atual();
     if(!assinatura||!usuario){root.textContent='Sessão autorizada necessária.';return;}
+    if(!A.ehGestor()){root.textContent='Acesso restrito a Gestores e Administradores.';return;}
     const endereco=new URL('src/ri/account-view.mjs',document.baseURI).href;
     const pendente=moduloInteligencia || (moduloInteligencia=import(endereco).catch(function(e){
       moduloInteligencia=null;
@@ -562,11 +573,10 @@
       root.textContent = 'Sessão autenticada necessária.';
       return;
     }
-    // Pilot release: production AI spend is limited to the tenant administrator.
-    // The Edge Function enforces the same boundary before reserving quota.
-    if (String(nuvem.config()?.url || '').includes('drhonmdffhnwamwzynrs.supabase.co') &&
-        usuario.papel !== 'admin') {
-      root.textContent = 'Inteligência de Mercado em piloto: acesso inicial exclusivo do administrador.';
+    // RI-M18: Gestores e Administradores autorizados, na mesma regra do backend.
+    // Não altera proteção do tenant, cotas, preflight ou bloqueio de importação.
+    if (!A.ehGestor()) {
+      root.textContent = 'Inteligência de Mercado disponível apenas para Gestores e Administradores.';
       return;
     }
     if (ctx.admin && (!filtros.tenant || filtros.tenant === 'todas')) {
@@ -1218,11 +1228,20 @@
     if (e.key === 'Escape') fecharMenuUsuario();
   });
 
+  let assinaturaMenuInteligencia = null;
   function montarNav() {
-    document.querySelector('nav.tabs').innerHTML = ROTAS.filter(function (r) { return !r.foraDasAbas; }).map(function (r) {
+    const nav = document.querySelector('nav.tabs');
+    if (!nav) return;
+    const autorizado = A.ehGestor();
+    const assinatura = autorizado ? 'gestor-admin' : 'outros';
+    if (assinatura === assinaturaMenuInteligencia) return;
+    nav.innerHTML = ROTAS.filter(function (r) {
+      return !r.foraDasAbas && (autorizado || (r.hash !== '#/inteligencia' && r.hash !== '#/mercado'));
+    }).map(function (r) {
       return '<a href="' + r.hash + '"' + (r.ajuda ? ' data-ajuda-titulo="' + r.nome + '" data-ajuda="' + U.esc(r.ajuda) + '"' : '') +
         '><span class="ico">' + r.ico + '</span>' + r.nome + '</a>';
     }).join('');
+    assinaturaMenuInteligencia = assinatura;
   }
 
   function pintarArquivos(opId) {

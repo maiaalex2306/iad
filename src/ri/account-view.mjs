@@ -10,7 +10,7 @@ const id = value => typeof value === 'string' && value.trim().length > 0;
 const fold = value => String(value == null ? '' : value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 const str = (value,fallback='') => typeof value==='string' && value.trim() ? value.trim().slice(0,200) : fallback;
 const usableScope = scope => !!scope && id(scope.userId) &&
-  ['usuario','vendedor','gestor','admin'].includes(scope.role) &&
+  ['gestor','admin'].includes(scope.role) &&
   (scope.role !== 'admin' || scope.admin === true) &&
   (id(scope.tenantId) || (scope.role === 'admin' && scope.admin === true));
 function allowedAccount(a,scope) {
@@ -20,8 +20,7 @@ function allowedAccount(a,scope) {
     return (scope.tenantFilter==='todas'||a.tenantId===scope.tenantFilter) &&
       (scope.ownerFilter==='todos'||a.donoId===scope.ownerFilter);
   }
-  return a.tenantId===scope.tenantId &&
-    (!['usuario','vendedor'].includes(scope.role)||!a.donoId||a.donoId===scope.userId);
+  return a.tenantId===scope.tenantId;
 }
 
 export function findVisibleAccount(snapshot,scope,accountId,tenantId=null) {

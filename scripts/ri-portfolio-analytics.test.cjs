@@ -3,7 +3,7 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const {pathToFileURL}=require('node:url'),{resolve}=require('node:path');
 let mod;async function run(data){mod??=import(pathToFileURL(resolve(__dirname,'../src/ri/portfolio-analytics.mjs')));return (await mod).buildPortfolioAnalytics(data);}
 const date='2026-11-05';
-const scope={userId:'u1',tenantId:'t1',role:'vendedor',admin:false,tenantFilter:'t1',ownerFilter:'todos'};
+const scope={userId:'u1',tenantId:'t1',role:'admin',admin:true,tenantFilter:'t1',ownerFilter:'u1'};
 function fixture(){return {
  scope,asOf:date,snapshot:{
  contas:[{id:'a1',tenantId:'t1',donoId:'u1',nome:'Química A'},{id:'a2',tenantId:'t1',donoId:'u2',nome:'Privada'},{id:'a3',tenantId:'t2',donoId:'u1',nome:'Outro tenant'}],
@@ -33,16 +33,20 @@ test('calcula receita e taxa de ganho apenas com negócios autorizados',async()=
  assert.ok(!JSON.stringify(x).includes('Privada'));
  assert.ok(!JSON.stringify(x).includes('Outro tenant'));
 });
-test('papel usuario usa permissão real do IaD e ignora contas e tarefas de terceiros',async()=>{
- const f=fixture();f.scope={...scope,role:'usuario'};
- f.snapshot.oportunidades.push({id:'o6',tenantId:'t1',contaId:'a1',donoId:'u2',valor:888888,etapa:'Proposta',desfecho:null});
- f.snapshot.tarefas.push({id:'t6',tenantId:'t1',oportunidadeId:'o6',donoId:'u2',status:'aberta',vencimento:'2026-11-01'});
+test('papéis usuário e vendedor não acessam indicadores da Inteligência Comercial',async()=>{
+ for(const role of ['usuario','vendedor']){
+  const f=fixture();f.scope={...scope,role,admin:false};
+  await assert.rejects(run(f),/Carteira, sessão/);
+ }
+});
+test('gestor vê indicadores da equipe inteira, mas nunca de outro tenant',async()=>{
+ const f=fixture();f.scope={...scope,role:'gestor',admin:false,ownerFilter:'todos'};
  const x=await run(f);
- assert.equal(x.metrics.accounts,1);
- assert.equal(x.metrics.open,1);
- assert.equal(x.metrics.openValue,2000);
- assert.equal(x.metrics.overdueTasks,1);
- assert.ok(!JSON.stringify(x).includes('888888'));
+ assert.equal(x.metrics.accounts,2);
+ assert.equal(x.metrics.opportunities,4);
+ assert.equal(x.metrics.open,2);
+ assert.equal(x.metrics.openValue,102000);
+ assert.ok(!JSON.stringify(x).includes('Outro tenant'));
 });
 test('admin com filtro de responsável não herda oportunidades ou tarefas de outro usuário',async()=>{
  const f=fixture();f.scope={...scope,role:'admin',admin:true,tenantFilter:'t1',ownerFilter:'u1'};
@@ -73,7 +77,7 @@ test('riscos de pendência, compromisso e financeiro são fatos distintos',async
  assert.equal(x.priorities[0].attention,7); // fechamento vencido + etapa parada + sem compromisso
 });
 test('dois tenants com mesmo id de oportunidade nunca cruzam tarefas',async()=>{
- const f=fixture();f.scope={...scope,role:'admin',admin:true,tenantFilter:'t1'};
+ const f=fixture();f.scope={...scope,role:'admin',admin:true,tenantFilter:'t1',ownerFilter:'todos'};
  f.snapshot.tarefas.push({id:'falso',tenantId:'t2',oportunidadeId:'o1',status:'aberta',vencimento:'2026-11-01'});
  const x=await run(f);assert.equal(x.metrics.overdueTasks,2); // u1 e u2 como admin
  assert.equal(x.metrics.accounts,2);
