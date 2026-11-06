@@ -54,6 +54,11 @@ const server=http.createServer((req,res)=>{
    assert.ok(panelBox.width>=240,'painel largo o suficiente');
    const choices=await popup.locator('.market-options .iad-market-option').allTextContents();
    assert.ok(choices.includes('Alimentos'),'catalogo autorizado veio do servidor');
+   const searchBox=popup.locator('input[type=search]');
+   await searchBox.fill('industria quimica');
+   const semanticItems=await popup.locator('.market-options .iad-market-option').allTextContents();
+   assert.ok(semanticItems.some(s=>s.includes('Química e Petroquímica')),'alias semantico deve sugerir categoria autorizada');
+   await searchBox.fill('');
    assert.equal(choices.includes('Segmento desatualizado'),false,'catalogo local obsoleto eliminado');
    const layout=await page.evaluate(()=>({scrollWidth:document.documentElement.scrollWidth,viewport:window.innerWidth}));
    assert.ok(layout.scrollWidth<=layout.viewport+2,'sem overflow horizontal '+JSON.stringify(layout));
