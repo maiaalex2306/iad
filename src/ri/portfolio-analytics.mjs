@@ -21,18 +21,18 @@ function allowed(row,scope){
     (scope.ownerFilter==='todos'||scope.ownerFilter===row.donoId);
  }
  if(!hasId(scope.tenantId)||row.tenantId!==scope.tenantId)return false;
- return scope.role==='gestor'||(['usuario','vendedor'].includes(scope.role)&&(!row.donoId||row.donoId===scope.userId));
+ return scope.role==='gestor';
 }
 const ownerVisible=(row,scope)=>{
  if(scope.role==='admin'&&scope.admin===true)
    return scope.ownerFilter==='todos'||scope.ownerFilter===row.donoId;
- return !['usuario','vendedor'].includes(scope.role)||!row.donoId||row.donoId===scope.userId;
+ return scope.role==='gestor';
 };
 const finalType=o=>norm(o?.desfecho?.tipo).toLowerCase();
 export function buildPortfolioAnalytics({snapshot,scope,asOf}={}){
  if(!snapshot||!Array.isArray(snapshot.contas)||!Array.isArray(snapshot.oportunidades)||
     !Array.isArray(snapshot.tarefas)||!scope||!hasId(scope.userId)||
-    !['usuario','vendedor','gestor','admin'].includes(scope.role)||
+    !['gestor','admin'].includes(scope.role)||
     (scope.role==='admin'&&scope.admin!==true)||!day(asOf))
   throw Error('Carteira, sessão e data de referência válidas são obrigatórias');
  const accounts=new Map();
