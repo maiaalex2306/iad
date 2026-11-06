@@ -32,6 +32,30 @@
   global.IADCarregarOpcional = carregarOpcional;
   let carregandoDemo = false;
 
+  /* PERF-36K1: o Método é conteúdo estático, não deve ser analisado no shell.
+     Conserva o mesmo contrato síncrono de V.playbook via carregador compartilhado.
+     O token e a rota impedem render tardio depois de uma navegação ou logout. */
+  let geracaoDoManual = 0;
+  function iniciarManualSobDemanda() {
+    if (global.IADViewsManual) return;
+    const token = ++geracaoDoManual;
+    carregarOpcional('IADViewsManual', 'views-manual.js').then(function () {
+      if (token !== geracaoDoManual || location.hash !== '#/playbook' || !A.atual() ||
+          (global.IADNuvem.mandaNoAcesso() && !global.IADNuvem.sessao())) return;
+      render();
+    }).catch(function () {
+      if (token !== geracaoDoManual || location.hash !== '#/playbook' || !A.atual()) return;
+      const destino = document.getElementById('conteudo');
+      if (!destino || !destino.querySelector('#iad-manual-loading')) return;
+      destino.innerHTML = '<section class="card" role="alert">' +
+        '<h2>Método indisponível</h2>' +
+        '<p>O conteúdo do Manual não pôde ser carregado. As outras telas continuam disponíveis.</p>' +
+        '<button type="button" class="btn alt" onclick="location.reload()">Tentar novamente</button>' +
+        '</section>';
+    });
+  }
+
+
   const ROTAS = [
     { hash: '#/hoje', ico: '⚡', nome: 'Hoje', render: V.hoje,
       ajuda: 'O que precisa de você agora, em ordem de urgência. Comece o dia por aqui.' },
@@ -501,7 +525,8 @@
       /* Duas telas se completam depois de desenhadas: Dados mede o espaço
          usado e busca os leads na ponte; Cadastros lista quem está no
          servidor. Nenhuma das duas pode segurar o render. */
-      if (rota.hash === '#/inteligencia') iniciarInteligenciaComercial();
+      if (rota.hash === '#/playbook') iniciarManualSobDemanda();
+      else if (rota.hash === '#/inteligencia') iniciarInteligenciaComercial();
       else if (rota.hash === '#/mercado') iniciarMercadoManual();
       else if (rota.hash === '#/dados') { pintarUso(); pintarLeads(); pintarVersao(); }
       else pintarUsuariosNuvem();
