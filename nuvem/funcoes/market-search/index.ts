@@ -201,7 +201,7 @@ const PERSONAL_EMAILS=new Set(['gmail.com','googlemail.com','hotmail.com','outlo
  'proton.me','protonmail.com','aol.com','terra.com.br']);
 function workEmail(input){
  const email=str(input,150).toLowerCase();
- if(!/^[a-z0-9._%+\\-]{1,64}@[a-z0-9.-]+\\.[a-z]{2,}$/.test(email))return null;
+ if(!/^[a-z0-9._%+-]{1,64}@[a-z0-9.-]+\.[a-z]{2,}$/.test(email))return null;
  const domain=email.split('@')[1];
  if(PERSONAL_EMAILS.has(domain)||domain.includes('..')||domain.startsWith('-')||
     domain.endsWith('-')||domain.endsWith('.local')||domain.endsWith('.internal'))return null;
@@ -219,20 +219,20 @@ function combineProfessionalContacts(results,target){
     stats.semCnpjExato++;continue;
    }
    const nome=str(item.nome,120),cargo=str(item.cargo,120),fonte=signalPublicURL(item.fonte);
-   if(nome.length<5||cargo.length<3||/[<>\\u0000-\\u001f]/.test(nome+cargo)){
+   if(nome.length<5||cargo.length<3||/[<>\u0000-\u001f]/.test(nome+cargo)){
     stats.semIdentidadeProfissional++;continue;
    }
    if(!fonte||!result.urls.has(fonte)){stats.semFonteCitada++;continue;}
    // URLs de perfil são mantidas somente se a ferramenta web citou a própria URL.
    const linkedin=signalPublicURL(item.linkedin);
-   const perfil=linkedin&&/^([a-z]{2,3}\\.)?linkedin\\.com$/i.test(new URL(linkedin).hostname.replace(/^www\\./,''))&&
-    /^\\/in\\//.test(new URL(linkedin).pathname)&&result.urls.has(linkedin)?linkedin:null;
+   const perfil=linkedin&&/^([a-z]{2,3}\.)?linkedin\.com$/i.test(new URL(linkedin).hostname.replace(/^www\./,''))&&
+    /^\/in\//.test(new URL(linkedin).pathname)&&result.urls.has(linkedin)?linkedin:null;
    if(item.linkedin&&!perfil)stats.perfisDescartados++;
    // E-mail não corporativo ou inválido nunca é apresentado como contato profissional.
    const email=workEmail(item.emailCorporativo);
    if(item.emailCorporativo&&!email)stats.emailsDescartados++;
-   const key=nome.normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase()+'|'+
-    cargo.normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase();
+   const key=nome.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()+'|'+
+    cargo.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
    const old=contacts.get(key);
    if(old){
     stats.duplicados++;
