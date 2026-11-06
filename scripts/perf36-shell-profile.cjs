@@ -33,7 +33,7 @@ const pct=(values,p)=>{const v=values.filter(Number.isFinite).sort((a,b)=>a-b);r
     for(let i=0;i<runs;i++){
       const ctx=await browser.newContext({serviceWorkers:'block'}),page=await ctx.newPage(),errors=[];
       page.on('pageerror',e=>errors.push(e.message));
-      page.on('dialog',d=>d.dismiss());
+      page.on('dialog',d=>d.type()==='confirm'?d.accept():d.dismiss());
       await page.route('**/*',r=>r.request().url().startsWith(origin+'/')?r.continue():r.abort('blockedbyclient'));
       await page.addInitScript(()=>{
         window.__perf36Tasks=[];
@@ -63,7 +63,6 @@ const pct=(values,p)=>{const v=values.filter(Number.isFinite).sort((a,b)=>a-b);r
         /* PERF-36B1: reproduzir as ações reais no Chromium LOCAL, sem
            autenticação, rede externa nem arquivos de clientes. A medição do
            cold start é fechada ANTES dessas ações para não contaminá-la. */
-        page.on('dialog',dlg=>dlg.type()==='confirm'?dlg.accept():dlg.dismiss());
         await page.evaluate(()=>window.App.carregarDemo());
         const demo=await page.evaluate(()=>({
           ok:!!window.IADSeed,op:window.IADStore.obter().oportunidades[0]?.id||null,
