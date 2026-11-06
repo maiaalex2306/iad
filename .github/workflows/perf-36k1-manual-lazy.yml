@@ -8,6 +8,7 @@ on:
       - 'src/app.js'
       - 'src/config.js'
       - 'sw.js'
+      - 'scripts/perf36k1-manual-chromium.cjs'
       - 'tests/perf36k1-manual-lazy.test.cjs'
       - '.github/workflows/perf-36k1-manual-lazy.yml'
   workflow_dispatch:
@@ -31,3 +32,19 @@ jobs:
           node --check src/app.js
           node --check sw.js
           node --test tests/perf36k1-manual-lazy.test.cjs
+  manual-chromium:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validar sintaxe
+        run: node --check scripts/perf36k1-manual-chromium.cjs
+      - name: Instalar Chromium isolado
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Validar modulo Manual no navegador e PWA offline
+        run: timeout 150s node scripts/perf36k1-manual-chromium.cjs
