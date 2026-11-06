@@ -139,19 +139,79 @@ function aiSummary(result,engine) {
  };
  return {engine,searched,urls,parsed:parseAI(texts),usage};
 }
-function prompt(f,target=null) {
+// RI-M09: sinais externos são HIPÓTESES auditáveis, não intenção de compra.
+const SIGNAL_TYPES=new Set(['expansao','investimento','contratacao','licenciamento',
+ 'projeto','mudanca_operacional','outro']);
+function signalPublicURL(value){
+ const url=canonicalUrl(value);
+ if(!url)return '';
+ try{
+  const u=new URL(url),host=u.hostname.toLowerCase().replace(/\\.$/,'');
+  if(u.protocol!=='https:'||u.username||u.password||(u.port&&u.port!=='443')||
+     host==='localhost'||host.endsWith('.localhost')||host.endsWith('.local')||
+     host.endsWith('.internal')||host.endsWith('.lan')||host.endsWith('.onion')||
+     host.endsWith('.home.arpa')||host.startsWith('[')||!host.includes('.')||
+     /^[0-9.]+$/.test(host))return '';
+  return u.href;
+ }catch{return ''}
+}
+function signalDate(value){
+ if(typeof value!=='string'||!/^\\d{4}-\\d{2}-\\d{2}$/.test(value))return null;
+ const date=new Date(value+'T00:00:00Z');
+ if(!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==value||
+    date.getTime()>Date.now())return null;
+ return value;
+}
+function combineSignals(results,target){
+ const all=new Map(),stats={relatados:0,semCnpjExato:0,semFonteCitada:0,
+  tipoInvalido:0,dataInvalida:0,duplicados:0};
+ for(const r of results){
+  if(!r.searched)continue;
+  const list=Array.isArray(r.parsed?.sinais)?r.parsed.sinais:[];
+  for(const item of list.slice(0,15)){
+   stats.relatados++;
+   if(!item||typeof item!=='object'||cnpjReal(item.cnpj)!==target.cnpj){
+    stats.semCnpjExato++;continue;
+   }
+   const tipo=str(item.tipo,40).toLowerCase(),titulo=str(item.titulo,160);
+   if(!SIGNAL_TYPES.has(tipo)||titulo.length<8){stats.tipoInvalido++;continue;}
+   const url=signalPublicURL(item.url);
+   if(!url||!r.urls.has(url)){stats.semFonteCitada++;continue;}
+   const rawDate=item.dataPublicacao;
+   const publicationDate=signalDate(rawDate);
+   if(rawDate!==null&&rawDate!==undefined&&rawDate!==''&&!publicationDate){
+    stats.dataInvalida++;continue;
+   }
+   const key=tipo+'|'+url;
+   if(all.has(key)){stats.duplicados++;continue;}
+   all.set(key,{cnpj:target.cnpj,tipo,titulo,
+    resumo:str(item.resumo,350),dataPublicacao:publicationDate,
+    url,provider:r.engine,
+    status:'FONTE_CITADA_NAO_VERIFICADA'});
+  }
+ }
+ const sinais=[...all.values()].sort((a,b)=>
+  (b.dataPublicacao||'').localeCompare(a.dataPublicacao||'')||
+  a.titulo.localeCompare(b.titulo,'pt-BR')).slice(0,8);
+ return {sinais,diagnostico:{...stats,apresentados:sinais.length}};
+}
+function prompt(f,target=null,mode='investigate') {
+ if(mode==='signals'&&target)return 'PESQUISA WEB EXTERNA DE SINAIS DOCUMENTADOS da empresa com CNPJ exato '+JSON.stringify(target)+
+  ', contexto territorial '+JSON.stringify(f)+
+  '. Busque SOMENTE acontecimentos sobre esta entidade jurídica: expansões, investimentos, contratações executivas, licenças, projetos e mudanças operacionais. Prefira notícias corporativas e documentos públicos, com data de publicação. Responda ESTRITAMENTE JSON {"sinais":[{"cnpj":"...","tipo":"expansao|investimento|contratacao|licenciamento|projeto|mudanca_operacional|outro","titulo":"...","resumo":"...","dataPublicacao":"YYYY-MM-DD ou null","url":"https://..."}]}. Máximo 8. Cada URL deve ser citada pela sua ferramenta web_search. Sem CNPJ exato, evento, data ou fonte confiável, omita o item. Não deduza interesse em comprar ou orçamento de vendas; retorno vazio é aceitável.';
+
  if(target)return 'INVESTIGAÇÃO INDEPENDENTE DE UMA EMPRESA ESPECÍFICA. Pesquise na WEB somente a empresa com CNPJ e nome '+JSON.stringify(target)+', localizada no recorte '+JSON.stringify(f)+'. Use fontes primárias e páginas corporativas quando disponíveis. Responda somente JSON com chave empresas, com NO MÁXIMO UMA empresa, contendo cnpj, razaoSocial, nome, cidade, uf, ddd, segmento, porte, site, telefone, funcionarios, faturamento, fontes:[{url,titulo}], contatos:[{nome,cargo,email,telefone,fonte}], noticias:[{titulo,url,data}], insights:[]. Se não conseguir obter o MESMO CNPJ com fonte web citada, devolva {"empresas":[]}. Nunca substitua por CNPJ parecido ou outra filial. Contatos, cargos, números e notícias somente com URL citada; desconhecidos devem ser null ou lista vazia. Evite inventar conclusões e intenção de compra.';
  return 'PESQUISE NA WEB empresas reais com recorte '+JSON.stringify(f)+'. Busque sites corporativos, bases publicas e noticias. Responda somente JSON com chave empresas (array): cada empresa possui cnpj, razaoSocial, nome, cidade, uf, ddd, segmento, porte, site, telefone, funcionarios, faturamento, fontes:[{url,titulo}], contatos:[{nome,cargo,email,telefone,fonte}], noticias:[{titulo,url,data}], insights:[]. Quando uma empresa mencionada nas fontes ainda nao tiver CNPJ encontrado, use cnpj=null e preserve-a como candidata pendente. Nunca invente CNPJ. Toda empresa precisa ter nome e URL realmente citada pela ferramenta web. Valores nao encontrados=null. NUNCA invente empresa ou pessoa. Para DDD/regiao pesquisa e exploratoria, sem promessa de cobertura total. Para filtros em listas aplique OU dentro do campo e E entre campos (municipios, DDDs, segmentos e faixas de empregados). Informe o numero de funcionarios apenas com fonte verificavel; caso contrario use null. Maximo '+f.limit+' empresas.';
 }
-async function queryAI(engine,key,f,target=null) {
+async function queryAI(engine,key,f,target=null,mode='investigate') {
  const instructions='Pesquisador B2B: use sempre a ferramenta web_search, inclua URLs citadas e retorne JSON sem inventar fatos.';
  let uri,headers,body;
  if(engine==='OpenAI') {
   uri='https://api.openai.com/v1/responses';headers={authorization:'Bearer '+key,'content-type':'application/json'};
-  body={model:Deno.env.get('IA_MODELO_PESQUISA_OPENAI')||Deno.env.get('IA_MODELO_OPENAI')||'gpt-5',instructions,input:prompt(f,target),tools:[{type:'web_search',search_context_size:'low'}],tool_choice:'required',max_tool_calls:2,max_output_tokens:2200,store:false};
+  body={model:Deno.env.get('IA_MODELO_PESQUISA_OPENAI')||Deno.env.get('IA_MODELO_OPENAI')||'gpt-5',instructions,input:prompt(f,target,mode),tools:[{type:'web_search',search_context_size:'low'}],tool_choice:'required',max_tool_calls:2,max_output_tokens:2200,store:false};
  } else {
   uri='https://api.anthropic.com/v1/messages';headers={'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json'};
-  body={model:Deno.env.get('IA_MODELO_PESQUISA_ANTHROPIC')||Deno.env.get('IA_MODELO_ANTHROPIC')||'claude-opus-5',system:instructions,max_tokens:2200,messages:[{role:'user',content:prompt(f,target)}],tools:[{type:'web_search_20250305',name:'web_search',max_uses:2}]};
+  body={model:Deno.env.get('IA_MODELO_PESQUISA_ANTHROPIC')||Deno.env.get('IA_MODELO_ANTHROPIC')||'claude-opus-5',system:instructions,max_tokens:2200,messages:[{role:'user',content:prompt(f,target,mode)}],tools:[{type:'web_search_20250305',name:'web_search',max_uses:2}]};
  }
  // Short searches need enough time for the hosted web tool, but always stay
  // below Supabase's 150s request idle limit. No hidden retry or extra quota.
@@ -402,9 +462,9 @@ Deno.serve(async req=>{
     note:'Metadados de modelo: nao executa web_search, nao usa quota de pesquisa e nao homologa a busca real.'},200,origin);
   }
   const action=body?.action;
-  if(action!=='search'&&action!=='investigate')return output({error:'SEARCH_ONLY'},400,origin);
+  if(!['search','investigate','signals'].includes(action))return output({error:'SEARCH_ONLY'},400,origin);
   let target=null;
-  if(action==='investigate'){
+  if(action==='investigate'||action==='signals'){
    try{target=targetedCompany(body.target)}
    catch{return output({error:'INVALID_INVESTIGATION_TARGET'},422,origin)}
   }
@@ -456,8 +516,8 @@ Deno.serve(async req=>{
   if(quota?.allowed===false)return output({error:'SEARCH_QUOTA_EXCEEDED',scope:quota.scope||'unknown'},429,origin);
   if(quota?.allowed!==true)return output({error:'SEARCH_QUOTA_UNAVAILABLE'},503,origin);
   const jobs=[];
-  if(openai&&provider!=='Anthropic')jobs.push({engine:'OpenAI',promise:queryAI('OpenAI',openai,f,target)});
-  if(claude&&provider!=='OpenAI')jobs.push({engine:'Anthropic',promise:queryAI('Anthropic',claude,f,target)});
+  if(openai&&provider!=='Anthropic')jobs.push({engine:'OpenAI',promise:queryAI('OpenAI',openai,f,target,action)});
+  if(claude&&provider!=='OpenAI')jobs.push({engine:'Anthropic',promise:queryAI('Anthropic',claude,f,target,action)});
   const outcomes=await Promise.allSettled(jobs.map(x=>x.promise));
   // A provider returning JSON without a recorded web_search execution
   // is not a successful market search, even when its text looks plausible.
@@ -479,6 +539,17 @@ Deno.serve(async req=>{
   }
   if(!results.length)return output({error:'AI_SEARCH_UNAVAILABLE',failedProviders,failures},502,origin);
   const partial=failedProviders.length>0;
+  if(action==='signals'){
+   const signals=combineSignals(results,target);
+   // Não inserir eventos nas tabelas nem afetar score ou Pipeline.
+   console.info('[market-search] signals_summary',JSON.stringify({
+    completedProviders:results.length,...signals.diagnostico}));
+   return output({action:'signals',sinais:signals.sinais,diagnostico:signals.diagnostico,
+    providers:results.map(x=>x.engine),failedProviders,failures,partial,
+    usage:results.map(x=>x.usage),retrievedAt:new Date().toISOString(),
+    verifiedSignals:0,signalStatus:'HIPOTESES_COM_URL_CITADA',
+    warning:'Sinais externos relatados pela IA e associados a URLs citadas. A ligação do evento com o CNPJ, a data e o conteúdo ainda exigem revisão humana. Não significa intenção de compra. Nenhum dado foi importado.'},200,origin);
+  }
   const diagnostics={};
   // Um provedor pode mencionar outras empresas no texto. Nunca permitir que
   // elas contaminem uma investigação com CNPJ exato, nem herdar suas fontes.
