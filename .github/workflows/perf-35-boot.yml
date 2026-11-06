@@ -1,0 +1,40 @@
+name: PERF-35 — Bootstrap com 37 scripts defer e comparação Chromium
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - 'index.html'
+      - 'src/config.js'
+      - 'sw.js'
+      - 'scripts/perf35-*.cjs'
+      - '.github/workflows/perf-35-boot.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test scripts/perf35-defer-contract.test.cjs scripts/ri01-release-shell.test.cjs
+      - run: node scripts/verificar-versao-shell.cjs
+      - run: node --check src/app.js
+      - run: node --check src/views.js
+  compare-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Benchmark baseline vs defer — mesmos 37 scripts
+        run: node scripts/perf35-boot-browser.cjs
