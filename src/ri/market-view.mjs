@@ -7,6 +7,7 @@ import {mountMarketInvestigation} from './market-investigation.mjs';
 import {mountMarketSignals} from './market-signals.mjs';
 import {mountMarketEnricher} from './market-enricher.mjs';
 import {mountMarketResearchMetrics} from './market-audit.mjs';
+import {interpretSector} from './sector-intelligence.mjs';
 /**
  * Pull only the server-confirmed RI-M01 import into the local Pipeline.
  * Never upload local edits. Refuse the pull when CAS/pending state is unknown.
@@ -74,7 +75,18 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
    summary.title=summary.textContent;
    options.replaceChildren();
    const term=search.value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
-   const shown=items.filter(x=>x.label.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().includes(term)).slice(0,65);
+   const exact=items.filter(x=>x.label.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().includes(term));
+   // RI-M14: a palavra usada pelo mercado pode diferir do rótulo oficial.
+   // Mostrar correspondências como SUGESTÃO; nunca selecionar automaticamente.
+   const suggested=new Set();
+   if(label==='Segmentos cadastrados'&&term.length>=3){
+    const semantic=interpretSector(search.value,{allowedNames:items.map(x=>x.label),limit:5});
+    for(const c of semantic.candidates){
+     const item=items.find(x=>x.label===c.name);
+     if(item&&!exact.some(x=>x.key===item.key))suggested.add(item.key);
+    }
+   }
+   const shown=[...exact,...items.filter(x=>suggested.has(x.key))].slice(0,65);
    if(!shown.length)options.appendChild(el('span','Nenhuma opcao encontrada','small muted'));
    for(const item of shown){
     const lbl=el('label','','campo'),input=doc.createElement('input');
@@ -85,7 +97,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
      render();
     });
     lbl.className='iad-market-option';
-    lbl.append(input,doc.createTextNode(item.label));options.appendChild(lbl);
+    lbl.append(input,doc.createTextNode(item.label+(suggested.has(item.key)?' · nome relacionado (revisar)':'')));options.appendChild(lbl);
    }
    if(items.length>65&&!term)options.appendChild(el('span','Digite para localizar outras opcoes.','small muted'));
   }
