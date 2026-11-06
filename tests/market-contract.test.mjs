@@ -631,6 +631,10 @@ test('RI-M16 DOM: perfil de outra empresa bloqueia busca sem reservar cota ou ch
   for(let i=0;i<20;i++)await new Promise(resolve=>setImmediate(resolve));
   const btn=walk(root,n=>n.tagName==='button'&&n.textContent==='Buscar empresas');
   assert.ok(btn.disabled,'o botão pago deve permanecer bloqueado');
+  const demo=walk(root,n=>n.tagName==='button'&&n.textContent.includes('Aplicar exemplo'));
+  await demo.fire('click');
+  assert.equal(requests.filter(u=>u.includes('servicodados.ibge.gov.br')||u.includes('brasilapi.com.br')).length,0,
+   'sem tenant validado, exemplo não deve consultar municípios');
   const form=walk(root,n=>n.tagName==='form');await form.fire('submit');
   assert.ok(!requests.some(u=>u.includes('/functions/v1/market-search')||u.includes('/rpc/iad_market_search_reserve')));
   const status=walk(root,n=>n.tagName==='p'&&String(n.textContent).includes('empresa vinculada'));
