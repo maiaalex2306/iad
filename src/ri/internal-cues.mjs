@@ -64,7 +64,7 @@ export function discoverInternalCommercialCues({snapshot,scope,accounts,asOf,lim
    status:'hipotese',sourceType,sourceOpportunityId:op.id,
    sourceEventId:eventId,date:date&&date<=asOf?date:null,
    sourceLabel:sourceType==='evento'?'Título de evento comercial registrado no CRM':'Nota de oportunidade cadastrada no CRM',
-   priority:priority(match)
+   priority:priority({...match,sourceType,date})
   };
   const prior=perAccount.get(ak);
   if(!prior||item.priority>prior.priority||
