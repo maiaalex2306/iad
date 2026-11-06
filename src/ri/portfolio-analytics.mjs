@@ -88,6 +88,18 @@ export function buildPortfolioAnalytics({snapshot,scope,asOf}={}){
     Quantidades cobrem todo o escopo; detalhes são limitados por grupo. */
  const motions={fechar:{count:0,items:[]},avancar:{count:0,items:[]},
   reativar:{count:0,items:[]},qualificar:{count:0,items:[]}};
+ /* Lista por movimento é limitada a 12 e ordenada sem chance predita de venda.
+    Primeiro decisões com vencimento, depois valor já informado e trabalho vencido. */
+ const compararTrabalho=(a,b)=>Number(b.lateClosing)-Number(a.lateClosing)||
+   Number(b.value>0)-Number(a.value>0)||b.overdueTasks-a.overdueTasks||
+   (b.stageDays||0)-(a.stageDays||0)||a.accountName.localeCompare(b.accountName,'pt-BR');
+ function inserirPrioridade(bucket,item){
+   bucket.count++;
+   const list=bucket.items,idx=list.findIndex(x=>compararTrabalho(item,x)<0);
+   if(idx>=0)list.splice(idx,0,item);
+   else if(list.length<12)list.push(item);
+   if(list.length>12)list.pop();
+ }
  const priorities=[],withoutUpcoming=[];
  for(const item of opportunities){
   if(item.closed)continue;
@@ -116,8 +128,7 @@ export function buildPortfolioAnalytics({snapshot,scope,asOf}={}){
    value:item.value,overdueTasks:item.overdueTasks,stageDays:item.stageDays,
    lateClosing:item.lateClosing,withNextStep:item.withNextStep,action,
    reason:reasons[0]||'Próximo passo comercial a confirmar'};
-  const bucket=motions[motion];bucket.count++;
-  if(bucket.items.length<12)bucket.items.push(work);
+  inserirPrioridade(motions[motion],work);
   if(reasons.length){
    // Classificação determinística de atenção operacional, NÃO probabilidade de ganho.
    const attention=(item.lateClosing?4:0)+(item.overdueTasks?3:0)+(item.stalled?2:0)+(!item.withNextStep?1:0);
