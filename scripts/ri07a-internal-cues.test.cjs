@@ -60,7 +60,7 @@ test('pistas: mesmo tenant, filtro de dono admin e caminho integrado do Radar',a
  const m=await radarPromise,s=state();
  const x=m.buildCommercialOpportunityRadar({snapshot:s,scope,asOf:date});
  assert.ok(Array.isArray(x.groups.pistas));
- assert.equal(x.groups.pistas.length,3);
+ assert.equal(x.groups.pistas.length,4,'gestor vê todas as contas do próprio tenant');
  assert.ok(!JSON.stringify(x).includes('SIGILO-TENANT-B'));
  const admin={...scope,role:'admin',admin:true,tenantFilter:'ta',ownerFilter:'other'};
  const y=m.buildCommercialOpportunityRadar({snapshot:s,scope:admin,asOf:date});
