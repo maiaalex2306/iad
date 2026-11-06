@@ -152,6 +152,7 @@ export function mountAccountIntelligence({root,snapshot,scope,getScopeToken}={})
     'antes de tratar todo contato como negociação madura.',
     'iad-ri-diagnosis-text');
   add(diagnosis,'small',
+    'Prioridades identificadas: '+number(portfolio.priorityCount)+' oportunidades com ao menos um alerta objetivo. '+
     'Diagnóstico de distribuição por etapa, não estimativa de conversão. '+number(metrics.lateClosing)+
     ' fechamentos estão vencidos e '+number(metrics.accountsWithoutOpen)+
     ' contas não têm oportunidade aberta registrada.','iad-ri-note');
