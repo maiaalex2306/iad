@@ -41,4 +41,4 @@ window.IAD_RI_ENABLED = true;
 window.IAD_MARKET_ENABLED = true;
 /* Piloto de pesquisa: a importação permanece bloqueada no servidor e no navegador. */
 window.IAD_MARKET_IMPORT_ENABLED = false;
-window.IADVersao = { numero: 'v286.67', data: '2026-11-06' };
+window.IADVersao = { numero: 'v286.68', data: '2026-11-06' };

@@ -257,6 +257,41 @@ test('DOM: botao de exemplo gera pesquisa JSON autenticada sem importar, respeit
   cleanup();
  }finally{globalThis.fetch=originalFetch;}
 });
+
+test('PERF-36G: reabrir Mercado no mesmo documento não repete GET de municípios do IBGE',async()=>{
+ const {mountMarketDiscovery}=await import('../src/ri/market-view.mjs');
+ const {root,walk}=fakeMarketDOM(),oldFetch=globalThis.fetch;
+ const scope={tenantId:'tenant-a',userId:'u1',token:'scope-a'};
+ const snapshot={contas:[],oportunidades:[],segmentos:[{tenantId:'tenant-a',ativo:true,nome:'Química e Petroquímica'}]};
+ let ibgeCalls=0;
+ globalThis.fetch=async(url,options={})=>{
+  const u=String(url);
+  if(u.includes('/rest/v1/perfis?'))return new Response(JSON.stringify([{tenant_id:'tenant-a',papel:'gestor',ativo:true}]),{status:200});
+  if(u.includes('/rest/v1/segmentos?'))return new Response(JSON.stringify([{nome:'Química e Petroquímica',ativo:true}]),{status:200});
+  if(u.includes('servicodados.ibge.gov.br')){ibgeCalls++;return new Response(JSON.stringify([{id:3530607,nome:'Mogi das Cruzes'}]),{status:200});}
+  throw Error('URL inesperada: '+u);
+ };
+ const nuvem={sessao:()=>({access_token:'jwt-test'}),config:()=>({url:'https://safe.supabase.co',chave:'public-test'})};
+ let cleanupOne,cleanupTwo;
+ try{
+  cleanupOne=mountMarketDiscovery({root,snapshot,scope,getScopeToken:()=>scope.token,nuvem});
+  await waitForMarketReady(root,walk);
+  await walk(root,n=>n.tagName==='button'&&n.textContent.includes('Aplicar exemplo')).fire('click');
+  assert.equal(ibgeCalls,1,'primeira consulta pública IBGE');
+  cleanupOne();cleanupOne=null;
+  const secondRoot=new MarketTestNode('root');
+  secondRoot.ownerDocument=root.ownerDocument;
+  cleanupTwo=mountMarketDiscovery({root:secondRoot,snapshot,scope,getScopeToken:()=>scope.token,nuvem});
+  await waitForMarketReady(secondRoot,walk);
+  await walk(secondRoot,n=>n.tagName==='button'&&n.textContent.includes('Aplicar exemplo')).fire('click');
+  assert.equal(ibgeCalls,1,'reabertura deve aproveitar o cache do mesmo documento');
+  const selected=walk(secondRoot,n=>n.tagName==='summary'&&n.textContent.includes('Mogi das Cruzes'));
+  assert.ok(selected,'município oficial permanece selecionável');
+ }finally{
+  cleanupTwo?.();cleanupOne?.();globalThis.fetch=oldFetch;
+ }
+});
+
 test('DOM: falha de IBGE usa BrasilAPI e preserva codigo municipal de sete digitos',async()=>{
  const {mountMarketDiscovery}=await import('../src/ri/market-view.mjs');
  const {root,walk}=fakeMarketDOM(),originalFetch=globalThis.fetch,requests=[];
@@ -596,6 +631,10 @@ test('RI-M16 DOM: perfil de outra empresa bloqueia busca sem reservar cota ou ch
   for(let i=0;i<20;i++)await new Promise(resolve=>setImmediate(resolve));
   const btn=walk(root,n=>n.tagName==='button'&&n.textContent==='Buscar empresas');
   assert.ok(btn.disabled,'o botão pago deve permanecer bloqueado');
+  const demo=walk(root,n=>n.tagName==='button'&&n.textContent.includes('Aplicar exemplo'));
+  await demo.fire('click');
+  assert.equal(requests.filter(u=>u.includes('servicodados.ibge.gov.br')||u.includes('brasilapi.com.br')).length,0,
+   'sem tenant validado, exemplo não deve consultar municípios');
   const form=walk(root,n=>n.tagName==='form');await form.fire('submit');
   assert.ok(!requests.some(u=>u.includes('/functions/v1/market-search')||u.includes('/rpc/iad_market_search_reserve')));
   const status=walk(root,n=>n.tagName==='p'&&String(n.textContent).includes('empresa vinculada'));
