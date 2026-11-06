@@ -1,0 +1,27 @@
+name: RI-M16 — Escopo do tenant na pesquisa de Mercado
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - 'src/ri/market-tenant-scope.mjs'
+      - 'src/ri/market-view.mjs'
+      - 'tests/market-tenant-scope.test.mjs'
+      - 'tests/market-contract.test.mjs'
+      - '.github/workflows/ri-m16-market-tenant.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  tenant-scope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Sintaxe e regressões de escopo por tenant
+        run: |
+          node --check src/ri/market-tenant-scope.mjs
+          node --check src/ri/market-view.mjs
+          node --test tests/market-tenant-scope.test.mjs tests/market-contract.test.mjs
