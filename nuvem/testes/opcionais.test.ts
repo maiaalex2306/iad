@@ -96,40 +96,74 @@ conferir('cada módulo sob demanda publica um global',
   opcionais.every(n => globalDe[n]),
   'sem global: ' + opcionais.filter(n => !globalDe[n]).join(', '));
 
-/* 3. A regra, e por que ela é por LINHA e não por arquivo.
+/* 3. A regra, e as DUAS vezes que eu errei ao escrevê-la.
 
-   A primeira versão desta trava conferia por arquivo: se o arquivo pedisse o
-   módulo em ALGUMA linha anterior, todo uso posterior passava. Eu desfiz o
-   conserto do `ui.js` para ver a trava pegar — e ela **não pegou**: o helper
-   `lerDocumentos`, que ficou no arquivo, tem a guarda numa linha de cima, e
-   isso dava passe livre aos dois usos soltos lá embaixo.
+   Primeira tentativa: por ARQUIVO — se o arquivo pedisse o módulo em alguma
+   linha anterior, todo uso posterior passava. Desfiz o conserto do `ui.js`
+   para ver a trava pegar e ela **não pegou**: o helper que ficou no arquivo
+   tem a guarda numa linha de cima, e isso dava passe livre aos usos soltos lá
+   embaixo. Era o mesmo erro que a trava existe para impedir, cometido dentro
+   dela.
 
-   Era o mesmo erro que a trava existe para impedir, cometido dentro dela.
-   Então a regra passou a ser por linha, e estrita: um `global.X.algo(...)` só
-   vale se a MESMA linha perguntar se `global.X` existe. Quem carrega pelo
-   carregador recebe o módulo num parâmetro local (`D.lerVarios(...)`) e nem
-   encosta nesta regra — é por isso que ela não atrapalha o jeito certo. */
+   Segunda tentativa: estrita, só valendo guarda na MESMA linha. Uma hora
+   depois, o PERF-36K1 pôs `views-manual.js` sob demanda e escreveu o uso na
+   forma normal e correta:
+
+       if (global.IADViewsManual && typeof ... === 'function') {
+         return global.IADViewsManual.playbook();
+       }
+
+   A trava reprovou isso. Ou seja: reprovaria todo uso certo em bloco `if`,
+   virando vermelho permanente que não quer dizer nada — a MESMA doença dos
+   três testes de versão que eu tinha acabado de consertar, reintroduzida por
+   mim, na trava contra reintroduzir coisas.
+
+   Terceira forma, a que ficou: a guarda vale se estiver na mesma linha OU em
+   até 8 linhas acima COM INDENTAÇÃO MENOR — isto é, abrindo um bloco que
+   contém o uso. Aceita a forma em bloco, continua recusando uma guarda solta
+   numa função distante, e quem usa o carregador recebe o módulo num parâmetro
+   local (`D.lerVarios(...)`) e nem encosta nesta regra.
+
+   Limite honesto: é indentação, não escopo de verdade. Um `if` guardando
+   outra coisa, logo acima e menos indentado, passaria. Troquei precisão por
+   uma regra que não grita à toa — porque trava que grita à toa é pior que
+   trava nenhuma. */
+const JANELA = 8;
 const arquivos = (await readdir(RAIZ + 'src')).filter(f => f.endsWith('.js'));
 const problemas: string[] = [];
 
+function indent(linha: string): number {
+  const m = /^[ \t]*/.exec(linha);
+  return m ? m[0].length : 0;
+}
+
 for (const [modulo, g] of Object.entries(globalDe)) {
   const usa = new RegExp('(?:global|window)\\.' + g + '\\s*\\.', '');
-  const guardaNaLinha = new RegExp(
-    'if\\s*\\(\\s*!?\\s*(?:global|window)\\.' + g + '\\b', '');
+  const guarda = new RegExp(
+    '(?:if|&&|\\|\\||\\?)\\s*\\(?\\s*!?\\s*(?:global|window)\\.' + g + '\\b', '');
 
   for (const f of arquivos) {
     if (f === modulo + '.js') continue;            /* o próprio módulo pode */
     const linhas = semComentarios(await readFile(RAIZ + 'src/' + f, 'utf8')).split('\n');
     for (let i = 0; i < linhas.length; i++) {
       if (!usa.test(linhas[i])) continue;
-      if (guardaNaLinha.test(linhas[i])) continue;
+      if (guarda.test(linhas[i])) continue;        /* guarda na mesma linha */
+      let protegido = false;
+      for (let j = i - 1; j >= 0 && j >= i - JANELA; j--) {
+        if (!linhas[j].trim()) continue;
+        if (guarda.test(linhas[j]) && indent(linhas[j]) < indent(linhas[i])) {
+          protegido = true;                        /* o uso está dentro do bloco */
+          break;
+        }
+      }
+      if (protegido) continue;
       problemas.push('src/' + f + ':' + (i + 1) + ' mexe em ' + g +
-        ' sem perguntar, na mesma linha, se ' + modulo + '.js já desceu');
+        ' sem nenhuma guarda de ' + modulo + '.js por perto');
     }
   }
 }
 
-conferir('todo uso de módulo sob demanda pergunta antes se ele desceu',
+conferir('todo uso de módulo sob demanda está sob uma guarda',
   problemas.length === 0,
   problemas.join('\n      ') + (problemas.length ? '\n      ' +
   'Esses módulos não vêm no index.html. Sem pedir, o global é undefined e o\n      ' +
