@@ -1,0 +1,51 @@
+name: RI-03 — Inteligência Comercial: estratégia, segurança e navegador
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - 'src/ri/account-view.mjs'
+      - 'src/ri/portfolio-analytics.mjs'
+      - 'assets/ri-commercial.css'
+      - 'sw.js'
+      - 'src/config.js'
+      - 'scripts/ri03-command-center.test.cjs'
+      - 'scripts/ri03-command-center-browser.cjs'
+      - '.github/workflows/ri03-command-center.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validar motor RI, segregação e paridade do escopo
+        run: |
+          node --check src/ri/account-view.mjs
+          node --check src/ri/portfolio-analytics.mjs
+          node --test scripts/ri03-command-center.test.cjs
+          node --test scripts/ri-portfolio-analytics.test.cjs
+          node --test scripts/ri-account-view.test.cjs
+          node --test scripts/ri-account-briefing.test.cjs
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar Playwright Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Testar UI real em múltiplos tamanhos, troca de abas e isolamento de tenant
+        run: |
+          timeout 150s node scripts/ri03-command-center-browser.cjs
+          timeout 150s node scripts/ri01b-browser.cjs
