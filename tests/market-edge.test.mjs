@@ -958,3 +958,124 @@ test('RI-M09: bloqueio por quota ou perfil impede pesquisa paga do Signal Hunter
  const b=await prod.handle(request(signalsRequest()));
  assert.equal(b.status,403);assert.equal(aiCalls(prod).length,0);
 });
+
+const syntheticProfessional=(overrides={})=>({
+ cnpj:candidate.cnpj,nome:'Ana Exemplo',cargo:'Diretora Industrial',
+ fonte:URL_COMPANY,linkedin:null,emailCorporativo:'ana@empresa-industrial.com.br',...overrides
+});
+const enrichRequest=(target={cnpj:candidate.cnpj,nome:candidate.nome})=>({
+ action:'enrich',target,filters:query.filters,provider:'OpenAI'
+});
+const openaiEnrichment=(rows,extraCitations=[])=>{
+ const res=responseOpenAI(true,true),text=res.output.find(b=>b.type==='message').content[0];
+ text.text=JSON.stringify({decisores:rows});
+ for(const url of extraCitations)text.annotations.push({type:'url_citation',url,title:'Perfil profissional'});
+ return res;
+};
+const claudeEnrichment=(rows)=>{
+ const res=responseClaude();
+ res.content.find(b=>b.type==='text').text=JSON.stringify({decisores:rows});
+ return res;
+};
+test('RI-M10: Enricher executa pesquisa web de profissional citado sem gravar no CRM',async()=>{
+ const h=harness({openai:true,openaiResponse:openaiEnrichment([syntheticProfessional()])});
+ const res=await h.handle(request(enrichRequest()));
+ assert.equal(res.status,200);
+ const body=await res.json();
+ assert.equal(body.action,'enrich');
+ assert.equal(body.decisores.length,1);
+ assert.equal(body.decisores[0].cnpj,candidate.cnpj);
+ assert.equal(body.decisores[0].emailCorporativo,'ana@empresa-industrial.com.br');
+ assert.equal(body.decisores[0].status,'VINCULO_PROFISSIONAL_CITADO_NAO_VERIFICADO');
+ assert.equal(body.verifiedContacts,0);
+ assert.ok(!body.data);
+ const calls=aiCalls(h);assert.equal(calls.length,1);
+ assert.match(JSON.stringify(calls[0].body),/INVESTIGAÇÃO WEB DE DECISORES PROFISSIONAIS/);
+ const quota=h.calls.findIndex(c=>c.url.includes('iad_market_search_reserve'));
+ const provider=h.calls.findIndex(c=>c.url.includes('api.openai.com/v1/responses'));
+ assert.ok(quota>=0&&provider>quota);
+});
+test('RI-M10: CNPJ diferente, fonte não citada e IP privado descartam decisores',async()=>{
+ const rows=[
+ syntheticProfessional({cnpj:'22333444000181'}),
+ syntheticProfessional({nome:'Bruna Sem Fonte',fonte:'https://example.org/nunca-citada'}),
+ syntheticProfessional({nome:'Carla URL Local',fonte:'https://localhost/admin'}),
+ syntheticProfessional({nome:'Dora URL Privada',fonte:'https://192.168.0.10/perfil'})
+ ];
+ const h=harness({openai:true,openaiResponse:openaiEnrichment(rows)});
+ const res=await h.handle(request(enrichRequest()));
+ assert.equal(res.status,200);
+ const data=await res.json();
+ assert.equal(data.decisores.length,0);
+ assert.equal(data.diagnostico.semCnpjExato,1);
+ assert.equal(data.diagnostico.semFonteCitada,3);
+});
+test('RI-M10: e-mails pessoais e inválidos não aparecem, cargo/nome sem qualidade são rejeitados',async()=>{
+ const rows=[
+ syntheticProfessional({emailCorporativo:'ana@gmail.com'}),
+ syntheticProfessional({nome:'Bruna Executiva',emailCorporativo:'bruna@outlook.com'}),
+ syntheticProfessional({nome:'Clara Industrial',emailCorporativo:'invalid@localhost'}),
+ syntheticProfessional({nome:'X',emailCorporativo:'x@empresa.com.br'}),
+ syntheticProfessional({nome:'Carlos Técnico',cargo:' '})
+ ];
+ const h=harness({openai:true,openaiResponse:openaiEnrichment(rows)});
+ const res=await h.handle(request(enrichRequest()));
+ assert.equal(res.status,200);
+ const data=await res.json();
+ assert.equal(data.decisores.length,3);
+ assert.ok(data.decisores.every(x=>x.emailCorporativo===null));
+ assert.equal(data.diagnostico.emailsDescartados,3);
+ assert.equal(data.diagnostico.semIdentidadeProfissional,2);
+});
+test('RI-M10: perfil LinkedIn só aparece quando a URL está citada pela ferramenta',async()=>{
+ const url='https://www.linkedin.com/in/ana-exemplo-industria';
+ const noCitation=harness({openai:true,
+  openaiResponse:openaiEnrichment([syntheticProfessional({linkedin:url})])});
+ const a=await noCitation.handle(request(enrichRequest()));
+ assert.equal(a.status,200);
+ assert.equal((await a.json()).decisores[0].linkedin,null);
+ const cited=harness({openai:true,
+  openaiResponse:openaiEnrichment([syntheticProfessional({linkedin:url})],[url])});
+ const b=await cited.handle(request(enrichRequest()));
+ assert.equal(b.status,200);
+ assert.equal((await b.json()).decisores[0].linkedin,url);
+});
+test('RI-M10: LinkedIn falso ou com URL não pública não pode se apresentar como perfil',async()=>{
+ const urls=['https://linkedin.com.evil.org/in/ana',
+  'https://linkedin.com/company/empresa-a',
+  'https://localhost/in/ana'];
+ for(const url of urls){
+  const h=harness({openai:true,
+   openaiResponse:openaiEnrichment([syntheticProfessional({linkedin:url})],[url])});
+  const res=await h.handle(request(enrichRequest()));
+  assert.equal(res.status,200);
+  assert.equal((await res.json()).decisores[0].linkedin,null,url);
+ }
+});
+test('RI-M10: OpenAI e Claude fundem mesmo decisor sem duplicá-lo e sem declarar validação',async()=>{
+ const h=harness({openai:true,claude:true,
+  openaiResponse:openaiEnrichment([syntheticProfessional({emailCorporativo:null})]),
+  claudeResponse:claudeEnrichment([syntheticProfessional()])});
+ const res=await h.handle(request({...enrichRequest(),provider:'both'}));
+ assert.equal(res.status,200);
+ const body=await res.json();
+ assert.equal(body.decisores.length,1);
+ assert.equal(body.decisores[0].emailCorporativo,'ana@empresa-industrial.com.br');
+ assert.equal(body.diagnostico.duplicados,1);
+ assert.equal(body.verifiedContacts,0);
+ assert.equal(aiCalls(h).length,2);
+});
+test('RI-M10: alvo inválido, falta de quota, perfil proibido e ausência de web_search bloqueiam enriquecimento',async()=>{
+ const bad=harness({openai:true});
+ const a=await bad.handle(request(enrichRequest({cnpj:'000',nome:'Empresa'})));
+ assert.equal(a.status,422);assert.equal(aiCalls(bad).length,0);
+ const quota=harness({openai:true,quotaAllowed:false});
+ const b=await quota.handle(request(enrichRequest()));
+ assert.equal(b.status,429);assert.equal(aiCalls(quota).length,0);
+ const noRole=harness({openai:true,role:'usuario',supabaseUrl:'https://drhonmdffhnwamwzynrs.supabase.co'});
+ const c=await noRole.handle(request(enrichRequest()));
+ assert.equal(c.status,403);assert.equal(aiCalls(noRole).length,0);
+ const noWeb=harness({openai:true,openaiResponse:responseOpenAI(false)});
+ const d=await noWeb.handle(request(enrichRequest()));
+ assert.equal(d.status,502);assert.equal((await d.json()).error,'AI_SEARCH_UNAVAILABLE');
+});
