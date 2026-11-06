@@ -210,12 +210,12 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   // the stale Store snapshot. Populate the facet from the same source before
   // allowing a paid request; never bypass server-side validation.
   const catalogController=new AbortController();
-  let catalogReady=false;
+  let catalogReady=false,catalogBlockReason='Aguarde a validação do catálogo e da empresa autenticada.';
   btn.disabled=true;
   (async()=>{
    const session=nuvem.sessao(),cfg=nuvem.config();
    if(!session?.access_token||!cfg?.url||!cfg?.chave){
-    show('Conecte-se à nuvem para validar o catálogo de segmentos.');return;
+    catalogBlockReason='Conecte-se à nuvem para validar o catálogo de segmentos.';show(catalogBlockReason);return;
    }
    show('Conferindo segmentos autorizados desta empresa no servidor...');
    try{
@@ -231,11 +231,11 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
       {headers,signal:catalogController.signal})
     ]);
     if(!valid())return;
-    if(!profileResponse.ok){show('Falha ao validar o perfil autenticado. Nenhuma pesquisa foi realizada.');return;}
+    if(!profileResponse.ok){catalogBlockReason='Falha ao validar o perfil autenticado. Nenhuma pesquisa foi realizada.';show(catalogBlockReason);return;}
     const profiles=await profileResponse.json();
     const auth=verifyMarketTenantScope({selectedTenant:scope.tenantId,selectedUser:scope.userId,
      profile:Array.isArray(profiles)?profiles[0]:null});
-    if(!auth.ok){show(marketTenantMessage(auth.code));return;}
+    if(!auth.ok){catalogBlockReason=marketTenantMessage(auth.code);show(catalogBlockReason);return;}
     if(!catalogResponse.ok)throw Error('catalog-http');
     const rows=await catalogResponse.json();
     if(!Array.isArray(rows))throw Error('catalog-format');
@@ -251,13 +251,13 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
     segmentPick.setItems(options);
     // Preserve prior selection only when it is part of the server-authorized catalog.
     segmentPick.choose(prev.filter(v=>authorized.has(v)));
-    catalogReady=true;btn.disabled=false;
-    if(!options.length)show('Nenhum segmento ativo autorizado no servidor para esta empresa. Confira Cadastros antes de pesquisar.');
+    catalogReady=options.length>0;btn.disabled=!catalogReady;
+    if(!options.length){catalogBlockReason='Nenhum segmento ativo autorizado no servidor para esta empresa. Confira Cadastros antes de pesquisar.';show(catalogBlockReason);}
     else if(prev.length&&!prev.every(v=>authorized.has(v)))
      show('Os segmentos locais foram atualizados com o catálogo do servidor. Revise sua seleção antes de buscar.');
     else show('Catálogo autorizado atualizado. Selecione os filtros e clique em Buscar empresas.');
    }catch(e){
-    if(e?.name!=='AbortError'&&valid())show('Não foi possível validar o catálogo no servidor. A pesquisa permanece bloqueada para evitar custo e rejeição. Confira a conexão e recarregue a tela.');
+    if(e?.name!=='AbortError'&&valid()){catalogBlockReason='Não foi possível validar o catálogo no servidor. A pesquisa permanece bloqueada para evitar custo e rejeição. Confira a conexão e recarregue a tela.';show(catalogBlockReason);}
    }
   })();
  const failureDescription=failures=>{
@@ -486,7 +486,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
  }
  form.addEventListener('submit',async ev=>{
   ev.preventDefault();if(!valid())return;
-  if(!catalogReady){show('Aguarde a validação dos segmentos autorizados no servidor antes de pesquisar.');return;}
+  if(!catalogReady){show(catalogBlockReason);return;}
    if(cityLoading){show('Aguarde a consulta de cidades no IBGE.');return;}
   let filters;try{filters=normalizeMarketFilters({
    ...Object.fromEntries([...els].map(([k,v])=>[k,v.value])),
