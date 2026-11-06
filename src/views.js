@@ -8690,6 +8690,10 @@
       '</div>';
   }
 
+  /* PERF-36K1: compartilhar as categorias oficiais do Pipeline com o Manual.
+     Não duplicar regras comerciais em dois módulos. Apenas leitura. */
+  global.IADViewsManualDados = Object.freeze({ FILTROS: FILTROS });
+
   global.IADViews = {
     semServidor,
     orientacaoFoco: blocosDaOrientacao,
