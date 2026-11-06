@@ -87,6 +87,49 @@ test('PERF03B baixa snapshot primeiro e depois só eventos + IDs atualizados',as
  assert.ok(calls.some(s=>s.includes('oportunidades?select=*&id=in.')));
  assert.ok(!calls.some(s=>s.includes('oportunidades?select=*&order=id.asc')));
 });
+test('PERF-36I: delta sem eventos e sem alteração privada não regrava Store ou índices',async()=>{
+ const a=ambiente();
+ assert.equal(await a.N.puxar(),1);
+ const antes=a.S.revisao();
+ const carteira=a.state.oportunidades;
+ a.clearCalls();
+ for(let i=0;i<8;i++)assert.equal(await a.N.puxar(),0);
+ assert.equal(a.S.revisao(),antes,
+  'refresh delta idêntico não pode invalidar revisão nem repintar o CRM');
+ assert.equal(a.state.oportunidades,carteira,'referência da carteira preservada');
+ const reqs=a.requests();
+ assert.ok(reqs.some(s=>s.includes('/iad_sync_eventos?')),'journal ainda consultado');
+ assert.ok(reqs.some(s=>s.includes('/sinais?')),'sinais privados ainda consultados');
+ assert.ok(reqs.some(s=>s.includes('/notas?')),'notas privadas ainda consultadas');
+ assert.ok(!reqs.some(s=>s.includes('/oportunidades?select=*&order=id.asc')),
+  'sem evento não rebaixar carteira');
+});
+
+test('PERF-36I: sinais privados alterados sem evento público ainda são aplicados',async()=>{
+ const a=ambiente();
+ await a.N.puxar();
+ const rev=a.S.revisao();
+ a.remote.sinais.push({id:'sinal-1',tenant_id:'d1111111-1111-4111-8111-111111111111',
+  nome:'Alerta sintético'});
+ assert.equal(await a.N.puxar(),0,
+  'journal público sem eventos, mas coleção privada deve ser atualizada');
+ assert.equal(a.S.revisao(),rev+1,'alteração de sinal deve ser materializada');
+ assert.equal(a.state.sinais.length,1);
+ const rev2=a.S.revisao();
+ assert.equal(await a.N.puxar(),0);
+ assert.equal(a.S.revisao(),rev2,
+  'após confirmar nova versão privada não pode regravar sem mudança');
+});
+
+test('PERF-36I: notas privadas alteradas preservam o mesmo gate',async()=>{
+ const a=ambiente();await a.N.puxar();
+ const rev=a.S.revisao();
+ a.remote.notas.push({id:'nota-1',tenant_id:'d1111111-1111-4111-8111-111111111111',
+  texto:'Nota sintética'});
+ assert.equal(await a.N.puxar(),0);
+ assert.equal(a.S.revisao(),rev+1,'nota privada tem precedência sobre fast-path');
+ assert.equal(a.state.notas.length,1);
+});
 test('PERF03B insere e remove oportunidade sem apagar registros independentes',async()=>{
  const a=ambiente();
  await a.N.puxar();
