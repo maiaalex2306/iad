@@ -13,15 +13,15 @@ const snapshot={contas:[
  {id:'c4',tenantId:'tenant-a',nome:'Conta Sem Dono'}
 ]};
 const seller={userId:'seller-1',tenantId:'tenant-a',role:'vendedor',admin:false,tenantFilter:'todas',ownerFilter:'todos'};
-test('vendedor vê apenas próprias contas e contas sem dono na própria empresa',async()=>{
+test('vendedor não tem acesso à Inteligência Comercial nesta fase',async()=>{
  const rows=await select(snapshot,seller,'',50);
- assert.deepEqual(rows.map(x=>x.id),['c1','c4']);
+ assert.deepEqual(rows,[]);
 });
-test('perfil usuario nativo do IaD equivale ao vendedor: escopo próprio e sem dono',async()=>{
+test('usuário comum não tem acesso mesmo pertencendo ao tenant',async()=>{
  const rows=await select(snapshot,{...seller,role:'usuario'},'',50);
- assert.deepEqual(rows.map(x=>x.id),['c1','c4']);
+ assert.deepEqual(rows,[]);
  const wrongTenant=await select(snapshot,{...seller,role:'usuario',tenantId:'tenant-b'},'',50);
- assert.deepEqual(wrongTenant.map(x=>x.id),['c3']);
+ assert.deepEqual(wrongTenant,[]);
 });
 test('gestor vê todas as contas apenas na empresa atual',async()=>{
  const rows=await select(snapshot,{...seller,role:'gestor'},'',50);
@@ -53,13 +53,15 @@ test('não modifica os registros originais',async()=>{
  await select(snapshot,seller,'',50);
  assert.equal(JSON.stringify(snapshot),before);
 });
-test('seleção de conta após a primeira página não pode perder o registro',async()=>{
+test('seleção de conta para gestor após a primeira página preserva escopo',async()=>{
  modulePromise??=import(file);
  const {findVisibleAccount}=await modulePromise;
  const accounts=Array.from({length:120},(_,i)=>({id:'acct-'+i,tenantId:'tenant-a',donoId:'seller-1',nome:'Conta '+i}));
- assert.equal(findVisibleAccount({contas:accounts},seller,'acct-109')?.id,'acct-109');
- assert.equal(findVisibleAccount({contas:accounts},seller,'acct-999'),null);
- assert.equal(findVisibleAccount({contas:accounts},{...seller,tenantId:'tenant-b'},'acct-109'),null);
+ const gestor={...seller,role:'gestor'};
+ assert.equal(findVisibleAccount({contas:accounts},gestor,'acct-109')?.id,'acct-109');
+ assert.equal(findVisibleAccount({contas:accounts},gestor,'acct-999'),null);
+ assert.equal(findVisibleAccount({contas:accounts},{...gestor,tenantId:'tenant-b'},'acct-109'),null);
+ assert.equal(findVisibleAccount({contas:accounts},seller,'acct-109'),null);
 });
 
 test('global administrator with no fixed tenant can view the authorized cross-tenant snapshot',async()=>{
