@@ -146,7 +146,7 @@ function signalPublicURL(value){
  const url=canonicalUrl(value);
  if(!url)return '';
  try{
-  const u=new URL(url),host=u.hostname.toLowerCase().replace(/\\.$/,'');
+  const u=new URL(url),host=u.hostname.toLowerCase().replace(/\.$/,'');
   if(u.protocol!=='https:'||u.username||u.password||(u.port&&u.port!=='443')||
      host==='localhost'||host.endsWith('.localhost')||host.endsWith('.local')||
      host.endsWith('.internal')||host.endsWith('.lan')||host.endsWith('.onion')||
@@ -156,7 +156,7 @@ function signalPublicURL(value){
  }catch{return ''}
 }
 function signalDate(value){
- if(typeof value!=='string'||!/^\\d{4}-\\d{2}-\\d{2}$/.test(value))return null;
+ if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(value))return null;
  const date=new Date(value+'T00:00:00Z');
  if(!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==value||
     date.getTime()>Date.now())return null;
