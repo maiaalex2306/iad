@@ -439,8 +439,12 @@
     const diagnosticoFila = arguments[2];
     /* PERF-04 P5: idade da evidência calculada uma única vez por resumo.
        Não cachear entre renders, revisões, usuários ou empresas. */
-    const decisoes = eventosDeDecisao(op);
-    const evidenciasPorDimensao = agruparEvidenciasDaDecisao(decisoes);
+    /* Histórico vazio: evitar inclusive a chamada do extrator. Este caminho
+       mantém compatibilidade com o teste isolado PERF-04 P5 e reduz custo em
+       leads novos sem evento. */
+    const decisoes = op.eventos && op.eventos.length ? eventosDeDecisao(op) : [];
+    const evidenciasPorDimensao = decisoes.length
+      ? agruparEvidenciasDaDecisao(decisoes) : Object.create(null);
     const idade = evidenceAge(op, decisoes);
     const pontos = iad(op);
     const cobertura = coverage(op);
