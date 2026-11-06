@@ -59,7 +59,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
  const el=(tag,text='',className='')=>{const n=doc.createElement(tag);n.textContent=String(text);if(className)n.className=className;return n};
  root.classList.add('iad-market-ui');
  const form=doc.createElement('form'),grid=el('div','','grid'),status=el('p','Selecione o territorio, o segmento e as faixas de funcionarios. Nada sera importado automaticamente.','small muted');
- grid.className='iad-market-filter-grid';
+ grid.className='iad-market-filter-grid';status.setAttribute('role','status');
  // Every picker derives its options from a versioned source, never free text.
  function picker(label,placeholder,limit=15){
   const wrapper=el('div','','campo iad-market-filter'),title=el('span',label,'iad-market-filter-label'),details=doc.createElement('details'),summary=doc.createElement('summary'),search=doc.createElement('input'),options=el('div','','market-options'),panel=el('div','','iad-market-picker-panel');
@@ -71,6 +71,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   let items=[],chosen=new Map();
   function render(){
    summary.textContent=chosen.size?chosen.size+' selecionado(s): '+[...chosen.values()].slice(0,2).map(x=>x.label).join(', ')+(chosen.size>2?'…':''):placeholder;
+   summary.title=summary.textContent;
    options.replaceChildren();
    const term=search.value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
    const shown=items.filter(x=>x.label.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().includes(term)).slice(0,65);
@@ -187,8 +188,10 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   actionButtons.append(demoBtn,preflightBtn,btn);actions.append(aiHolder,actionButtons);
   form.append(grid,actions);
  root.replaceChildren(el('h2','Pesquisar empresas fora do CRM'),el('p','Pesquisa iniciada manualmente. Fontes, custos e cobertura dependem do provedor contratado. Os dados nao sao fatos confirmados ate verificacao.','small muted'),form,status,results,review);
+  const closePickers=(event)=>{for(const d of root.querySelectorAll('.iad-market-picker[open]')){if(event.type==='keydown'&&event.key==='Escape')d.open=false;else if(event.type==='pointerdown'&&!d.contains(event.target))d.open=false;}};
+  doc.addEventListener('pointerdown',closePickers);doc.addEventListener('keydown',closePickers);
  const stopResearchMetrics=mountMarketResearchMetrics({root,doc,nuvem,valid});
- const show=(message)=>{if(valid())status.textContent=message;};
+ const show=(message)=>{if(valid()){status.textContent=message;status.classList.toggle('iad-market-error',/nao foi|não foi|indispon|erro|inválid|inval|autoriza|bloquead|falha/i.test(message));}};
  const failureDescription=failures=>{
   if(!Array.isArray(failures))return '';
   const labels={TIMEOUT:'tempo limite excedido',FETCH_FAILURE:'falha de conexao',INVALID_JSON:'resposta invalida',
@@ -444,7 +447,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
       'SEARCH_QUOTA_EXCEEDED':'Limite diario de pesquisas atingido. Nao houve nova chamada as IAs.',
       'SEARCH_QUOTA_UNAVAILABLE':'Controle de quota indisponivel. Pesquisa interrompida sem consultar as IAs.',
       'DDD_MAPPING_PENDING':'O DDD precisa ser mapeado para municipios antes da pesquisa.',
-      'SEGMENT_NOT_AUTHORIZED':'O segmento selecionado nao pertence ao catalogo autorizado desta empresa. Atualize os filtros.',
+      'SEGMENT_NOT_AUTHORIZED':'O segmento selecionado não corresponde ao catálogo ativo autorizado no servidor para esta empresa. Confira os segmentos em Cadastros, selecione novamente e repita a pesquisa.',
       'SEGMENT_CATALOG_UNAVAILABLE':'Nao foi possivel validar os segmentos da empresa. Nenhum credito de pesquisa foi consumido.'};
     const failure=failureDescription(payload?.failures);
     show((payload?.message||messages[payload?.error]||'Pesquisa indisponivel: '+(payload?.error||response.status))+(failure?' Motivo: '+failure+'.':''));return;
@@ -477,5 +480,5 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   }catch(e){if(seq===currentRequest&&valid()&&e.name!=='AbortError')show('Falha de rede ao consultar fonte empresarial. Nenhuma alteracao no CRM.');}
   finally{if(seq===currentRequest&&valid())btn.disabled=false;}
  });
- return ()=>{root.classList.remove('iad-market-ui');stopResearchMetrics();if(controller)controller.abort();for(const stop of cancelInvestigations)stop();cancelInvestigations.clear();if(preflightController)preflightController.abort();if(cityRequest)cityRequest.abort();currentRequest++;};
+ return ()=>{doc.removeEventListener('pointerdown',closePickers);doc.removeEventListener('keydown',closePickers);root.classList.remove('iad-market-ui');stopResearchMetrics();if(controller)controller.abort();for(const stop of cancelInvestigations)stop();cancelInvestigations.clear();if(preflightController)preflightController.abort();if(cityRequest)cityRequest.abort();currentRequest++;};
 }
