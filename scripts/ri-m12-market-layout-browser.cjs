@@ -27,9 +27,11 @@ const server=http.createServer((req,res)=>{
    await page.goto('http://127.0.0.1:'+server.address().port+'/');
    const data=await page.evaluate(async()=>{
     const original=window.fetch.bind(window);
-    window.fetch=(url,opt)=>String(url).includes('/rest/v1/segmentos?')
-      ?Promise.resolve(new Response(JSON.stringify([{nome:'Química e Petroquímica',ativo:true},{nome:'Alimentos',ativo:true}]),{status:200,headers:{'content-type':'application/json'}}))
-      :original(url,opt);
+    window.fetch=(url,opt)=>String(url).includes('/rest/v1/perfis?')
+      ?Promise.resolve(new Response(JSON.stringify([{tenant_id:'tenant-a',papel:'gestor',ativo:true}]),{status:200,headers:{'content-type':'application/json'}}))
+      :String(url).includes('/rest/v1/segmentos?')
+       ?Promise.resolve(new Response(JSON.stringify([{nome:'Química e Petroquímica',ativo:true},{nome:'Alimentos',ativo:true}]),{status:200,headers:{'content-type':'application/json'}}))
+       :original(url,opt);
     const mod=await import('/src/ri/market-view.mjs');
     mod.mountMarketDiscovery({root:document.getElementById('market'),
       snapshot:{segmentos:[{nome:'Química e Petroquímica',ativo:true,tenantId:'tenant-a'},{nome:'Segmento desatualizado',ativo:true,tenantId:'tenant-a'}]},
