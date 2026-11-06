@@ -26,6 +26,7 @@ jobs:
       - run: node --check src/ri/market-contract.mjs
       - run: node --check src/ri/market-view.mjs
       - run: node --check src/ri/market-investigation.mjs
+      - run: node --check src/ri/market-signals.mjs
       - run: node --check src/ri/prospect-agents.mjs
       - run: node --check scripts/ri-m01-staging-e2e.mjs
       # Live perimeter smoke against homologation only. No API keys or paid AI calls.
