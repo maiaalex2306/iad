@@ -69,8 +69,8 @@ const server=http.createServer((req,res)=>{
    await page.locator('#iad-ri-root button[data-account-id="a1"]').waitFor({timeout:12000});
    const riOverview=await page.locator('#iad-ri-root .iad-ri-radar-spotlight').textContent();
    assert.match(await page.locator('#iad-ri-root .iad-ri-hero').textContent(),/Radar de oportunidades comerciais/);
-   assert.equal(await page.locator('#iad-ri-root .iad-ri-radar-tab').count(),5);
-   assert.match(riOverview,/Contas esquecidas/);
+   assert.equal(await page.locator('#iad-ri-root .iad-ri-radar-tab').count(),6);
+   assert.match(riOverview,/Pistas da carteira/);
    assert.doesNotMatch(riOverview,/EMPRESA SECRETA|NEGÓCIO SECRETO/,
      'radar não revela informação de outro tenant');
    assert.equal(await page.locator('#iad-ri-root .iad-ri-kpi').count(),0,
