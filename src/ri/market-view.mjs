@@ -173,8 +173,9 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
  const demoBtn=el('button','Aplicar exemplo','btn iad-market-btn-example');
  demoBtn.type='button';
  demoBtn.addEventListener('click',async()=>{
+  // Não consultar IBGE quando tenant/catálogo ainda não autorizam a busca.
+  if(!catalogReady){show(catalogBlockReason);return;}
   ufSelect.value='SP';const cities=await loadCities('SP');
-  if(!catalogReady){show('Aguarde a validação do catálogo e da empresa autenticada.');return;}
   const mogi=cities.find(x=>x.label==='Mogi das Cruzes');
   if(!mogi){show('Nao foi possivel validar Mogi das Cruzes no catalogo de municipios. Exemplo nao aplicado.');return;}
   cityPick.choose([mogi.key]);
