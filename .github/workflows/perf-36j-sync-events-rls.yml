@@ -1,0 +1,24 @@
+name: PERF-36J - Sync RLS InitPlan parity
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - 'nuvem/perf-36j-sync-eventos-*.sql'
+      - 'nuvem/testes/perf-36j-sync-eventos-initplan.test.cjs'
+      - '.github/workflows/perf-36j-sync-events-rls.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sql-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validar equivalencia sem modificar banco
+        run: |
+          node --test nuvem/testes/perf-36j-sync-eventos-initplan.test.cjs
+          node --test nuvem/testes/perf-13c-rls-initplan.test.cjs
