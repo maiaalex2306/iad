@@ -6,10 +6,16 @@ on:
     paths:
       - .github/workflows/ri-m01-live-e2e.yml
   workflow_dispatch:
+  pull_request:
+    branches:
+      - claude/decisoes-estagios-vendas-eckjo0
+    paths:
+      - .github/workflows/ri-m01-live-e2e.yml
 permissions:
   contents: read
 jobs:
   live-research:
+    if: github.event_name != 'pull_request' || github.head_ref == 'qa/ri-m01-live-staging-20261105'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: homologacao
