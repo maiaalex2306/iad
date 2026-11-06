@@ -469,6 +469,19 @@ export function interpretSector(raw,{allowedNames=null,limit=5}={}){
   const aliases=visible.filter(x=>x.aliases.some(a=>foldSector(a)===input));
   if(aliases.length===1)return {status:'alias',canonical:aliases[0].name,candidates:[{name:aliases[0].name,relation:'alias',score:1}]};
   if(aliases.length>1)return {status:'ambiguous',candidates:aliases.map(x=>({name:x.name,relation:'alias',score:1}))};
+  // Uma especialização não autorizada como segmento próprio pode sugerir
+  // a FAMÍLIA ativa no tenant, nunca se transformar em equivalência.
+  // Ex.: "laticínios" sugere Alimentos; "saneantes" sugere Química, não Saneamento.
+  if(allowed){
+   const familyMatches=BWC_SECTOR_TAXONOMY.filter(x=>x.parent&&
+    (foldSector(x.name)===input||x.aliases.some(a=>foldSector(a)===input))&&
+    allowed.has(foldSector(x.parent)));
+   if(familyMatches.length){
+    const candidates=[...new Map(familyMatches.map(x=>[x.parent,
+     {name:x.parent,viaSubsector:x.name,relation:'broader',score:1}])).values()];
+    return {status:'related',candidates:candidates.slice(0,Math.max(1,Math.min(10,limit)))};
+   }
+  }
   const candidates=visible.map(x=>{
     const own=similarity(raw,x.name),syn=Math.max(0,...x.aliases.map(a=>similarity(raw,a)));
     const score=Math.max(own,syn);
