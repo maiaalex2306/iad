@@ -330,3 +330,43 @@ nav.tabs a.ativo { color: var(--acp-brand); font-weight: 700; }
    azul-marinho antigo o par era #10202f sobre #0d2b4e, igualmente ilegível.
    Estava lá desde sempre e só apareceu quando eu olhei a captura do login. */
 .acesso-painel .chip { color: #fff; }
+
+
+/* RI-M12 — Pesquisa de Mercado. Escopo fechado: sem efeito em outras telas. */
+.iad-market-ui { --market-ink:var(--acp-text,#241c29); --market-line:var(--acp-line,#e6dfea); }
+.iad-market-ui > h2 {color:var(--acp-brand-dark,#4a1078);font-size:clamp(1.2rem,1.4vw,1.55rem);margin:0 0 8px;letter-spacing:-.02em;}
+.iad-market-ui > p.small {margin:0 0 22px;line-height:1.6;}
+.iad-market-ui form {display:grid;gap:22px;min-width:0;}
+.iad-market-filter-grid {display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px;align-items:start;min-width:0;}
+.iad-market-ui .iad-market-filter {display:flex;flex-direction:column;gap:9px;min-width:0;margin:0;font-size:14px;font-weight:700;color:var(--market-ink);}
+.iad-market-ui .iad-market-filter-label {font-weight:750;font-size:14px;line-height:1.35;color:var(--market-ink);}
+.iad-market-ui .iad-market-filter > select,.iad-market-ui .iad-market-engine > select {width:100%;min-width:0;min-height:46px;border:1px solid var(--market-line);border-radius:11px;background:var(--acp-bg,#f8f6fa);color:var(--market-ink);font-weight:500;padding:10px 12px;}
+.iad-market-ui .iad-market-picker {position:relative;width:100%;min-width:0;border:1px solid var(--market-line);background:var(--acp-surface,#fff);border-radius:11px;min-height:46px;box-sizing:border-box;}
+.iad-market-ui .iad-market-picker > summary {display:block;list-style:none;cursor:pointer;padding:12px 34px 12px 12px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;font-size:13px;font-weight:500;line-height:20px;color:var(--market-ink);position:relative;min-height:44px;box-sizing:border-box;}
+.iad-market-ui .iad-market-picker > summary::-webkit-details-marker {display:none;}
+.iad-market-ui .iad-market-picker > summary::after {content:'⌄';position:absolute;right:12px;top:9px;color:var(--acp-brand,#6816a8);font-size:20px;line-height:24px;}
+.iad-market-ui .iad-market-picker[open] {z-index:20;border-color:var(--acp-brand,#6816a8);box-shadow:0 0 0 2px var(--acp-brand-soft,#f3ecfa);}
+.iad-market-ui .iad-market-picker[open] > summary::after {transform:rotate(180deg);}
+.iad-market-ui .iad-market-picker-panel {display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:30;padding:10px;background:var(--acp-surface,#fff);border:1px solid var(--market-line);border-radius:12px;box-shadow:0 14px 34px rgba(45,20,60,.18);min-width:260px;box-sizing:border-box;}
+.iad-market-ui .iad-market-picker[open] .iad-market-picker-panel {display:block;}
+.iad-market-ui .iad-market-picker-panel input[type=search] {width:100%;box-sizing:border-box;min-height:40px;margin:0 0 8px;padding:8px 10px;border:1px solid var(--market-line);border-radius:9px;background:var(--acp-bg,#f8f6fa);color:var(--market-ink);}
+.iad-market-ui .market-options {max-height:230px;overflow-y:auto;overscroll-behavior:contain;display:grid;gap:3px;padding-right:3px;}
+.iad-market-ui .market-options .iad-market-option {display:flex;align-items:center;justify-content:flex-start;gap:10px;min-height:38px;box-sizing:border-box;padding:7px 9px;border-radius:8px;font-weight:500;font-size:13px;line-height:1.35;text-align:left;white-space:normal;overflow-wrap:anywhere;cursor:pointer;color:var(--market-ink);}
+.iad-market-ui .market-options .iad-market-option:hover {background:var(--acp-brand-soft,#f3ecfa);}
+.iad-market-ui .market-options .iad-market-option input[type=checkbox] {flex:0 0 16px;width:16px;height:16px;margin:0;accent-color:var(--acp-brand,#6816a8);}
+.iad-market-ui .iad-market-advanced {grid-column:1/-1;border:1px solid var(--market-line);border-radius:11px;background:var(--acp-bg,#f8f6fa);padding:0;min-width:0;}
+.iad-market-ui .iad-market-advanced > summary {cursor:pointer;padding:13px 16px;font-size:14px;font-weight:700;color:var(--market-ink);}
+.iad-market-ui .iad-market-advanced-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;padding:12px 16px 16px;}
+.iad-market-ui .iad-market-actions {display:grid;grid-template-columns:minmax(215px,300px) minmax(0,1fr);gap:24px;align-items:end;}
+.iad-market-ui .iad-market-engine {display:grid;gap:8px;min-width:0;font-size:14px;font-weight:750;color:var(--market-ink);}
+.iad-market-ui .iad-market-action-buttons {display:flex;flex-wrap:wrap;justify-content:flex-end;gap:12px;align-items:center;min-width:0;}
+.iad-market-ui .iad-market-action-buttons .btn {width:auto;min-height:46px;margin:0;display:inline-flex;align-items:center;justify-content:center;gap:8px;box-sizing:border-box;border-radius:11px;padding:11px 18px;font-size:13px;font-weight:750;line-height:1.25;white-space:normal;text-align:center;}
+.iad-market-ui .iad-market-btn-example {background:var(--acp-brand-soft,#f3ecfa);color:var(--acp-brand-dark,#4a1078);border:1px solid transparent;}
+.iad-market-ui .iad-market-btn-check {background:var(--acp-surface,#fff);color:var(--acp-brand-dark,#4a1078);border:1px solid var(--acp-brand,#6816a8);}
+.iad-market-ui .iad-market-btn-search {background:var(--acp-brand-fundo,#4a1078);color:#fff;border:1px solid var(--acp-brand-fundo,#4a1078);min-width:168px;}
+.iad-market-ui .iad-market-action-buttons .btn:focus-visible,.iad-market-ui .iad-market-picker > summary:focus-visible {outline:3px solid var(--acp-accent,#ff682c);outline-offset:2px;}
+@media(max-width:1150px){.iad-market-filter-grid {grid-template-columns:repeat(3,minmax(0,1fr));}.iad-market-ui .iad-market-actions {grid-template-columns:1fr;gap:12px;}.iad-market-ui .iad-market-action-buttons {justify-content:flex-start;}}
+@media(max-width:720px){.iad-market-filter-grid {grid-template-columns:repeat(2,minmax(0,1fr));}.iad-market-ui .iad-market-picker-panel {min-width:min(260px,80vw);}.iad-market-ui .iad-market-action-buttons .btn {flex:1 1 210px;}}
+@media(max-width:460px){.iad-market-filter-grid {grid-template-columns:minmax(0,1fr);}.iad-market-ui .iad-market-picker-panel {min-width:0;}.iad-market-ui .iad-market-actions {grid-template-columns:1fr;}}
+
+.iad-market-ui .iad-market-error {padding:12px 14px;background:var(--acp-accent-soft,#fff0e8);color:var(--acp-soft-ink,#2e1508);border:1px solid var(--acp-accent,#ff682c);border-radius:10px;font-size:13px;font-weight:600;line-height:1.55;}

@@ -57,19 +57,21 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
  const cancelInvestigations=new Set();
  const valid=()=>root.isConnected&&getScopeToken()===scope.token;
  const el=(tag,text='',className='')=>{const n=doc.createElement(tag);n.textContent=String(text);if(className)n.className=className;return n};
+ root.classList.add('iad-market-ui');
  const form=doc.createElement('form'),grid=el('div','','grid'),status=el('p','Selecione o territorio, o segmento e as faixas de funcionarios. Nada sera importado automaticamente.','small muted');
- grid.style.display='grid';grid.style.gridTemplateColumns='repeat(auto-fit,minmax(245px,1fr))';grid.style.gap='14px';grid.style.alignItems='start';
+ grid.className='iad-market-filter-grid';status.setAttribute('role','status');
  // Every picker derives its options from a versioned source, never free text.
  function picker(label,placeholder,limit=15){
-  const wrapper=el('div','','campo'),title=el('span',label,'small'),details=doc.createElement('details'),summary=doc.createElement('summary'),search=doc.createElement('input'),options=el('div','','market-options');
-  details.style.border='1px solid var(--borda,#ded8e5)';details.style.borderRadius='9px';details.style.padding='9px';
-  summary.textContent=placeholder;summary.style.cursor='pointer';
-  search.type='search';search.placeholder='Filtrar opcoes';search.autocomplete='off';search.style.width='100%';search.style.margin='8px 0';
-  options.style.maxHeight='190px';options.style.overflow='auto';options.style.display='grid';options.style.gap='5px';
-  details.append(summary,search,options);wrapper.append(title,details);
+  const wrapper=el('div','','campo iad-market-filter'),title=el('span',label,'iad-market-filter-label'),details=doc.createElement('details'),summary=doc.createElement('summary'),search=doc.createElement('input'),options=el('div','','market-options'),panel=el('div','','iad-market-picker-panel');
+  details.className='iad-market-picker';
+  summary.textContent=placeholder;
+  search.type='search';search.placeholder='Filtrar opções';search.autocomplete='off';search.setAttribute('aria-label','Filtrar '+label);
+  panel.append(search,options);details.append(summary,panel);wrapper.append(title,details);
+  details.addEventListener('toggle',()=>{if(details.open){for(const d of root.querySelectorAll('.iad-market-picker[open]'))if(d!==details)d.open=false;}});
   let items=[],chosen=new Map();
   function render(){
    summary.textContent=chosen.size?chosen.size+' selecionado(s): '+[...chosen.values()].slice(0,2).map(x=>x.label).join(', ')+(chosen.size>2?'…':''):placeholder;
+   summary.title=summary.textContent;
    options.replaceChildren();
    const term=search.value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
    const shown=items.filter(x=>x.label.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().includes(term)).slice(0,65);
@@ -82,7 +84,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
      if(input.checked)chosen.set(item.key,item);else chosen.delete(item.key);
      render();
     });
-    lbl.style.display='flex';lbl.style.alignItems='center';lbl.style.gap='8px';
+    lbl.className='iad-market-option';
     lbl.append(input,doc.createTextNode(item.label));options.appendChild(lbl);
    }
    if(items.length>65&&!term)options.appendChild(el('span','Digite para localizar outras opcoes.','small muted'));
@@ -92,7 +94,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
    items=next;const keys=new Set(items.map(x=>x.key));chosen=new Map([...chosen].filter(([k])=>keys.has(k)));render();
   },choose(keys){const wanted=new Set(keys);chosen=new Map(items.filter(x=>wanted.has(x.key)).slice(0,limit).map(x=>[x.key,x]));render();},clear(){chosen.clear();render();}};
  }
- const ufBox=el('label','Estado (UF)','campo'),ufSelect=doc.createElement('select');
+ const ufBox=el('label','Estado (UF)','campo iad-market-filter'),ufSelect=doc.createElement('select');
  ufSelect.name='uf';const emptyState=doc.createElement('option');emptyState.value='';emptyState.textContent='Selecione o estado';ufSelect.appendChild(emptyState);
  for(const uf of Object.keys(UF_IBGE).sort()){const opt=doc.createElement('option');opt.value=uf;opt.textContent=uf;ufSelect.appendChild(opt);}
  ufBox.appendChild(ufSelect);
@@ -149,8 +151,8 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   }finally{if(cityRequest===request)cityLoading=false;}
  }
  ufSelect.addEventListener('change',()=>{loadCities(ufSelect.value);});
- const demoBtn=el('button','Aplicar exemplo: Mogi/SP · Quimica · 201–1.000 funcionarios','btn');
- demoBtn.type='button';demoBtn.style.gridColumn='1/-1';
+ const demoBtn=el('button','Aplicar exemplo','btn iad-market-btn-example');
+ demoBtn.type='button';
  demoBtn.addEventListener('click',async()=>{
   ufSelect.value='SP';const cities=await loadCities('SP');
   const mogi=cities.find(x=>x.label==='Mogi das Cruzes');
@@ -163,9 +165,9 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   aiSelect.value='both';
  });
  const advanced=doc.createElement('details'),advancedGrid=el('div','','grid');
- advanced.style.gridColumn='1/-1';advanced.style.padding='7px';advanced.style.border='1px solid var(--borda,#ded8e5)';advanced.style.borderRadius='9px';
+ advanced.className='iad-market-advanced';
  const advancedHead=doc.createElement('summary');advancedHead.textContent='Filtros avancados (regiao, CNAE, porte e faturamento)';advanced.append(advancedHead,advancedGrid);
- advancedGrid.style.display='grid';advancedGrid.style.gridTemplateColumns='repeat(auto-fit,minmax(170px,1fr))';advancedGrid.style.gap='8px';
+ advancedGrid.className='iad-market-advanced-grid';
  for(const [name,label,type] of fields){
   const holder=el('label',label,'campo'),input=doc.createElement('input');input.type=type;input.name=name;input.autocomplete='off';input.maxLength=150;
   if(type==='number'){input.min='0';input.step='1';}
@@ -173,19 +175,63 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
  }
  grid.append(ufBox,cityPick.wrapper,dddPick.wrapper,segmentPick.wrapper,bandPick.wrapper,advanced);
  if(!tenantSegments.length)status.textContent='Nenhum segmento autorizado encontrado na carteira. Consulte o cadastro de segmentos.';
- const aiHolder=el('label','Motor de pesquisa','campo'),aiSelect=doc.createElement('select');
+ const aiHolder=el('label','Motor de pesquisa','campo iad-market-engine'),aiSelect=doc.createElement('select');
  for(const [value,label] of [['both','ChatGPT + Claude'],['OpenAI','Somente ChatGPT'],['Anthropic','Somente Claude']]){
   const option=doc.createElement('option');option.value=value;option.textContent=label;aiSelect.appendChild(option);
  }
- aiHolder.appendChild(aiSelect);grid.appendChild(aiHolder);aiSelect.value='both';
- const preflightBtn=el('button','VERIFICAR ACESSO ÀS IAs (SEM GASTAR COTA DE PESQUISA)','btn');
+ aiHolder.appendChild(aiSelect);aiSelect.value='both';
+ const preflightBtn=el('button','Verificar acesso às IAs','btn iad-market-btn-check');
  preflightBtn.type='button';
- const btn=el('button','BUSCAR EMPRESAS','btn');btn.type='submit';
+ const btn=el('button','Buscar empresas','btn iad-market-btn-search');btn.type='submit';
  const results=el('div','','iad-market-results'),review=el('div','','iad-market-review');
- form.appendChild(grid);form.appendChild(demoBtn);form.appendChild(preflightBtn);form.appendChild(btn);
+ const actions=el('div','','iad-market-actions'),actionButtons=el('div','','iad-market-action-buttons');
+  actionButtons.append(demoBtn,preflightBtn,btn);actions.append(aiHolder,actionButtons);
+  form.append(grid,actions);
  root.replaceChildren(el('h2','Pesquisar empresas fora do CRM'),el('p','Pesquisa iniciada manualmente. Fontes, custos e cobertura dependem do provedor contratado. Os dados nao sao fatos confirmados ate verificacao.','small muted'),form,status,results,review);
+  const closePickers=(event)=>{for(const d of root.querySelectorAll('.iad-market-picker[open]')){if(event.type==='keydown'&&event.key==='Escape')d.open=false;else if(event.type==='pointerdown'&&!d.contains(event.target))d.open=false;}};
+  doc.addEventListener('pointerdown',closePickers);doc.addEventListener('keydown',closePickers);
  const stopResearchMetrics=mountMarketResearchMetrics({root,doc,nuvem,valid});
- const show=(message)=>{if(valid())status.textContent=message;};
+ const show=(message)=>{if(valid()){status.textContent=message;status.classList.toggle('iad-market-error',/nao foi|não foi|indispon|erro|inválid|inval|autoriza|bloquead|falha/i.test(message));}};
+  // RI-M12: the API authorizes segments using the LIVE tenant catalog, not
+  // the stale Store snapshot. Populate the facet from the same source before
+  // allowing a paid request; never bypass server-side validation.
+  const catalogController=new AbortController();
+  let catalogReady=false;
+  btn.disabled=true;
+  (async()=>{
+   const session=nuvem.sessao(),cfg=nuvem.config();
+   if(!session?.access_token||!cfg?.url||!cfg?.chave){
+    show('Conecte-se à nuvem para validar o catálogo de segmentos.');return;
+   }
+   show('Conferindo segmentos autorizados desta empresa no servidor...');
+   try{
+    const url=cfg.url.replace(/\/$/,'')+'/rest/v1/segmentos?select=nome,ativo&tenant_id=eq.'+
+     encodeURIComponent(scope.tenantId)+'&ativo=eq.true&limit=120';
+    const response=await fetch(url,{headers:{apikey:cfg.chave,Authorization:'Bearer '+session.access_token},signal:catalogController.signal});
+    if(!response.ok)throw Error('catalog-http');
+    const rows=await response.json();
+    if(!Array.isArray(rows))throw Error('catalog-format');
+    if(!valid())return;
+    const seen=new Set(),options=[];
+    for(const item of rows){
+     const label=String(item?.nome||'').trim(),key=label.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+     if(item?.ativo===false||!label||seen.has(key))continue;
+     seen.add(key);options.push({key:label,label,value:label});
+    }
+    options.sort((a,b)=>a.label.localeCompare(b.label,'pt-BR'));
+    const prev=segmentPick.get().map(v=>v.value),authorized=new Set(options.map(x=>x.key));
+    segmentPick.setItems(options);
+    // Preserve prior selection only when it is part of the server-authorized catalog.
+    segmentPick.choose(prev.filter(v=>authorized.has(v)));
+    catalogReady=true;btn.disabled=false;
+    if(!options.length)show('Nenhum segmento ativo autorizado no servidor para esta empresa. Confira Cadastros antes de pesquisar.');
+    else if(prev.length&&!prev.every(v=>authorized.has(v)))
+     show('Os segmentos locais foram atualizados com o catálogo do servidor. Revise sua seleção antes de buscar.');
+    else show('Catálogo autorizado atualizado. Selecione os filtros e clique em Buscar empresas.');
+   }catch(e){
+    if(e?.name!=='AbortError'&&valid())show('Não foi possível validar o catálogo no servidor. A pesquisa permanece bloqueada para evitar custo e rejeição. Confira a conexão e recarregue a tela.');
+   }
+  })();
  const failureDescription=failures=>{
   if(!Array.isArray(failures))return '';
   const labels={TIMEOUT:'tempo limite excedido',FETCH_FAILURE:'falha de conexao',INVALID_JSON:'resposta invalida',
@@ -412,7 +458,8 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
  }
  form.addEventListener('submit',async ev=>{
   ev.preventDefault();if(!valid())return;
-  if(cityLoading){show('Aguarde a consulta de cidades no IBGE.');return;}
+  if(!catalogReady){show('Aguarde a validação dos segmentos autorizados no servidor antes de pesquisar.');return;}
+   if(cityLoading){show('Aguarde a consulta de cidades no IBGE.');return;}
   let filters;try{filters=normalizeMarketFilters({
    ...Object.fromEntries([...els].map(([k,v])=>[k,v.value])),
    uf:ufSelect.value,
@@ -441,7 +488,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
       'SEARCH_QUOTA_EXCEEDED':'Limite diario de pesquisas atingido. Nao houve nova chamada as IAs.',
       'SEARCH_QUOTA_UNAVAILABLE':'Controle de quota indisponivel. Pesquisa interrompida sem consultar as IAs.',
       'DDD_MAPPING_PENDING':'O DDD precisa ser mapeado para municipios antes da pesquisa.',
-      'SEGMENT_NOT_AUTHORIZED':'O segmento selecionado nao pertence ao catalogo autorizado desta empresa. Atualize os filtros.',
+      'SEGMENT_NOT_AUTHORIZED':'O segmento selecionado não corresponde ao catálogo ativo autorizado no servidor para esta empresa. Confira os segmentos em Cadastros, selecione novamente e repita a pesquisa.',
       'SEGMENT_CATALOG_UNAVAILABLE':'Nao foi possivel validar os segmentos da empresa. Nenhum credito de pesquisa foi consumido.'};
     const failure=failureDescription(payload?.failures);
     show((payload?.message||messages[payload?.error]||'Pesquisa indisponivel: '+(payload?.error||response.status))+(failure?' Motivo: '+failure+'.':''));return;
@@ -474,5 +521,5 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   }catch(e){if(seq===currentRequest&&valid()&&e.name!=='AbortError')show('Falha de rede ao consultar fonte empresarial. Nenhuma alteracao no CRM.');}
   finally{if(seq===currentRequest&&valid())btn.disabled=false;}
  });
- return ()=>{stopResearchMetrics();if(controller)controller.abort();for(const stop of cancelInvestigations)stop();cancelInvestigations.clear();if(preflightController)preflightController.abort();if(cityRequest)cityRequest.abort();currentRequest++;};
+ return ()=>{doc.removeEventListener('pointerdown',closePickers);doc.removeEventListener('keydown',closePickers);root.classList.remove('iad-market-ui');catalogController.abort();stopResearchMetrics();if(controller)controller.abort();for(const stop of cancelInvestigations)stop();cancelInvestigations.clear();if(preflightController)preflightController.abort();if(cityRequest)cityRequest.abort();currentRequest++;};
 }
