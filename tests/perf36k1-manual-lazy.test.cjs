@@ -31,8 +31,10 @@ test('PERF-36K1: JavaScript e PWA com sintaxe válida', () => {
     new vm.Script(read(file), { filename:file });
   }
   const sw = read('sw.js'), config = read('src/config.js');
-  assert.match(sw, /iad-crm-v286\.75/);
-  assert.match(config, /numero:\s*'v286\.75'/);
+  const version = config.match(/numero:\s*'(v286\.\d+)'/);
+  assert.ok(version, 'a versao v286 do aplicativo deve estar declarada');
+  assert.ok(sw.includes("const CACHE = 'iad-crm-" + version[1] + "'"),
+    'cache e versao precisam ser iguais em toda release');
   assert.match(sw, /'\.\/src\/views-manual\.js'/);
   assert.doesNotMatch(read('index.html'), /<script[^>]*views-manual\.js/);
 });
