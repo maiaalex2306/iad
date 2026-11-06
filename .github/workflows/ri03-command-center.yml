@@ -1,5 +1,14 @@
-name: RI-03 — Inteligência Comercial: estratégia, segurança e navegador
+name: "RI-03 — Inteligência Comercial: estratégia, segurança e navegador"
 on:
+  push:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - '.github/workflows/ri03-command-center.yml'
+      - 'src/ri/account-view.mjs'
+      - 'src/ri/portfolio-analytics.mjs'
+      - 'scripts/ri03-command-center.test.cjs'
+      - 'scripts/ri03-command-center-browser.cjs'
+      - 'assets/ri-commercial.css'
   pull_request:
     branches: [claude/decisoes-estagios-vendas-eckjo0]
     paths:
