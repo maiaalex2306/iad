@@ -14,7 +14,7 @@ const server=http.createServer((req,res)=>{
   try{file=path.resolve(root,decodeURIComponent(url.pathname).replace(/^\/+/,''));}catch{res.writeHead(400);return res.end();}
   if(url.pathname==='/src/config.js'){
     res.writeHead(200,{'content-type':'text/javascript','cache-control':'no-store'});
-    return res.end("window.IADConfig={supabase:{url:'',chave:''}};window.IADHomologacao=true;window.IAD_RI_ENABLED="+String(enabled)+";window.IADVersao={numero:'v286.45',data:'2026-11-04'};");
+    return res.end("window.IADConfig={supabase:{url:'',chave:''}};window.IADHomologacao=true;window.IAD_RI_ENABLED="+String(enabled)+";window.IAD_MARKET_ENABLED=true;window.IADVersao={numero:'v286.45',data:'2026-11-04'};");
   }
   if(url.pathname==='/')file=path.join(root,'index.html');
   if(!file.startsWith(root+path.sep)){res.writeHead(403);return res.end();}
@@ -89,6 +89,39 @@ const server=http.createServer((req,res)=>{
    const after=await page.evaluate(()=>({rev:window.IADStore.revisao(),hash:location.hash}));
    assert.equal(initial.rev,after.rev,'somente leitura não grava no Store');
    assert.equal(after.hash,'#/inteligencia');
+   // RI-M18: Gestor abre as duas áreas sem alterar permissões globais.
+   assert.equal(await page.locator('nav.tabs a[href="#/mercado"]').count(),1,
+     'Gestor deve ver Mercado no menu');
+   await page.evaluate(()=>window.App.ir('#/mercado'));
+   await page.locator('#iad-market-root form').waitFor({timeout:12000});
+   assert.doesNotMatch(await page.locator('#iad-market-root').textContent(),/acesso inicial exclusivo do administrador/i);
+
+   // Usuário comum não pode sequer montar módulos por link direto.
+   await page.evaluate(()=>{
+     const S=window.IADStore,A=window.IADAuth;
+     const user={id:'ri01-seller',nome:'Usuário de testes',login:'seller',papel:'usuario',ativo:true,tenantId:'tenant-a'};
+     S.obter().usuarios.push(user);A.abrirSessao(user);window.App.ir('#/hoje');
+   });
+   assert.equal(await page.locator('nav.tabs a[href="#/inteligencia"]').count(),0);
+   assert.equal(await page.locator('nav.tabs a[href="#/mercado"]').count(),0);
+   for(const hash of ['#/inteligencia','#/mercado']){
+     await page.evaluate(hash=>window.App.ir(hash),hash);
+     await page.locator('#conteudo [role="alert"]').waitFor({timeout:4000});
+     assert.match(await page.locator('#conteudo [role="alert"]').textContent(),/apenas para Gestores e Administradores/);
+     assert.equal(await page.locator('#iad-ri-root, #iad-market-root').count(),0);
+   }
+   // Administrador mantém ambas as funcionalidades e o filtro de empresa.
+   await page.evaluate(()=>{
+     const S=window.IADStore,A=window.IADAuth;
+     const admin={id:'ri01-admin',nome:'Administrador de testes',login:'admin',papel:'admin',ativo:true,tenantId:'tenant-a'};
+     S.obter().usuarios.push(admin);A.abrirSessao(admin);A.definirFiltros({tenant:'tenant-a'});
+     window.App.ir('#/hoje');
+   });
+   assert.equal(await page.locator('nav.tabs a[href="#/inteligencia"]').count(),1);
+   assert.equal(await page.locator('nav.tabs a[href="#/mercado"]').count(),1);
+   await page.evaluate(()=>window.App.ir('#/mercado'));
+   await page.locator('#iad-market-root form').waitFor({timeout:12000});
+   assert.equal(await page.locator('#conteudo [role="alert"]').count(),0);
    await page.evaluate(()=>{window.IADAuth.encerrarSessao();window.App.ir('#/hoje');});
    await page.waitForFunction(()=>!document.getElementById('iad-ri-root'));
    assert.equal(await page.locator('#iad-ri-details').count(),0,'a tela antiga não deve permanecer após logout');
