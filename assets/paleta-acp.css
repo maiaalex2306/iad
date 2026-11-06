@@ -368,3 +368,5 @@ nav.tabs a.ativo { color: var(--acp-brand); font-weight: 700; }
 @media(max-width:1150px){.iad-market-filter-grid {grid-template-columns:repeat(3,minmax(0,1fr));}.iad-market-ui .iad-market-actions {grid-template-columns:1fr;gap:12px;}.iad-market-ui .iad-market-action-buttons {justify-content:flex-start;}}
 @media(max-width:720px){.iad-market-filter-grid {grid-template-columns:repeat(2,minmax(0,1fr));}.iad-market-ui .iad-market-picker-panel {min-width:min(260px,80vw);}.iad-market-ui .iad-market-action-buttons .btn {flex:1 1 210px;}}
 @media(max-width:460px){.iad-market-filter-grid {grid-template-columns:minmax(0,1fr);}.iad-market-ui .iad-market-picker-panel {min-width:0;}.iad-market-ui .iad-market-actions {grid-template-columns:1fr;}}
+
+.iad-market-ui .iad-market-error {padding:12px 14px;background:var(--acp-accent-soft,#fff0e8);color:var(--acp-soft-ink,#2e1508);border:1px solid var(--acp-accent,#ff682c);border-radius:10px;font-size:13px;font-weight:600;line-height:1.55;}
