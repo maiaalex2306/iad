@@ -8,6 +8,7 @@ import {mountMarketSignals} from './market-signals.mjs';
 import {mountMarketEnricher} from './market-enricher.mjs';
 import {mountMarketResearchMetrics} from './market-audit.mjs';
 import {interpretSector} from './sector-intelligence.mjs';
+import {verifyMarketTenantScope,marketTenantMessage} from './market-tenant-scope.mjs';
 /**
  * Pull only the server-confirmed RI-M01 import into the local Pipeline.
  * Never upload local edits. Refuse the pull when CAS/pending state is unknown.
@@ -102,7 +103,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
    if(items.length>65&&!term)options.appendChild(el('span','Digite para localizar outras opcoes.','small muted'));
   }
   search.addEventListener('input',render);
-  return {wrapper,get:()=>[...chosen.values()],setItems(next){
+  return {wrapper,get:()=>[...chosen.values()],getItems:()=>[...items],setItems(next){
    items=next;const keys=new Set(items.map(x=>x.key));chosen=new Map([...chosen].filter(([k])=>keys.has(k)));render();
   },choose(keys){const wanted=new Set(keys);chosen=new Map(items.filter(x=>wanted.has(x.key)).slice(0,limit).map(x=>[x.key,x]));render();},clear(){chosen.clear();render();}};
  }
@@ -167,12 +168,13 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
  demoBtn.type='button';
  demoBtn.addEventListener('click',async()=>{
   ufSelect.value='SP';const cities=await loadCities('SP');
+  if(!catalogReady){show('Aguarde a validação do catálogo e da empresa autenticada.');return;}
   const mogi=cities.find(x=>x.label==='Mogi das Cruzes');
   if(!mogi){show('Nao foi possivel validar Mogi das Cruzes no catalogo de municipios. Exemplo nao aplicado.');return;}
   cityPick.choose([mogi.key]);
   dddPick.choose(['11']);
-  const selected=tenantSegments.find(x=>/qu[ií]mic/i.test(String(x.nome||'')));
-  if(selected)segmentPick.choose([String(selected.nome)]);
+  const selected=segmentPick.getItems().find(x=>/qu[ií]mic/i.test(x.label));
+  if(selected)segmentPick.choose([selected.key]);
   bandPick.choose(['201_500','501_1000']);
   aiSelect.value='both';
  });
@@ -208,20 +210,34 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   // the stale Store snapshot. Populate the facet from the same source before
   // allowing a paid request; never bypass server-side validation.
   const catalogController=new AbortController();
-  let catalogReady=false;
+  let catalogReady=false,catalogBlockReason='Aguarde a validação do catálogo e da empresa autenticada.';
   btn.disabled=true;
   (async()=>{
    const session=nuvem.sessao(),cfg=nuvem.config();
    if(!session?.access_token||!cfg?.url||!cfg?.chave){
-    show('Conecte-se à nuvem para validar o catálogo de segmentos.');return;
+    catalogBlockReason='Conecte-se à nuvem para validar o catálogo de segmentos.';show(catalogBlockReason);return;
    }
    show('Conferindo segmentos autorizados desta empresa no servidor...');
    try{
-    const url=cfg.url.replace(/\/$/,'')+'/rest/v1/segmentos?select=nome,ativo&tenant_id=eq.'+
-     encodeURIComponent(scope.tenantId)+'&ativo=eq.true&limit=120';
-    const response=await fetch(url,{headers:{apikey:cfg.chave,Authorization:'Bearer '+session.access_token},signal:catalogController.signal});
-    if(!response.ok)throw Error('catalog-http');
-    const rows=await response.json();
+    const base=cfg.url.replace(/\/$/,'');
+    const headers={apikey:cfg.chave,Authorization:'Bearer '+session.access_token};
+    // Parallel reads: verify the active profile/tenant before any paid search.
+    // The backend uses profile.tenant_id to scope catalog, quotas and audit.
+    const [profileResponse,catalogResponse]=await Promise.all([
+     fetch(base+'/rest/v1/perfis?select=tenant_id,papel,ativo&id=eq.'+
+      encodeURIComponent(scope.userId)+'&limit=1',{headers,signal:catalogController.signal}),
+     fetch(base+'/rest/v1/segmentos?select=nome,ativo&tenant_id=eq.'+
+      encodeURIComponent(scope.tenantId)+'&ativo=eq.true&limit=120',
+      {headers,signal:catalogController.signal})
+    ]);
+    if(!valid())return;
+    if(!profileResponse.ok){catalogBlockReason='Falha ao validar o perfil autenticado. Nenhuma pesquisa foi realizada.';show(catalogBlockReason);return;}
+    const profiles=await profileResponse.json();
+    const auth=verifyMarketTenantScope({selectedTenant:scope.tenantId,selectedUser:scope.userId,
+     profile:Array.isArray(profiles)?profiles[0]:null});
+    if(!auth.ok){catalogBlockReason=marketTenantMessage(auth.code);show(catalogBlockReason);return;}
+    if(!catalogResponse.ok)throw Error('catalog-http');
+    const rows=await catalogResponse.json();
     if(!Array.isArray(rows))throw Error('catalog-format');
     if(!valid())return;
     const seen=new Set(),options=[];
@@ -235,13 +251,13 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
     segmentPick.setItems(options);
     // Preserve prior selection only when it is part of the server-authorized catalog.
     segmentPick.choose(prev.filter(v=>authorized.has(v)));
-    catalogReady=true;btn.disabled=false;
-    if(!options.length)show('Nenhum segmento ativo autorizado no servidor para esta empresa. Confira Cadastros antes de pesquisar.');
+    catalogReady=options.length>0;btn.disabled=!catalogReady;
+    if(!options.length){catalogBlockReason='Nenhum segmento ativo autorizado no servidor para esta empresa. Confira Cadastros antes de pesquisar.';show(catalogBlockReason);}
     else if(prev.length&&!prev.every(v=>authorized.has(v)))
      show('Os segmentos locais foram atualizados com o catálogo do servidor. Revise sua seleção antes de buscar.');
     else show('Catálogo autorizado atualizado. Selecione os filtros e clique em Buscar empresas.');
    }catch(e){
-    if(e?.name!=='AbortError'&&valid())show('Não foi possível validar o catálogo no servidor. A pesquisa permanece bloqueada para evitar custo e rejeição. Confira a conexão e recarregue a tela.');
+    if(e?.name!=='AbortError'&&valid()){catalogBlockReason='Não foi possível validar o catálogo no servidor. A pesquisa permanece bloqueada para evitar custo e rejeição. Confira a conexão e recarregue a tela.';show(catalogBlockReason);}
    }
   })();
  const failureDescription=failures=>{
@@ -470,7 +486,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
  }
  form.addEventListener('submit',async ev=>{
   ev.preventDefault();if(!valid())return;
-  if(!catalogReady){show('Aguarde a validação dos segmentos autorizados no servidor antes de pesquisar.');return;}
+  if(!catalogReady){show(catalogBlockReason);return;}
    if(cityLoading){show('Aguarde a consulta de cidades no IBGE.');return;}
   let filters;try{filters=normalizeMarketFilters({
    ...Object.fromEntries([...els].map(([k,v])=>[k,v.value])),
