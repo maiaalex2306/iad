@@ -2138,6 +2138,25 @@
         throw new Error('Dados ou usuário mudaram durante a sincronização; repetir sem sobrescrever');
       }
       const est = Store.obter();
+      /* PERF-36I: sem evento no journal, as tabelas privadas (sinais/notas)
+         ainda precisam ser lidas integralmente por RLS. Se também vieram
+         idênticas, não invalidar revisão, índices, cálculos ou DOM à toa.
+         Comparação conservadora do objeto TODO, ordenado como veio da fonte.
+         Qualquer divergência, falha de serialização ou evento mantém o
+         caminho original (Store.salvar + marcas + checkpoint).
+         O gate de CAS/edições pendentes e a revisão do Store foram
+         validados antes deste ponto; não cachear dados de outro tenant. */
+      if (eventos.length === 0 && partes.every(function (p) {
+        if (!p.completa || !Array.isArray(p.linhas)) return false;
+        const atual = est[p.local] || [];
+        if (atual.length !== p.linhas.length) return false;
+        try {
+          for (let i = 0; i < atual.length; i++) {
+            if (JSON.stringify(atual[i]) !== JSON.stringify(p.linhas[i])) return false;
+          }
+          return true;
+        } catch (e) { return false; }
+      })) return 0;
       const novas = {};
       partes.forEach(function (p) {
         if (p.completa) { novas[p.local] = p.linhas; return; }
