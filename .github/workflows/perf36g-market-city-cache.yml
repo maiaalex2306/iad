@@ -6,6 +6,8 @@ on:
       - 'src/ri/market-city-cache.mjs'
       - 'src/ri/market-view.mjs'
       - 'tests/market-city-cache.test.mjs'
+      - 'tests/market-pwa-precache.test.mjs'
+      - 'sw.js'
       - 'tests/market-contract.test.mjs'
       - '.github/workflows/perf36g-market-city-cache.yml'
   workflow_dispatch:
@@ -25,4 +27,4 @@ jobs:
           node --check src/ri/market-city-cache.mjs
           node --check src/ri/market-view.mjs
       - name: Testar ciclo de vida da aba, TTL, LRU e contrato de filtros
-        run: node --test tests/market-city-cache.test.mjs tests/market-contract.test.mjs
+        run: node --test tests/market-city-cache.test.mjs tests/market-pwa-precache.test.mjs tests/market-contract.test.mjs
