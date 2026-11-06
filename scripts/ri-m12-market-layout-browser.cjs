@@ -38,7 +38,7 @@ const server=http.createServer((req,res)=>{
          :original(url,opt);
     const mod=await import('/src/ri/market-view.mjs');
     mod.mountMarketDiscovery({root:document.getElementById('market'),
-      snapshot:{segmentos:[{nome:'Química e Petroquímica',ativo:true,tenantId:'tenant-a'},{nome:'Segmento desatualizado',ativo:true,tenantId:'tenant-a'}]},
+      snapshot:{contas:[],oportunidades:[],segmentos:[{nome:'Química e Petroquímica',ativo:true,tenantId:'tenant-a'},{nome:'Segmento desatualizado',ativo:true,tenantId:'tenant-a'}]},
       scope:{tenantId:'tenant-a',userId:'user-a',token:'scope-token'},
       getScopeToken:()=> 'scope-token',nuvem:{sessao:()=>({access_token:'synthetic'}),config:()=>({url:'https://example.invalid',chave:'synthetic'})}});
     return true;
