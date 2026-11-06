@@ -82,7 +82,7 @@ test('escala de 10.000 oportunidades sem alteração de limite de cards',async()
  const f=fixture(2500,600,2);
  const output=m.buildCommercialOpportunityRadar({snapshot:f,scope,asOf});
  assert.ok(Object.values(output.groups).every(x=>x.length<=12));
- assert.ok(!JSON.stringify(output).includes('Conta 1')||true);
+ assert.ok(Object.values(output.groups).flat().every(x=>x.tenantId==='tenant-a'),'não atravessar tenants');
 });
 test('gate de release consistente e código sem cache comercial global',()=>{
  const src=fs.readFileSync(path.join(root,'src/ri/opportunity-radar.mjs'),'utf8');
