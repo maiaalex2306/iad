@@ -33,3 +33,14 @@ test('vocabulário de pesquisa usa apenas aliases da mesma categoria aprovada',(
 test('rótulos vagos ou inexistentes nao inventam categoria',()=>{
  for(const s of ['',null,'setor desconhecido com palavra impossivel'])assert.equal(interpretSector(s).canonical,undefined);
 });
+
+test('subsegmentos associados sugerem a família ativa, mas apenas como relação broader',()=>{
+ const milk=interpretSector('laticinios',{allowedNames:['Alimentos','Química e Petroquímica']});
+ assert.equal(milk.status,'related');
+ assert.equal(milk.canonical,undefined);
+ assert.equal(milk.candidates[0].name,'Alimentos');
+ assert.equal(milk.candidates[0].relation,'broader');
+ const clean=interpretSector('saneantes',{allowedNames:['Química e Petroquímica','Saneamento']});
+ assert.equal(clean.candidates[0].name,'Química e Petroquímica');
+ assert.notEqual(clean.candidates[0].name,'Saneamento');
+});
