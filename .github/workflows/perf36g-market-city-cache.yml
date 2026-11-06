@@ -1,0 +1,28 @@
+name: PERF-36G — Cache IBGE por aba, sem dados comerciais
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - 'src/ri/market-city-cache.mjs'
+      - 'src/ri/market-view.mjs'
+      - 'tests/market-city-cache.test.mjs'
+      - 'tests/market-contract.test.mjs'
+      - '.github/workflows/perf36g-market-city-cache.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-catalog-cache:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Sintaxe do módulo e da tela
+        run: |
+          node --check src/ri/market-city-cache.mjs
+          node --check src/ri/market-view.mjs
+      - name: Testar ciclo de vida da aba, TTL, LRU e contrato de filtros
+        run: node --test tests/market-city-cache.test.mjs tests/market-contract.test.mjs
