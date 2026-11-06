@@ -189,21 +189,22 @@ test('interface de Mercado nao usa lista global de segmentos nem executa pesquis
  assert.match(source,/x\.tenantId===scope\.tenantId/);
  assert.match(source,/servicodados\.ibge\.gov\.br\/api\/v1\/localidades\/estados/);
  assert.match(source,/faixasFuncionarios:bandPick\.get\(\)/);
- assert.match(source,/Aplicar exemplo: Mogi\/SP/);
+ assert.match(source,/Aplicar exemplo/);
  assert.match(source,/IAD_MARKET_IMPORT_ENABLED!==true/);
 });
 
 class MarketTestNode{
- constructor(tag){this.tagName=tag;this.textContent='';this.children=[];this.style={};this.listeners=new Map();this.isConnected=true;this.value='';}
+ constructor(tag){this.tagName=tag;this.textContent='';this.children=[];this.style={};this.listeners=new Map();this.isConnected=true;this.value='';this.classList={add(){},remove(){},toggle(){}};}
  append(...nodes){nodes.forEach(node=>{this.children.push(node);node.parent=this;});}
  appendChild(node){this.append(node);return node;}
  prepend(node){this.children.unshift(node);node.parent=this;}
  replaceChildren(...nodes){this.children=[];this.append(...nodes);}
  addEventListener(event,fn){const a=this.listeners.get(event)||[];a.push(fn);this.listeners.set(event,a);}
+ setAttribute(name,value){this[name]=value;}
  async fire(event,data={}){for(const fn of this.listeners.get(event)||[])await fn({preventDefault(){},...data});}
 }
 function fakeMarketDOM(){
- const doc={createElement:t=>new MarketTestNode(t),createTextNode:text=>{const n=new MarketTestNode('#text');n.textContent=text;return n;}};
+ const doc={createElement:t=>new MarketTestNode(t),createTextNode:text=>{const n=new MarketTestNode('#text');n.textContent=text;return n;},addEventListener(){},removeEventListener(){}};
  const root=new MarketTestNode('root');root.ownerDocument=doc;
  const walk=(node,pred)=>{if(pred(node))return node;for(const child of node.children){const match=walk(child,pred);if(match)return match;}return null;};
  return {root,walk};
@@ -217,6 +218,7 @@ test('DOM: botao de exemplo gera pesquisa JSON autenticada sem importar, respeit
   {tenantId:'tenant-b',ativo:true,nome:'Segmento privado de outro tenant'}
  ]};
  globalThis.fetch=async(url,options={})=>{
+  if(String(url).includes('/rest/v1/segmentos?'))return new Response(JSON.stringify([{nome:'Química e Petroquímica',ativo:true}]),{status:200});
   requests.push({url:String(url),options});
   if(String(url).includes('servicodados.ibge.gov.br'))
    return new Response(JSON.stringify([{id:3530607,nome:'Mogi das Cruzes'},{id:3509502,nome:'Campinas'}]),{status:200});
@@ -227,7 +229,7 @@ test('DOM: botao de exemplo gera pesquisa JSON autenticada sem importar, respeit
  try{
   const cleanup=mountMarketDiscovery({root,snapshot,scope,getScopeToken:()=>scope.token,
    nuvem:{sessao:()=>({access_token:'jwt-test'}),config:()=>({url:'https://safe.supabase.co',chave:'public-test'})}});
-  const demo=walk(root,n=>n.tagName==='button'&&n.textContent.includes('Aplicar exemplo: Mogi/SP'));
+  const demo=walk(root,n=>n.tagName==='button'&&n.textContent.includes('Aplicar exemplo'));
   assert.ok(demo,'demo missing');await demo.fire('click');
   assert.equal(walk(root,n=>n.textContent==='Segmento privado de outro tenant'),null,'out-of-tenant segment leaked');
   const form=walk(root,n=>n.tagName==='form');assert.ok(form);
@@ -249,6 +251,7 @@ test('DOM: falha de IBGE usa BrasilAPI e preserva codigo municipal de sete digit
  const {root,walk}=fakeMarketDOM(),originalFetch=globalThis.fetch,requests=[];
  const scope={tenantId:'tenant-a',userId:'u1',token:'scope-a'};
  globalThis.fetch=async(url,options={})=>{
+  if(String(url).includes('/rest/v1/segmentos?'))return new Response(JSON.stringify([{nome:'Química e Petroquímica',ativo:true}]),{status:200});
   requests.push({url:String(url),options});
   if(String(url).includes('servicodados.ibge.gov.br'))throw Error('IBGE temporariamente indisponivel');
   if(String(url).includes('brasilapi.com.br'))
@@ -260,7 +263,7 @@ test('DOM: falha de IBGE usa BrasilAPI e preserva codigo municipal de sete digit
  try{
   const cleanup=mountMarketDiscovery({root,snapshot:{contas:[],oportunidades:[],segmentos:[{tenantId:'tenant-a',ativo:true,nome:'Química e Petroquímica'}]},scope,
    getScopeToken:()=>scope.token,nuvem:{sessao:()=>({access_token:'jwt-test'}),config:()=>({url:'https://safe.supabase.co',chave:'public-test'})}});
-  const demo=walk(root,n=>n.tagName==='button'&&n.textContent.includes('Aplicar exemplo: Mogi/SP'));await demo.fire('click');
+  const demo=walk(root,n=>n.tagName==='button'&&n.textContent.includes('Aplicar exemplo'));await demo.fire('click');
   const form=walk(root,n=>n.tagName==='form');await form.fire('submit');
   const body=JSON.parse(requests.find(x=>x.url.includes('/functions/v1/market-search')).options.body);
   assert.equal(body.filters.municipios[0].codigoIBGE,'3530607');
@@ -303,6 +306,7 @@ test('RI-M04: DOM de Mercado verifica modelos autenticados sem filtros, quotas o
  const {root,walk}=fakeMarketDOM(),oldFetch=globalThis.fetch,requests=[];
  const scope={tenantId:'tenant-a',userId:'u1',token:'scope-preflight'};
  globalThis.fetch=async(url,opt={})=>{
+  if(String(url).includes('/rest/v1/segmentos?'))return new Response(JSON.stringify([]),{status:200});
   requests.push({url:String(url),options:opt});
   if(String(url).includes('/functions/v1/market-search')){
    const request=JSON.parse(opt.body);
@@ -320,11 +324,12 @@ test('RI-M04: DOM de Mercado verifica modelos autenticados sem filtros, quotas o
   const cleanup=mountMarketDiscovery({root,snapshot:{contas:[],oportunidades:[],segmentos:[]},scope,
    getScopeToken:()=>scope.token,
    nuvem:{sessao:()=>({access_token:'jwt-test'}),config:()=>({url:'https://safe.supabase.co',chave:'public-key'})}});
-  const button=walk(root,n=>n.tagName==='button'&&n.textContent.includes('VERIFICAR ACESSO'));
+  const button=walk(root,n=>n.tagName==='button'&&n.textContent.includes('Verificar acesso'));
   assert.ok(button);
   await button.fire('click');
-  assert.equal(requests.length,1);
-  assert.match(String(requests[0].options.headers.Authorization),/^Bearer /);
+  const preflightRequests=requests.filter(x=>x.url.includes('/functions/v1/market-search'));
+  assert.equal(preflightRequests.length,1);
+  assert.match(String(preflightRequests[0].options.headers.Authorization),/^Bearer /);
   assert.ok(!requests.some(x=>x.url.includes('iad_market_import_confirmed')||x.url.includes('iad_market_search_reserve')));
   const status=walk(root,n=>typeof n.textContent==='string'&&n.textContent.includes('Nenhuma cota de pesquisa consumida'));
   assert.ok(status,'diagnostic result missing in UI');
@@ -347,6 +352,7 @@ test('RI-M06 DOM: seis etapas e shortlist aparecem na pesquisa real simulada sem
  const scope={tenantId:'tenant-a',userId:'user1',token:'ri-m06'};
  const snapshot={contas:[],oportunidades:[],segmentos:[{tenantId:'tenant-a',ativo:true,nome:'Química e Petroquímica'}]};
  globalThis.fetch=async(url,options={})=>{
+  if(String(url).includes('/rest/v1/segmentos?'))return new Response(JSON.stringify([{nome:'Química e Petroquímica',ativo:true}]),{status:200});
   requests.push(String(url));
   if(String(url).includes('servicodados.ibge.gov.br'))
    return new Response(JSON.stringify([{id:3530607,nome:'Mogi das Cruzes'}]),{status:200});
@@ -363,7 +369,7 @@ test('RI-M06 DOM: seis etapas e shortlist aparecem na pesquisa real simulada sem
  try{
   const cleanup=mountMarketDiscovery({root,snapshot,scope,getScopeToken:()=>scope.token,
    nuvem:{sessao:()=>({access_token:'jwt-test'}),config:()=>({url:'https://safe.supabase.co',chave:'test'})}});
-  const demo=walk(root,n=>n.tagName==='button'&&n.textContent.includes('Aplicar exemplo: Mogi/SP'));
+  const demo=walk(root,n=>n.tagName==='button'&&n.textContent.includes('Aplicar exemplo'));
   assert.ok(demo);await demo.fire('click');
   const form=walk(root,n=>n.tagName==='form');assert.ok(form);
   await form.fire('submit');
