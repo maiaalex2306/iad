@@ -495,6 +495,32 @@
      existe relato para o conteúdo dos arquivos alimentar, e mesmo assim os
      arquivos precisam ser anexados ao negócio. Sem isso, "Editar tarefa"
      mostrava o campo de anexo e não guardava nada. */
+  /* O LEITOR DE DOCUMENTOS NÃO VEM MAIS NO BOOT
+     ------------------------------------------------------------------
+     A v286.73 tirou `documentos.js` do `index.html` e passou a carregá-lo sob
+     demanda, para o shell abrir com menos scripts. O `app.js` foi ajustado nos
+     dois pontos dele; estes dois aqui ficaram chamando
+     `global.IADDocumentos.lerVarios` direto.
+
+     Sem o módulo, o handler estourava em "Cannot read properties of undefined"
+     e o recado ficava parado em **"Lendo 1 arquivo…" para sempre**. Quem
+     concluía uma tarefa anexando a ata da reunião via uma mensagem
+     tranquilizadora e esperava por algo que nunca vinha. Falha calada com cara
+     de progresso — o pior formato que existe aqui, porque o erro tem de gritar.
+
+     Daí este helper. Ele usa o carregador do `app.js`, não um próprio, para que
+     o módulo seja importado uma única vez. E cada chamada ganhou um `.catch`:
+     se o módulo não descer (sem rede, 404), o recado DIZ isso em vez de
+     continuar prometendo uma leitura que não vem. */
+  function lerDocumentos(escolhidos) {
+    if (global.IADDocumentos) return global.IADDocumentos.lerVarios(escolhidos);
+    if (typeof global.IADCarregarOpcional === 'function') {
+      return global.IADCarregarOpcional('IADDocumentos', 'documentos.js')
+        .then(function (D) { return D.lerVarios(escolhidos); });
+    }
+    return Promise.reject(new Error('o leitor de documentos não está disponível'));
+  }
+
   function ligarDocumentos(dlg, idArquivo, idTexto) {
     const entrada = dlg.querySelector('[name="' + idArquivo + '"]');
     const caixa = idTexto ? dlg.querySelector('[name="' + idTexto + '"]') : null;
@@ -542,7 +568,7 @@
       if (!escolhidos.length) return;
       estado.textContent = 'Lendo ' + escolhidos.length + ' arquivo' + (escolhidos.length > 1 ? 's' : '') + '…';
 
-      global.IADDocumentos.lerVarios(escolhidos).then(function (lidos) {
+      lerDocumentos(escolhidos).then(function (lidos) {
         lidos.forEach(function (d) { docs.push(d); });
         dlg.documentosIA = docs;
         entrada.value = '';                       /* deixa reescolher o mesmo arquivo */
@@ -572,6 +598,10 @@
         estado.textContent = ruins.length
           ? ruins.map(function (d) { return d.nome + ': ' + d.erro; }).join(' · ')
           : docs.length + ' documento' + (docs.length > 1 ? 's' : '') + ' anexado' + (docs.length > 1 ? 's' : '') + '.';
+      }).catch(function (e) {
+        estado.textContent = 'Não consegui ler os arquivos: ' +
+          ((e && e.message) || 'tente de novo') + '.';
+        entrada.value = '';
       });
     });
   }
@@ -615,7 +645,7 @@
           const escolhidos = Array.prototype.slice.call(entrada.files || []);
           if (!escolhidos.length) return;
           estado.textContent = 'Lendo ' + escolhidos.length + ' arquivo' + (escolhidos.length > 1 ? 's' : '') + '…';
-          global.IADDocumentos.lerVarios(escolhidos).then(function (lidos) {
+          lerDocumentos(escolhidos).then(function (lidos) {
             lidos.forEach(function (d) { docs.push(d); });
             dlg.documentosIA = docs;
             entrada.value = '';                       /* deixa reescolher o mesmo arquivo */
@@ -624,6 +654,10 @@
             estado.textContent = ruins
               ? ruins + ' arquivo' + (ruins > 1 ? 's' : '') + ' não deu para ler — passe o mouse para ver o motivo.'
               : docs.length + ' documento' + (docs.length > 1 ? 's' : '') + ' carregado' + (docs.length > 1 ? 's' : '') + '.';
+          }).catch(function (e) {
+            estado.textContent = 'Não consegui ler os arquivos: ' +
+              ((e && e.message) || 'tente de novo') + '.';
+            entrada.value = '';
           });
         });
       }

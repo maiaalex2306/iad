@@ -27,6 +27,9 @@
     }
     return modulosOpcionais[nome];
   }
+  /* Exposto porque o `ui.js` também precisa de módulo opcional, e precisa do
+     MESMO cache: dois carregadores importariam `documentos.js` duas vezes. */
+  global.IADCarregarOpcional = carregarOpcional;
   let carregandoDemo = false;
 
   const ROTAS = [
