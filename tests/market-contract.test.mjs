@@ -576,3 +576,30 @@ test('RI-M10 DOM: sem sessão não executa enriquecimento nem utiliza quota',asy
   stop();
  }finally{globalThis.fetch=original;}
 });
+
+test('RI-M16 DOM: perfil de outra empresa bloqueia busca sem reservar cota ou chamar IA',async()=>{
+ const {mountMarketDiscovery}=await import('../src/ri/market-view.mjs');
+ const {root,walk}=fakeMarketDOM(),oldFetch=globalThis.fetch,requests=[];
+ const scope={tenantId:'tenant-bio',userId:'admin-acp',token:'scope-mismatch'};
+ globalThis.fetch=async(url,opt={})=>{
+  const u=String(url);requests.push(u);
+  if(u.includes('/rest/v1/perfis?'))return new Response(JSON.stringify([{tenant_id:'tenant-acp',papel:'admin',ativo:true}]),{status:200});
+  if(u.includes('/rest/v1/segmentos?'))return new Response(JSON.stringify([{nome:'Química e Petroquímica',ativo:true}]),{status:200});
+  if(u.includes('servicodados.ibge.gov.br'))return new Response('[]',{status:200});
+  throw Error('Nenhuma IA deveria ser consultada: '+u);
+ };
+ try{
+  const cleanup=mountMarketDiscovery({root,
+   snapshot:{contas:[],oportunidades:[],segmentos:[{tenantId:'tenant-bio',ativo:true,nome:'Química e Petroquímica'}]},
+   scope,getScopeToken:()=>scope.token,
+   nuvem:{sessao:()=>({access_token:'synthetic'}),config:()=>({url:'https://safe.supabase.co',chave:'public-key'})}});
+  for(let i=0;i<20;i++)await new Promise(resolve=>setImmediate(resolve));
+  const btn=walk(root,n=>n.tagName==='button'&&n.textContent==='Buscar empresas');
+  assert.ok(btn.disabled,'o botão pago deve permanecer bloqueado');
+  const form=walk(root,n=>n.tagName==='form');await form.fire('submit');
+  assert.ok(!requests.some(u=>u.includes('/functions/v1/market-search')||u.includes('/rpc/iad_market_search_reserve')));
+  const status=walk(root,n=>n.tagName==='p'&&String(n.textContent).includes('empresa vinculada'));
+  assert.ok(status,'a divergência entre tenants deve ser compreensível');
+  cleanup();
+ }finally{globalThis.fetch=oldFetch;}
+});
