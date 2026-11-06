@@ -40,7 +40,9 @@ test('resultado exatamente igual ao módulo publicado, com nomes e ordenação i
    for(const profile of [scope,{...scope,role:'admin',admin:true,tenantFilter:'todas',ownerFilter:'todos'},
     {...scope,role:'admin',admin:true,tenantFilter:'tenant-b',ownerFilter:'todos'}]){
     const args={snapshot:data,scope:profile,asOf};
-    assert.equal(value(newM.buildCommercialOpportunityRadar(args)),
+    const current=newM.buildCommercialOpportunityRadar(args);
+    delete current.groups.pistas; // RI-07A adiciona um grupo; as 5 categorias legadas devem ser idênticas.
+    assert.equal(value(current),
      value(oldM.buildCommercialOpportunityRadar(args)),
      'diferença em '+accounts+' contas / '+tenants+' tenants / '+profile.role+' / '+profile.tenantFilter);
    }
@@ -90,7 +92,7 @@ test('gate de release consistente e código sem cache comercial global',()=>{
  const sw=fs.readFileSync(path.join(root,'sw.js'),'utf8');
  assert.match(src,/const candidates=segmentProducts\.get/);
  assert.doesNotMatch(src,/fetch\s*\(|localStorage|sessionStorage|supabase\./);
- assert.match(config,/numero:\s*'v286\.79'/);
- assert.match(sw,/iad-crm-v286\.79/);
+ assert.match(config,/numero:\s*'v286\.80'/);
+ assert.match(sw,/iad-crm-v286\.80/);
  assert.ok(sw.includes("'./src/ri/opportunity-radar.mjs'"));
 });

@@ -194,7 +194,7 @@
 #iad-ri-root .iad-ri-radar-hero-note p{margin-top:7px;color:#e2edf8;line-height:1.5;font-size:.77rem}
 #iad-ri-root .iad-ri-radar-intro{display:grid;gap:4px}
 #iad-ri-root .iad-ri-radar-tabs{
- display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;min-width:0;
+ display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;min-width:0;
 }
 #iad-ri-root .iad-ri-radar-tab{
  border:1px solid var(--ci-line);background:var(--ci-surface);color:var(--ci-ink);
@@ -263,4 +263,14 @@
  #iad-ri-root .iad-ri-radar-tabs{grid-template-columns:minmax(0,1fr)}
  #iad-ri-root .iad-ri-radar-tab{min-height:0}
  #iad-ri-root .iad-ri-radar-card{padding:15px}
+}
+
+/* RI-07A: seis frentes de descoberta, com rastreio da fonte textual. */
+#iad-ri-root .iad-ri-radar-source-label{
+ display:block;font-size:.68rem;line-height:1.5;color:var(--ci-muted);margin-top:8px;
+ overflow-wrap:anywhere;
+}
+#iad-ri-root .iad-ri-radar-tab[data-radar="pistas"] strong{font-weight:800;}
+@media(max-width:1160px) and (min-width:821px){
+ #iad-ri-root .iad-ri-radar-tabs{grid-template-columns:repeat(3,minmax(0,1fr));}
 }

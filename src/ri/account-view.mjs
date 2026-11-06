@@ -52,7 +52,7 @@ export function mountAccountIntelligence({root,snapshot,scope,getScopeToken}={})
   throw Error('Destino, sessão e carteira autorizada são obrigatórios');
  const doc=root.ownerDocument;
  const radar=buildCommercialOpportunityRadar({snapshot,scope,asOf:localBusinessDate()});
- let active=true,selected='forgotten',searchLimit=8;
+ let active=true,selected='pistas',searchLimit=8;
  const valid=()=>{
   if(!active||!root.isConnected)return false;
   try{return getScopeToken()===scope.token;}catch{return false;}
@@ -97,6 +97,8 @@ export function mountAccountIntelligence({root,snapshot,scope,getScopeToken}={})
  add(intro,'h2','Onde podemos gerar novos negócios?','iad-ri-section-title');
  add(intro,'p','Selecione um tipo de oportunidade. O radar só apresenta hipóteses fundamentadas; quando faltam dados, indica o que registrar ou validar.','iad-ri-section-intro');
  const groups=[
+  {id:'pistas',title:'Pistas da carteira',desc:'Projetos, solicitações e necessidades citados nos registros',
+   empty:'Nenhuma expressão comercial inequívoca foi localizada nas notas ou nos eventos autorizados. Esse resultado não significa ausência de oportunidades; a investigação com IA contextual permanece uma evolução necessária.'},
   {id:'upsell',title:'Upsell',desc:'Ampliar contratos e soluções de clientes existentes',empty:'Nenhum cliente com venda ganha e itens contratados suficientes para sugerir ampliação. Registre produtos efetivamente vendidos nos negócios ganhos.'},
   {id:'crossSell',title:'Cross-sell',desc:'Investigar soluções complementares no mesmo segmento',empty:'Faltam referências de compras reais, com produtos vinculados, em outras contas do mesmo segmento. Não vamos sugerir itens aleatórios.'},
   {id:'forgotten',title:'Contas esquecidas',desc:'Retomar relacionamentos sem atividade registrada',empty:'Nenhuma conta sem atividade documentada há 90 dias e sem compromisso futuro, dentro da carteira autorizada.'},
@@ -124,7 +126,8 @@ export function mountAccountIntelligence({root,snapshot,scope,getScopeToken}={})
   const account=findVisibleAccount(snapshot,scope,row.accountId,row.tenantId);
   if(!account)return;
   const op=(snapshot.oportunidades||[]).find(o=>o&&o.contaId===account.id&&
-   o.tenantId===account.tenantId&&scopedOp(o)&&!o.desfecho?.tipo);
+   o.tenantId===account.tenantId&&scopedOp(o)&&!o.desfecho?.tipo&&
+   (!row.sourceOpportunityId||row.sourceOpportunityId===o.id));
   const app=doc.defaultView?.App;
   if(op&&typeof app?.abrir==='function')app.abrir(op.id);
   else goToAccount(row);
@@ -138,6 +141,9 @@ export function mountAccountIntelligence({root,snapshot,scope,getScopeToken}={})
   }
   htitle.textContent=g.title;
   hdesc.textContent=g.desc;
+  info.textContent=selected==='pistas'
+   ?'Triagem por regras sobre textos internos, não análise por IA. Confirme contexto, atualidade e interlocutor antes de agir.'
+   :'Hipóteses de trabalho — cada indicação exige validação pelo responsável antes de contato ou proposta.';
   const items=radar.groups[selected];
   const fragment=doc.createDocumentFragment();
   if(!items.length){
@@ -161,6 +167,10 @@ export function mountAccountIntelligence({root,snapshot,scope,getScopeToken}={})
    const detail=add(card,'div','','iad-ri-radar-evidence');
    add(detail,'strong','Por que apareceu');
    add(detail,'p',item.evidence);
+   if(item.sourceLabel){
+    add(detail,'small','Fonte interna: '+item.sourceLabel+
+      (item.date?' · '+item.date:''),'iad-ri-radar-source-label');
+   }
    const next=add(card,'div','','iad-ri-radar-next');
    add(next,'strong','Próxima ação recomendada');
    add(next,'p',item.action);
@@ -168,8 +178,8 @@ export function mountAccountIntelligence({root,snapshot,scope,getScopeToken}={})
    if(item.accountId){
     const view=add(actions,'button','Analisar conta','iad-ri-primary-small');
     view.type='button';view.addEventListener('click',()=>goToAccount(item));
-    if(selected==='upsell'||selected==='crossSell'){
-     const deal=add(actions,'button','Abrir relacionamento','iad-ri-link');
+    if(selected==='upsell'||selected==='crossSell'||selected==='pistas'){
+     const deal=add(actions,'button',selected==='pistas'?'Abrir registro':'Abrir relacionamento','iad-ri-link');
      deal.type='button';deal.addEventListener('click',()=>openOpportunity(item));
     }
    }

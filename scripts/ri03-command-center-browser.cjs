@@ -55,6 +55,7 @@ const server=http.createServer((req,res)=>{
         {id:'c2',tenantId:'tenant-b',donoId:user.id,contaId:'a1',nome:'CONTATO SEGREDO-TENANT-B'}];
       d.oportunidades=[
         {id:'o1',tenantId:'tenant-a',donoId:user.id,contaId:'a1',titulo:'Modernização da ETE',
+         notas:'Cliente solicitou orçamento para automação dos processos industriais.',
          etapa:'Proposta',etapaDesde:day(-44),fechamentoPrevisto:day(-3),valor:50000,desfecho:null,
          dims:Object.fromEntries(P.DIMENSOES.map(x=>[x.id,0])),stakeholders:[],eventos:[]},
         {id:'o2',tenantId:'tenant-a',donoId:user.id,contaId:'a2',titulo:'Recuperar contato',
@@ -75,22 +76,24 @@ const server=http.createServer((req,res)=>{
     const before=await page.evaluate(()=>window.IADStore.revisao());
     await page.evaluate(()=>window.App.ir('#/inteligencia'));
     await page.locator('#iad-ri-root .iad-ri-workspace').count().catch(()=>0);
-    await page.locator('#iad-ri-root .iad-ri-radar-tab[data-radar="forgotten"]').waitFor({timeout:15000});
+    await page.locator('#iad-ri-root .iad-ri-radar-tab[data-radar="pistas"]').waitFor({timeout:15000});
     await page.locator('#iad-ri-root button[data-account-id="a1"]').waitFor({timeout:15000});
     await page.waitForFunction(()=>document.getElementById('iad-ri-commercial-css')&&
       getComputedStyle(document.querySelector('.iad-ri-hero')).backgroundImage.includes('gradient'));
     assert.equal(await page.locator('#iad-ri-root .iad-ri-kpi').count(),0,
       'Números e KPIs devem permanecer no Painel');
-    assert.equal(await page.locator('#iad-ri-root .iad-ri-radar-tab').count(),5);
+    assert.equal(await page.locator('#iad-ri-root .iad-ri-radar-tab').count(),6);
     const text=await page.locator('#iad-ri-root').textContent();
     for(const expected of ['Radar de oportunidades comerciais','Upsell','Cross-sell',
-      'Contas esquecidas','Notícias e movimentos','Segmentos em crescimento',
+      'Contas esquecidas','Pistas da carteira','Notícias e movimentos','Segmentos em crescimento',
       'Por que apareceu','Próxima ação recomendada','Investigar uma conta'])
       assert.ok(text.includes(expected),expected);
     assert.doesNotMatch(text,/SEGREDO-TENANT-B/,'nenhum dado de outra empresa na tela');
     assert.equal(await page.locator('#iad-ri-root img').count(),0,'injetar HTML não executa imagem');
+    assert.match(await page.locator('#iad-ri-root .iad-ri-radar-results').textContent(),/solicitou orçamento/);
+    assert.match(await page.locator('#iad-ri-root .iad-ri-radar-results').textContent(),/Fonte interna/);
     assert.match(await page.locator('#iad-ri-root .iad-ri-radar-results').textContent(),/Empresa|Aurora|Fábrica Azul/);
-    for(const tab of ['upsell','crossSell','news','growth']){
+    for(const tab of ['upsell','crossSell','news','growth','forgotten']){
       await page.locator('#iad-ri-root .iad-ri-radar-tab[data-radar="'+tab+'"]').click();
       assert.ok((await page.locator('#iad-ri-root .iad-ri-radar-results').textContent()).length>40);
     }

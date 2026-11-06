@@ -7,6 +7,8 @@ on:
       - 'src/ri/account-view.mjs'
       - 'src/ri/portfolio-analytics.mjs'
       - 'src/ri/opportunity-radar.mjs'
+      - 'src/ri/internal-cues.mjs'
+      - 'scripts/ri07a-internal-cues.test.cjs'
       - 'scripts/perf-ri04-crosssell-index.test.cjs'
       - 'scripts/ri03-command-center.test.cjs'
       - 'scripts/ri03-command-center-browser.cjs'
@@ -17,6 +19,8 @@ on:
       - 'src/ri/account-view.mjs'
       - 'src/ri/portfolio-analytics.mjs'
       - 'src/ri/opportunity-radar.mjs'
+      - 'src/ri/internal-cues.mjs'
+      - 'scripts/ri07a-internal-cues.test.cjs'
       - 'scripts/perf-ri04-crosssell-index.test.cjs'
       - 'assets/ri-commercial.css'
       - 'sw.js'
@@ -44,6 +48,7 @@ jobs:
           node --check src/ri/portfolio-analytics.mjs
           node --test scripts/ri03-command-center.test.cjs
           node --test scripts/ri04-opportunity-radar.test.cjs
+          node --test scripts/ri07a-internal-cues.test.cjs
           node --test scripts/perf-ri04-crosssell-index.test.cjs
           node --test scripts/ri-portfolio-analytics.test.cjs
           node --test scripts/ri-account-view.test.cjs
