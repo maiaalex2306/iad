@@ -14,6 +14,7 @@ const ARQUIVOS = [
   './src/ui.js', './src/ajuda.js', './src/seed.js', './src/whatsapp.js', './src/email.js', './src/conversa.js', './src/views.js', './src/perf-hoje.js', './src/app.js',
   './src/ri/account-view.mjs', './src/ri/account-briefing.mjs', './src/ri/portfolio-analytics.mjs',
   './src/ri/market-view.mjs', './src/ri/market-contract.mjs', './src/ri/prospect-agents.mjs', './src/ri/market-investigation.mjs', './src/ri/market-signals.mjs', './src/ri/market-enricher.mjs', './src/ri/market-audit.mjs',
+  './src/ri/sector-intelligence.mjs', './src/ri/market-tenant-scope.mjs', './src/ri/market-city-cache.mjs',
   './icons/icon-192.png', './icons/icon-512.png'
 ];
 
