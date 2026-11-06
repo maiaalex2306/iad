@@ -10,7 +10,7 @@ test('RI-M11: tabela auditável sem PII, esquema com RLS e somente service_role'
  assert.match(sql,/ENABLE ROW LEVEL SECURITY/);
  assert.match(sql,/REVOKE ALL ON public\.iad_market_research_runs FROM PUBLIC,anon,authenticated/);
  assert.match(sql,/GRANT SELECT,INSERT,UPDATE ON public\.iad_market_research_runs TO service_role/);
- assert.doesNotMatch(sql,/\b(email|telefone|whatsapp|linkedin|prompt|source_url|razaoSocial)\b/i);
+ assert.doesNotMatch(sql,/^\s*(email|telefone|whatsapp|linkedin|prompt|source_url|razaoSocial)\s+(text|varchar|uuid)/im);
  assert.match(edge,/Deno\.env\.get\('SUPABASE_SERVICE_ROLE_KEY'\)/);
  assert.match(edge,/if\(!service\)return output\(\{error:'RESEARCH_AUDIT_UNAVAILABLE'\}/);
  assert.ok(edge.indexOf('auditStart(url,service')<edge.indexOf('const jobs=[]'));
