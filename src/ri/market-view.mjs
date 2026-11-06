@@ -5,6 +5,7 @@ import {normalizeMarketFilters,normalizeMarketCompanies,proposePipelineAction,bu
 import {buildProspectWorkflow} from './prospect-agents.mjs';
 import {mountMarketInvestigation} from './market-investigation.mjs';
 import {mountMarketSignals} from './market-signals.mjs';
+import {mountMarketEnricher} from './market-enricher.mjs';
 /**
  * Pull only the server-confirmed RI-M01 import into the local Pipeline.
  * Never upload local edits. Refuse the pull when CAS/pending state is unknown.
@@ -297,6 +298,8 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
    cancelInvestigations.add(mountMarketInvestigation({card,company,doc,nuvem,valid,
     provider:()=>aiSelect.value,getSequence:()=>currentRequest}));
    cancelInvestigations.add(mountMarketSignals({card,company,doc,nuvem,valid,
+    provider:()=>aiSelect.value,getSequence:()=>currentRequest}));
+   cancelInvestigations.add(mountMarketEnricher({card,company,doc,nuvem,valid,
     provider:()=>aiSelect.value,getSequence:()=>currentRequest}));
    card.appendChild(el('p','Funcionarios: '+(company.funcionarios===null?'indisponivel':String(company.funcionarios))+' (nao confirmado) · Faturamento: '+(company.faturamento===null?'indisponivel':String(company.faturamento))+' (nao confirmado)','small'));
    const icp=company.qualificacaoICP;

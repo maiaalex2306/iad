@@ -507,3 +507,50 @@ test('RI-M09 DOM: Signal Hunter bloqueia sem sessão e rejeita links perigosos n
   stop();
  }finally{globalThis.fetch=original;}
 });
+
+test('RI-M10 DOM: pesquisa de decisores exige clique, não cria contato ou oportunidade',async()=>{
+ const {mountMarketEnricher}=await import('../src/ri/market-enricher.mjs');
+ const {root,walk}=fakeMarketDOM(),doc=root.ownerDocument,original=globalThis.fetch,requests=[];
+ const company={cnpj:'11222333000181',nome:'Empresa A',uf:'SP',cidade:'Jacarei',segmento:'Quimico'};
+ let seq=1;
+ globalThis.fetch=async(url,options={})=>{
+  requests.push({url:String(url),method:options.method,body:JSON.parse(options.body)});
+  return new Response(JSON.stringify({action:'enrich',decisores:[{
+   cnpj:company.cnpj,nome:'Ana Exemplo',cargo:'Diretora Industrial',fonte:'https://example.org/empresa-a',
+   emailCorporativo:'ana@empresa-industrial.com.br',linkedin:null,
+   status:'VINCULO_PROFISSIONAL_CITADO_NAO_VERIFICADO'
+  }],providers:['OpenAI'],usage:[{provider:'OpenAI',webSearchRequests:1}],verifiedContacts:0}),{status:200});
+ };
+ try{
+  const stop=mountMarketEnricher({card:root,company,doc,valid:()=>true,getSequence:()=>seq,
+   provider:()=> 'OpenAI',nuvem:{sessao:()=>({access_token:'jwt-test'}),
+    config:()=>({url:'https://safe.supabase.co',chave:'public-test'})}});
+  const button=walk(root,n=>n.tagName==='button'&&n.textContent.includes('PESQUISAR DECISORES'));
+  assert.ok(button);assert.equal(requests.length,0);
+  await button.fire('click');
+  assert.equal(requests.length,1);
+  assert.equal(requests[0].body.action,'enrich');
+  assert.equal(requests[0].body.target.cnpj,company.cnpj);
+  assert.ok(!requests.some(x=>x.url.includes('iad_market_import_confirmed')));
+  assert.ok(walk(root,n=>n.textContent?.includes('Enricher — profissionais citados')));
+  assert.ok(walk(root,n=>n.textContent?.includes('NÃO foram verificados')));
+  assert.ok(walk(root,n=>n.tagName==='a'&&n.href==='https://example.org/empresa-a'));
+  assert.equal(button.disabled,true);
+  await button.fire('click');assert.equal(requests.length,1);
+  stop();seq++;
+ }finally{globalThis.fetch=original;}
+});
+test('RI-M10 DOM: sem sessão não executa enriquecimento nem utiliza quota',async()=>{
+ const {mountMarketEnricher}=await import('../src/ri/market-enricher.mjs');
+ const {root,walk}=fakeMarketDOM(),doc=root.ownerDocument,original=globalThis.fetch;let calls=0;
+ globalThis.fetch=async()=>{calls++;throw Error('Network should not run');};
+ try{
+  const stop=mountMarketEnricher({card:root,company:{cnpj:'11222333000181',
+   nome:'Empresa A',uf:'SP',cidade:'Jacarei',segmento:'Quimico'},
+   doc,valid:()=>true,getSequence:()=>1,nuvem:{sessao:()=>null,config:()=>({})}});
+  const b=walk(root,n=>n.tagName==='button'&&n.textContent.includes('PESQUISAR DECISORES'));
+  assert.ok(b);await b.fire('click');assert.equal(calls,0);
+  assert.ok(walk(root,n=>n.textContent?.includes('Autenticação necessária')));
+  stop();
+ }finally{globalThis.fetch=original;}
+});
