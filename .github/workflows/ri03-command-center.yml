@@ -6,6 +6,7 @@ on:
       - '.github/workflows/ri03-command-center.yml'
       - 'src/ri/account-view.mjs'
       - 'src/ri/portfolio-analytics.mjs'
+      - 'src/ri/opportunity-radar.mjs'
       - 'scripts/ri03-command-center.test.cjs'
       - 'scripts/ri03-command-center-browser.cjs'
       - 'assets/ri-commercial.css'
@@ -14,6 +15,7 @@ on:
     paths:
       - 'src/ri/account-view.mjs'
       - 'src/ri/portfolio-analytics.mjs'
+      - 'src/ri/opportunity-radar.mjs'
       - 'assets/ri-commercial.css'
       - 'sw.js'
       - 'src/config.js'
@@ -39,6 +41,7 @@ jobs:
           node --check src/ri/account-view.mjs
           node --check src/ri/portfolio-analytics.mjs
           node --test scripts/ri03-command-center.test.cjs
+          node --test scripts/ri04-opportunity-radar.test.cjs
           node --test scripts/ri-portfolio-analytics.test.cjs
           node --test scripts/ri-account-view.test.cjs
           node --test scripts/ri-account-briefing.test.cjs
