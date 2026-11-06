@@ -172,3 +172,13 @@
 @media(prefers-reduced-motion:reduce){
  #iad-ri-root .iad-ri-motion{transition:none;}
 }
+
+/* Telefones estreitos: KPI compacto, alertas em linhas legíveis.
+   Evita largura mínima causada pelo valor "Sem base" junto ao rótulo. */
+@media (max-width:420px){
+ #iad-ri-root .iad-ri-signals{grid-template-columns:minmax(0,1fr);}
+ #iad-ri-root .iad-ri-signal{padding:10px 12px;}
+ #iad-ri-root .iad-ri-stage-labels{flex-wrap:wrap;gap:3px;}
+ #iad-ri-root .iad-ri-stage-data{text-align:left;}
+ #iad-ri-root .iad-ri-tags{gap:5px;}
+}
