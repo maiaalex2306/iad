@@ -71,7 +71,10 @@ function ambiente() {
       const s=JSON.parse(storage.get('iad-crm:nuvem-sessao:v1'));
       s.perfil.papel=role;storage.set('iad-crm:nuvem-sessao:v1',JSON.stringify(s));
     },
-    clearCalls:()=>requests.splice(0),requests:()=>requests.slice()};
+    clearCalls:()=>requests.splice(0),requests:()=>requests.slice(),
+    getMarks:()=>JSON.parse(storage.get('iad-crm:nuvem-marcas')||'null'),
+    setMarks:value=>storage.set('iad-crm:nuvem-marcas',JSON.stringify(value)),
+    forgetMarks:()=>storage.delete('iad-crm:nuvem-marcas')};
 }
 test('PERF03B baixa snapshot primeiro e depois só eventos + IDs atualizados',async()=>{
  const a=ambiente();
@@ -86,6 +89,72 @@ test('PERF03B baixa snapshot primeiro e depois só eventos + IDs atualizados',as
  assert.ok(calls.some(s=>s.includes('iad_sync_eventos')));
  assert.ok(calls.some(s=>s.includes('oportunidades?select=*&id=in.')));
  assert.ok(!calls.some(s=>s.includes('oportunidades?select=*&order=id.asc')));
+});
+test('PERF-36I: delta sem eventos e sem alteração privada não regrava Store ou índices',async()=>{
+ const a=ambiente();
+ assert.equal(await a.N.puxar(),1);
+ const antes=a.S.revisao();
+ const carteira=a.state.oportunidades;
+ a.clearCalls();
+ for(let i=0;i<8;i++)assert.equal(await a.N.puxar(),0);
+ assert.equal(a.S.revisao(),antes,
+  'refresh delta idêntico não pode invalidar revisão nem repintar o CRM');
+ assert.equal(a.state.oportunidades,carteira,'referência da carteira preservada');
+ const reqs=a.requests();
+ assert.ok(reqs.some(s=>s.includes('/iad_sync_eventos?')),'journal ainda consultado');
+ assert.ok(reqs.some(s=>s.includes('/sinais?')),'sinais privados ainda consultados');
+ assert.ok(reqs.some(s=>s.includes('/notas?')),'notas privadas ainda consultadas');
+ assert.ok(!reqs.some(s=>s.includes('/oportunidades?select=*&order=id.asc')),
+  'sem evento não rebaixar carteira');
+});
+
+test('PERF-36I: refresh sem dados renova TTL das marcas sem regravar Store',async()=>{
+ const a=ambiente();
+ await a.N.puxar();
+ const old=a.getMarks();
+ assert.ok(old?.em>0,'carga inicial deve criar marcas');
+ const passada={...old,em:Date.now()-3*3600000};
+ a.setMarks(passada);
+ const rev=a.S.revisao(),start=Date.now();
+ assert.equal(await a.N.puxar(),0);
+ const now=a.getMarks();
+ assert.equal(a.S.revisao(),rev);
+ assert.ok(now.em>=start,'não deixar marca expirar e causar upsert total');
+ assert.deepEqual(now.tabelas,old.tabelas,'mesmos IDs e hashes confirmados');
+ assert.equal(now.conta,old.conta);
+});
+test('PERF-36I: sem marcas o gate de edições pendentes falha fechado',async()=>{
+ const a=ambiente();await a.N.puxar();
+ a.forgetMarks();
+ const rev=a.S.revisao();
+ await assert.rejects(()=>a.N.puxar(),/alterações locais não confirmadas/i);
+ assert.equal(a.S.revisao(),rev,'carteira original preservada após falta de ACK');
+ assert.equal(a.getMarks(),null,'não inventar marca de sincronização confirmada');
+});
+test('PERF-36I: sinais privados alterados sem evento público ainda são aplicados',async()=>{
+ const a=ambiente();
+ await a.N.puxar();
+ const rev=a.S.revisao();
+ a.remote.sinais.push({id:'sinal-1',tenant_id:'d1111111-1111-4111-8111-111111111111',
+  nome:'Alerta sintético'});
+ assert.equal(await a.N.puxar(),0,
+  'journal público sem eventos, mas coleção privada deve ser atualizada');
+ assert.equal(a.S.revisao(),rev+1,'alteração de sinal deve ser materializada');
+ assert.equal(a.state.sinais.length,1);
+ const rev2=a.S.revisao();
+ assert.equal(await a.N.puxar(),0);
+ assert.equal(a.S.revisao(),rev2,
+  'após confirmar nova versão privada não pode regravar sem mudança');
+});
+
+test('PERF-36I: notas privadas alteradas preservam o mesmo gate',async()=>{
+ const a=ambiente();await a.N.puxar();
+ const rev=a.S.revisao();
+ a.remote.notas.push({id:'nota-1',tenant_id:'d1111111-1111-4111-8111-111111111111',
+  texto:'Nota sintética'});
+ assert.equal(await a.N.puxar(),0);
+ assert.equal(a.S.revisao(),rev+1,'nota privada tem precedência sobre fast-path');
+ assert.equal(a.state.notas.length,1);
 });
 test('PERF03B insere e remove oportunidade sem apagar registros independentes',async()=>{
  const a=ambiente();
