@@ -458,3 +458,52 @@ test('RI-M08 DOM: sem sessão não consome pesquisa nem quota',async()=>{
   stop();
  }finally{globalThis.fetch=old;}
 });
+
+test('RI-M09 DOM: Signal Hunter faz uma busca adicional e não grava nem altera lista original',async()=>{
+ const {mountMarketSignals}=await import('../src/ri/market-signals.mjs');
+ const {root,walk}=fakeMarketDOM(),doc=root.ownerDocument,original=globalThis.fetch,requests=[];
+ const company={cnpj:'11222333000181',nome:'Empresa A',cidade:'Jacarei',uf:'SP',segmento:'Quimico'};
+ let sequence=1;
+ globalThis.fetch=async(url,opt={})=>{
+  requests.push({url:String(url),body:JSON.parse(opt.body),method:opt.method});
+  return new Response(JSON.stringify({action:'signals',sinais:[
+   {cnpj:company.cnpj,tipo:'expansao',titulo:'Expansão da planta industrial',
+    resumo:'Projeto industrial citado pelo provedor',dataPublicacao:'2026-11-01',
+    url:'https://example.org/empresa-a'}
+  ],providers:['OpenAI'],verifiedSignals:0,partial:false,usage:[{provider:'OpenAI',webSearchRequests:1}]}),{status:200});
+ };
+ try{
+  const stop=mountMarketSignals({card:root,company,doc,valid:()=>true,getSequence:()=>sequence,
+   provider:()=> 'OpenAI',nuvem:{sessao:()=>({access_token:'jwt-test'}),
+    config:()=>({url:'https://safe.supabase.co',chave:'publishable-test'})}});
+  const button=walk(root,n=>n.tagName==='button'&&n.textContent.includes('BUSCAR SINAIS EXTERNOS'));
+  assert.ok(button);
+  await button.fire('click');
+  assert.equal(requests.length,1);assert.equal(requests[0].body.action,'signals');
+  assert.deepEqual(requests[0].body.target,{cnpj:company.cnpj,nome:company.nome});
+  assert.equal(requests[0].body.provider,'OpenAI');
+  assert.ok(walk(root,n=>n.textContent==='Signal Hunter — eventos externos para revisão'));
+  assert.ok(walk(root,n=>n.tagName==='a'&&n.href==='https://example.org/empresa-a'));
+  assert.ok(walk(root,n=>n.textContent?.includes('Nenhum vínculo com compra foi confirmado')));
+  assert.ok(!requests.some(x=>x.url.includes('iad_market_import_confirmed')));
+  assert.equal(button.disabled,true);
+  await button.fire('click');
+  assert.equal(requests.length,1,'clique duplo não cobra duas investigações');
+  stop();sequence++;
+ }finally{globalThis.fetch=original;}
+});
+test('RI-M09 DOM: Signal Hunter bloqueia sem sessão e rejeita links perigosos no payload',async()=>{
+ const {mountMarketSignals}=await import('../src/ri/market-signals.mjs');
+ const {root,walk}=fakeMarketDOM(),doc=root.ownerDocument,original=globalThis.fetch;let calls=0;
+ const company={cnpj:'11222333000181',nome:'Empresa A',cidade:'Jacarei',uf:'SP',segmento:'Quimico'};
+ globalThis.fetch=async()=>{calls++;throw Error('no http expected');};
+ try{
+  const stop=mountMarketSignals({card:root,company,doc,valid:()=>true,getSequence:()=>1,
+   nuvem:{sessao:()=>null,config:()=>({})}});
+  const b=walk(root,n=>n.tagName==='button'&&n.textContent.includes('BUSCAR SINAIS'));
+  assert.ok(b);await b.fire('click');
+  assert.equal(calls,0);
+  assert.ok(walk(root,n=>n.textContent?.includes('Autenticação necessária')));
+  stop();
+ }finally{globalThis.fetch=original;}
+});
