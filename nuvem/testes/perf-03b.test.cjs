@@ -71,7 +71,10 @@ function ambiente() {
       const s=JSON.parse(storage.get('iad-crm:nuvem-sessao:v1'));
       s.perfil.papel=role;storage.set('iad-crm:nuvem-sessao:v1',JSON.stringify(s));
     },
-    clearCalls:()=>requests.splice(0),requests:()=>requests.slice()};
+    clearCalls:()=>requests.splice(0),requests:()=>requests.slice(),
+    getMarks:()=>JSON.parse(storage.get('iad-crm:nuvem-marcas')||'null'),
+    setMarks:value=>storage.set('iad-crm:nuvem-marcas',JSON.stringify(value)),
+    forgetMarks:()=>storage.delete('iad-crm:nuvem-marcas')};
 }
 test('PERF03B baixa snapshot primeiro e depois só eventos + IDs atualizados',async()=>{
  const a=ambiente();
@@ -105,6 +108,29 @@ test('PERF-36I: delta sem eventos e sem alteração privada não regrava Store o
   'sem evento não rebaixar carteira');
 });
 
+test('PERF-36I: refresh sem dados renova TTL das marcas sem regravar Store',async()=>{
+ const a=ambiente();
+ await a.N.puxar();
+ const old=a.getMarks();
+ assert.ok(old?.em>0,'carga inicial deve criar marcas');
+ const passada={...old,em:Date.now()-3*3600000};
+ a.setMarks(passada);
+ const rev=a.S.revisao(),start=Date.now();
+ assert.equal(await a.N.puxar(),0);
+ const now=a.getMarks();
+ assert.equal(a.S.revisao(),rev);
+ assert.ok(now.em>=start,'não deixar marca expirar e causar upsert total');
+ assert.deepEqual(now.tabelas,old.tabelas,'mesmos IDs e hashes confirmados');
+ assert.equal(now.conta,old.conta);
+});
+test('PERF-36I: ausência de marcas usa recomputação segura, nunca inventa ACK',async()=>{
+ const a=ambiente();await a.N.puxar();
+ a.forgetMarks();
+ const rev=a.S.revisao();
+ assert.equal(await a.N.puxar(),0);
+ assert.equal(a.S.revisao(),rev);
+ assert.ok(a.getMarks()?.em>0,'marcas precisam ser reconstruídas a partir de registros reais');
+});
 test('PERF-36I: sinais privados alterados sem evento público ainda são aplicados',async()=>{
  const a=ambiente();
  await a.N.puxar();
