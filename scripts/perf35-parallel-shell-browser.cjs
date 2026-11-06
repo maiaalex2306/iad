@@ -11,7 +11,9 @@ const root=path.resolve(__dirname,'..');
 const target=new Set(['src/config.js','src/performance.js','src/localidades.js','src/playbook.js']);
 const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
 const tags=[...html.matchAll(/<script defer src="(src\/[^"]+\.js)"><\/script>/g)].map(x=>x[1]);
-assert.equal(tags.length,37,'O shell deve declarar os mesmos 37 scripts em ordem');
+assert.equal(tags.length,35,'PERF-36B1: shell deve declarar 35 scripts defer em ordem');
+assert.ok(!tags.includes('src/documentos.js') && !tags.includes('src/seed.js'),
+  'módulos opcionais não devem bloquear o carregamento inicial');
 assert.equal(tags[0],'src/config.js');
 assert.equal(tags.at(-1),'src/app.js');
 assert.ok(!/<script\s+src="src\//.test(html),'Scripts síncronos regressivos detectados');

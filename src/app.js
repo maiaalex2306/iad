@@ -7,6 +7,28 @@
     A = global.IADAuth, IA = global.IADIA, C = global.IADConversa,
     W = global.IADWhatsapp, Mail = global.IADEmail;
 
+  /* PERF-36B1: scripts opcionais só são analisados quando o vendedor aciona
+     leitura de documentos ou demonstração. Usa import() de arquivo estático
+     já incluído no cache offline do PWA. Falha explícita, sem segundo click,
+     sem importar módulo pago, sem mudar global App nem a ordem do shell.
+     A Promise é compartilhada entre ações simultâneas e revogada ao falhar. */
+  const modulosOpcionais = Object.create(null);
+  function carregarOpcional(nome,arquivo) {
+    if (global[nome]) return Promise.resolve(global[nome]);
+    if (!modulosOpcionais[nome]) {
+      const url = new URL('src/' + arquivo, document.baseURI).href;
+      modulosOpcionais[nome] = import(url).then(function () {
+        if (!global[nome]) throw new Error('Módulo opcional não inicializado: ' + nome);
+        return global[nome];
+      }).catch(function (e) {
+        delete modulosOpcionais[nome];
+        throw e;
+      });
+    }
+    return modulosOpcionais[nome];
+  }
+  let carregandoDemo = false;
+
   const ROTAS = [
     { hash: '#/hoje', ico: '⚡', nome: 'Hoje', render: V.hoje,
       ajuda: 'O que precisa de você agora, em ordem de urgência. Comece o dia por aqui.' },
@@ -5794,10 +5816,20 @@
     },
 
     carregarDemo: function () {
-      if (Store.dados().oportunidades.length && !U.confirmar('Isso substitui os dados atuais. Continuar?')) return;
-      global.IADSeed.carregar();
-      location.hash = '#/hoje';
-      render();
+      if (carregandoDemo) return;
+      carregandoDemo = true;
+      /* Confirmar DEPOIS de carregar o script, com a carteira mais recente:
+         jamais tomar a decisão destrutiva antes de uma Promise pendente. */
+      return carregarOpcional('IADSeed','seed.js').then(function (Seed) {
+        if (Store.dados().oportunidades.length &&
+          !U.confirmar('Isso substitui os dados atuais. Continuar?')) return;
+        Seed.carregar();
+        location.hash = '#/hoje';
+        render();
+      }).catch(function (e) {
+        alert('Não foi possível carregar a demonstração. Seus dados foram preservados. ' +
+          ((e && e.message) || 'Verifique a conexão e tente novamente.'));
+      }).finally(function () { carregandoDemo = false; });
     },
 
     /* ---------- Nuvem ---------- */
@@ -10769,10 +10801,20 @@
   }
 
   function lerParaOQuadro(opId, arquivos) {
-    const D = global.IADDocumentos, Q = global.IADQuadro;
+    const Q = global.IADQuadro;
     const op = Store.oportunidade(opId);
-    if (!op || !D || !Q) return;
-
+    if (!op || !Q) return;
+    if (!global.IADDocumentos) {
+      estadoDoQuadro('Preparando o leitor de documentos do aplicativo…');
+      return carregarOpcional('IADDocumentos','documentos.js').then(function () {
+        return lerParaOQuadro(opId, arquivos);
+      }, function (e) {
+        estadoDoQuadro('');
+        alert('Não foi possível iniciar a leitura. Os anexos não foram alterados. ' +
+          ((e && e.message) || 'Tente novamente.'));
+      });
+    }
+    const D = global.IADDocumentos;
     const conta = op.contaId ? Store.conta(op.contaId) : null;
     definirAviso('');
     /* O balão de progresso só nasce quando a IA é chamada. A leitura dos
@@ -10945,8 +10987,16 @@
      a ata e o levantamento que ela cita só fazem sentido lidos lado a lado,
      que é como o assistente separa as evidências. */
   function convidarALer(opId, arquivos) {
+    if (!IA.disponivel()) return;
+    if (!global.IADDocumentos) {
+      return carregarOpcional('IADDocumentos','documentos.js').then(function () {
+        return convidarALer(opId, arquivos);
+      }, function (e) {
+        alert('Os anexos foram salvos, mas a leitura opcional não iniciou: ' +
+          ((e && e.message) || 'Tente novamente.'));
+      });
+    }
     const D = global.IADDocumentos;
-    if (!IA.disponivel() || !D) return;
     const legiveis = arquivos.filter(function (a) { return D.aceito(a); });
     if (!legiveis.length) return;
 
