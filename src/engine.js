@@ -22,8 +22,8 @@
 
   /* Evidence Age: dias desde a última evidência do CLIENTE.
      Atividade do vendedor não zera o contador — por definição. */
-  function evidenceAge(op) {
-    const decisoes = eventosDeDecisao(op);
+  function evidenceAge(op, decisoesProntas) {
+    const decisoes = decisoesProntas || eventosDeDecisao(op);
     if (!decisoes.length) return diasEntre(op.criadoEm);
     const maisRecente = decisoes.reduce(function (max, e) { return e.data > max ? e.data : max; }, decisoes[0].data);
     return diasEntre(maisRecente);
@@ -96,8 +96,9 @@
   }
 
   /* Decision Velocity: microdecisões comprovadas nos últimos 30 dias. */
-  function decisionVelocity(op) {
-    return eventosDeDecisao(op).filter(function (e) { return diasEntre(e.data) <= 30; }).length;
+  function decisionVelocity(op, decisoesProntas) {
+    const decisoes = decisoesProntas || eventosDeDecisao(op);
+    return decisoes.filter(function (e) { return diasEntre(e.data) <= 30; }).length;
   }
 
   function stakeholdersDaOp(op) {
@@ -415,13 +416,13 @@
     if ((op.adiamentos || 0) >= 2) {
       lista.push({ tipo: 'adiamento', nivel: 'alto', texto: 'Data de fechamento adiada ' + op.adiamentos + ' vezes.' });
     }
-    const aut = autoria(op);
+    const aut = autoria(op, base && base.decisoes);
     if (aut.total >= 3 && aut.concentracao === 1 && aut.principal) {
       lista.push({ tipo: 'autoria', nivel: 'medio', texto: 'Todas as evidências vieram de ' + aut.principal.nome + '.' });
     }
     P.DIMENSOES.forEach(function (d) {
       const nota = op.dims[d.id] || 0;
-      if (nota >= 3 && !podeComprovar(op, d.id, nota)) {
+      if (nota >= 3 && !podeComprovar(op, d.id, nota, base && base.evidenciasPorDimensao)) {
         lista.push({ tipo: 'comprovacao', nivel: 'medio',
           texto: d.nome + ' está em ' + nota + ' (' + (nota === 4 ? 'documentado' : 'testado') +
             ') sem evidência do cliente com essa força.' });
@@ -438,17 +439,20 @@
     const diagnosticoFila = arguments[2];
     /* PERF-04 P5: idade da evidência calculada uma única vez por resumo.
        Não cachear entre renders, revisões, usuários ou empresas. */
-    const idade = evidenceAge(op);
+    const decisoes = eventosDeDecisao(op);
+    const evidenciasPorDimensao = agruparEvidenciasDaDecisao(decisoes);
+    const idade = evidenceAge(op, decisoes);
     const pontos = iad(op);
     const cobertura = coverage(op);
     const proposta = gates(op);
-    const velocidade = decisionVelocity(op);
+    const velocidade = decisionVelocity(op, decisoes);
     const proximoCompromisso = compromisso(op);
     /* PERF-13D: cada resumo compartilha dependencias SOMENTE nesta chamada.
        Nenhum cache sobrevive a edicoes, revisoes, troca de usuario ou tenant.
        Os metodos publicos continuam independentes quando chamados sem base. */
     const base = { iad: pontos, evidenceAge: idade, coverage: cobertura,
-      gates: proposta, velocity: velocidade, compromisso: proximoCompromisso };
+      gates: proposta, velocity: velocidade, compromisso: proximoCompromisso,
+      decisoes: decisoes, evidenciasPorDimensao: evidenciasPorDimensao };
     return {
       op: op,
       conta: Store.conta(op.contaId),
@@ -465,8 +469,8 @@
       compromisso: proximoCompromisso,
       lacunas: lacunas(op, base),
       tempoNaEtapa: tempoNaEtapa(op),
-      delta: deltaSemana(op),
-      autoria: autoria(op),
+      delta: deltaSemana(op, decisoes),
+      autoria: autoria(op, decisoes),
       tarefasAtrasadas: atrasadasIndex ? (atrasadasIndex[op.id] || 0) : tarefasAtrasadas(op)
     };
   }
@@ -680,7 +684,21 @@
     return f ? f.peso : 1;
   }
 
-  function evidenciasDaDimensao(op, dimensao) {
+  /* PERF-36K2: indice efemero da execucao de resumo, sem memo entre usuarios,
+     tenants, revisoes ou data. Preserva ordem e igualdade estrita dos eventos.
+     Provas de outras dimensoes continuam invisiveis para cada decisao. */
+  function agruparEvidenciasDaDecisao(decisoes) {
+    const grupos = Object.create(null);
+    for (const e of decisoes) {
+      if (typeof e.dimensao !== 'string') continue;
+      if (!grupos[e.dimensao]) grupos[e.dimensao] = [];
+      grupos[e.dimensao].push(e);
+    }
+    return grupos;
+  }
+
+  function evidenciasDaDimensao(op, dimensao, gruposProntos) {
+    if (gruposProntos) return gruposProntos[dimensao] || [];
     return eventosDeDecisao(op).filter(function (e) { return e.dimensao === dimensao; });
   }
 
@@ -692,10 +710,10 @@
      Na régua de três degraus isto era uma regra à parte, presa ao número 2.
      Agora é a própria escada: o mínimo de força sobe com o degrau. */
 
-  function podeComprovar(op, dimensao, degrau) {
+  function podeComprovar(op, dimensao, degrau, gruposProntos) {
     const exigido = P.FORCA_MINIMA_DO_DEGRAU[degrau || 3] || 0;
     if (!exigido) return true;
-    return evidenciasDaDimensao(op, dimensao).some(function (e) {
+    return evidenciasDaDimensao(op, dimensao, gruposProntos).some(function (e) {
       return pesoForca(e.forca) >= exigido;
     });
   }
@@ -715,9 +733,9 @@
 
   /* Quem produziu as evidências. Se vier tudo da mesma pessoa, a conta
      inteira está apoiada nela — e agora isso é fato, não suposição. */
-  function autoria(op) {
+  function autoria(op, decisoesProntas) {
     const contagem = {};
-    eventosDeDecisao(op).forEach(function (e) {
+    (decisoesProntas || eventosDeDecisao(op)).forEach(function (e) {
       if (!e.contatoId) return;
       contagem[e.contatoId] = (contagem[e.contatoId] || 0) + 1;
     });
@@ -768,9 +786,9 @@
   }
 
   /* Delta da semana: o que mudou na decisão nos últimos 7 dias. */
-  function deltaSemana(op) {
+  function deltaSemana(op, decisoesProntas) {
     const recentes = (op.snapshots || []).filter(function (s) { return diasEntre(s.data) <= 7; });
-    const evidencias = eventosDeDecisao(op).filter(function (e) { return diasEntre(e.data) <= 7; });
+    const evidencias = (decisoesProntas || eventosDeDecisao(op)).filter(function (e) { return diasEntre(e.data) <= 7; });
     const mudancas = recentes.filter(function (s) { return s.dimensaoAlterada; }).map(function (s) {
       const d = P.DIMENSOES.find(function (x) { return x.id === s.dimensaoAlterada; });
       return { nome: d ? d.nome : s.dimensaoAlterada, de: s.de, para: s.para };
@@ -827,16 +845,17 @@
   function lacunas(op, base) {
     const lista = [];
     const cob = base ? base.coverage : coverage(op);
+    const gruposProntos = base && base.evidenciasPorDimensao;
 
     ORDEM_DECISAO.forEach(function (id) {
       const d = P.DIMENSOES.find(function (x) { return x.id === id; });
       const nota = op.dims[id] || 0;
-      const provas = evidenciasDaDimensao(op, id);
+      const provas = evidenciasDaDimensao(op, id, gruposProntos);
 
       /* Degrau alto sem evidência à altura é lacuna de PROVA, não de nota: a
          decisão está marcada como testada ou documentada e nada no histórico
          do cliente sustenta isso. */
-      if (nota >= 3 && !podeComprovar(op, id, nota)) {
+      if (nota >= 3 && !podeComprovar(op, id, nota, gruposProntos)) {
         lista.push({
           tipo: 'comprovacao',
           dimensao: d,
