@@ -9,6 +9,7 @@ import {mountMarketEnricher} from './market-enricher.mjs';
 import {mountMarketResearchMetrics} from './market-audit.mjs';
 import {interpretSector} from './sector-intelligence.mjs';
 import {verifyMarketTenantScope,marketTenantMessage} from './market-tenant-scope.mjs';
+import {marketCityCacheForDocument} from './market-city-cache.mjs';
 /**
  * Pull only the server-confirmed RI-M01 import into the local Pipeline.
  * Never upload local edits. Refuse the pull when CAS/pending state is unknown.
@@ -118,13 +119,18 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
  const segmentSeen=new Set();
  segmentPick.setItems(tenantSegments.filter(x=>{const n=String(x.nome||'').trim();if(!n||segmentSeen.has(n.toLowerCase()))return false;segmentSeen.add(n.toLowerCase());return true;}).map(x=>({key:String(x.nome),label:String(x.nome),value:String(x.nome)})).sort((a,b)=>a.label.localeCompare(b.label,'pt-BR')));
  let cityRequest=null,cityLoading=false;
- const cityCache=new Map();
+ const cityCache=marketCityCacheForDocument(doc);
  async function loadCities(uf){
   cityPick.clear();cityPick.setItems([]);
   if(cityRequest){cityRequest.abort();cityRequest=null;}
   cityLoading=false;
   if(!uf)return [];
-  if(cityCache.has(uf)){cityPick.setItems(cityCache.get(uf));return cityCache.get(uf);}
+  const cached=cityCache.get(uf);
+  if(cached&&valid()&&ufSelect.value===uf){
+   cityPick.setItems(cached);
+   status.textContent=cached.length+' municípios reutilizados do catálogo público da sessão. Selecione as cidades.';
+   return cached;
+  }
   const request=new AbortController();cityRequest=request;cityLoading=true;
   status.textContent='Consultando municipios oficiais do IBGE para '+uf+'…';
   try{
@@ -156,7 +162,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
    }).map(x=>({key:String(x.id),label:x.nome,value:{codigoIBGE:String(x.id),nome:x.nome,uf}})).sort((a,b)=>a.label.localeCompare(b.label,'pt-BR'));
    if(!items.length)throw Error('Nenhum municipio valido');
    if(ufSelect.value!==uf||!valid())return [];
-   cityCache.set(uf,items);cityPick.setItems(items);status.textContent=items.length+' municipios carregados via '+source+'. Selecione as cidades.';
+   cityCache.put(uf,items);cityPick.setItems(items);status.textContent=items.length+' municipios carregados via '+source+'. Selecione as cidades.';
    return items;
   }catch(error){
    if(error?.name!=='AbortError'&&ufSelect.value===uf&&valid())status.textContent='Nao foi possivel carregar o catalogo oficial de municipios. Tente selecionar o estado novamente.';
