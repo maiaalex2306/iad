@@ -2,6 +2,7 @@
  * Apenas dados recebidos de Store.dados() e conferidos contra tenant/dono.
  * Tipos são HIPÓTESES para decisão humana; sem score de compra ou previsão.
  */
+import {discoverInternalCommercialCues} from './internal-cues.mjs';
 const label=v=>typeof v==='string'?v.trim().slice(0,180):'';
 const id=v=>typeof v==='string'&&v.length>0;
 const norm=v=>label(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
@@ -112,7 +113,7 @@ export function buildCommercialOpportunityRadar({snapshot,scope,asOf}={}){
   if(t.status==='concluida'||t.status==='concluido')touch(t.tenantId,t.contaId||op?.contaId,t.concluidoEm||t.atualizadoEm||t.vencimento);
   if(t.status==='aberta'&&dateFrom(t.vencimento)&&dateFrom(t.vencimento)>=asOf)upcoming.add(ak);
  }
- const results={upsell:[],crossSell:[],forgotten:[],news:[],growth:[]};
+ const results={pistas:[],upsell:[],crossSell:[],forgotten:[],news:[],growth:[]};
  for(const [ak,account] of accounts){
   const ops=opByAccount.get(ak)||[],purchased=wonProducts.get(ak);
   const active=ops.filter(o=>!closed(o));
@@ -180,6 +181,10 @@ export function buildCommercialOpportunityRadar({snapshot,scope,asOf}={}){
    'Comparar contas atendidas, mix de soluções e lacunas do segmento; solicitar validação externa à Inteligência de Mercado.',
    {priority:50,segment:v.segment,accountId:null,accountName:v.segment}));
  }
+ /* RI-07A: pistas textuais já existentes no CRM.
+    Etapa O(N), executada em memória e sem chamada de IA, banco ou internet.
+    Uma pista por conta impede que o mesmo cliente ocupe todo o resultado. */
+ results.pistas=discoverInternalCommercialCues({snapshot,scope,accounts,asOf}).items;
  const dedup=new Set();
  for(const kind of Object.keys(results)){
   results[kind]=results[kind].sort(scoreSort).filter(x=>{
