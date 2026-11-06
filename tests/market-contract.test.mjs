@@ -209,6 +209,15 @@ function fakeMarketDOM(){
  const walk=(node,pred)=>{if(pred(node))return node;for(const child of node.children){const match=walk(child,pred);if(match)return match;}return null;};
  return {root,walk};
 }
+async function waitForMarketReady(root,walk){
+ for(let i=0;i<25;i++){
+  const btn=walk(root,n=>n.tagName==='button'&&n.textContent==='Buscar empresas');
+  if(btn&&!btn.disabled)return;
+  await new Promise(resolve=>setImmediate(resolve));
+ }
+ throw Error('Catálogo de Mercado não ficou pronto no mock autenticado');
+}
+
 test('DOM: botao de exemplo gera pesquisa JSON autenticada sem importar, respeitando tenant e IBGE',async()=>{
  const {mountMarketDiscovery}=await import('../src/ri/market-view.mjs');
  const {root,walk}=fakeMarketDOM(),originalFetch=globalThis.fetch,requests=[];
@@ -230,6 +239,7 @@ test('DOM: botao de exemplo gera pesquisa JSON autenticada sem importar, respeit
  try{
   const cleanup=mountMarketDiscovery({root,snapshot,scope,getScopeToken:()=>scope.token,
    nuvem:{sessao:()=>({access_token:'jwt-test'}),config:()=>({url:'https://safe.supabase.co',chave:'public-test'})}});
+  await waitForMarketReady(root,walk);
   const demo=walk(root,n=>n.tagName==='button'&&n.textContent.includes('Aplicar exemplo'));
   assert.ok(demo,'demo missing');await demo.fire('click');
   assert.equal(walk(root,n=>n.textContent==='Segmento privado de outro tenant'),null,'out-of-tenant segment leaked');
@@ -265,6 +275,7 @@ test('DOM: falha de IBGE usa BrasilAPI e preserva codigo municipal de sete digit
  try{
   const cleanup=mountMarketDiscovery({root,snapshot:{contas:[],oportunidades:[],segmentos:[{tenantId:'tenant-a',ativo:true,nome:'Química e Petroquímica'}]},scope,
    getScopeToken:()=>scope.token,nuvem:{sessao:()=>({access_token:'jwt-test'}),config:()=>({url:'https://safe.supabase.co',chave:'public-test'})}});
+  await waitForMarketReady(root,walk);
   const demo=walk(root,n=>n.tagName==='button'&&n.textContent.includes('Aplicar exemplo'));await demo.fire('click');
   const form=walk(root,n=>n.tagName==='form');await form.fire('submit');
   const body=JSON.parse(requests.find(x=>x.url.includes('/functions/v1/market-search')).options.body);
@@ -373,6 +384,7 @@ test('RI-M06 DOM: seis etapas e shortlist aparecem na pesquisa real simulada sem
  try{
   const cleanup=mountMarketDiscovery({root,snapshot,scope,getScopeToken:()=>scope.token,
    nuvem:{sessao:()=>({access_token:'jwt-test'}),config:()=>({url:'https://safe.supabase.co',chave:'test'})}});
+  await waitForMarketReady(root,walk);
   const demo=walk(root,n=>n.tagName==='button'&&n.textContent.includes('Aplicar exemplo'));
   assert.ok(demo);await demo.fire('click');
   const form=walk(root,n=>n.tagName==='form');assert.ok(form);
