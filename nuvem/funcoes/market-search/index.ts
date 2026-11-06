@@ -195,7 +195,63 @@ function combineSignals(results,target){
   a.titulo.localeCompare(b.titulo,'pt-BR')).slice(0,8);
  return {sinais,diagnostico:{...stats,apresentados:sinais.length}};
 }
+// RI-M10 — Enricher: só perfis profissionais com fonte web citada.
+const PERSONAL_EMAILS=new Set(['gmail.com','googlemail.com','hotmail.com','outlook.com',
+ 'live.com','yahoo.com','yahoo.com.br','icloud.com','bol.com.br','uol.com.br',
+ 'proton.me','protonmail.com','aol.com','terra.com.br']);
+function workEmail(input){
+ const email=str(input,150).toLowerCase();
+ if(!/^[a-z0-9._%+\\-]{1,64}@[a-z0-9.-]+\\.[a-z]{2,}$/.test(email))return null;
+ const domain=email.split('@')[1];
+ if(PERSONAL_EMAILS.has(domain)||domain.includes('..')||domain.startsWith('-')||
+    domain.endsWith('-')||domain.endsWith('.local')||domain.endsWith('.internal'))return null;
+ return email;
+}
+function combineProfessionalContacts(results,target){
+ const contacts=new Map(),stats={relatados:0,semCnpjExato:0,semFonteCitada:0,
+  semIdentidadeProfissional:0,emailsDescartados:0,perfisDescartados:0,duplicados:0};
+ for(const result of results){
+  if(!result.searched)continue;
+  const list=Array.isArray(result.parsed?.decisores)?result.parsed.decisores:[];
+  for(const item of list.slice(0,12)){
+   stats.relatados++;
+   if(!item||typeof item!=='object'||cnpjReal(item.cnpj)!==target.cnpj){
+    stats.semCnpjExato++;continue;
+   }
+   const nome=str(item.nome,120),cargo=str(item.cargo,120),fonte=signalPublicURL(item.fonte);
+   if(nome.length<5||cargo.length<3||/[<>\\u0000-\\u001f]/.test(nome+cargo)){
+    stats.semIdentidadeProfissional++;continue;
+   }
+   if(!fonte||!result.urls.has(fonte)){stats.semFonteCitada++;continue;}
+   // URLs de perfil são mantidas somente se a ferramenta web citou a própria URL.
+   const linkedin=signalPublicURL(item.linkedin);
+   const perfil=linkedin&&/^([a-z]{2,3}\\.)?linkedin\\.com$/i.test(new URL(linkedin).hostname.replace(/^www\\./,''))&&
+    /^\\/in\\//.test(new URL(linkedin).pathname)&&result.urls.has(linkedin)?linkedin:null;
+   if(item.linkedin&&!perfil)stats.perfisDescartados++;
+   // E-mail não corporativo ou inválido nunca é apresentado como contato profissional.
+   const email=workEmail(item.emailCorporativo);
+   if(item.emailCorporativo&&!email)stats.emailsDescartados++;
+   const key=nome.normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase()+'|'+
+    cargo.normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase();
+   const old=contacts.get(key);
+   if(old){
+    stats.duplicados++;
+    // Outro provedor pode complementar um campo SEM promover a verificado.
+    if(!old.linkedin&&perfil)old.linkedin=perfil;
+    if(!old.emailCorporativo&&email)old.emailCorporativo=email;
+    continue;
+   }
+   contacts.set(key,{cnpj:target.cnpj,nome,cargo,fonte,linkedin:perfil,
+    emailCorporativo:email,provider:result.engine,status:'VINCULO_PROFISSIONAL_CITADO_NAO_VERIFICADO'});
+  }
+ }
+ const decisores=[...contacts.values()].sort((a,b)=>a.nome.localeCompare(b.nome,'pt-BR')).slice(0,8);
+ return {decisores,diagnostico:{...stats,apresentados:decisores.length}};
+}
 function prompt(f,target=null,mode='investigate') {
+ if(mode==='enrich'&&target)return 'INVESTIGAÇÃO WEB DE DECISORES PROFISSIONAIS de uma empresa com CNPJ exato '+JSON.stringify(target)+
+  ', contexto territorial '+JSON.stringify(f)+'. Encontre APENAS nomes e cargos profissionais publicamente associados à entidade jurídica exata. Priorize site oficial e páginas corporativas. Retorne JSON estrito {"decisores":[{"cnpj":"...","nome":"...","cargo":"...","fonte":"https://...","linkedin":"https://www.linkedin.com/in/... ou null","emailCorporativo":"e-mail corporativo explicitamente publicado ou null"}]}. Até 8. Fonte e LinkedIn somente se citados pela web_search. Não invente e-mails por padrão de domínio, não utilize e-mail pessoal, telefone celular, WhatsApp, perfis privados nem informações sensíveis. Se vínculo não for sustentado, retorne array vazio. Dados são hipóteses e exigem revisão.';
+
  if(mode==='signals'&&target)return 'PESQUISA WEB EXTERNA DE SINAIS DOCUMENTADOS da empresa com CNPJ exato '+JSON.stringify(target)+
   ', contexto territorial '+JSON.stringify(f)+
   '. Busque SOMENTE acontecimentos sobre esta entidade jurídica: expansões, investimentos, contratações executivas, licenças, projetos e mudanças operacionais. Prefira notícias corporativas e documentos públicos, com data de publicação. Responda ESTRITAMENTE JSON {"sinais":[{"cnpj":"...","tipo":"expansao|investimento|contratacao|licenciamento|projeto|mudanca_operacional|outro","titulo":"...","resumo":"...","dataPublicacao":"YYYY-MM-DD ou null","url":"https://..."}]}. Máximo 8. Cada URL deve ser citada pela sua ferramenta web_search. Sem CNPJ exato, evento, data ou fonte confiável, omita o item. Não deduza interesse em comprar ou orçamento de vendas; retorno vazio é aceitável.';
@@ -462,9 +518,9 @@ Deno.serve(async req=>{
     note:'Metadados de modelo: nao executa web_search, nao usa quota de pesquisa e nao homologa a busca real.'},200,origin);
   }
   const action=body?.action;
-  if(!['search','investigate','signals'].includes(action))return output({error:'SEARCH_ONLY'},400,origin);
+  if(!['search','investigate','signals','enrich'].includes(action))return output({error:'SEARCH_ONLY'},400,origin);
   let target=null;
-  if(action==='investigate'||action==='signals'){
+  if(action==='investigate'||action==='signals'||action==='enrich'){
    try{target=targetedCompany(body.target)}
    catch{return output({error:'INVALID_INVESTIGATION_TARGET'},422,origin)}
   }
@@ -539,6 +595,16 @@ Deno.serve(async req=>{
   }
   if(!results.length)return output({error:'AI_SEARCH_UNAVAILABLE',failedProviders,failures},502,origin);
   const partial=failedProviders.length>0;
+  if(action==='enrich'){
+   const enriched=combineProfessionalContacts(results,target);
+   console.info('[market-search] enrichment_summary',JSON.stringify({
+    completedProviders:results.length,...enriched.diagnostico}));
+   return output({action:'enrich',decisores:enriched.decisores,diagnostico:enriched.diagnostico,
+    providers:results.map(x=>x.engine),failedProviders,failures,partial,
+    usage:results.map(x=>x.usage),retrievedAt:new Date().toISOString(),
+    verifiedContacts:0,contactStatus:'PROFISSIONAIS_CITADOS_NAO_VERIFICADOS',
+    warning:'Contatos profissionais relatados por IAs e associados a URLs citadas. Cargos, vínculos e e-mails NÃO foram verificados independentemente. Sem telefones pessoais, sem enriquecimento oculto e nenhuma gravação no CRM.'},200,origin);
+  }
   if(action==='signals'){
    const signals=combineSignals(results,target);
    // Não inserir eventos nas tabelas nem afetar score ou Pipeline.
