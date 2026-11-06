@@ -51,42 +51,45 @@
   <div class="col"><div id="barra-admin"></div><main id="conteudo"></main></div>
 </div>
 
-<script src="src/config.js"></script>
-<script src="src/performance.js"></script>
-<script src="src/localidades.js"></script>
-  <script src="src/playbook.js"></script>
-<script src="src/store.js"></script>
-<script src="src/auth.js"></script>
-<script src="src/engine.js"></script>
-<script src="src/incremental.js"></script>
-<script src="src/p5b-shadow.js"></script>
-<script src="src/p5d-events.js"></script>
-<script src="src/p5e-cache.js"></script>
-<script src="src/perf-02.js"></script>
-<script src="src/pipeline-performance.js"></script>
-<script src="src/funis.js"></script>
-<script src="src/orientacao.js"></script>
-<script src="src/conferencia.js"></script>
-<script src="src/arquivos.js"></script>
-<script src="src/pendencias.js"></script>
-<script src="src/csv.js"></script>
-<script src="src/integracoes.js"></script>
-<script src="src/cas.js"></script>
-<script src="src/cas-queue.js"></script>
-<script src="src/nuvem.js"></script>
-<script src="src/sincronia.js"></script>
-<script src="src/documentos.js"></script>
-<script src="src/quadro.js"></script>
-  <script src="src/ia.js"></script>
-<script src="src/ui.js"></script>
-  <script src="src/ajuda.js"></script>
-<script src="src/graficos.js"></script>
-<script src="src/seed.js"></script>
-<script src="src/whatsapp.js"></script>
-    <script src="src/email.js"></script>
-<script src="src/conversa.js"></script>
-<script src="src/views.js"></script>
-<script src="src/perf-hoje.js"></script>
-<script src="src/app.js"></script>
+<!-- PERF-35: scripts classicos diferidos, executados na ordem do HTML.
+     O redirecionamento de recuperacao acima segue SINCRONO para nao expor
+     links de senha ao shell do CRM. O bootstrap so ocorre no DOMContentLoaded. -->
+<script src="src/config.js" defer></script>
+<script src="src/performance.js" defer></script>
+<script src="src/localidades.js" defer></script>
+  <script src="src/playbook.js" defer></script>
+<script src="src/store.js" defer></script>
+<script src="src/auth.js" defer></script>
+<script src="src/engine.js" defer></script>
+<script src="src/incremental.js" defer></script>
+<script src="src/p5b-shadow.js" defer></script>
+<script src="src/p5d-events.js" defer></script>
+<script src="src/p5e-cache.js" defer></script>
+<script src="src/perf-02.js" defer></script>
+<script src="src/pipeline-performance.js" defer></script>
+<script src="src/funis.js" defer></script>
+<script src="src/orientacao.js" defer></script>
+<script src="src/conferencia.js" defer></script>
+<script src="src/arquivos.js" defer></script>
+<script src="src/pendencias.js" defer></script>
+<script src="src/csv.js" defer></script>
+<script src="src/integracoes.js" defer></script>
+<script src="src/cas.js" defer></script>
+<script src="src/cas-queue.js" defer></script>
+<script src="src/nuvem.js" defer></script>
+<script src="src/sincronia.js" defer></script>
+<script src="src/documentos.js" defer></script>
+<script src="src/quadro.js" defer></script>
+  <script src="src/ia.js" defer></script>
+<script src="src/ui.js" defer></script>
+  <script src="src/ajuda.js" defer></script>
+<script src="src/graficos.js" defer></script>
+<script src="src/seed.js" defer></script>
+<script src="src/whatsapp.js" defer></script>
+    <script src="src/email.js" defer></script>
+<script src="src/conversa.js" defer></script>
+<script src="src/views.js" defer></script>
+<script src="src/perf-hoje.js" defer></script>
+<script src="src/app.js" defer></script>
 </body>
 </html>
