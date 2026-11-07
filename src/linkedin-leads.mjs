@@ -3,6 +3,7 @@
    Post e comentário são fornecidos conscientemente pelo usuário.
    Sem OAuth aprovado, copiar/abrir publicação NÃO é publicar ou curtir. */
 import {importLinkedInCsv} from './linkedin-csv.mjs';
+import {serializeLinkedInCheckpoint,restoreLinkedInCheckpoint} from './linkedin-checkpoint.mjs';
 import {campaignSummary,nextPending,skipWithoutPost,setProfileOpened,setLikeConfirmed,setCommentConfirmed,canReviewProfile,reviewWindow,TERMINAIS} from './linkedin-campaign-engine.mjs';
 
 /* Não salvar perfis, textos nem tokens em localStorage: a fila é retida
@@ -115,6 +116,43 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
   const csvPage=elem(doc,'span','','small muted');
   csvPager.append(csvPrevious,csvPage,csvNext);csvPager.hidden=true;
   arquivoBox.append(csvFile,csvStatus,csvSearch,csvRows,csvPager);
+  const checkpointActions=elem(doc,'div','','iad-linkedin-buttons');
+  const saveCheckpoint=action(doc,'Exportar progresso (.json)',()=>{
+    if(!valid()||!campaignRows.length){csvStatus.textContent='Importe uma lista antes de exportar o andamento.';return;}
+    const data=serializeLinkedInCheckpoint({rows:campaignRows,selected:session.selected,
+      paused:campaignPaused,scope});
+    const blob=new Blob([data],{type:'application/json'});
+    const obj=doc.defaultView.URL.createObjectURL(blob);
+    const anchor=elem(doc,'a');anchor.href=obj;
+    anchor.download='iad-linkedin-leads-progresso-'+new Date().toISOString().slice(0,10)+'.json';
+    doc.body.appendChild(anchor);anchor.click();anchor.remove();
+    setTimeout(()=>doc.defaultView.URL.revokeObjectURL(obj),1500);
+    csvStatus.textContent='Checkpoint exportado para download local. Contém dados dos leads e textos; guarde o arquivo com segurança.';
+  },true);
+  const restoreInput=elem(doc,'input');
+  restoreInput.type='file';restoreInput.accept='.json,application/json';
+  restoreInput.setAttribute('aria-label','Restaurar progresso LinkedIN Leads em JSON');
+  restoreInput.addEventListener('change',async()=>{
+    const file=restoreInput.files?.[0];if(!file||!valid())return;
+    if(file.size>12*1024*1024){csvStatus.textContent='Checkpoint maior que 12 MB.';return;}
+    try{
+      const restored=restoreLinkedInCheckpoint(await file.text(),scope);
+      if(!valid())return;
+      campaignRows=restored.rows;session.rows=campaignRows;
+      campaignPaused=restored.paused;session.paused=campaignPaused;
+      session.selected=restored.selected;
+      activeRow=campaignRows.find(r=>r.perfil===restored.selected)||null;
+      requestVersion++;page=0;csvSearch.value='';
+      btnPause.textContent=campaignPaused?'Retomar campanha':'Pausar campanha';
+      csvStatus.textContent='Checkpoint restaurado: '+campaignRows.length+' perfis. Confirmacões de ações externas vieram do registro manual anterior.';
+      renderCsv();
+      if(activeRow)selectCsvRow(activeRow,false);
+      filaMsg.textContent='Campanha retomada do arquivo local. Confirme as interações reais antes de prosseguir.';
+    }catch(e){csvStatus.textContent='Falha ao restaurar: '+String(e.message||e).slice(0,240);}
+    finally{restoreInput.value='';}
+  });
+  checkpointActions.append(saveCheckpoint,restoreInput);
+  arquivoBox.append(elem(doc,'p','Checkpoint opcional: exporte o andamento para retomar depois. A restauração só aceita o mesmo usuário, empresa e filtro. Os arquivos contêm dados comerciais; não incluem senhas ou cookies.','small muted'),checkpointActions);
   let campaignRows=session.rows,page=0,
     activeRow=campaignRows.find(x=>x.perfil===session.selected)||null,
     requestVersion=0,campaignPaused=session.paused;
@@ -264,6 +302,7 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
     }catch(_){textArea.focus();textArea.select();status.textContent='Selecione e copie o comentário manualmente.';}
   },true);
   const bAbrir=action(doc,'Abrir post para curtir e comentar',()=>{
+    if(campaignPaused){status.textContent='Campanha pausada. Retome para abrir a publicação pelo fluxo.';return;}
     const link=linkedinUrl(postUrl.value,'post');
     if(!link){status.textContent='URL de publicação inválida.';return;}
     doc.defaultView.open(link,'_blank','noopener,noreferrer');
@@ -274,6 +313,7 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
   caixaConfirmacao.append(confirmado,elem(doc,'span','Confirmei manualmente a curtida e a publicação no LinkedIn.'));
   const registro=elem(doc,'p','','small muted');
   confirmado.addEventListener('change',()=>{
+    if(campaignPaused){confirmado.checked=false;registro.textContent='Campanha pausada; retome antes de confirmar publicação.';return;}
     registro.textContent=confirmado.checked?'Confirmação local desta sessão. Não foi feita verificação automática no LinkedIn nem gravação na carteira.':'';
     if(activeRow&&valid()&&confirmado.checked){
       try{setCommentConfirmed(activeRow,textArea.value);activeRow.rascunho=textArea.value;renderCsv();registro.textContent='Comentário confirmado manualmente. Use Próximo perfil para continuar.';}
