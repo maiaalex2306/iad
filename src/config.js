@@ -41,4 +41,6 @@ window.IAD_RI_ENABLED = true;
 window.IAD_MARKET_ENABLED = true;
 /* Piloto de pesquisa: a importação permanece bloqueada no servidor e no navegador. */
 window.IAD_MARKET_IMPORT_ENABLED = false;
-window.IADVersao = { numero: 'v286.87', data: '2026-11-07' };
+/* LinkedIN-01: somente rascunhos assistidos, sem automação de navegação. */
+window.IAD_LINKEDIN_LEADS_ENABLED = true;
+window.IADVersao = { numero: 'v286.88', data: '2026-11-07' };
