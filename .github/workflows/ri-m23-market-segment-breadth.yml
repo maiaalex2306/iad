@@ -1,0 +1,50 @@
+name: RI-M23 — Inteligência de Mercado: subsegmentos e ampla descoberta
+on:
+  pull_request:
+    paths:
+      - 'nuvem/funcoes/market-search/index.ts'
+      - 'src/ri/market-contract.mjs'
+      - 'src/ri/market-view.mjs'
+      - 'tests/market-edge.test.mjs'
+      - 'tests/market-contract.test.mjs'
+      - 'scripts/ri-m21-market-quality.test.cjs'
+      - 'src/config.js'
+      - 'sw.js'
+      - '.github/workflows/ri-m23-market-segment-breadth.yml'
+  push:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - 'nuvem/funcoes/market-search/index.ts'
+      - 'src/ri/market-contract.mjs'
+      - 'src/ri/market-view.mjs'
+      - 'tests/market-edge.test.mjs'
+      - 'src/config.js'
+      - 'sw.js'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  icp-breadth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Validate JavaScript syntax
+        run: |
+          node --check src/ri/market-view.mjs
+          node --check src/ri/market-contract.mjs
+      - name: Market discovery, RLS mock, sources and import protection
+        run: |
+          node --test tests/market-edge.test.mjs tests/market-contract.test.mjs tests/market-prospect-agents.test.mjs scripts/ri-m21-market-quality.test.cjs
+  visual-and-pwa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Validate offline version and style contracts
+        run: |
+          node --test scripts/ri-palette-contract.test.cjs scripts/release-v28683-integrity.test.cjs tests/market-progress.test.mjs
