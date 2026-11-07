@@ -60,7 +60,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
  if(!root||!root.ownerDocument||!snapshot||!scope||typeof getScopeToken!=='function'||!nuvem)throw Error('Sessao e dados autorizados obrigatorios');
  const doc=root.ownerDocument,els=new Map();let currentRequest=0,controller=null,selected=new Set(),importKeys=new Map(),importing=false;
  const cancelInvestigations=new Set();
- let batchSession=null,batchIntent='automatico';
+ let batchSession=null,batchIntent='automatico',batchRenderLimit=120;
  const valid=()=>root.isConnected&&getScopeToken()===scope.token;
  const el=(tag,text='',className='')=>{const n=doc.createElement(tag);n.textContent=String(text);if(className)n.className=className;return n};
  root.classList.add('iad-market-ui');
@@ -359,8 +359,11 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   const workflow=buildProspectWorkflow({companies:data,snapshot,scope});
   const ranked=new Map(workflow.candidates.map(x=>[x.company,x]));
   const ordered=workflow.candidates.map(x=>x.company);
+  const visible=batchSession?ordered.slice(0,batchRenderLimit):ordered;
+  const retained=batchSession?new Set(selected):new Set();
   for(const stop of cancelInvestigations)stop();cancelInvestigations.clear();
-  selected.clear();importKeys.clear();review.replaceChildren();results.replaceChildren();
+  selected.clear();for(const key of retained)selected.add(key);
+  importKeys.clear();review.replaceChildren();results.replaceChildren();
   const machine=el('section','','card');machine.id='iad-prospect-agents';
   machine.appendChild(el('h3','Máquina de Prospecção — seis etapas auditáveis'));
   machine.appendChild(el('p','As seis etapas organizam a pesquisa já retornada pelo ChatGPT/Claude. Não representam seis buscas independentes, nem validam automaticamente intenção de compra, e-mail ou CNPJ de uma empresa.','small muted'));
@@ -410,7 +413,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   results.appendChild(el('p',pending+' candidata(s) com CNPJ pendente, somente para revisao; nenhuma pode ser importada sem validacao.','small muted'));
   results.appendChild(el('p','Dados consultados em '+asOf+'. Esta pagina nao representa necessariamente todas as empresas da regiao.','small muted'));
   const snapshotNow=snapshot;
-  for(const company of ordered){
+  for(const company of visible){
    const plan=proposePipelineAction(company,snapshotNow,{tenantId:scope.tenantId,userId:scope.userId});
    const card=el('section','','card'),title=el('h4',(company.nome||company.razaoSocial)+' · '+company.cidade+'/'+company.uf);
    const statusMatch=plan.match.status==='existing'?'Ja cadastrada — CNPJ exato':plan.match.status==='related'?'Possivel matriz/filial':plan.match.status==='review'?'Revisar possivel duplicidade':'Nao cadastrada';
@@ -476,8 +479,20 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
    const label=el('label','Selecionar para revisao comercial','campo'),check=doc.createElement('input');
    check.type='checkbox'; // pending candidates may be selected for research review; never for import.
    check.addEventListener('change',()=>{if(!valid())return;const key=researchKey(company);if(check.checked)selected.add(key);else selected.delete(key);renderSelection(data);});
+   check.checked=selected.has(researchKey(company));
    label.prepend(check);card.appendChild(label);results.appendChild(card);
   }
+  if(batchSession&&ordered.length>visible.length){
+   const more=el('button','Mostrar mais '+Math.min(120,ordered.length-visible.length)+
+    ' empresas (apenas visualização)','btn iad-market-btn-check');
+   more.type='button';
+   more.addEventListener('click',()=>{
+    if(!valid())return;
+    batchRenderLimit+=120;renderCompanies(batchSession.companies,source,asOf);
+   });
+   results.appendChild(more);
+  }
+  if(batchSession&&selected.size)renderSelection(data);
  }
  function renderSelection(data){
   review.replaceChildren();
@@ -572,6 +587,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
    });}catch(e){show(e.message);return;}
    const cells=intent==='rapido'?[]:buildMarketBatchPlan(filters);
    batchSession=cells.length?{filters,provider:aiSelect.value,cells,next:0,companies:[]}:null;
+   batchRenderLimit=120;
    batchStatus.hidden=!batchSession;batchMeter.hidden=!batchSession;nextBatchBtn.hidden=true;
    if(batchSession){
     batchMeter.max=cells.length;batchMeter.value=0;
