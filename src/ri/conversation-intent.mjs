@@ -9,6 +9,7 @@ const short = (value, limit=600) => typeof value === 'string' ? value.trim().sli
    isoladas como "proposta", "conversar", "ETE" ou "expansão".
    Frases com contraste ("mas"/"porém") são avaliadas separadamente. */
 const negation = /\b(?:nao solicitou|nao pediu|nao (?:tenho|temos|queremos|quero|precisamos|preciso|pretendemos|pretendo|podemos|pode|conseguimos|vamos|planejamos|planejo|ha|existe|existe nenhuma|estamos buscando)|sem (?:interesse|demanda|necessidade|projeto|previsao)|projeto (?:cancelado|suspenso)|nao e (?:para mim|nosso foco)|retire (?:me|meu contato)|pare de (?:enviar|mandar)|(?:foi|esta|estao|foram)\s+(?:cancelad[oa]s?|suspens[oa]s?|descartad[oa]s?))\b/;
+const semProblema = /\b(?:sem|nenhum[as]?|ausencia de)\s+(?:problemas?|falhas?|dificuldades?)\b/;
 const courtesy = /^(?:bom dia|boa tarde|boa noite|obrigad[oa](?: pelo contato)?|agradec(?:o|emos)(?: o contato)?|ok|tudo bem|legal|perfeito|valeu)[.! ]*$/;
 const rules = [
  {id:'pedido_proposta',priority:100,label:'Pedido de proposta ou orçamento',re:/\b(?:envie|enviar|mande|mandar|preciso|precisamos|gostaria|quero|solicito|solicitamos|podem enviar|pode enviar|poderia enviar|cotem|cotar)\b.{0,75}\b(?:proposta|orcamento|cotacao|precos?)\b|\b(?:proposta|orcamento|cotacao)\b.{0,35}\b(?:enviar|solicitar|preciso|queremos|pedir)\b|\b(?:solicitou|solicitaram|pediu|pediram|requisitou)\b.{0,75}\b(?:proposta|orcamento|cotacao)\b/,action:'Confirmar escopo, requisitos e prazo antes de elaborar a proposta.'},
@@ -69,8 +70,11 @@ export function validateAiIntents(items,buyerMessages){
   if(!raw||typeof raw!=='object'||!INTENT_KINDS.includes(raw.type))continue;
   const excerpt=short(raw.evidence,220);
   if(!excerpt || negation.test(fold(excerpt)))continue;
-  if(!originals.some(s=>fragments(s).some(part=>
-    fold(part).includes(fold(excerpt)) && !negation.test(fold(part)))))continue;
+  if(!originals.some(s=>fragments(s).some(part=>{
+    const frase=fold(part);
+    return frase.includes(fold(excerpt)) && !negation.test(frase) &&
+      !(raw.type==='problema' && semProblema.test(frase));
+  })))continue;
   const key=raw.type+'|'+fold(excerpt);
   if(seen.has(key))continue;seen.add(key);
   const rule=rules.find(r=>r.id===raw.type);
@@ -85,6 +89,7 @@ export function validateAiIntents(items,buyerMessages){
    reuso:/\b(?:reuso|reutiliz|aproveitamento)\w*/,
    expansao:/\b(?:expansao|ampliacao|ampliando|expandindo|nova planta|nova unidade|nova fabrica|capacidade)\b/,
    custos:/\b(?:custos?|despesas?|gastos?|economia|desperdicio)\b/,
+   problema:/\b(?:problemas?|dificuldades?|falhas?|retrabalho|ineficiencia|paradas?|quebras?|indisponibilidade|defeitos?|nao atende)\b/,
    interesse_solucoes:/\b(?:interess|conhecer|soluc|apresent|entender|saber mais)\w*/,
    decisao:/\b(?:decisao|aprova|diretoria|comite|compras)\w*/,
    futuro:/\b(?:semestre|ano que vem|proximo ano|futuro|mais para frente)\b/
