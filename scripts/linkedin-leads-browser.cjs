@@ -102,8 +102,11 @@ const server=http.createServer((req,res)=>{
   await page.waitForFunction(()=>document.querySelector('#iad-linkedin-root')?.textContent?.includes('Comentários confirmados: 1'),null,{timeout:10000});
   assert.equal(await page.locator('#iad-linkedin-root h3').allTextContents().then(a=>a.includes('Terceiro Lead')),true);
   await page.getByRole('button',{name:'Pausar campanha'}).click();
+  await page.getByRole('button',{name:'Retomar campanha'}).waitFor({timeout:10000});
+  await page.waitForFunction(()=>document.querySelector('#iad-linkedin-root')?.textContent?.includes('Campanha pausada'),null,{timeout:10000});
   assert.equal(await page.getByRole('button',{name:'Sem post → próximo lead'}).isDisabled(),true);
   await page.getByRole('button',{name:'Retomar campanha'}).click();
+  await page.getByRole('button',{name:'Pausar campanha'}).waitFor({timeout:10000});
   assert.equal(await page.getByRole('button',{name:'Sem post → próximo lead'}).isEnabled(),true);
   await page.getByRole('button',{name:'Sem post → próximo lead'}).click();
   await page.waitForFunction(()=>document.querySelector('#iad-linkedin-root')?.textContent?.includes('Sem post: 2'),null,{timeout:10000});
