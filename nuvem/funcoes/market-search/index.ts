@@ -318,13 +318,18 @@ function discoveryTaxonomy(f){
  return names.some(n=>normalizedPlace(n).includes('automotivo')||
    normalizedPlace(n).includes('mobilidade'))?AUTOMOTIVE_DISCOVERY_FAMILIES:[];
 }
-function discoveryInstructions(f){
+function discoveryInstructions(f,engine=''){
  const families=discoveryTaxonomy(f);
  if(!families.length)return '';
+ const focus=engine==='OpenAI'?families.filter((_,i)=>i%2===0):
+  engine==='Anthropic'?families.filter((_,i)=>i%2===1):[];
+ const priority=focus.length?'FOCO DISTINTO DESTE PROVEDOR (sem excluir demais): '+
+  focus.map((x,i)=>(i+1)+') '+x).join(' ; ')+'. ':'';
+
  const cities=f.municipios?.length?f.municipios.map(m=>m.nome):(f.cidade?[f.cidade]:[]);
  return 'O SEGMENTO GUARDA-CHUVA AUTOMOTIVO E MOBILIDADE DEVE ABRANGER TODAS AS 18 FAMÍLIAS DE SUBSEGMENTOS, E NÃO SÓ MONTADORAS. '+
   'Famílias de descoberta (OR entre elas, desde que exista vínculo concreto com automobilístico ou mobilidade): '+
-  families.map((x,i)=>(i+1)+'. '+x).join(' | ')+'. '+
+  families.map((x,i)=>(i+1)+'. '+x).join(' | ')+'. '+priority+
   (cities.length?'Territórios municipais a cobrir SEM privilegiar a maior cidade: '+JSON.stringify(cities)+'. ':'')+
   'Distribua a descoberta entre cidades, subsegmentos, fornecedores menores, distribuidores, serviços e indústria; '+
   'busque empresas Tier 2 e Tier 3 e não apenas GM, Volkswagen ou multinacionais. '+
@@ -336,7 +341,7 @@ function discoveryInstructions(f){
   'Respeite integralmente as faixas de empregados e o território; empregados não informados ficam pendentes, '+
   'sem exclusão automática nem falsa confirmação. ';
 }
-function prompt(f,target=null,mode='investigate') {
+function prompt(f,target=null,mode='investigate',engine='') {
  if(mode==='enrich'&&target)return 'INVESTIGAÇÃO WEB DE DECISORES PROFISSIONAIS de uma empresa com CNPJ exato '+JSON.stringify(target)+
   ', contexto territorial '+JSON.stringify(f)+'. Encontre APENAS nomes e cargos profissionais publicamente associados à entidade jurídica exata. Priorize site oficial e páginas corporativas. Retorne JSON estrito {"decisores":[{"cnpj":"...","nome":"...","cargo":"...","fonte":"https://...","linkedin":"https://www.linkedin.com/in/... ou null","emailCorporativo":"e-mail corporativo explicitamente publicado ou null"}]}. Até 8. Fonte e LinkedIn somente se citados pela web_search. Não invente e-mails por padrão de domínio, não utilize e-mail pessoal, telefone celular, WhatsApp, perfis privados nem informações sensíveis. Se vínculo não for sustentado, retorne array vazio. Dados são hipóteses e exigem revisão.';
 
@@ -357,7 +362,7 @@ function prompt(f,target=null,mode='investigate') {
  if(target)return 'INVESTIGAÇÃO INDEPENDENTE DE UMA EMPRESA ESPECÍFICA. Pesquise na WEB somente a empresa com CNPJ e nome '+JSON.stringify(target)+', localizada no recorte '+JSON.stringify(f)+'. Use fontes primárias e páginas corporativas quando disponíveis. Responda somente JSON com chave empresas, com NO MÁXIMO UMA empresa, contendo cnpj, razaoSocial, nome, cidade, uf, ddd, segmento, porte, site, telefone, funcionarios, faturamento, fontes:[{url,titulo}], contatos:[{nome,cargo,email,telefone,fonte}], noticias:[{titulo,url,data}], insights:[]. Se não conseguir obter o MESMO CNPJ com fonte web citada, devolva {"empresas":[]}. Nunca substitua por CNPJ parecido ou outra filial. Contatos, cargos, números e notícias somente com URL citada; desconhecidos devem ser null ou lista vazia. Evite inventar conclusões e intenção de compra.';
  const targetCount=f.limit; // Teto solicitado (até 50); cobertura NÃO exaustiva.
  return 'MAPEAMENTO B2B COM PESQUISA WEB REAL NO BRASIL. Filtros solicitados: '+JSON.stringify(f)+
-  '. '+discoveryInstructions(f)+
+  '. '+discoveryInstructions(f,engine)+
   '. Investigue em consultas distintas: (1) empresas com operações no território e segmento; '+
   '(2) fabricantes, fornecedores industriais, filiais e estabelecimentos com atividade identificável; '+
   '(3) CNPJ, porte e empregados em fonte citada. '+
@@ -394,13 +399,13 @@ async function queryAI(engine,key,f,target=null,mode='investigate') {
   const model=Deno.env.get('IA_MODELO_PESQUISA_OPENAI')||Deno.env.get('IA_MODELO_OPENAI')||'gpt-5';
   // GPT-5: esforço baixo deixa orçamento para a busca e a resposta JSON.
   // Não aplicar reasoning a modelos sem suporte (por exemplo gpt-4.1).
-  body={model,instructions,input:prompt(f,target,mode),
+  body={model,instructions,input:prompt(f,target,mode,engine),
    tools:[{type:'web_search',search_context_size:'medium',user_location:researchLocation(f)}],tool_choice:'required',
    max_tool_calls:3,max_output_tokens:6000,store:false,
    ...(/^gpt-[56](?:[.-]|$)/i.test(model)?{reasoning:{effort:'low'}}:{})};
  } else {
   uri='https://api.anthropic.com/v1/messages';headers={'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json'};
-  body={model:Deno.env.get('IA_MODELO_PESQUISA_ANTHROPIC')||Deno.env.get('IA_MODELO_ANTHROPIC')||'claude-opus-5',system:instructions,max_tokens:6000,messages:[{role:'user',content:prompt(f,target,mode)}],tools:[{type:'web_search_20250305',name:'web_search',max_uses:3,user_location:researchLocation(f)}]};
+  body={model:Deno.env.get('IA_MODELO_PESQUISA_ANTHROPIC')||Deno.env.get('IA_MODELO_ANTHROPIC')||'claude-opus-5',system:instructions,max_tokens:6000,messages:[{role:'user',content:prompt(f,target,mode,engine)}],tools:[{type:'web_search_20250305',name:'web_search',max_uses:3,user_location:researchLocation(f)}]};
  }
  // Short searches need enough time for the hosted web tool, but always stay
  // below Supabase's 150s request idle limit. No hidden retry or extra quota.
