@@ -19,6 +19,7 @@ jobs:
           node-version: '22'
       - run: node --check src/app.js && node --check src/store.js && node --check src/performance.js
       - run: node --check scripts/perf17-journey-browser.cjs
+      - run: node --check scripts/perf38-navigation.test.cjs && node --test scripts/perf38-navigation.test.cjs
       - run: node --test nuvem/testes/perf-17-journey-adoption.test.cjs
       - run: node --test nuvem/testes/perf-15-contacts-index.test.cjs nuvem/testes/perf-10-percentis.test.cjs
   perf17-browser:
@@ -38,3 +39,5 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Jornada sintetica sem dados reais
         run: timeout 120s node scripts/perf17-journey-browser.cjs
+      - name: Medir rotas reais com UI lazy sem dados comerciais
+        run: timeout 150s node scripts/perf38-navigation-browser.cjs
