@@ -1288,6 +1288,22 @@
     if (e.key === 'Escape') fecharMenuUsuario();
   });
 
+  /* PERF-38: o menu principal usa <a href>, não App.ir.
+     Acompanhar cliques diretos sem interceptar navegação e sem coletar URLs.
+     Modificadores/nova aba não são uma abertura desta sessão. */
+  document.addEventListener('click', function (evento) {
+    if (!global.IADPerformance?.ativo?.() ||
+        evento.defaultPrevented || evento.button !== 0 ||
+        evento.altKey || evento.ctrlKey || evento.metaKey || evento.shiftKey) return;
+    const alvo = evento.target;
+    const link = alvo && typeof alvo.closest === 'function'
+      ? alvo.closest('nav.tabs a[href^="#/"]') : null;
+    if (!link || link.target && link.target !== '_self') return;
+    const rota = link.getAttribute('href');
+    if (rota && rota !== location.hash)
+      global.IADPerformance.iniciarNavegacao(rota);
+  }, true);
+
   let assinaturaMenuInteligencia = null;
   function montarNav() {
     const nav = document.querySelector('nav.tabs');
