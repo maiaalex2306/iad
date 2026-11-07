@@ -49,6 +49,10 @@ const server=http.createServer((req,res)=>{
    A.abrirSessao(user);S.semSincronizar(()=>S.salvar());
    window.IADPerformance.limpar();window.IADPerformance.iniciar();
   });
+  /* Navegação real no menu: deve incrementar o contador, não só App.ir. */
+  await page.locator('nav.tabs a[href="#/pipeline"]').click();
+  await page.waitForFunction(()=>location.hash==='#/pipeline',{timeout:10000});
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
   const result=await page.evaluate(async()=>{
    const twoFrames=()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
    for(let i=0;i<12;i++){
@@ -64,7 +68,7 @@ const server=http.createServer((req,res)=>{
   const metrics=await page.evaluate(()=>({metricas:window.IADPerformance.relatorioDiagnostico(),
     json:window.IADPerformance.exportarDiagnosticoJSON(),hash:location.hash}));
   const r=metrics.metricas;
-  assert.ok(r['perf38.nav.pipeline']?.chamadas>=10,JSON.stringify(r['perf38.nav.pipeline']));
+  assert.ok(r['perf38.nav.pipeline']?.chamadas>=13,'12 App.ir + pelo menos 1 clique no menu: '+JSON.stringify(r['perf38.nav.pipeline']));
   assert.ok(r['perf38.nav.hoje']?.chamadas>=10,JSON.stringify(r['perf38.nav.hoje']));
   assert.equal(r['perf38.nav.inteligencia']?.chamadas,1,'medir UI após mount lazy');
   assert.equal(metrics.hash,'#/inteligencia');
