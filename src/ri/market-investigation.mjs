@@ -5,12 +5,13 @@
 import {normalizeMarketCompanies,isReviewableSourceURL} from './market-contract.mjs';
 
 export function mountMarketInvestigation({card,company,doc,nuvem,valid,provider,getSequence}={}){
- if(!card||!doc||!company||!company.cnpj||!company.nome||
+ if(!card||!doc||!company||!company.nome||
     !company.uf||!company.cidade||!company.segmento||
     typeof valid!=='function'||typeof getSequence!=='function')return ()=>{};
  const button=doc.createElement('button');
  button.type='button';button.className='btn';
- button.textContent='INVESTIGAR EMPRESA COM IA — CONSOME COTA';
+ button.textContent=company.cnpj?'INVESTIGAR EMPRESA COM IA — CONSOME COTA':
+  'LOCALIZAR IDENTIDADE E CNPJ COM IA — CONSOME COTA';
  const panel=doc.createElement('section');panel.className='iad-market-independent-investigation';
  card.appendChild(button);card.appendChild(panel);
  let abort=null,attempted=false,closed=false;
@@ -32,7 +33,7 @@ export function mountMarketInvestigation({card,company,doc,nuvem,valid,provider,
     method:'POST',headers:{'Content-Type':'application/json','apikey':cfg.chave,
      'Authorization':'Bearer '+session.access_token},
     body:JSON.stringify({action:'investigate',provider:provider?.()||'both',
-     target:{cnpj:company.cnpj,nome:company.nome},
+     target:{cnpj:company.cnpj||null,nome:company.nome},
      filters:{uf:company.uf,cidade:company.cidade,segmento:company.segmento,limit:1}}),
     signal:abort.signal
    });
@@ -46,32 +47,36 @@ export function mountMarketInvestigation({card,company,doc,nuvem,valid,provider,
    }
    const candidates=normalizeMarketCompanies(payload.data||[],{
     source:payload.source||'Investigação independente',retrievedAt:payload.retrievedAt||''});
-   const found=candidates.find(x=>x.cnpj===company.cnpj);
-   line('Analyst — pesquisa web independente','h5');
+   const found=company.cnpj?candidates.filter(x=>x.cnpj===company.cnpj):candidates.slice(0,3);
+   line(company.cnpj?'Analyst — pesquisa web independente':'Analyst — identidade por nome e município','h5');
    const providers=(Array.isArray(payload.providers)?payload.providers:[])
     .filter(p=>p==='OpenAI'||p==='Anthropic');
    line('IAs participantes: '+(providers.join(' + ')||'não informado')+
-    '. Este resultado NÃO foi incorporado ao CRM nem alterou a prioridade anterior.');
+    '. Nenhum resultado alterou a carteira ou a shortlist anterior.');
    if(payload.partial===true)line('Pesquisa parcial: um ou mais provedores não concluíram.');
-   if(!found){
-    line('CNPJ exato não corroborado nas respostas citadas. Nenhuma empresa foi considerada verificada.');
+   if(!found.length){
+    line(company.cnpj?'CNPJ exato não corroborado nas respostas citadas.':
+      'Nenhuma identidade empresarial compatível com nome e município foi localizada com fontes citadas.');
     return;
    }
-   line('CNPJ relatado: '+found.cnpj+'; nome: '+(found.razaoSocial||found.nome)+
-    '; local: '+found.cidade+'/'+found.uf+'. Verifique a associação jurídica nas fontes.');
-   const sources=found.fontes.filter(x=>isReviewableSourceURL(x.url)).slice(0,8);
-   if(!sources.length)line('Não há URL HTTPS pública para conferir.');
-   for(const source of sources){
-    const a=doc.createElement('a');a.href=source.url;a.target='_blank';
-    a.rel='noopener noreferrer';a.textContent=source.titulo||source.url;
-    panel.appendChild(a);line('');
+   if(!company.cnpj)line('ATENÇÃO: são hipóteses de identidade para conferência. Mesmo um CNPJ com dígitos válidos não comprova vínculo jurídico. Não há importação automática.');
+   for(const match of found){
+    line((match.cnpj?'CNPJ relatado (NÃO verificado): '+match.cnpj:'CNPJ ainda pendente')+
+     '; nome: '+(match.razaoSocial||match.nome)+'; local: '+match.cidade+'/'+match.uf+'.');
+    const sources=(match.fontes||[]).filter(x=>isReviewableSourceURL(x.url)).slice(0,8);
+    if(!sources.length)line('Não há URL HTTPS pública para conferir.');
+    for(const source of sources){
+     const a=doc.createElement('a');a.href=source.url;a.target='_blank';
+     a.rel='noopener noreferrer';a.textContent=source.titulo||source.url;
+     panel.appendChild(a);line('');
+    }
+    if(match.contatos.length)
+     line('Possíveis decisores citados: '+match.contatos.map(c=>c.nome+' — '+c.cargo).join('; ')+
+      '. Vínculo e contato profissional não foram validados.');
+    if(match.noticias.length)
+     line('Notícias a revisar: '+match.noticias.map(n=>n.titulo).join('; ')+
+      '. Notícias não comprovam intenção de compra.');
    }
-   if(found.contatos.length)
-    line('Possíveis decisores citados: '+found.contatos.map(c=>c.nome+' — '+c.cargo).join('; ')+
-     '. Vínculo e contato profissional não foram validados.');
-   if(found.noticias.length)
-    line('Notícias a revisar: '+found.noticias.map(n=>n.titulo).join('; ')+
-     '. Notícias não comprovam intenção de compra.');
    const usage=(Array.isArray(payload.usage)?payload.usage:[])
     .filter(x=>['OpenAI','Anthropic'].includes(x?.provider));
    if(usage.length)line('Consumo informado: '+usage.map(x=>x.provider+' '+
