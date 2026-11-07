@@ -1,0 +1,37 @@
+name: RI-08 production Edge canary smoke (no credentials)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/ri08-production-canary-smoke.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  no-auth-provider-transport:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Compare production Edge providers without credentials or user data
+        shell: bash
+        run: |
+          set -euo pipefail
+          payload='{"tipo":"diagnostico"}'
+          status() {
+            curl -sS --retry 1 --max-time 20 -X POST "$1" \
+              -H 'content-type: application/json' \
+              -d "$payload" -o /dev/null -w '%{http_code}'
+          }
+          old="$(status https://drhonmdffhnwamwzynrs.supabase.co/functions/v1/assistente)"
+          canary="$(status https://drhonmdffhnwamwzynrs.supabase.co/functions/v1/assistente-v28683-canary)"
+          staging="$(status https://bvlfzeblpewlqhssprpv.supabase.co/functions/v1/assistente)"
+          echo "IAD_PRODUCTION_ASSISTENTE_NO_AUTH_HTTP=$old"
+          echo "IAD_CANARY_V28683_NO_AUTH_HTTP=$canary"
+          echo "IAD_STAGING_ASSISTENTE_NO_AUTH_HTTP=$staging"
+          # 401 means the function has a configured provider and reaches its auth gate.
+          # It is not proof that a real LLM invocation works, or that the session/tenant flow passes.
+          [ "$old" = 401 ] || { echo '::error::Production assistant not reaching auth gate'; exit 1; }
+          [ "$canary" = 401 ] || { echo '::error::Canary not reaching auth gate'; exit 1; }
+          echo 'IAD_CANARY_TRANSPORT=PASS; real authenticated provider E2E still required'
+          if [ "$staging" = 503 ]; then
+            echo '::warning::Staging LLM provider still not configured; release gate remains NO-GO'
+          fi
