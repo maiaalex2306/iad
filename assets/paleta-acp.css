@@ -379,9 +379,17 @@ nav.tabs a.ativo { color: var(--acp-brand); font-weight: 700; }
 .iad-market-progress-eyebrow {display:block;font-size:11px;letter-spacing:.12em;font-weight:800;color:var(--acp-brand-dark,#4a1078);margin:0 0 12px;}
 .iad-market-progress-title {margin:0 0 12px;font-size:clamp(22px,3vw,28px);line-height:1.2;color:var(--acp-brand-dark,#4a1078);font-weight:800;}
 .iad-market-progress-description {margin:0 0 18px;line-height:1.5;font-size:15px;overflow-wrap:anywhere;}
-.iad-market-progress-bar {display:block;width:100%;height:9px;margin:12px 0 20px;accent-color:var(--acp-brand,#6816a8);border:0;border-radius:12px;overflow:hidden;}
-.iad-market-progress-bar::-webkit-progress-bar {background:var(--acp-brand-soft,#f3ecfa);}
-.iad-market-progress-bar::-webkit-progress-value {background:var(--acp-brand,#6816a8);}
+/* RI-M21 — animação decorativa de atividade, NUNCA percentual calculado.
+   O progress nativo indeterminado permanece acessível a leitores de tela. */
+.iad-market-progress-bar {position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;}
+.iad-market-progress-track {position:relative;display:block;width:100%;height:11px;margin:12px 0 20px;background:var(--acp-brand-soft,#f3ecfa);border-radius:999px;overflow:hidden;}
+.iad-market-progress-track[hidden] {display:none!important;}
+.iad-market-progress-fill {display:block;height:100%;width:100%;background:var(--acp-accent,#ff682c);border-radius:999px;transform-origin:left;transform:scaleX(.06);}
+.iad-market-progress-track[data-state="running"] .iad-market-progress-fill {animation:iad-market-progress-grow 86s cubic-bezier(.1,.5,.2,1) forwards;}
+.iad-market-progress-track[data-state="running"]::after {content:"";position:absolute;inset:0 auto 0 -35%;width:33%;border-radius:999px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.5),transparent);animation:iad-market-progress-glint 2.4s ease-in-out infinite;}
+.iad-market-progress-track[data-state="done"] .iad-market-progress-fill {transform:scaleX(1);}
+@keyframes iad-market-progress-grow {0%{transform:scaleX(.06)}35%{transform:scaleX(.52)}70%{transform:scaleX(.76)}100%{transform:scaleX(.93)}}
+@keyframes iad-market-progress-glint {from{left:-35%}to{left:105%}}
 .iad-market-progress-phase {font-size:14px;line-height:1.5;font-weight:750;margin:0 0 8px;color:var(--acp-brand-dark,#4a1078);}
 .iad-market-progress-time {margin:0 0 12px;font-size:14px;font-variant-numeric:tabular-nums;font-weight:650;}
 .iad-market-progress-note {margin:0 0 22px;font-size:12px;line-height:1.6;color:var(--acp-muted,#665b6f);}
@@ -390,4 +398,4 @@ nav.tabs a.ativo { color: var(--acp-brand); font-weight: 700; }
 .iad-market-progress-reopen {position:fixed;bottom:22px;right:22px;z-index:11999;background:var(--acp-brand-fundo,#4a1078);color:#fff;border:1px solid var(--acp-brand-fundo,#4a1078);border-radius:999px;padding:12px 19px;box-shadow:0 9px 27px rgba(40,14,66,.26);font-weight:750;}
 .iad-market-progress-close:focus-visible,.iad-market-progress-reopen:focus-visible {outline:3px solid var(--acp-accent,#ff682c);outline-offset:3px;}
 @media(max-width:520px){.iad-market-progress {padding:12px;}.iad-market-progress-dialog {border-radius:15px;padding:23px 18px;}.iad-market-progress-reopen {bottom:14px;right:14px;left:14px;}}
-@media(prefers-reduced-motion:reduce){.iad-market-progress {backdrop-filter:none;}}
+@media(prefers-reduced-motion:reduce){.iad-market-progress {backdrop-filter:none;}.iad-market-progress-track[data-state="running"] .iad-market-progress-fill {animation:none;transform:scaleX(.55)}.iad-market-progress-track[data-state="running"]::after {animation:none;display:none}}
