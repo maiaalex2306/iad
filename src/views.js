@@ -7525,6 +7525,33 @@
       ['perf23.rede.storage', 'Supabase: arquivos'],
       ['perf23.rede.outros', 'Supabase: outros']
     ];
+    /* PERF-38: durações medidas apenas após clique no menu dentro desta sessão;
+       as rotas RI/Mercado incluem import lazy, sem consulta externa automática. */
+    const jornadas = [
+      ['perf38.nav.hoje','Hoje: clique até dois frames'],
+      ['perf38.nav.painel','Painel: clique até dois frames'],
+      ['perf38.nav.pipeline','Pipeline: clique até dois frames'],
+      ['perf38.nav.tarefas','Tarefas: clique até dois frames'],
+      ['perf38.nav.conversas','Conversas: clique até dois frames'],
+      ['perf38.nav.revisao','Revisão: clique até dois frames'],
+      ['perf38.nav.cadastros','Cadastros: clique até dois frames'],
+      ['perf38.nav.inteligencia','Inteligência Comercial: carregamento inicial'],
+      ['perf38.nav.mercado','Inteligência de Mercado: carregamento inicial']
+    ];
+    const bloqueios = [
+      ['perf38.main-thread.longtask','Thread principal bloqueada (eventos >= 50 ms)']
+    ];
+    const comparaveis=jornadas.map(function(x){
+      return {rotulo:x[1],metrica:rel[x[0]]};
+    }).filter(function(x){return x.metrica&&x.metrica.chamadas>=10;})
+      .sort(function(a,b){return b.metrica.p95Ultimas100Ms-a.metrica.p95Ultimas100Ms;});
+    const hipotese=comparaveis.length
+      ? 'Maior P95 de navegação entre rotas com 10 ou mais amostras: '+
+        esc(comparaveis[0].rotulo)+' ('+
+        Number(comparaveis[0].metrica.p95Ultimas100Ms).toFixed(1)+
+        ' ms). Investigue essa jornada antes de alterar outras telas.'
+      : 'Ainda não há 10 amostras por rota para comparar com segurança. '+
+        'Inicie a medição, navegue por diferentes telas e faça também uma sincronização normal.';
     const valor = function (n) {
       return Number.isFinite(Number(n)) ? Number(n).toFixed(1) + ' ms' : '—';
     };
@@ -7573,7 +7600,14 @@
       '<p class="tiny muted">P95 representa as últimas 100 amostras de cada indicador; ' +
       'dois frames não comprovam a apresentação visual. Rede e sincronização podem ocorrer em ' +
       'paralelo, portanto não some seus tempos. O CRM não envia este relatório automaticamente.</p>' +
-      '</div>' + tabela('Abertura das oportunidades', principais) +
+      '<p class="small" style="margin-top:12px"><strong>Diagnóstico por jornada:</strong> '+
+      hipotese+'</p>' +
+      '<p class="tiny muted">Os tempos de navegação medem cliques feitos neste navegador. '+
+      'Long tasks representam bloqueios da thread principal, sem identificar a função causadora. '+
+      'Telas de Inteligência incluem carregamento do módulo, não o tempo de pesquisas externas.</p>' +
+      '</div>' + tabela('Navegação real entre telas', jornadas) +
+      tabela('Bloqueios de interface (somente com medição ativa)', bloqueios) +
+      tabela('Abertura das oportunidades', principais) +
       tabela('Troca de abas do cockpit', abas) +
       tabela('Gargalos de abertura e notificações', gargalos) +
       tabela('Rede e sincronização', rede);
