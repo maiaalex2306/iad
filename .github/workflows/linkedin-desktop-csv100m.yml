@@ -44,3 +44,27 @@ jobs:
         run: |
           node --max-old-space-size=512 --test tests/linkedin-csv-stream.test.mjs
           node --test desktop/linkedin-leads/test/security.test.cjs
+
+  windows-build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: desktop/linkedin-leads
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar dependências do desktop
+        run: npm install --no-audit --no-fund
+      - name: Testes de segurança e rota
+        run: npm test
+      - name: Empacotar POC portátil Windows
+        run: npm run package:win
+      - name: Publicar somente artefato de prévia (não produção)
+        uses: actions/upload-artifact@v4
+        with:
+          name: LinkedIN-Leads-Windows-POC
+          path: desktop/linkedin-leads/dist/*.exe
+          retention-days: 7
