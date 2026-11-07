@@ -17,6 +17,7 @@ Converter falas reais do prospect em hipóteses comerciais rastreáveis, preserv
 - A IA não altera o IAD, valor, etapa, data, proposta ou venda.
 - Não cria negócio, tarefa ou envio de mensagem automaticamente: somente as rotinas de importação existentes continuam fazendo o que já faziam, com intervenção do usuário.
 - A classificação por IA depende de implantação da Edge Function `assistente` atualizada e credenciais existentes.
+- Verificação da conta Supabase em 06/11/2026: o projeto `iadcrm-homolog` (`bvlfzeblpewlqhssprpv`) lista somente a função `market-search`; **não possui `assistente`**, portanto o teste semântico real ainda não pode ser homologado nele sem instalação controlada de dependências e credenciais.
 - A triagem por regras opera mesmo sem IA, apenas sobre eventos já armazenados no CRM.
 - O pacote não revisa os dados de produção; não mexe no schema SQL nem realiza migração.
 - Conservar a publicação coordenada do PWA (versão e service worker) para o release final. Não alterar `config.js` / `sw.js` neste PR de homologação.
