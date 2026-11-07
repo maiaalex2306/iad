@@ -35,6 +35,8 @@ O IaD CRM publicado em GitHub Pages é uma aplicação web estática. `window.op
 Portanto, a experiência equivalente exige um **host desktop com navegador nativo isolado** e não apenas CSS/HTML do PWA.
 
 ## 4. Decisão tecnológica
+**Escopo obrigatório atualizado:** não converter o IaD CRM em aplicativo desktop. O navegador nativo e a sessão LinkedIn existem SOMENTE enquanto a funcionalidade LinkedIN Leads estiver aberta. Todas as outras rotas e módulos permanecem na web atual. O shell desktop deve iniciar diretamente em `#/linkedin-leads`, impedir navegação do painel nativo para outras rotas e ser fechado ao encerrar a funcionalidade. A versão atual da POC abre janela exclusiva, não integrada fisicamente dentro de uma aba web; lançamento a partir do menu web ainda exige integração específica do sistema operacional.
+
 **Preferência inicial para POC: Electron + WebContentsView**, com separação entre vista IaD CRM e vista LinkedIn na mesma janela nativa. `WebContentsView` é API oficial adequada para conteúdo externo. NÃO utilizar `<webview>` (desaconselhado pela documentação atual do Electron), `BrowserView` (depreciado), nem `iframe` no PWA.
 
 Alternativa posterior: Tauri 2 + WebView2 no Windows tende a reduzir empacotamento, mas child webviews lado a lado exigem `unstable` atualmente. Avaliar depois da POC ou caso peso de memória torne Electron inviável.
