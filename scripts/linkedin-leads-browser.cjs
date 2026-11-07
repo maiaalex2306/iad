@@ -109,6 +109,9 @@ const server=http.createServer((req,res)=>{
   assert.equal(await page.evaluate(()=>window.IADStore.revisao()),initialRevision,'LinkedIN Leads não deve gravar no Store/CAS');
   assert.equal(requestsOutside.length,0,'campanha não pode acessar LinkedIn/externos durante teste local: '+requestsOutside);
   // Usuário comum não pode ver nem montar a rota, inclusive via deep link.
+  // A troca real de usuário troca a tela. App.ir na MESMA hash não emite hashchange.
+  await page.evaluate(()=>window.App.ir('#/hoje'));
+  await page.waitForFunction(()=>location.hash==='#/hoje'&&!document.querySelector('#iad-linkedin-root'),null,{timeout:10000});
   await page.evaluate(()=>{
    const S=window.IADStore,A=window.IADAuth;
    const u={id:'seller-e2e',nome:'Vendedor',login:'seller',papel:'usuario',ativo:true,tenantId:'tenant-a'};
