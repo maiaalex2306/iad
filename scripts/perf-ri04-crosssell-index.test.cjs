@@ -92,7 +92,8 @@ test('gate de release consistente e código sem cache comercial global',()=>{
  const sw=fs.readFileSync(path.join(root,'sw.js'),'utf8');
  assert.match(src,/const candidates=segmentProducts\.get/);
  assert.doesNotMatch(src,/fetch\s*\(|localStorage|sessionStorage|supabase\./);
- assert.match(config,/numero:\s*'v286\.80'/);
- assert.match(sw,/iad-crm-v286\.80/);
+ const version=config.match(/numero:\s*'(v286\.\d+)'/);
+ assert.ok(version,'versão semanticamente válida do CRM');
+ assert.ok(sw.includes('iad-crm-'+version[1]),'Configuração e Service Worker precisam ter a mesma versão');
  assert.ok(sw.includes("'./src/ri/opportunity-radar.mjs'"));
 });
