@@ -60,3 +60,11 @@ test('Shell nativo somente LinkedIN Leads, CRM geral permanece web',()=>{
   assert.doesNotMatch(source,/title:'IaD CRM Desktop/);
   assert.doesNotMatch(source,/CRM_ORIGIN\+'\/#\/hoje'/);
 });
+
+test('Voltar ao CRM web encerra somente o host especializado',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'../main.cjs'),'utf8');
+  assert.match(source,/Voltar ao IaD CRM web/);
+  assert.match(source,/shell\.openExternal\(CRM_ORIGIN\+'\/#\/hoje'\)/);
+  assert.match(source,/win\.close\(\)/);
+  assert.match(source,/LINKEDIN_LEADS_ROUTE/);
+});
