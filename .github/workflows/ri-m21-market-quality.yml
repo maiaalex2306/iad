@@ -50,3 +50,12 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Orange animated progress in light, dark and reduced-motion
         run: node scripts/ri-m21-progress-browser.cjs
+  canary-auth-boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Production canary without JWT or provider call
+        run: node scripts/ri-m21-canary-smoke.cjs
