@@ -3,7 +3,7 @@
    Post e comentário são fornecidos conscientemente pelo usuário.
    Sem OAuth aprovado, copiar/abrir publicação NÃO é publicar ou curtir. */
 import {importLinkedInCsv} from './linkedin-csv.mjs';
-import {campaignSummary,nextPending,skipWithoutPost,setProfileOpened,setLikeConfirmed,setCommentConfirmed} from './linkedin-campaign-engine.mjs';
+import {campaignSummary,nextPending,skipWithoutPost,setProfileOpened,setLikeConfirmed,setCommentConfirmed,canReviewProfile,reviewWindow,TERMINAIS} from './linkedin-campaign-engine.mjs';
 
 export function linkedinUrl(input,kind='post') {
   let parsed;
@@ -103,6 +103,18 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
   csvPager.append(csvPrevious,csvPage,csvNext);csvPager.hidden=true;
   arquivoBox.append(csvFile,csvStatus,csvSearch,csvRows,csvPager);
   let campaignRows=[],page=0,activeRow=null,requestVersion=0,campaignPaused=false;
+  function openProfileFor(row,providedUrl) {
+    if(!valid()||campaignPaused){status.textContent='Campanha pausada ou sessão alterada.';return;}
+    const url=linkedinUrl(providedUrl||row?.perfil,'profile');
+    if(!url){status.textContent='URL do perfil inválida. Informe um endereço /in/.';return;}
+    if(row){
+      const gate=canReviewProfile(campaignRows,row);
+      if(!gate.ok){status.textContent=gate.reason+(gate.nextAt?' Tente após '+new Date(gate.nextAt).toLocaleTimeString('pt-BR')+'.':'');return;}
+      if(activeRow!==row)selectCsvRow(row,false);
+    }
+    doc.defaultView.open(url,'_blank','noopener,noreferrer');
+    status.textContent='Abertura solicitada no LinkedIn. Quando o perfil estiver aberto, confirme a revisão na fila. Se não houver publicação, marque Sem post.';
+  }
   function renderCsv(){
     if(!valid())return;
     const term=csvSearch.value.trim().toLocaleLowerCase('pt-BR');
@@ -115,7 +127,7 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
       const details=elem(doc,'span',[item.empresa,item.cargo].filter(Boolean).join(' · ')||'Dados adicionais não informados','small muted');
       const names={rascunho:'Rascunho gerado',confirmado:'Comentário confirmado',sem_post:'Sem post',curtido:'Curtida confirmada',post_localizado:'Post localizado',perfil_aberto:'Perfil aberto',erro:'Erro'};
       const state=elem(doc,'span',names[item.estado]||'Pendente','small muted');
-      const open=action(doc,'Abrir perfil',()=>doc.defaultView.open(item.perfil,'_blank','noopener,noreferrer'),true);
+      const open=action(doc,'Abrir perfil',()=>openProfileFor(item,item.perfil),true);
       const choose=action(doc,activeRow===item?'Selecionado':'Selecionar',()=>selectCsvRow(item),true);
       row.append(title,details,state,open,choose);csvRows.append(row);
     }
@@ -144,6 +156,7 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
       if(!valid())return;
       const parsed=importLinkedInCsv(text);
       campaignRows=parsed.leads;page=0;activeRow=null;requestVersion++;campaignPaused=false;
+      btnPause.textContent='Pausar campanha';
       csvSearch.value='';
       const s=parsed.summary;
       csvStatus.textContent=file.name+': '+s.valid+' perfil(is) válido(s), '+s.duplicates+' duplicado(s), '+s.invalid+' inválido(s), de '+s.total+' linhas. Dados locais nesta aba. '+(s.problems.length?'Primeiros erros nas linhas: '+s.problems.slice(0,8).map(p=>p.line).join(', ')+'.':'');
@@ -209,12 +222,7 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
   status.setAttribute('role','status');status.setAttribute('aria-live','polite');
   const generate=action(doc,'Analisar post e criar comentário com IA',()=>{});
   const profileOpen=action(doc,'Abrir perfil do lead para pesquisa',()=>{
-    const url=linkedinUrl(perfil.value,'profile');
-    if(!url){status.textContent='Informe uma URL /in/ válida para abrir o perfil.';return;}
-    doc.defaultView.open(url,'_blank','noopener,noreferrer');
-    if(activeRow&&!['sem_post','confirmado'].includes(activeRow.estado))setProfileOpened(activeRow);
-    refreshQueue();
-    status.textContent='Perfil aberto. Procure o post, cole a URL e o texto; se não houver, marque Sem post.';
+    openProfileFor(activeRow,perfil.value);
   },true);
   const formActions=elem(doc,'div','','iad-linkedin-buttons');
   formActions.append(profileOpen,generate);form.append(formActions,status);
@@ -255,6 +263,8 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
   bCopiar.disabled=true;textArea.disabled=true;
   generate.onclick=async()=>{
     if(!valid())return;
+    if(campaignPaused){status.textContent='Campanha pausada. Retome antes de analisar outro post.';return;}
+    if(activeRow&&TERMINAIS.includes(activeRow.estado)){status.textContent='Este lead já foi encerrado; não substituirei o comentário registrado.';return;}
     let c;
     try{c=prepareLinkedInCampaign({lead:lead.value,cargo:cargo.value,empresa:empresa.value,perfil:perfil.value,
       postUrl:postUrl.value,resumoPerfil:resumoPerfil.value,post:post.value,comentarioLead:comentarioLead.value,
@@ -291,8 +301,22 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
   filaResumo.setAttribute('role','status');filaResumo.setAttribute('aria-live','polite');
   const filaMsg=elem(doc,'p','Primeiro perfil será selecionado ao importar o CSV.','small muted');
   filaMsg.setAttribute('role','status');
+  const btnReviewed=action(doc,'Confirmei a abertura do perfil',()=>{
+    if(campaignPaused||!activeRow)return;
+    const gate=canReviewProfile(campaignRows,activeRow);
+    if(!gate.ok){filaMsg.textContent=gate.reason+(gate.nextAt?' Disponível após '+new Date(gate.nextAt).toLocaleTimeString('pt-BR')+'.':'');return;}
+    try{
+      setProfileOpened(activeRow);
+      filaMsg.textContent='Acesso ao perfil confirmado nesta campanha. Procure uma publicação ou marque Sem post.';
+      renderCsv();
+    }catch(e){filaMsg.textContent=e.message;}
+  },true);
   const btnNext=action(doc,'Próximo perfil',()=>{
     if(campaignPaused){filaMsg.textContent='Campanha pausada.';return;}
+    if(activeRow&&!TERMINAIS.includes(activeRow.estado||'pendente')){
+      filaMsg.textContent='Conclua este lead ou use Sem post antes de avançar; assim a fila não perde pendências.';
+      return;
+    }
     const next=nextPending(campaignRows,activeRow);
     if(next)selectCsvRow(next,false);
     else filaMsg.textContent='Fim da fila ou todos os próximos perfis já foram processados.';
@@ -304,13 +328,14 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
       const nome=activeRow.lead;
       const next=skipWithoutPost(campaignRows,activeRow);
       if(next)selectCsvRow(next,false);
-      else{activeRow=null;renderCsv();}
+      else{activeRow=null;requestVersion++;renderCsv();}
       filaMsg.textContent=nome+' marcado Sem post. '+(next?'Próximo lead selecionado.':'Fim da fila.');
       refreshQueue();
     }catch(e){filaMsg.textContent=e.message;}
   },true);
   const btnLocated=action(doc,'Encontrei um post',()=>{
     if(campaignPaused||!activeRow)return;
+    if(TERMINAIS.includes(activeRow.estado)){filaMsg.textContent='Lead encerrado. Revise o resultado antes de editar.';return;}
     const u=linkedinUrl(postUrl.value,'post');
     if(!u){filaMsg.textContent='Informe o endereço válido da publicação primeiro.';return;}
     activeRow.postUrl=u;activeRow.post=post.value;
@@ -320,6 +345,7 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
   },true);
   const btnLike=action(doc,'Confirmei curtida',()=>{
     if(campaignPaused||!activeRow)return;
+    if(TERMINAIS.includes(activeRow.estado)){filaMsg.textContent='Lead encerrado.';return;}
     activeRow.postUrl=linkedinUrl(postUrl.value,'post');
     try{
       setLikeConfirmed(activeRow);
@@ -334,19 +360,20 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
     refreshQueue();
   },true);
   function refreshQueue(){
-    const c=campaignSummary(campaignRows);
-    filaResumo.textContent='Total: '+c.total+' | Pendentes: '+c.pendentes+' | Sem post: '+c.semPost+
+    const c=campaignSummary(campaignRows),w=reviewWindow(campaignRows);
+    filaResumo.textContent='Meta interna de revisão: '+w.used+'/'+w.limit+' perfis nas últimas 24h (somente desta lista e desta sessão) · Total: '+c.total+' | Pendentes: '+c.pendentes+' | Sem post: '+c.semPost+
       ' | Curtidas confirmadas: '+c.curtidas+' | Comentários confirmados: '+c.confirmados+
       (activeRow?' | Atual: '+activeRow.lead:'');
-    for(const b of [btnNext,btnSkip,btnLocated,btnLike])b.disabled=campaignPaused||!campaignRows.length;
+    for(const b of [btnNext,btnSkip,btnLocated,btnLike,btnReviewed])b.disabled=campaignPaused||!campaignRows.length;
     btnSkip.disabled ||= !activeRow;
     btnLocated.disabled ||= !activeRow;
     btnLike.disabled ||= !activeRow;
+    btnReviewed.disabled ||= !activeRow;
   }
   const filaBotoes=elem(doc,'div','','iad-linkedin-buttons');
-  filaBotoes.append(btnNext,btnLocated,btnLike,btnSkip,btnPause);
+  filaBotoes.append(btnReviewed,btnLocated,btnLike,btnSkip,btnNext,btnPause);
   fila.append(elem(doc,'h2','3. Executar fila de perfis'),filaResumo,filaBotoes,filaMsg,
-    elem(doc,'p','Ações externas são manuais nesta versão. Não existe intervalo que garanta evitar bloqueio. Diante de limite, CAPTCHA ou restrição do LinkedIn, pause a campanha. A automação futura exige acesso oficial autorizado e bloqueios de quota.','small muted'));
+    elem(doc,'p','A revisão tem intervalo interno de 60 segundos e meta de até 20 perfis por 24 horas, calculados somente nesta lista aberta (não persistem após recarregar). Não são limites do LinkedIn. Ações externas são manuais nesta versão. Não existe intervalo que garanta evitar bloqueio. Diante de limite, CAPTCHA ou restrição do LinkedIn, pause a campanha. A automação futura exige acesso oficial autorizado e bloqueios de quota.','small muted'));
   refreshQueue();
   root.replaceChildren(elem(doc,'h2','LinkedIN Leads — Campanha 01'),notices,acesso,arquivoBox,fila,form,resultado);
 }
