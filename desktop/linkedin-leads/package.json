@@ -15,7 +15,7 @@
   },
   "build": {
     "appId": "br.com.iadcrm.linkedin",
-    "productName": "IaD CRM LinkedIN Leads",
+    "productName": "LinkedIN Leads - IaD CRM",
     "files": [
       "main.cjs",
       "security.cjs",
