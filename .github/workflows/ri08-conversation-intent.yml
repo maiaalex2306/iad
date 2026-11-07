@@ -51,24 +51,14 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Replay import preview in real browser
         run: timeout 150s node scripts/ri08-linkedhelper-browser.cjs
-  staging-transport:
+  staging-readiness:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
-      - name: Test staging assistant HTTP/auth gate without credentials
-        shell: bash
-        run: |
-          status=$(curl -sS --retry 2 --max-time 25 \
-            -X POST 'https://bvlfzeblpewlqhssprpv.supabase.co/functions/v1/assistente' \
-            -H 'content-type: application/json' \
-            -d '{"tipo":"diagnostico"}' -o /tmp/ri08-staging-response.json \
-            -w '%{http_code}')
-          echo "RI08_STAGING_HTTP_STATUS=$status"
-          if [ "$status" = "401" ]; then
-            echo "RI08_STAGING_AUTH_GATE=ENFORCED"
-          elif [ "$status" = "503" ]; then
-            echo "::notice::RI08_STAGING_AI_KEYS_MISSING_OR_UNAVAILABLE; authenticated LLM E2E remains blocked"
-          else
-            echo "::error::Unexpected staging status $status: expected unauthenticated 401 or unconfigured 503"
-            exit 1
-          fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Regression tests for release gate (no secrets)
+        run: node --test scripts/ri08-staging-readiness.test.cjs
+      - name: Fail closed when staging AI is unavailable
+        run: node scripts/ri08-staging-readiness.cjs
