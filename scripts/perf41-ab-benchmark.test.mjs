@@ -6,9 +6,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import {execFileSync} from 'node:child_process';
-import {pathToFileURL} from 'node:url';
+import {pathToFileURL,fileURLToPath} from 'node:url';
 import {performance} from 'node:perf_hooks';
-const root=path.resolve(__dirname,'..');
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const baseline='eaf46b932a5a6224651cff57597d3079de51e99f';
 const before=execFileSync('git',['show',baseline+':src/ri/internal-cues.mjs'],
   {cwd:root,encoding:'utf8',maxBuffer:8*1024*1024});
