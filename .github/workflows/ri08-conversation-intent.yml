@@ -1,0 +1,34 @@
+name: RI-08 linkedhelper commercial intent
+on:
+  pull_request:
+    paths:
+      - 'src/ri/conversation-intent.mjs'
+      - 'src/ri/internal-cues.mjs'
+      - 'src/ri/account-view.mjs'
+      - 'src/ri/opportunity-radar.mjs'
+      - 'src/ia.js'
+      - 'src/app.js'
+      - 'src/views.js'
+      - 'nuvem/funcoes/assistente/index.ts'
+      - 'tests/ri08-conversation-intent.test.mjs'
+      - '.github/workflows/ri08-conversation-intent.yml'
+  workflow_dispatch:
+jobs:
+  intents-and-scope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate javascript syntax
+        run: |
+          node --check src/ia.js
+          node --check src/app.js
+          node --check src/views.js
+          node --check src/ri/conversation-intent.mjs
+          node --check src/ri/internal-cues.mjs
+          node --check src/ri/account-view.mjs
+      - name: Run focused regression tests
+        run: node --test tests/ri08-conversation-intent.test.mjs
