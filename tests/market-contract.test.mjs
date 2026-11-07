@@ -681,3 +681,15 @@ test('RI-M16 DOM: perfil de outra empresa bloqueia busca sem reservar cota ou ch
   cleanup();
  }finally{globalThis.fetch=oldFetch;}
 });
+
+test('RI-M23: páginas consultadas não qualificam, não são fonte de importação e não alteram a carteira',()=>{
+ const rows=normalizeMarketCompanies([{cnpj:'11222333000181',
+  nome:'Candidata automotiva',cidade:'Taubate',uf:'SP',segmento:'Automotivo e Mobilidade - sistemista',
+  fontes:[],fontesConsultadas:[{url:'https://example.org/setor',titulo:'Página visitada'}]}]);
+ assert.equal(rows.length,1);
+ assert.equal(rows[0].fonteStatus,'consultada_sem_citacao');
+ assert.equal(rows[0].fontes.length,0);
+ assert.equal(rows[0].fontesConsultadas.length,1);
+ assert.throws(()=>buildMarketImportRequest(rows[0],{contas:[],oportunidades:[]},
+  {tenantId:'t',userId:'u'},'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),/Fonte HTTPS obrigatoria/);
+});
