@@ -275,3 +275,28 @@ test('cache do classificador tem limite de memória e somente escopo da análise
  assert(a.groups.pistas.length>0);
  assert.equal(b.groups.pistas.length,0);
 });
+
+
+test('RI-08: IA não inventa problema operacional a partir de cortesia ou interesse genérico',()=>{
+ for(const fala of ['Obrigado pelo contato','Quero conhecer as soluções',
+   'Bom dia, tudo bem?','Sem falhas no processo','Sem problemas nesta unidade']){
+  const result=validateAiIntents([{type:'problema',evidence:fala}],[fala]);
+  assert.deepEqual(result,[],fala+' não é um relato de problema');
+ }
+});
+
+test('RI-08: problemas concretos continuam detectáveis e outros sinais não regridem',()=>{
+ for(const fala of ['Temos problemas frequentes na bomba',
+   'Nossa máquina apresentou falhas recorrentes',
+   'Temos retrabalho e dificuldades no processo']){
+  const result=validateAiIntents([{type:'problema',evidence:fala}],[fala]);
+  assert.equal(result.length,1,fala);
+  assert.equal(result[0].type,'problema');
+ }
+ const interesse=validateAiIntents([{type:'interesse_solucoes',evidence:'Quero conhecer as soluções'}],
+   ['Quero conhecer as soluções']);
+ assert.equal(interesse.length,1);
+ const proposta=validateAiIntents([{type:'pedido_proposta',evidence:'Preciso de uma proposta comercial'}],
+   ['Preciso de uma proposta comercial']);
+ assert.equal(proposta.length,1);
+});
