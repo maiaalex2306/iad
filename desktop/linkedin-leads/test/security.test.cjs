@@ -3,7 +3,7 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
-const {allowedLinkedIn,allowedCrm,profilePartition,splitBounds,CRM_ORIGIN}=require('../security.cjs');
+const {allowedLinkedIn,allowedCrm,isFeatureRoute,profilePartition,splitBounds,CRM_ORIGIN,LINKEDIN_LEADS_ROUTE}=require('../security.cjs');
 test('HTTPS LinkedIn real é permitido e host malicioso é barrado',()=>{
   assert.equal(allowedLinkedIn('https://www.linkedin.com/login'),true);
   assert.equal(allowedLinkedIn('https://www.linkedin.com/feed/'),true);
@@ -45,4 +45,18 @@ test('Shell desktop mantém isolamento remoto sem injeção/scraping',()=>{
   assert.match(source,/will-navigate/);
   assert.doesNotMatch(source,/executeJavaScript|insertCSS|setUserAgent|webSecurity:false|--disable-web-security|li_at/);
   assert.ok(!/https:\/\/www.linkedin.com\/login.*password/i.test(source));
+});
+
+test('Shell nativo somente LinkedIN Leads, CRM geral permanece web',()=>{
+  assert.equal(isFeatureRoute(LINKEDIN_LEADS_ROUTE),true);
+  assert.equal(isFeatureRoute(CRM_ORIGIN+'/#/hoje'),false);
+  assert.equal(isFeatureRoute(CRM_ORIGIN+'/#/pipeline'),false);
+  assert.equal(isFeatureRoute('https://evil.com/#/linkedin-leads'),false);
+  const source=fs.readFileSync(path.join(__dirname,'../main.cjs'),'utf8');
+  assert.match(source,/did-navigate-in-page/);
+  assert.match(source,/isFeatureRoute\(url\)/);
+  assert.match(source,/loadURL\(LINKEDIN_LEADS_ROUTE\)/);
+  assert.match(source,/title:'LinkedIN Leads — IaD CRM'/);
+  assert.doesNotMatch(source,/title:'IaD CRM Desktop/);
+  assert.doesNotMatch(source,/CRM_ORIGIN\+'\/#\/hoje'/);
 });
