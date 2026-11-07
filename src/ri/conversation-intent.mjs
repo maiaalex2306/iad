@@ -5,7 +5,10 @@
 const fold = value => String(value || '').normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 const short = (value, limit=600) => typeof value === 'string' ? value.trim().slice(0,limit) : '';
-const negation = /\b(?:nao solicitou|nao pediu|nao (?:tenho|temos|queremos|quero|precisamos|pretendemos|ha|existe|existe nenhuma|estamos buscando)|sem (?:interesse|demanda|necessidade|projeto)|projeto (?:cancelado|suspenso)|nao e (?:para mim|nosso foco)|retire (?:me|meu contato)|pare de (?:enviar|mandar))\b/;
+/* Segurança comercial: em uma cláusula de recusa não qualificar palavras
+   isoladas como "proposta", "conversar", "ETE" ou "expansão".
+   Frases com contraste ("mas"/"porém") são avaliadas separadamente. */
+const negation = /\b(?:nao solicitou|nao pediu|nao (?:tenho|temos|queremos|quero|precisamos|preciso|pretendemos|pretendo|podemos|pode|conseguimos|vamos|planejamos|planejo|ha|existe|existe nenhuma|estamos buscando)|sem (?:interesse|demanda|necessidade|projeto|previsao)|projeto (?:cancelado|suspenso)|nao e (?:para mim|nosso foco)|retire (?:me|meu contato)|pare de (?:enviar|mandar)|(?:foi|esta|estao|foram)\s+(?:cancelad[oa]s?|suspens[oa]s?|descartad[oa]s?))\b/;
 const courtesy = /^(?:bom dia|boa tarde|boa noite|obrigad[oa](?: pelo contato)?|agradec(?:o|emos)(?: o contato)?|ok|tudo bem|legal|perfeito|valeu)[.! ]*$/;
 const rules = [
  {id:'pedido_proposta',priority:100,label:'Pedido de proposta ou orçamento',re:/\b(?:envie|enviar|mande|mandar|preciso|precisamos|gostaria|quero|solicito|solicitamos|podem enviar|pode enviar|poderia enviar|cotem|cotar)\b.{0,75}\b(?:proposta|orcamento|cotacao|precos?)\b|\b(?:proposta|orcamento|cotacao)\b.{0,35}\b(?:enviar|solicitar|preciso|queremos|pedir)\b|\b(?:solicitou|solicitaram|pediu|pediram|requisitou)\b.{0,75}\b(?:proposta|orcamento|cotacao)\b/,action:'Confirmar escopo, requisitos e prazo antes de elaborar a proposta.'},
@@ -31,7 +34,7 @@ export const INTENT_KINDS=Object.freeze(rules.map(r=>r.id));
 const topics=normal=>topicRules.filter(([,rx])=>rx.test(normal)).map(([id])=>id);
 function fragments(text){
  return short(text,1600)
-  .split(/(?:\r?\n|(?<=[.!?;])\s+|,\s+(?=mas\b)|\s+(?=mas\b))/i)
+  .split(/(?:\r?\n|(?<=[.!?;])\s+|[,;]?\s+(?=(?:mas|por[eé]m|contudo|entretanto|no entanto)\b))/i)
   .map(s=>s.trim()).filter(Boolean).slice(0,18);
 }
 export function detectCommercialIntents(text,{sellerContext='',max=6}={}){

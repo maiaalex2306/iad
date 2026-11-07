@@ -201,3 +201,51 @@ test('importação faz triagem local antes de depender da IA de segmentos',()=>{
  assert.match(views,/l\.sinaisLocais/);
  assert.match(views,/Sinais comerciais encontrados/);
 });
+
+test('negações explícitas de proposta e reunião nunca viram pedidos do prospect',()=>{
+ const cases=[
+  'Não podemos conversar agora.',
+  'Não preciso de proposta comercial.',
+  'Não vamos enviar proposta neste momento.',
+  'Não pretendo modernizar a ETE.',
+  'O projeto de ETE foi suspenso.',
+  'A expansão da fábrica foi cancelada.',
+  'Não queremos reduzir consumo de água nesta unidade.'
+ ];
+ for(const input of cases){
+  const result=detectCommercialIntents(input);
+  assert.deepEqual(result,[],input+' -> '+JSON.stringify(result));
+ }
+});
+test('contraste adversativo preserva necessidade real sem ressuscitar a recusa',()=>{
+ const cases=[
+  ['Não podemos conversar, porém queremos conhecer as soluções.','interesse_solucoes'],
+  ['Não preciso de proposta, mas queremos reduzir o consumo de água.','consumo_agua'],
+  ['Não pretendemos ampliar a ETE; entretanto queremos controlar o consumo de água.','consumo_agua'],
+  ['O projeto foi suspenso, mas podemos conversar sobre outro sistema.','reuniao']
+ ];
+ for(const [input,k] of cases){
+  const got=detectCommercialIntents(input);
+  assert(got.some(s=>s.type===k),input+' -> '+JSON.stringify(got));
+  assert(!got.some(s=>s.type==='pedido_proposta'&&k!=='pedido_proposta'),
+    'proposta recusada requalificada: '+input);
+ }
+});
+test('trecho de recusa não pode justificar intenção positiva atribuída à IA',()=>{
+ for(const [type,evidence,original] of [
+  ['reuniao','podemos conversar','Não podemos conversar agora.'],
+  ['pedido_proposta','preciso de proposta','Não preciso de proposta comercial.'],
+  ['modernizacao_ete','modernizar a ETE','Não pretendo modernizar a ETE.']
+ ]){
+  assert.deepEqual(validateAiIntents([{type,evidence}],[original]),[],original);
+ }
+});
+test('decisão resumida do LinkedIn não é rotulada como mensagem literal do prospect',()=>{
+ const snap=fixture();
+ snap.oportunidades[0].eventos=[{id:'resumo-manual',tipo:'decision',canal:'LinkedIn',
+  data:'2026-11-05',titulo:'Cliente pediu proposta de monitoramento'}];
+ const items=buildCommercialOpportunityRadar({snapshot:snap,scope,asOf:'2026-11-06'}).groups.pistas;
+ assert.equal(items.length,1);
+ assert.equal(items[0].sourceType,'evento');
+ assert.equal(items[0].sourceLabel,'Evento comercial cadastrado no CRM');
+});

@@ -73,8 +73,11 @@ export function discoverInternalCommercialCues({snapshot,scope,accounts,asOf,lim
    }
    if(!['decision','activity','contato','interacao'].includes(event.tipo))continue;
    const text=event.titulo||event.descricao||'';
+   // Um evento "decision" pode conter síntese escrita pelo vendedor.
+   // Apenas uma transcrição atribuída ao prospect pode receber a legenda
+   // "Mensagem do prospect no LinkedIn".
    for(const signal of detectCommercialIntents(text))
-    add(account,op,signal,event.tipo==='decision'&&event.canal==='LinkedIn'?'linkedin':'evento',event,date);
+    add(account,op,signal,'evento',event,date);
   }
  }
  const items=[];
