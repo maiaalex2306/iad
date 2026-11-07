@@ -37,7 +37,9 @@ test('CSS-only patch preserves responsive breakpoints and semantic controls',()=
 test('version parity invalidates old offline CSS and retains lazy asset in SW',()=>{
  const version=config.match(/window\.IADVersao\s*=\s*\{[^}]*numero\s*:\s*'([^']+)'/s)?.[1];
  const cache=sw.match(/const CACHE = 'iad-crm-([^']+)'/)?.[1];
- assert.equal(version,'v286.84');
+ assert.ok(/^v\d+\.\d+$/.test(version),'Versão semântica obrigatória');
+ const [major,minor]=version.slice(1).split('.').map(Number);
+ assert.ok(major>286||(major===286&&minor>=84),'O PWA não pode retroceder à versão anterior');
  assert.equal(cache,version);
  assert.ok(sw.includes("'./assets/ri-commercial.css'"),'CSS must be precached offline');
 });
