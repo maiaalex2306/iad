@@ -83,11 +83,13 @@ function cnpjReal(s){
 }
 // Investigação individual explícita: somente CNPJ com DV válido, nome limitado.
 // Não usar o alvo para conceder privilégios; a RPC de quota continua obrigatória.
-function targetedCompany(raw){
+function targetedCompany(raw,allowNameOnly=false){
  if(!raw||typeof raw!=='object'||Array.isArray(raw)||
   Object.keys(raw).some(k=>!['cnpj','nome'].includes(k)))throw Error('Alvo de investigação inválido');
- const cnpj=cnpjReal(raw.cnpj),nome=str(raw.nome,160);
- if(!cnpj||nome.length<3||/[\r\n\u0000-\u001f<>]/.test(nome))throw Error('CNPJ ou nome inválido para investigação');
+ const supplied=str(raw.cnpj,40),cnpj=cnpjReal(supplied),nome=str(raw.nome,160);
+ if((supplied&&!cnpj)||(!cnpj&&!allowNameOnly)||
+    nome.length<(cnpj?3:5)||/[\r\n\u0000-\u001f<>]/.test(nome))
+  throw Error('CNPJ ou nome inválido para investigação');
  return {cnpj,nome};
 }
 function parseAI(s) {
@@ -296,6 +298,16 @@ function prompt(f,target=null,mode='investigate') {
   ', contexto territorial '+JSON.stringify(f)+
   '. Busque SOMENTE acontecimentos sobre esta entidade jurídica: expansões, investimentos, contratações executivas, licenças, projetos e mudanças operacionais. Prefira notícias corporativas e documentos públicos, com data de publicação. Responda ESTRITAMENTE JSON {"sinais":[{"cnpj":"...","tipo":"expansao|investimento|contratacao|licenciamento|projeto|mudanca_operacional|outro","titulo":"...","resumo":"...","dataPublicacao":"YYYY-MM-DD ou null","url":"https://..."}]}. Máximo 8. Cada URL deve ser citada pela sua ferramenta web_search. Sem CNPJ exato, evento, data ou fonte confiável, omita o item. Não deduza interesse em comprar ou orçamento de vendas; retorno vazio é aceitável.';
 
+ if(target&&!target.cnpj)return 'BUSCA DE IDENTIDADE EMPRESARIAL POR NOME E TERRITÓRIO. Nome informado e ainda não validado: '+
+   JSON.stringify(target.nome)+'. Recorte exato: '+JSON.stringify(f)+
+   '. Investigue em fontes oficiais, sites próprios e publicações empresariais a identidade jurídica desse nome no município. '+
+   'Nomes fantasia e razões sociais podem diferir; não substitua por empresa parecida, matriz ou filial sem evidência individual. '+
+   'Se encontrar CNPJ exato associado à empresa, informe e cite a fonte pública; se ausente use null. '+
+   'Retorne até 3 opções se cada uma tiver página web citada nominalmente. Não invente empregados, contatos, telefone, faturamento ou notícias. '+
+   'Responda SOMENTE JSON {"empresas":[{"cnpj":null,"razaoSocial":"...","nome":"...","cidade":"...",'+
+   '"uf":"...","segmento":"...","funcionarios":null,"faturamento":null,'+
+   '"fontes":[{"url":"https://...","titulo":"..."}],"contatos":[],"noticias":[],"insights":[]}]}. '+
+   'Toda URL precisa estar citada pela ferramenta web_search. Sem identidade compatível retorne {"empresas":[]}.';
  if(target)return 'INVESTIGAÇÃO INDEPENDENTE DE UMA EMPRESA ESPECÍFICA. Pesquise na WEB somente a empresa com CNPJ e nome '+JSON.stringify(target)+', localizada no recorte '+JSON.stringify(f)+'. Use fontes primárias e páginas corporativas quando disponíveis. Responda somente JSON com chave empresas, com NO MÁXIMO UMA empresa, contendo cnpj, razaoSocial, nome, cidade, uf, ddd, segmento, porte, site, telefone, funcionarios, faturamento, fontes:[{url,titulo}], contatos:[{nome,cargo,email,telefone,fonte}], noticias:[{titulo,url,data}], insights:[]. Se não conseguir obter o MESMO CNPJ com fonte web citada, devolva {"empresas":[]}. Nunca substitua por CNPJ parecido ou outra filial. Contatos, cargos, números e notícias somente com URL citada; desconhecidos devem ser null ou lista vazia. Evite inventar conclusões e intenção de compra.';
  const targetCount=Math.min(f.limit,20);
  return 'MAPEAMENTO B2B COM PESQUISA WEB REAL NO BRASIL. Filtros solicitados: '+JSON.stringify(f)+
@@ -371,6 +383,21 @@ async function queryAI(engine,key,f,target=null,mode='investigate') {
 // Filter only explicit geographic contradictions; missing fields remain unverified.
 function normalizedPlace(value) {
  return str(value,120).normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase().replace(/\s+/g,' ');
+}
+// Bloqueia empresas alheias ao nome pesquisado, inclusive resultados do mesmo setor.
+// Nomes com sufixos societários podem diferir; resultado é apenas hipótese.
+function sameCompanyName(entry,requested){
+ const norm=v=>normalizedPlace(v).replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+ // Descritores de unidade (ex.: "General Motors — Complexo Industrial") não
+ // integram necessariamente a razão social; comparar também o núcleo anterior
+ // ao travessão, sempre exigindo vínculo por nome e fonte citada.
+ const name=norm(String(requested||'').split(/[–—|]/)[0]);
+ const names=[norm(entry?.nome),norm(entry?.razaoSocial)].filter(Boolean);
+ if(name.length<5)return false;
+ const meaningful=name.split(' ').filter(x=>x.length>=4&&
+   !['brasil','industria','comercio','servicos','grupo','empresa','sociedade','limitada'].includes(x));
+ return names.some(n=>n===name||n.includes(name)||name.includes(n)||
+   (meaningful.length>=2&&meaningful.every(word=>n.split(' ').includes(word))));
 }
 function inRequestedPlace(entry,f) {
  if(f.uf && entry.uf && normalizedPlace(entry.uf)!==normalizedPlace(f.uf))return false;
@@ -680,14 +707,14 @@ Deno.serve(async req=>{
   if(!['search','investigate','signals','enrich'].includes(action))return output({error:'SEARCH_ONLY'},400,origin);
   let target=null;
   if(action==='investigate'||action==='signals'||action==='enrich'){
-   try{target=targetedCompany(body.target)}
+   try{target=targetedCompany(body.target,action==='investigate')}
    catch{return output({error:'INVALID_INVESTIGATION_TARGET'},422,origin)}
   }
   let f;try{f=filters(body.filters)}catch(e){return output({error:'INVALID_FILTERS',message:e.message},422,origin)}
   if(target){
    if(!f.uf||!f.cidade||!f.segmento||f.municipios.length||f.ddds.length||f.segmentos.length)
     return output({error:'INVESTIGATION_REQUIRES_EXACT_TERRITORY'},422,origin);
-   f={...f,limit:1};
+   f={...f,limit:target.cnpj?1:3};
   }
   // Explicit provider selection helps diagnose a failed provider without
   // charging for both. Invalid values are rejected before quota reservation.
@@ -795,7 +822,8 @@ Deno.serve(async req=>{
   // elas contaminem uma investigação com CNPJ exato, nem herdar suas fontes.
   const focusedResults=target?results.map(r=>({...r,parsed:{empresas:
    (Array.isArray(r.parsed?.empresas)?r.parsed.empresas:[])
-    .filter(entry=>cnpjReal(entry?.cnpj)===target.cnpj).slice(0,1)}})):results;
+    .filter(entry=>target.cnpj?cnpjReal(entry?.cnpj)===target.cnpj:
+      sameCompanyName(entry,target.nome)).slice(0,target.cnpj?1:3)}})):results;
   const companies=combineAI(focusedResults,f.limit,f,diagnostics);
   console.info('[market-search] filtering_summary',JSON.stringify({completedProviders:results.length,...diagnostics}));
   const stored=await auditFinish(url,service,auditId,auditActor,results,failedProviders,companies.length);
@@ -804,10 +832,14 @@ Deno.serve(async req=>{
    source:'Pesquisa web '+results.map(x=>x.engine==='OpenAI'?'ChatGPT':'Claude').join(' + '),
    providers:results.map(x=>x.engine),failedProviders,failures,partial,
    usage:results.map(x=>x.usage),retrievedAt:new Date().toISOString(),
-   ...(target?{targetMatch:companies.length?'CNPJ_RELATADO_PELO_PROVEDOR':'CNPJ_NAO_CORROBORADO'}:{}),
+   ...(target?{targetMatch:target.cnpj?
+    (companies.length?'CNPJ_RELATADO_PELO_PROVEDOR':'CNPJ_NAO_CORROBORADO'):
+    (companies.length?'IDENTIDADE_SUGERIDA_NAO_VERIFICADA':'IDENTIDADE_NAO_LOCALIZADA')}:{}),
    total:null,hasMore:target?false:null,coverage:'exploratoria',coverageStatus:'unknown',
    territoryVerified:false,warning:(partial?'Uma ou mais IAs nao concluiram a pesquisa; cobertura parcial. ':'')+
-   (target?'Investigação adicional com pesquisa web independente. O CNPJ foi relatado pela IA, mas vínculo empresarial e fontes exigem revisão humana. ':
+   (target?(target.cnpj?
+    'Investigação adicional com pesquisa web independente. O CNPJ foi relatado pela IA, mas vínculo empresarial e fontes exigem revisão humana. ':
+    'Busca por nome e território: identidade e CNPJ eventualmente relatado exigem validação em fonte independente. Nenhuma empresa foi confirmada. '):
     'Pesquisa exploratoria; nao equivale ao universo integral de CNPJs. ')+
    'Nenhum registro foi importado.'},200,origin);
  }catch{return output({error:'SEARCH_UNAVAILABLE'},502,origin)}

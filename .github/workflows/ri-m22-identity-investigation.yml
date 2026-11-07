@@ -1,0 +1,61 @@
+name: RI-M22 — Identidade empresarial e CNPJ pendente
+on:
+  pull_request:
+    paths:
+      - 'src/ri/market-investigation.mjs'
+      - 'src/ri/market-view.mjs'
+      - 'nuvem/funcoes/market-search/index.ts'
+      - 'tests/market-edge.test.mjs'
+      - 'tests/market-investigation-identity.test.mjs'
+      - 'scripts/ri-m22-canary-smoke.cjs'
+      - 'src/config.js'
+      - 'sw.js'
+      - '.github/workflows/ri-m22-identity-investigation.yml'
+  push:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - 'src/ri/market-investigation.mjs'
+      - 'nuvem/funcoes/market-search/index.ts'
+      - 'tests/market-investigation-identity.test.mjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  identity-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Validate JS syntax
+        run: |
+          node --check src/ri/market-investigation.mjs
+          node --check tests/market-investigation-identity.test.mjs
+      - name: Replay identity, CNPJ, web-source, quota, user isolation and catalog
+        run: |
+          node --test tests/market-edge.test.mjs tests/market-investigation-identity.test.mjs tests/market-contract.test.mjs tests/market-prospect-agents.test.mjs
+  staging-canary-auth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Test canary and current production Auth/CORS without credentials
+        run: node scripts/ri-m22-canary-smoke.cjs
+  browser-multitheme:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Install Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Regression of market progress and PWA cache
+        run: |
+          node scripts/ri-m21-progress-browser.cjs
+          node --test scripts/ri-palette-contract.test.cjs tests/market-progress.test.mjs
