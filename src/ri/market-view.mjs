@@ -203,12 +203,18 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
   const option=doc.createElement('option');option.value=value;option.textContent=label;aiSelect.appendChild(option);
  }
  aiHolder.appendChild(aiSelect);aiSelect.value='both';
+ const limitHolder=el('label','Candidatas por pesquisa (teto, não cobertura)','campo iad-market-engine');
+ const batchLimit=doc.createElement('select');
+ for(const [size,label] of [[20,'Até 20 — pesquisa rápida'],[50,'Até 50 — exploração ampliada']]){
+  const opt=doc.createElement('option');opt.value=String(size);opt.textContent=label;batchLimit.appendChild(opt);
+ }
+ batchLimit.value='20';limitHolder.appendChild(batchLimit);
  const preflightBtn=el('button','Verificar acesso às IAs','btn iad-market-btn-check');
  preflightBtn.type='button';
  const btn=el('button','Buscar empresas','btn iad-market-btn-search');btn.type='submit';
  const results=el('div','','iad-market-results'),review=el('div','','iad-market-review');
  const actions=el('div','','iad-market-actions'),actionButtons=el('div','','iad-market-action-buttons');
-  actionButtons.append(demoBtn,preflightBtn,btn);actions.append(aiHolder,actionButtons);
+  actionButtons.append(demoBtn,preflightBtn,btn);actions.append(aiHolder,limitHolder,actionButtons);
   form.append(grid,actions);
  root.replaceChildren(el('h2','Pesquisar empresas fora do CRM'),el('p','Pesquisa iniciada manualmente. Fontes, custos e cobertura dependem do provedor contratado. Os dados nao sao fatos confirmados ate verificacao.','small muted'),form,status,results,review);
  const progress=mountMarketSearchProgress({doc,host:root});
@@ -406,6 +412,8 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
     card.appendChild(el('p',evaluation.reasons.join(' · '),'small muted'));
     card.appendChild(el('p','Próximo passo recomendado: '+evaluation.nextAction,'small'));
    }
+   if(company.fonteStatus==='pendente_sem_fonte'||!company.fontes?.length)
+    card.appendChild(el('p','NOME SUGERIDO PELA IA, SEM FONTE CITADA. Ainda não é empresa verificada. Pesquise a identidade e descarte se não houver evidência pública.','small muted'));
    card.appendChild(el('p',(company.cnpj?'CNPJ '+company.cnpj:'CNPJ pendente — validar identidade')+' · '+(company.segmento||'Setor nao informado')+' · '+(company.porte||'Porte nao informado'),'small muted'));
    card.appendChild(el('p','Situacao CRM: '+statusMatch+(plan.existingOpportunityId?' · Ja existe oportunidade em Prospecção':''),'small'));
    cancelInvestigations.add(mountMarketInvestigation({card,company,doc,nuvem,valid,
@@ -440,7 +448,16 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
      const link=doc.createElement('a');link.href=f.url;link.target='_blank';link.rel='noopener noreferrer';
      link.textContent=(f.titulo||f.url);card.appendChild(link);card.appendChild(el('p',''));
     }
-   }else card.appendChild(el('p','Sem URL HTTPS pública para revisão: não utilizar como fato.','small muted'));
+   }else card.appendChild(el('p','Sem URL efetivamente citada para esta empresa: hipótese NÃO validada.','small muted'));
+   if(Array.isArray(company.fontesConsultadas)&&company.fontesConsultadas.length){
+    card.appendChild(el('h5','Páginas consultadas pela busca — vínculo com a empresa NÃO comprovado'));
+    for(const f of company.fontesConsultadas.slice(0,6)){
+     if(!isReviewableSourceURL(f?.url))continue;
+     const link=doc.createElement('a');link.href=f.url;link.target='_blank';
+     link.rel='noopener noreferrer';link.textContent=f.titulo||f.url;card.appendChild(link);
+     card.appendChild(el('p','Página consultada, não citada como prova individual.','small muted'));
+    }
+   }
    if(company.insights.length){card.appendChild(el('h5','Insights — hipoteses a investigar'));for(const insight of company.insights)card.appendChild(el('p',insight,'small'));}
    if(company.conflitos?.length){
     card.appendChild(el('h5','Divergencias entre IAs — verificar antes de qualificar'));
@@ -531,7 +548,8 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
    municipios:cityPick.get().map(x=>x.value),
    ddds:dddPick.get().map(x=>x.value),
    segmentos:segmentPick.get().map(x=>x.value),
-   faixasFuncionarios:bandPick.get().map(x=>x.value)
+   faixasFuncionarios:bandPick.get().map(x=>x.value),
+   limit:Number(batchLimit.value)
   });}catch(e){show(e.message);return;}
   const session=nuvem.sessao(),config=nuvem.config();
   if(!session?.access_token||!config?.url||!config?.chave){show('Autenticacao de nuvem necessaria para pesquisar empresas.');return;}
@@ -584,12 +602,30 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
       ', quantidade de funcionarios: '+(Number.isSafeInteger(diagnostics.rejectedEmployees)?diagnostics.rejectedEmployees:0)+
       ', CNPJ invalido: '+(Number.isSafeInteger(diagnostics.rejectedInvalidCnpj)?diagnostics.rejectedInvalidCnpj:0)+
       ', nome insuficiente: '+(Number.isSafeInteger(diagnostics.rejectedMissingName)?diagnostics.rejectedMissingName:0)+
-      ', falta de fonte citada pela IA: '+(Number.isSafeInteger(diagnostics.rejectedUncitedSource)?diagnostics.rejectedUncitedSource:0)+
+      ', sem fonte citada — mantidos SOMENTE para investigação: '+(Number.isSafeInteger(diagnostics.pendingUncitedSource)?diagnostics.pendingUncitedSource:0)+
+      ', excluídos por falta de fonte: '+(Number.isSafeInteger(diagnostics.rejectedUncitedSource)?diagnostics.rejectedUncitedSource:0)+
       ', duplicados agrupados: '+(Number.isSafeInteger(diagnostics.mergedDuplicates)?diagnostics.mergedDuplicates:0)+'.'
      :'';
    const sourcedCount=companies.filter(c=>(c.fontes||[]).some(f=>isReviewableSourceURL(f?.url))).length;
-   show(partialWarning+'Pesquisa exploratoria: '+companies.length+' candidatas relatadas; '+sourcedCount+' com URL HTTPS citada pelo provedor; '+companies.filter(c=>!c.cnpj).length+' com CNPJ pendente. Cobertura total desconhecida, fontes ainda nao verificadas. Nenhuma gravacao realizada.'+rejectedText+(usageText?' Consumo informado: '+usageText+'. Custo em R$ a apurar.':''));
+   const withoutSource=companies.length-sourcedCount;
+   show(partialWarning+'Pesquisa exploratoria: '+companies.length+' nomes candidatos; '+sourcedCount+' com URL HTTPS citada pelo provedor; '+withoutSource+' SEM fonte individual (apenas investigação, jamais qualificação/importação); '+companies.filter(c=>!c.cnpj).length+' com CNPJ pendente. Cobertura total desconhecida, fontes ainda nao verificadas. Nenhuma gravacao realizada.'+rejectedText+(usageText?' Consumo informado: '+usageText+'. Custo em R$ a apurar.':''));
    renderCompanies(companies,payload.source||'Fornecedor',payload.retrievedAt||'data nao fornecida');
+   // Planejamento amplo não equivale a consultar cada combinação municipal e
+   // setorial. Expor as 18 famílias sem afirmar cobertura exaustiva.
+   const plan=payload.discoveryPlan;
+   if(plan?.sectorExpansion==='automotivo_mobilidade'&&Array.isArray(plan.families)&&plan.families.length){
+    const details=doc.createElement('details');
+    details.className='iad-market-discovery-plan';
+    const summary=doc.createElement('summary');
+    summary.textContent='Automotivo e Mobilidade — '+plan.families.length+
+     ' famílias de subsegmentos consideradas na descoberta';
+    details.appendChild(summary);
+    details.appendChild(el('p','Escopo solicitado: '+String(plan.municipalityCount||0)+
+     ' municípios; '+String(plan.families.length)+' famílias; teto '+String(plan.requestedLimit||20)+
+     ' nomes por consulta. As famílias são hipóteses de busca; uma única rodada NÃO pesquisa cada combinação.','small muted'));
+    for(const family of plan.families.slice(0,25))details.appendChild(el('p','• '+String(family).slice(0,280),'small'));
+    results.prepend(details);
+   }
    progress.finish({count:companies.length,partial:payload.partial===true});
   }catch(e){if(seq===currentRequest&&valid()&&e?.name!=='AbortError'){
    const message=responseReceived?'A pesquisa respondeu, mas os resultados não puderam ser processados. Nenhuma alteração no CRM.':'Falha de conexão durante a pesquisa. Confira o resultado antes de repetir, pois a solicitação pode ter sido recebida pelo servidor.';

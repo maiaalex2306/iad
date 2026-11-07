@@ -117,9 +117,15 @@ test('se IA nao realizou pesquisa web, descartar dados gerados',async()=>{
  assert.equal(body.error,'AI_SEARCH_UNAVAILABLE');
  assert.deepEqual(Array.from(body.failedProviders),['OpenAI']);
 });
-test('sem fonte citada pela ferramenta web nao retornar empresa inventada',async()=>{
+test('sem fonte citada: apenas nome no Finder, nunca fonte inventada, shortlist ou importação',async()=>{
  const h=harness({openai:true,openaiResponse:responseOpenAI(true,false)}),res=await h.handle(request(query));
- assert.equal(res.status,200);assert.equal((await res.json()).data.length,0);
+ assert.equal(res.status,200);
+ const result=await res.json();
+ assert.equal(result.data.length,1,'Não ocultar hipótese exploratória sem fonte');
+ assert.equal(result.data[0].fonteStatus,'pendente_sem_fonte');
+ assert.equal(result.data[0].fontes.length,0,'Jamais criar referência não citada');
+ assert.equal(result.data[0].contatos.length,0);
+ assert.equal(result.diagnostics.pendingUncitedSource,1);
 });
 test('Claude usa Messages API com web_search e limite de buscas',async()=>{
  const h=harness({claude:true}),res=await h.handle(request(query));
@@ -464,12 +470,18 @@ test('preserva candidata com nome e fonte web mas sem CNPJ',async()=>{
  assert.equal(body.data[0].cnpj,'');
  assert.equal(body.data[0].identidadeStatus,'pendente_cnpj');
 });
-test('sem CNPJ e sem citacao registrada nao gera candidata',async()=>{
+test('sem CNPJ e sem citacao: hipótese exploratória visível mas sem fonte validada',async()=>{
  const response=responseOpenAI(true,false);
  response.output.find(b=>b.type==='message').content[0].text=JSON.stringify({empresas:[{...candidate,cnpj:null}]});
  const h=harness({openai:true,openaiResponse:response}),res=await h.handle(request(query));
  assert.equal(res.status,200);
- assert.equal((await res.json()).data.length,0);
+ const body=await res.json();
+ assert.equal(body.data.length,1);
+ assert.equal(body.data[0].cnpj,'');
+ assert.equal(body.data[0].identidadeStatus,'pendente_cnpj');
+ assert.equal(body.data[0].fonteStatus,'pendente_sem_fonte');
+ assert.equal(body.data[0].fontes.length,0);
+ assert.equal(body.data[0].contatos.length,0);
 });
 
 test('modo ChatGPT consulta apenas OpenAI e preserva quota',async()=>{
@@ -741,15 +753,17 @@ test('RI-M04: preflight tem cooldown e segunda chamada nao solicita provider nem
  assert.equal(h.calls.filter(x=>x.url.includes('iad_market_search_reserve')).length,0);
 });
 
-test('RI-M05: diagnostico de resultado vazio explicita falta de URL citada, sem expor CNPJ nem URL',async()=>{
+test('RI-M05: diagnóstico preserva hipótese sem URL como PENDENTE, sem expor CNPJ ou URL',async()=>{
  const h=harness({openai:true,openaiResponse:responseOpenAI(true,false)});
  const response=await h.handle(request(query));
  assert.equal(response.status,200);
  const body=await response.json();
- assert.equal(body.data.length,0);
+ assert.equal(body.data.length,1);
+ assert.equal(body.data[0].fontes.length,0);
  assert.equal(body.diagnostics.candidates,1);
- assert.equal(body.diagnostics.rejectedUncitedSource,1);
- assert.equal(body.diagnostics.accepted,0);
+ assert.equal(body.diagnostics.pendingUncitedSource,1);
+ assert.equal(body.diagnostics.rejectedUncitedSource,0);
+ assert.equal(body.diagnostics.accepted,1);
  assert.equal(body.diagnostics.rejectedInvalidCnpj,0);
  assert.ok(!JSON.stringify(body.diagnostics).includes(URL_COMPANY));
  assert.ok(!JSON.stringify(body.diagnostics).includes(candidate.cnpj));
@@ -1287,4 +1301,85 @@ test('RI-M22: nome de planta industrial com travessão aceita razão social da m
  const result=await res.json();
  assert.equal(result.data.length,1);
  assert.equal(result.targetMatch,'IDENTIDADE_SUGERIDA_NAO_VERIFICADA');
+});
+
+test('RI-M23: Automotivo e Mobilidade expande para 18 famílias, inclusive fornecedores e serviços, com 5 cidades',async()=>{
+ const cities=[
+  {codigoIBGE:'3549904',nome:'São José dos Campos',uf:'SP'},
+  {codigoIBGE:'3554102',nome:'Taubaté',uf:'SP'},
+  {codigoIBGE:'3508504',nome:'Caçapava',uf:'SP'},
+  {codigoIBGE:'3524402',nome:'Jacarei',uf:'SP'},
+  {codigoIBGE:'3538006',nome:'Pindamonhangaba',uf:'SP'}
+ ];
+ const f={uf:'SP',municipios:cities,ddds:['12'],segmentos:['Automotivo e Mobilidade'],
+  faixasFuncionarios:['201_500','501_1000','1001_5000','5001_10000','10001_plus'],limit:50};
+ const h=harness({openai:true,claude:true,catalogNames:['Automotivo e Mobilidade']});
+ const res=await h.handle(request({action:'search',filters:f,provider:'both'}));
+ assert.equal(res.status,200);
+ const body=await res.json();
+ assert.equal(body.discoveryPlan.familyCount,18);
+ assert.equal(body.discoveryPlan.municipalityCount,5);
+ assert.equal(body.discoveryPlan.requestedLimit,50);
+ assert.equal(body.discoveryPlan.allFamiliesIndividuallySearched,false);
+ const providers=aiCalls(h);
+ assert.equal(providers.length,2,'O orçamento de cota e provedor não é multiplicado pelas famílias');
+ const openai=providers.find(c=>c.url.includes('openai.com')).body.input;
+ const claude=providers.find(c=>c.url.includes('anthropic.com')).body.messages[0].content;
+ for(const prompt of [openai,claude]){
+  for(const token of ['Automotivo e Mobilidade','São José dos Campos','Taubaté','Caçapava',
+   'Jacarei','Pindamonhangaba','usinagem CNC','autopeças','estamparia','eletrificação',
+   'frotistas','concessionárias','mobilidade compartilhada','Tier 2','serviços de engenharia']){
+   assert.ok(prompt.includes(token),'Falta subsegmento/cidade: '+token);
+  }
+  assert.match(prompt,/18 FAMÍLIAS/);
+  assert.match(prompt,/até 50 empresas/);
+  assert.match(prompt,/Respeite integralmente as faixas/);
+ }
+ assert.notEqual(openai,claude,'Motores com prioridades distintas reduzem repetição de megamarcas');
+ assert.equal(h.calls.filter(c=>c.url.includes('iad_market_search_reserve')).length,1);
+});
+test('RI-M23: investigação por nome sem fonte segue recusando resultado não citado',async()=>{
+ const h=harness({openai:true,openaiResponse:responseOpenAI(true,false)});
+ const res=await h.handle(request({action:'investigate',target:{cnpj:null,nome:'Empresa A'},
+  filters:{uf:'SP',cidade:'Jacarei',segmento:'Quimico'}}));
+ assert.equal(res.status,200);
+ const body=await res.json();
+ assert.equal(body.data.length,0,'CNPJ e identidade individuais exigem fonte realmente citada');
+ assert.equal(body.diagnostics.rejectedUncitedSource,1);
+ assert.equal(body.diagnostics.pendingUncitedSource,0);
+});
+
+test('RI-M23: descrição do subsegmento mantém declaração do setor guarda-chuva, sem validar porte sozinho',async()=>{
+ const entry={...candidate,segmento:'Automotivo e Mobilidade - fornecedor Tier 2 de componentes',funcionarios:null,ddd:''};
+ const response=responseOpenAI();
+ response.output.find(x=>x.type==='message').content[0].text=JSON.stringify({empresas:[entry]});
+ const h=harness({openai:true,openaiResponse:response,catalogNames:['Automotivo e Mobilidade']});
+ const res=await h.handle(request({action:'search',provider:'OpenAI',filters:{
+  uf:'SP',cidade:'Jacarei',segmentos:['Automotivo e Mobilidade'],ddds:['12'],faixasFuncionarios:['201_500'],limit:20
+ }}));
+ assert.equal(res.status,200);
+ const body=await res.json();
+ assert.equal(body.data.length,1);
+ assert.equal(body.data[0].qualificacaoICP.segmento,'declarado');
+ assert.equal(body.data[0].qualificacaoICP.funcionarios,'pendente');
+ assert.equal(body.data[0].qualificacaoICP.statusGeral,'pendente');
+});
+
+test('RI-M23: páginas web consultadas pela OpenAI são capturadas mas não promovidas a citação individual',async()=>{
+ const ai=responseOpenAI(true,false);
+ ai.output.find(b=>b.type==='web_search_call').action={
+  type:'search',sources:[{type:'url',url:URL_COMPANY},{type:'url',url:'https://127.0.0.1/interno'}]};
+ const h=harness({openai:true,openaiResponse:ai});
+ const res=await h.handle(request(query));
+ assert.equal(res.status,200);
+ const body=await res.json();
+ assert.equal(body.data.length,1);
+ assert.equal(body.data[0].fonteStatus,'consultada_sem_citacao');
+ assert.equal(body.data[0].fontes.length,0,'URL consultada não pode autorizar importação');
+ assert.equal(body.data[0].fontesConsultadas.length,1);
+ assert.equal(body.data[0].fontesConsultadas[0].url,URL_COMPANY);
+ assert.equal(body.diagnostics.pendingUncitedSource,1);
+ const calls=aiCalls(h);
+ assert.deepEqual(Array.from(calls[0].body.include),['web_search_call.action.sources']);
+ assert.equal(calls[0].body.store,false);
 });

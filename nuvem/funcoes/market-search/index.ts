@@ -157,8 +157,15 @@ function aiSummary(result,engine) {
  const completion=researchCompletion(engine,result,blocks,finalResponse,completedSearch);
  const textBlocks=engine==='OpenAI'?blocks.filter(b=>b.type==='message').flatMap(b=>b.content||[]):blocks.filter(b=>b.type==='text');
  const texts=textBlocks.map(b=>b.text||'').join('\n');
- const urls=new Set();
+ // URLs realmente CITADAS e URLs apenas CONSULTADAS pela ferramenta não
+ // comprovam a mesma coisa. As consultadas nunca autorizam importação.
+ const urls=new Set(),consultedUrls=new Set();
  for(const b of blocks) {
+  if(engine==='OpenAI'&&b.type==='web_search_call'&&b.status==='completed'){
+   for(const item of (Array.isArray(b.action?.sources)?b.action.sources:[])){
+    const u=signalPublicURL(item?.url);if(u)consultedUrls.add(u);
+   }
+  }
   for(const item of (Array.isArray(b.content)?b.content:[])){
    if(item.url&&canonicalUrl(item.url))urls.add(canonicalUrl(item.url));
    for(const an of (Array.isArray(item.annotations)?item.annotations:[])){const u=canonicalUrl(an.url||(an.url_citation&&an.url_citation.url));if(u)urls.add(u)}
@@ -178,7 +185,7 @@ function aiSummary(result,engine) {
    :safeCount(metering.server_tool_use?.web_search_requests),
   costBRL:null
  };
- return {engine,searched,urls,parsed:parseAI(texts),usage,
+ return {engine,searched,urls,consultedUrls,parsed:parseAI(texts),usage,
   failureCategory:completion.failureCategory,diagnostic:completion.diagnostic};
 }
 // RI-M09: sinais externos são HIPÓTESES auditáveis, não intenção de compra.
@@ -290,7 +297,60 @@ function combineProfessionalContacts(results,target){
  const decisores=[...contacts.values()].sort((a,b)=>a.nome.localeCompare(b.nome,'pt-BR')).slice(0,8);
  return {decisores,diagnostico:{...stats,apresentados:decisores.length}};
 }
-function prompt(f,target=null,mode='investigate') {
+// Taxonomia de DESCOBERTA para termos guarda-chuva. Não altera segmento
+// autorizado no cadastro, CNAE legal, filtros de porte ou qualificação.
+// Cada família exige evidência concreta de atuação/fornecimento no ecossistema.
+const AUTOMOTIVE_DISCOVERY_FAMILIES=Object.freeze([
+ 'montadoras: carros, comerciais leves, SUVs, ônibus, caminhões, motocicletas, micro-ônibus, veículos especiais, implementos rodoviários, carrocerias e reboques',
+ 'sistemistas Tier 1/Tier 2/Tier 3, fabricantes e distribuidores industriais de autopeças, reposição e componentes OEM',
+ 'motores, usinagem de motores, transmissões, engrenagens, eixos, redutores, embreagens e conjuntos de powertrain',
+ 'freios, direção, suspensão, sistemas hidráulicos, pneumática e componentes de segurança veicular',
+ 'chicotes, cabos, conectores, eletrônica embarcada, sensores, ECUs, painéis, infotainment, telemática e rastreamento de frotas',
+ 'baterias, eletrificação, motores elétricos, power electronics, inversores, recarga e infraestrutura de mobilidade elétrica',
+ 'pneus, borracha técnica, vedação, mangueiras, elastômeros, rodas e peças de borracha automotiva',
+ 'injeção plástica, moldagem técnica, polímeros, termoformagem, peças plásticas e acabamentos internos de veículos',
+ 'estamparia, metalurgia, chaparia, corte/dobra, caldeiraria, soldagem, estruturas e componentes metálicos para veículos',
+ 'usinagem CNC, fundição, forjaria, tratamento térmico, ferramentarias, moldes, matrizes, dispositivos e prototipagem automotiva',
+ 'bancos, estofados, espumas, revestimentos, painéis, vidros, espelhos, faróis, iluminação e interiores',
+ 'máquinas, automação industrial, robótica, integradores, metrologia, testes, laboratórios e engenharia de desenvolvimento automotivo',
+ 'frotistas, transportadoras, logística de autopeças, operadores de distribuição e armazéns da cadeia automotiva',
+ 'concessionárias, revendas de veículos, atacadistas e distribuidores de peças, auto centers, manutenção e oficinas de frotas',
+ 'locação de veículos, mobilidade compartilhada, gestão de frotas, aplicativos de transporte, ônibus urbanos e transporte coletivo',
+ 'mobilidade ferroviária, micromobilidade, bicicletas e seus componentes, motocicletas e veículos elétricos leves',
+ 'remanufatura, recuperação de motores, reciclagem e reaproveitamento de componentes automotivos',
+ 'softwares e serviços de engenharia, gestão, IoT, manutenção, simulação, segurança e inspeção COM CLIENTES OU PRODUTOS automotivos'
+]);
+function discoveryTaxonomy(f){
+ const names=[...(f.segmentos||[]),...(f.segmento?[f.segmento]:[])];
+ return names.some(n=>normalizedPlace(n).includes('automotivo')||
+   normalizedPlace(n).includes('mobilidade'))?AUTOMOTIVE_DISCOVERY_FAMILIES:[];
+}
+function discoveryInstructions(f,engine=''){
+ const families=discoveryTaxonomy(f);
+ if(!families.length)return '';
+ const focus=engine==='OpenAI'?families.filter((_,i)=>i%2===0):
+  engine==='Anthropic'?families.filter((_,i)=>i%2===1):[];
+ const priority=focus.length?'FOCO DISTINTO DESTE PROVEDOR (sem excluir demais): '+
+  focus.map((x,i)=>(i+1)+') '+x).join(' ; ')+'. ':'';
+
+ const cities=f.municipios?.length?f.municipios.map(m=>m.nome):(f.cidade?[f.cidade]:[]);
+ return 'O SEGMENTO GUARDA-CHUVA AUTOMOTIVO E MOBILIDADE DEVE ABRANGER TODAS AS 18 FAMÍLIAS DE SUBSEGMENTOS, E NÃO SÓ MONTADORAS. '+
+  'Famílias de descoberta (OR entre elas, desde que exista vínculo concreto com automobilístico ou mobilidade): '+
+  families.map((x,i)=>(i+1)+'. '+x).join(' | ')+'. '+priority+
+  (cities.length?'Territórios municipais a cobrir SEM privilegiar a maior cidade: '+JSON.stringify(cities)+'. ':'')+
+  'Distribua a descoberta entre cidades, subsegmentos, fornecedores menores, distribuidores, serviços e indústria; '+
+  'busque empresas Tier 2 e Tier 3 e não apenas GM, Volkswagen ou multinacionais. '+
+  'Combine variações de pesquisa por município e família, e sinônimos como autopeças, ferramentaria, injeção plástica, '+
+  'usinagem, estampagem, frotas e mobilidade elétrica. '+
+  'CNAE 29 (veículos/peças) e 45 (comércio/reparação) são pistas, NÃO um corte exclusivo: '+
+  'empresas com CNAE principal 22, 25, 26, 27, 28, 30, 33, 49, 52, 62 ou 71 também podem integrar a cadeia, '+
+  'MAS exija evidência de produto/cliente/serviço automotivo ou de mobilidade. '+
+  'Ao identificar relação efetiva com o setor selecionado, escreva o campo segmento como "Automotivo e Mobilidade - [subsegmento específico]", '+
+  'por exemplo "Automotivo e Mobilidade - injeção plástica para sistemistas". NÃO use o rótulo se não houver vínculo. '+
+  'Respeite integralmente as faixas de empregados e o território; empregados não informados ficam pendentes, '+
+  'sem exclusão automática nem falsa confirmação. ';
+}
+function prompt(f,target=null,mode='investigate',engine='') {
  if(mode==='enrich'&&target)return 'INVESTIGAÇÃO WEB DE DECISORES PROFISSIONAIS de uma empresa com CNPJ exato '+JSON.stringify(target)+
   ', contexto territorial '+JSON.stringify(f)+'. Encontre APENAS nomes e cargos profissionais publicamente associados à entidade jurídica exata. Priorize site oficial e páginas corporativas. Retorne JSON estrito {"decisores":[{"cnpj":"...","nome":"...","cargo":"...","fonte":"https://...","linkedin":"https://www.linkedin.com/in/... ou null","emailCorporativo":"e-mail corporativo explicitamente publicado ou null"}]}. Até 8. Fonte e LinkedIn somente se citados pela web_search. Não invente e-mails por padrão de domínio, não utilize e-mail pessoal, telefone celular, WhatsApp, perfis privados nem informações sensíveis. Se vínculo não for sustentado, retorne array vazio. Dados são hipóteses e exigem revisão.';
 
@@ -309,12 +369,16 @@ function prompt(f,target=null,mode='investigate') {
    '"fontes":[{"url":"https://...","titulo":"..."}],"contatos":[],"noticias":[],"insights":[]}]}. '+
    'Toda URL precisa estar citada pela ferramenta web_search. Sem identidade compatível retorne {"empresas":[]}.';
  if(target)return 'INVESTIGAÇÃO INDEPENDENTE DE UMA EMPRESA ESPECÍFICA. Pesquise na WEB somente a empresa com CNPJ e nome '+JSON.stringify(target)+', localizada no recorte '+JSON.stringify(f)+'. Use fontes primárias e páginas corporativas quando disponíveis. Responda somente JSON com chave empresas, com NO MÁXIMO UMA empresa, contendo cnpj, razaoSocial, nome, cidade, uf, ddd, segmento, porte, site, telefone, funcionarios, faturamento, fontes:[{url,titulo}], contatos:[{nome,cargo,email,telefone,fonte}], noticias:[{titulo,url,data}], insights:[]. Se não conseguir obter o MESMO CNPJ com fonte web citada, devolva {"empresas":[]}. Nunca substitua por CNPJ parecido ou outra filial. Contatos, cargos, números e notícias somente com URL citada; desconhecidos devem ser null ou lista vazia. Evite inventar conclusões e intenção de compra.';
- const targetCount=Math.min(f.limit,20);
+ const targetCount=f.limit; // Teto solicitado (até 50); cobertura NÃO exaustiva.
  return 'MAPEAMENTO B2B COM PESQUISA WEB REAL NO BRASIL. Filtros solicitados: '+JSON.stringify(f)+
+  '. '+discoveryInstructions(f,engine)+
   '. Investigue em consultas distintas: (1) empresas com operações no território e segmento; '+
   '(2) fabricantes, fornecedores industriais, filiais e estabelecimentos com atividade identificável; '+
   '(3) CNPJ, porte e empregados em fonte citada. '+
-  'Priorize empresas com evidência individual de aderência ao ICP, não apenas diretórios agregados. '+
+  'Na DESCOBERTA, varra também diretórios empresariais, relações de fornecedores, associações setoriais, listagens locais e sites comerciais; '+
+  'use esses resultados para ampliar NOMES, sem afirmar identidade validada, CNPJ, quadro de empregados ou vínculo confirmado. '+
+  'Priorize diversidade setorial e geográfica, empresas de médio porte, prestadores especializados e fornecedores menores. '+
+  'Validação de identidade, empregados e ICP é etapa posterior — não restrinja a descoberta a quem já publica todos os campos. '+
   'Fontes preferidas: sites corporativos, cadastros públicos, relatórios e imprensa. '+
   'Um ranking geral ou Wikipédia não valida CNPJ, funcionários ou operação industrial. '+
   'Não confunda marca, grupo, matriz, unidade e filial; diferencie indústria, serviços e comércio. '+
@@ -344,13 +408,13 @@ async function queryAI(engine,key,f,target=null,mode='investigate') {
   const model=Deno.env.get('IA_MODELO_PESQUISA_OPENAI')||Deno.env.get('IA_MODELO_OPENAI')||'gpt-5';
   // GPT-5: esforço baixo deixa orçamento para a busca e a resposta JSON.
   // Não aplicar reasoning a modelos sem suporte (por exemplo gpt-4.1).
-  body={model,instructions,input:prompt(f,target,mode),
+  body={model,instructions,input:prompt(f,target,mode,engine),
    tools:[{type:'web_search',search_context_size:'medium',user_location:researchLocation(f)}],tool_choice:'required',
-   max_tool_calls:3,max_output_tokens:6000,store:false,
+   max_tool_calls:3,max_output_tokens:6000,include:['web_search_call.action.sources'],store:false,
    ...(/^gpt-[56](?:[.-]|$)/i.test(model)?{reasoning:{effort:'low'}}:{})};
  } else {
   uri='https://api.anthropic.com/v1/messages';headers={'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json'};
-  body={model:Deno.env.get('IA_MODELO_PESQUISA_ANTHROPIC')||Deno.env.get('IA_MODELO_ANTHROPIC')||'claude-opus-5',system:instructions,max_tokens:6000,messages:[{role:'user',content:prompt(f,target,mode)}],tools:[{type:'web_search_20250305',name:'web_search',max_uses:3,user_location:researchLocation(f)}]};
+  body={model:Deno.env.get('IA_MODELO_PESQUISA_ANTHROPIC')||Deno.env.get('IA_MODELO_ANTHROPIC')||'claude-opus-5',system:instructions,max_tokens:6000,messages:[{role:'user',content:prompt(f,target,mode,engine)}],tools:[{type:'web_search_20250305',name:'web_search',max_uses:3,user_location:researchLocation(f)}]};
  }
  // Short searches need enough time for the hosted web tool, but always stay
  // below Supabase's 150s request idle limit. No hidden retry or extra quota.
@@ -422,18 +486,23 @@ function reportedICP(entry,f,employees){
  const values={
   municipio:asked.municipio?(entry.cidade?'declarado':'pendente'):'nao_solicitado',
   ddd:asked.ddd?(ddd?'declarado':'pendente'):'nao_solicitado',
-  segmento:asked.segmento?(segment?(selectedSegments.some(x=>normalizedPlace(x)===segment)?'declarado':'a_confirmar'):'pendente'):'nao_solicitado',
+  // "Automotivo e Mobilidade - autopeças" mantém o setor pai declarado;
+  // a subcategoria continua texto informado pela IA, nunca fato confirmado.
+  segmento:asked.segmento?(segment?(selectedSegments.some(x=>{
+   const base=normalizedPlace(x);
+   return segment===base||[' - ',': ',' — ',' / ',' ('].some(sep=>segment.startsWith(base+sep));
+  })?'declarado':'a_confirmar'):'pendente'):'nao_solicitado',
   funcionarios:asked.funcionarios?(Number.isSafeInteger(employees)&&employees>=0?'declarado':'pendente'):'nao_solicitado'
  };
  const requested=Object.values(values).filter(x=>x!=='nao_solicitado');
  return {...values,statusGeral:requested.length&&requested.every(x=>x==='declarado')?'declarado_nao_verificado':'pendente'};
 }
-function combineAI(results,limit,f,diagnostics={}) {
+function combineAI(results,limit,f,diagnostics={},options={}) {
  const out=new Map();
  // Aggregate-only diagnostics; never log names, IDs, URLs or prompts.
  const counts={candidates:0,rejectedTerritory:0,rejectedEmployees:0,
   rejectedInvalidCnpj:0,rejectedMissingName:0,rejectedUncitedSource:0,
-  mergedDuplicates:0,accepted:0};
+  pendingUncitedSource:0,mergedDuplicates:0,accepted:0};
  for(const r of results){
   if(!r.searched)continue;
   const list=Array.isArray(r.parsed.empresas)?r.parsed.empresas:[];
@@ -459,8 +528,16 @@ function combineAI(results,limit,f,diagnostics={}) {
    if(rawCnpj&&!cnpj){counts.rejectedInvalidCnpj++;continue;}
    const nome=str(entry.nome||entry.razaoSocial,160);
    if(!nome){counts.rejectedMissingName++;continue;}
-   const sources=(Array.isArray(entry.fontes)?entry.fontes:[]).map(f=>({url:canonicalUrl(f.url),titulo:str(f.titulo,150)})).filter(f=>f.url&&r.urls.has(f.url));
-   if(!sources.length){counts.rejectedUncitedSource++;continue;}
+   const reportedSources=(Array.isArray(entry.fontes)?entry.fontes:[]).map(f=>({url:signalPublicURL(f.url),titulo:str(f.titulo,150)})).filter(f=>f.url);
+   const sources=reportedSources.filter(f=>r.urls.has(f.url));
+   const consultedSources=reportedSources.filter(f=>!r.urls.has(f.url)&&r.consultedUrls?.has(f.url)).slice(0,6);
+   // RI-M23: descoberta ≠ validação. Empresas sem URL citada permanecem
+    // APENAS na fila de pesquisa não verificável; sem fonte, nenhum
+    // contato/notícia, shortlist ou importação. Não promover a fato.
+    if(!sources.length){
+     if(options.allowUncited===true)counts.pendingUncitedSource++;
+     else {counts.rejectedUncitedSource++;continue;}
+    }
    const normalizedName=normalizedPlace(nome).replace(/[^a-z0-9]/g,'');
    if(!cnpj&&normalizedName.length<4){counts.rejectedMissingName++;continue;}
    const researchKey=cnpj?'cnpj:'+cnpj:'pending:'+normalizedName+'|'+normalizedPlace(entry.cidade||f.cidade)+'|'+str(entry.uf||f.uf,2).toUpperCase();
@@ -488,6 +565,9 @@ function combineAI(results,limit,f,diagnostics={}) {
       existing.qualificacaoICP[key]='declarado';
     }
     for(const src of sources)if(!existing.fontes.some(x=>x.url===src.url))existing.fontes.push(src);
+    for(const src of consultedSources)if(!existing.fontesConsultadas.some(x=>x.url===src.url))existing.fontesConsultadas.push(src);
+    if(existing.fontes.length)existing.fonteStatus='citada_pelo_provedor';
+    else if(existing.fontesConsultadas.length)existing.fonteStatus='consultada_sem_citacao';
     // Merge only contacts whose source was independently cited by this
     // provider; never borrow another provider's global citation set.
     for(const c of contatos){
@@ -500,7 +580,8 @@ function combineAI(results,limit,f,diagnostics={}) {
     }
     continue;
    }
-   out.set(researchKey,{cnpj,identidadeStatus:cnpj?'cnpj_validado':'pendente_cnpj',razaoSocial:str(entry.razaoSocial||entry.nome),nome:str(entry.nome||entry.razaoSocial),cidade:str(entry.cidade),uf:str(entry.uf,2).toUpperCase(),porte:str(entry.porte),segmento:str(entry.segmento),site:str(entry.site,200),telefone:str(entry.telefone,60),funcionarios:entry.funcionarios??null,faixaFuncionariosStatus:f.faixasFuncionarios.length?(Number.isSafeInteger(employees)?'aderente_nao_verificado':'pendente'):'nao_solicitado',qualificacaoICP:icp,faturamento:entry.faturamento??null,contatos,noticias,insights:Array.isArray(entry.insights)?entry.insights.slice(0,6).map(s=>str(s,250)):[],fontes:sources,providers:[r.engine],conflitos:[],territorioCorroborado:false});
+   out.set(researchKey,{fonteStatus:sources.length?'citada_pelo_provedor':consultedSources.length?'consultada_sem_citacao':'pendente_sem_fonte',
+     fontesConsultadas:consultedSources,cnpj,identidadeStatus:cnpj?'cnpj_validado':'pendente_cnpj',razaoSocial:str(entry.razaoSocial||entry.nome),nome:str(entry.nome||entry.razaoSocial),cidade:str(entry.cidade),uf:str(entry.uf,2).toUpperCase(),porte:str(entry.porte),segmento:str(entry.segmento),site:str(entry.site,200),telefone:str(entry.telefone,60),funcionarios:entry.funcionarios??null,faixaFuncionariosStatus:f.faixasFuncionarios.length?(Number.isSafeInteger(employees)?'aderente_nao_verificado':'pendente'):'nao_solicitado',qualificacaoICP:icp,faturamento:entry.faturamento??null,contatos,noticias,insights:Array.isArray(entry.insights)?entry.insights.slice(0,6).map(s=>str(s,250)):[],fontes:sources,providers:[r.engine],conflitos:[],territorioCorroborado:false});
   }
  }
  counts.accepted=Math.min(out.size,limit);
@@ -824,7 +905,7 @@ Deno.serve(async req=>{
    (Array.isArray(r.parsed?.empresas)?r.parsed.empresas:[])
     .filter(entry=>target.cnpj?cnpjReal(entry?.cnpj)===target.cnpj:
       sameCompanyName(entry,target.nome)).slice(0,target.cnpj?1:3)}})):results;
-  const companies=combineAI(focusedResults,f.limit,f,diagnostics);
+  const companies=combineAI(focusedResults,f.limit,f,diagnostics,{allowUncited:action==='search'});
   console.info('[market-search] filtering_summary',JSON.stringify({completedProviders:results.length,...diagnostics}));
   const stored=await auditFinish(url,service,auditId,auditActor,results,failedProviders,companies.length);
   return output({researchId:auditId,auditStatus:stored?'RECORDED':'INCOMPLETE',
@@ -835,6 +916,15 @@ Deno.serve(async req=>{
    ...(target?{targetMatch:target.cnpj?
     (companies.length?'CNPJ_RELATADO_PELO_PROVEDOR':'CNPJ_NAO_CORROBORADO'):
     (companies.length?'IDENTIDADE_SUGERIDA_NAO_VERIFICADA':'IDENTIDADE_NAO_LOCALIZADA')}:{}),
+   ...(action==='search'?{discoveryPlan:{
+     sectorExpansion:discoveryTaxonomy(f).length?'automotivo_mobilidade':'sem_taxonomia_expandida',
+     familyCount:discoveryTaxonomy(f).length,
+     families:[...discoveryTaxonomy(f)],
+     municipalityCount:f.municipios.length||(f.cidade?1:0),
+     requestedLimit:f.limit,
+     coverage:'amostragem_exploratoria',
+     allFamiliesIndividuallySearched:false
+   }}:{}),
    total:null,hasMore:target?false:null,coverage:'exploratoria',coverageStatus:'unknown',
    territoryVerified:false,warning:(partial?'Uma ou mais IAs nao concluiram a pesquisa; cobertura parcial. ':'')+
    (target?(target.cnpj?
