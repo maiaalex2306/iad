@@ -1358,3 +1358,22 @@ test('RI-M23: descrição do subsegmento mantém declaração do setor guarda-ch
  assert.equal(body.data[0].qualificacaoICP.funcionarios,'pendente');
  assert.equal(body.data[0].qualificacaoICP.statusGeral,'pendente');
 });
+
+test('RI-M23: páginas web consultadas pela OpenAI são capturadas mas não promovidas a citação individual',async()=>{
+ const ai=responseOpenAI(true,false);
+ ai.output.find(b=>b.type==='web_search_call').action={
+  type:'search',sources:[{type:'url',url:URL_COMPANY},{type:'url',url:'https://127.0.0.1/interno'}]};
+ const h=harness({openai:true,openaiResponse:ai});
+ const res=await h.handle(request(query));
+ assert.equal(res.status,200);
+ const body=await res.json();
+ assert.equal(body.data.length,1);
+ assert.equal(body.data[0].fonteStatus,'consultada_sem_citacao');
+ assert.equal(body.data[0].fontes.length,0,'URL consultada não pode autorizar importação');
+ assert.equal(body.data[0].fontesConsultadas.length,1);
+ assert.equal(body.data[0].fontesConsultadas[0].url,URL_COMPANY);
+ assert.equal(body.diagnostics.pendingUncitedSource,1);
+ const calls=aiCalls(h);
+ assert.deepEqual(Array.from(calls[0].body.include),['web_search_call.action.sources']);
+ assert.equal(calls[0].body.store,false);
+});
