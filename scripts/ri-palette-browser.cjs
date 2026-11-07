@@ -41,6 +41,8 @@ async function run(){
   await page.addStyleTag({content:cssFile('assets/styles.css')});
   await page.addStyleTag({content:cssFile('assets/paleta-acp.css')});
   await page.addStyleTag({content:cssFile('assets/ri-commercial.css')});
+  // Computed style asserts the settled state; transitions can report UA button gray mid-frame.
+  await page.addStyleTag({content:'*,*::before,*::after {transition:none!important;animation:none!important;}'});
   for(const [theme,vars] of [
    ['claro',{brand:'#6816A8',brandDark:'#4A1078',brandSurface:'#4A1078',brandSurface2:'#6816A8',soft:'#F3ECFA',risk:'#B4530C'}],
    ['escuro',{brand:'#C9A0F0',brandDark:'#E0C6FA',brandSurface:'#3A0C60',brandSurface2:'#571291',soft:'#2A1B3D',risk:'#C4703C'}]
