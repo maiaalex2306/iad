@@ -478,7 +478,7 @@ function reportedICP(entry,f,employees){
  const requested=Object.values(values).filter(x=>x!=='nao_solicitado');
  return {...values,statusGeral:requested.length&&requested.every(x=>x==='declarado')?'declarado_nao_verificado':'pendente'};
 }
-function combineAI(results,limit,f,diagnostics={}) {
+function combineAI(results,limit,f,diagnostics={},options={}) {
  const out=new Map();
  // Aggregate-only diagnostics; never log names, IDs, URLs or prompts.
  const counts={candidates:0,rejectedTerritory:0,rejectedEmployees:0,
@@ -513,7 +513,10 @@ function combineAI(results,limit,f,diagnostics={}) {
    // RI-M23: descoberta ≠ validação. Empresas sem URL citada permanecem
     // APENAS na fila de pesquisa não verificável; sem fonte, nenhum
     // contato/notícia, shortlist ou importação. Não promover a fato.
-    if(!sources.length)counts.pendingUncitedSource++;
+    if(!sources.length){
+     if(options.allowUncited===true)counts.pendingUncitedSource++;
+     else {counts.rejectedUncitedSource++;continue;}
+    }
    const normalizedName=normalizedPlace(nome).replace(/[^a-z0-9]/g,'');
    if(!cnpj&&normalizedName.length<4){counts.rejectedMissingName++;continue;}
    const researchKey=cnpj?'cnpj:'+cnpj:'pending:'+normalizedName+'|'+normalizedPlace(entry.cidade||f.cidade)+'|'+str(entry.uf||f.uf,2).toUpperCase();
@@ -878,7 +881,7 @@ Deno.serve(async req=>{
    (Array.isArray(r.parsed?.empresas)?r.parsed.empresas:[])
     .filter(entry=>target.cnpj?cnpjReal(entry?.cnpj)===target.cnpj:
       sameCompanyName(entry,target.nome)).slice(0,target.cnpj?1:3)}})):results;
-  const companies=combineAI(focusedResults,f.limit,f,diagnostics);
+  const companies=combineAI(focusedResults,f.limit,f,diagnostics,{allowUncited:action==='search'});
   console.info('[market-search] filtering_summary',JSON.stringify({completedProviders:results.length,...diagnostics}));
   const stored=await auditFinish(url,service,auditId,auditActor,results,failedProviders,companies.length);
   return output({researchId:auditId,auditStatus:stored?'RECORDED':'INCOMPLETE',
