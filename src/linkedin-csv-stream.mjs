@@ -31,16 +31,39 @@ function firstRecordEnd(text){
   }
   return -1;
 }
-function decoderFromFirstChunk(bytes){
+function decoderFromFirstChunk(bytes,encoding){
   if(bytes[0]===0xff&&bytes[1]===0xfe)return {decoder:new TextDecoder('utf-16le',{fatal:true}),skip:2};
   if(bytes[0]===0xfe&&bytes[1]===0xff)return {decoder:new TextDecoder('utf-16be',{fatal:true}),skip:2};
   if(bytes[0]===0xef&&bytes[1]===0xbb&&bytes[2]===0xbf)
     return {decoder:new TextDecoder('utf-8',{fatal:true}),skip:3};
+  return {decoder:new TextDecoder(encoding,{fatal:encoding==='utf-8'}),skip:0};
+}
+/* Detecta codificação ANTES de gravar quaisquer lotes. Evita CSV Windows-1252
+   com cabeçalho ASCII e caracteres acentuados apenas no meio do arquivo.
+   Realiza uma passagem sequencial leve, sem acumular bytes ou textos em RAM. */
+async function detectCsvEncoding(file,signal){
+  const reader=file.stream().getReader();
+  const probe=new TextDecoder('utf-8',{fatal:true});
+  let first=true;
   try{
-    new TextDecoder('utf-8',{fatal:true}).decode(bytes,{stream:true});
-    return {decoder:new TextDecoder('utf-8',{fatal:true}),skip:0};
-  }catch{
-    return {decoder:new TextDecoder('windows-1252'),skip:0};
+    while(true){
+      if(signal?.aborted)throw errAbort();
+      const {done,value}=await reader.read();
+      if(done)break;
+      const bytes=value instanceof Uint8Array?value:new Uint8Array(value);
+      if(first){
+        first=false;
+        if(bytes[0]===0xff&&bytes[1]===0xfe)return 'utf-16le';
+        if(bytes[0]===0xfe&&bytes[1]===0xff)return 'utf-16be';
+      }
+      try{probe.decode(bytes,{stream:true});}
+      catch{return 'windows-1252';}
+    }
+    try{probe.decode();}catch{return 'windows-1252';}
+    return 'utf-8';
+  }finally{
+    try{await reader.cancel();}catch{}
+    reader.releaseLock();
   }
 }
 export async function importLinkedInCsvStream(file,{
@@ -52,6 +75,8 @@ export async function importLinkedInCsvStream(file,{
   if(file.size>CSV_MAX_BYTES)throw new Error('Arquivo maior que 100 MB. O limite é 100 MiB.');
   if(file.size===0)throw new Error('Arquivo CSV vazio.');
   const maxBatch=Math.max(50,Math.min(1000,Math.trunc(batchSize)||CSV_BATCH_SIZE));
+  const encoding=await detectCsvEncoding(file,signal);
+  if(signal?.aborted)throw errAbort();
   const reader=file.stream().getReader();
   let decoder,first=true,bytesRead=0,separator=null,headerProbe='';
   let quoted=false,afterQuote=false,skipLF=false,field='',record=[];
@@ -135,7 +160,7 @@ export async function importLinkedInCsvStream(file,{
       let piece;
       if(first){
         first=false;
-        const selected=decoderFromFirstChunk(bytes);
+        const selected=decoderFromFirstChunk(bytes,encoding);
         decoder=selected.decoder;
         piece=decoder.decode(bytes.subarray(selected.skip),{stream:true});
       }else piece=decoder.decode(bytes,{stream:true});
