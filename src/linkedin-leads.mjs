@@ -3,6 +3,7 @@
    Post e comentário são fornecidos conscientemente pelo usuário.
    Sem OAuth aprovado, copiar/abrir publicação NÃO é publicar ou curtir. */
 import {importLinkedInCsv} from './linkedin-csv.mjs';
+import {campaignSummary,nextPending,skipWithoutPost,setProfileOpened,setLikeConfirmed,setCommentConfirmed} from './linkedin-campaign-engine.mjs';
 
 export function linkedinUrl(input,kind='post') {
   let parsed;
@@ -31,21 +32,20 @@ export function prepareLinkedInCampaign(fields={}) {
   if (!campaign.lead) throw new Error('Informe o nome do lead.');
   if (!campaign.postUrl) throw new Error('Informe um link válido de publicação do LinkedIn.');
   if (campaign.post.length<40) throw new Error('Cole o texto do post (mínimo de 40 caracteres).');
-  if (campaign.comentarioLead.length<8) throw new Error('Cole o comentário do lead para contextualizar a interação.');
   return campaign;
 }
 
 export function campaignText(c) {
   return [
     'POST DO LINKEDIN (conteúdo fornecido pelo usuário):',c.post,
-    'COMENTÁRIO DO LEAD NO POST:',c.comentarioLead,
+    'COMENTÁRIO DO LEAD NO POST (opcional):',c.comentarioLead||'não informado',
     'LEAD:',c.lead,
     'CARGO:',c.cargo||'não informado',
     'EMPRESA:',c.empresa||'não informada',
     'DADOS PÚBLICOS DO PERFIL INFORMADOS PELO USUÁRIO:',c.resumoPerfil||'não informado',
     'NOSSA SOLUÇÃO / POSICIONAMENTO:',c.solucao||'não informado',
     'ESTILO SOLICITADO:',c.estilo,
-    'TAREFA: redigir um comentário público à publicação, considerando também o comentário feito pelo lead.'
+    'TAREFA: redigir um comentário público simpático e útil sobre a publicação, introduzindo uma reflexão pertinente sobre água e convidando delicadamente para uma conversa sobre o tema. O comentário do lead é contexto opcional.'
   ].join('\n');
 }
 
@@ -79,7 +79,7 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
     throw new Error('Sessão autorizada obrigatória.');
   const doc=root.ownerDocument;
   const valid=()=>root.isConnected&&getScopeToken()===scope.token;
-  const notices=elem(doc,'p','Primeiro fluxo: curtir um comentário do lead e comentar o post com apoio da IA. Nesta fase, as interações externas exigem sua ação no LinkedIn.','small muted');
+  const notices=elem(doc,'p','Fluxo: login → CSV → abrir perfil → procurar post → curtir → analisar → comentar sobre água → próximo lead. Sem post: marcar e avançar. Ações externas exigem sua confirmação no LinkedIn.','small muted');
   const safe=elem(doc,'p','Sua senha é digitada somente em linkedin.com. O IaD CRM não solicita nem armazena senha, cookies ou tokens do LinkedIn.','small muted');
   const login=action(doc,'Abrir login oficial do LinkedIn',()=>globalThis.open('https://www.linkedin.com/login','_blank','noopener,noreferrer'),true);
   const acesso=elem(doc,'section','','card');
@@ -102,7 +102,7 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
   const csvPage=elem(doc,'span','','small muted');
   csvPager.append(csvPrevious,csvPage,csvNext);csvPager.hidden=true;
   arquivoBox.append(csvFile,csvStatus,csvSearch,csvRows,csvPager);
-  let campaignRows=[],page=0,activeRow=null,requestVersion=0;
+  let campaignRows=[],page=0,activeRow=null,requestVersion=0,campaignPaused=false;
   function renderCsv(){
     if(!valid())return;
     const term=csvSearch.value.trim().toLocaleLowerCase('pt-BR');
@@ -113,7 +113,8 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
       const row=elem(doc,'div','','iad-linkedin-import-row');
       const title=elem(doc,'strong',item.lead||'Lead');
       const details=elem(doc,'span',[item.empresa,item.cargo].filter(Boolean).join(' · ')||'Dados adicionais não informados','small muted');
-      const state=elem(doc,'span',item.estado==='rascunho'?'Rascunho gerado':item.estado==='confirmado'?'Confirmado manualmente':'Pendente','small muted');
+      const names={rascunho:'Rascunho gerado',confirmado:'Comentário confirmado',sem_post:'Sem post',curtido:'Curtida confirmada',post_localizado:'Post localizado',perfil_aberto:'Perfil aberto',erro:'Erro'};
+      const state=elem(doc,'span',names[item.estado]||'Pendente','small muted');
       const open=action(doc,'Abrir perfil',()=>doc.defaultView.open(item.perfil,'_blank','noopener,noreferrer'),true);
       const choose=action(doc,activeRow===item?'Selecionado':'Selecionar',()=>selectCsvRow(item),true);
       row.append(title,details,state,open,choose);csvRows.append(row);
@@ -121,6 +122,7 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
     csvPage.textContent=filtered.length+' lead(s) · página '+(page+1)+' de '+pageMax;
     csvPrevious.disabled=page===0;csvNext.disabled=page>=pageMax-1;
     csvPager.hidden=!campaignRows.length;csvSearch.hidden=!campaignRows.length;
+    if(typeof refreshQueue==='function')refreshQueue();
   }
   csvSearch.addEventListener('input',()=>{page=0;renderCsv();});
   async function readCsv(file){
@@ -141,17 +143,18 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
       const text=await readCsv(file);
       if(!valid())return;
       const parsed=importLinkedInCsv(text);
-      campaignRows=parsed.leads;page=0;activeRow=null;requestVersion++;
+      campaignRows=parsed.leads;page=0;activeRow=null;requestVersion++;campaignPaused=false;
       csvSearch.value='';
       const s=parsed.summary;
       csvStatus.textContent=file.name+': '+s.valid+' perfil(is) válido(s), '+s.duplicates+' duplicado(s), '+s.invalid+' inválido(s), de '+s.total+' linhas. Dados locais nesta aba. '+(s.problems.length?'Primeiros erros nas linhas: '+s.problems.slice(0,8).map(p=>p.line).join(', ')+'.':'');
       renderCsv();
+      if(campaignRows.length)selectCsvRow(campaignRows[0],false);
     }catch(e){csvStatus.textContent='Falha na leitura: '+String(e?.message||e).slice(0,240);}
   });
 
   const form=elem(doc,'form','','card');
   form.noValidate=true;
-  form.append(elem(doc,'h2','3. Selecionar publicação e lead'));
+  form.append(elem(doc,'h2','4. Selecionar publicação e lead'));
   form.addEventListener('submit',e=>e.preventDefault());
   const cols=elem(doc,'div','','iad-linkedin-grid');
   const contatos=(Array.isArray(snapshot?.contatos)?snapshot.contatos:[]).filter(x=>x&&x.nome).slice(0,1500);
@@ -171,14 +174,14 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
   form.append(cols);
   const resumoPerfil=inputField(doc,form,'Resumo público do perfil do lead','textarea',{max:1200,rows:3,placeholder:'Experiência, área de atuação e prioridades expressas publicamente'});
   const post=inputField(doc,form,'Texto da publicação','textarea',{max:6000,rows:5,required:true,placeholder:'Cole aqui o post para análise: o CRM não o extrai automaticamente'});
-  const comentarioLead=inputField(doc,form,'Comentário feito pelo lead','textarea',{max:2000,rows:3,required:true,placeholder:'Cole o comentário específico do lead que deseja curtir'});
+  const comentarioLead=inputField(doc,form,'Comentário do lead (opcional)','textarea',{max:2000,rows:3,placeholder:'Inclua apenas se o lead comentou a publicação'});
   const solucao=inputField(doc,form,'Nossa proposta de valor / conexão com o assunto','textarea',{max:1200,rows:3,placeholder:'Qual contribuição real podemos oferecer a este segmento?'});
   const estiloLabel=elem(doc,'label','','iad-linkedin-field');
   estiloLabel.append(elem(doc,'span','Abordagem','iad-linkedin-label'));
   const estilo=elem(doc,'select');
   [['consultivo','Consultiva'],['tecnico','Técnica'],['objetivo','Objetiva']].forEach(x=>estilo.append(selectOption(doc,x[0],x[1])));
   estiloLabel.append(estilo);form.append(estiloLabel);
-  function selectCsvRow(item) {
+  function selectCsvRow(item,scroll=true) {
     if(!valid())return;
     activeRow=item;requestVersion++;
     picker.value='';
@@ -186,11 +189,12 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
     empresa.value=item.empresa||'';perfil.value=item.perfil||'';
     resumoPerfil.value=item.resumoPerfil||'';postUrl.value=linkedinUrl(item.postUrl,'post')||'';
     post.value=item.post||'';comentarioLead.value=item.comentarioLead||'';
-    textArea.value='';analise.textContent='';bCopiar.disabled=true;textArea.disabled=true;
-    confirmado.checked=false;registro.textContent='';
-    status.textContent='Lead selecionado do CSV. Abra o perfil para pesquisar; informe ou confirme o post e o comentário antes de gerar a sugestão.';
+    textArea.value=item.rascunho||'';analise.textContent=item.fundamento||'';
+    bCopiar.disabled=!textArea.value;textArea.disabled=!textArea.value;
+    confirmado.checked=item.estado==='confirmado';registro.textContent='';
+    status.textContent='Abra o perfil e procure uma publicação. Se não houver, use Sem post → próximo lead.';
     renderCsv();
-    form.scrollIntoView({behavior:'smooth',block:'start'});
+    if(scroll)form.scrollIntoView({behavior:'smooth',block:'start'});
   }
   picker.addEventListener('change',()=>{
     const c=contatos[Number(picker.value)];
@@ -208,7 +212,9 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
     const url=linkedinUrl(perfil.value,'profile');
     if(!url){status.textContent='Informe uma URL /in/ válida para abrir o perfil.';return;}
     doc.defaultView.open(url,'_blank','noopener,noreferrer');
-    status.textContent='Perfil aberto. Revise as informações publicadas no LinkedIn e preencha o resumo antes de solicitar a análise.';
+    if(activeRow&&!['sem_post','confirmado'].includes(activeRow.estado))setProfileOpened(activeRow);
+    refreshQueue();
+    status.textContent='Perfil aberto. Procure o post, cole a URL e o texto; se não houver, marque Sem post.';
   },true);
   const formActions=elem(doc,'div','','iad-linkedin-buttons');
   formActions.append(profileOpen,generate);form.append(formActions,status);
@@ -235,10 +241,15 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
   const registro=elem(doc,'p','','small muted');
   confirmado.addEventListener('change',()=>{
     registro.textContent=confirmado.checked?'Confirmação local desta sessão. Não foi feita verificação automática no LinkedIn nem gravação na carteira.':'';
-    if(activeRow&&valid()&&textArea.value.trim()){activeRow.estado=confirmado.checked?'confirmado':'rascunho';renderCsv();}
+    if(activeRow&&valid()&&confirmado.checked){
+      try{setCommentConfirmed(activeRow,textArea.value);activeRow.rascunho=textArea.value;renderCsv();registro.textContent='Comentário confirmado manualmente. Use Próximo perfil para continuar.';}
+      catch(e){confirmado.checked=false;registro.textContent=e.message;}
+    }else if(activeRow&&!confirmado.checked&&activeRow.estado==='confirmado'){
+      activeRow.estado='rascunho';renderCsv();
+    }
   });
   resultado.append(elem(doc,'h2','4. Revisar e executar no LinkedIn'),
-    elem(doc,'p','A IA só sugere. Revise pertinência, informações e tom antes de qualquer interação.','small muted'),
+    elem(doc,'p','A IA sugere um comentário sobre água e uma conversa profissional. Revise o conteúdo antes de publicar.','small muted'),
     analise,textArea,elem(doc,'div','','iad-linkedin-buttons'),caixaConfirmacao,registro);
   const actions=resultado.querySelector('.iad-linkedin-buttons');actions.append(bCopiar,bAbrir);
   bCopiar.disabled=true;textArea.disabled=true;
@@ -267,7 +278,7 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
       if(!comentario)throw new Error('A IA não devolveu um comentário válido.');
       textArea.value=comentario;analise.textContent=String(campos.fundamento||'');
       textArea.disabled=false;bCopiar.disabled=false;
-      if(activeRow){activeRow.estado='rascunho';renderCsv();}
+      if(activeRow){activeRow.estado='rascunho';activeRow.rascunho=comentario;activeRow.fundamento=analise.textContent;renderCsv();}
       status.textContent='Rascunho pronto para revisão. Nenhuma curtida nem comentário foi publicado.';
     }catch(e){
       if(!valid()||currentVersion!==requestVersion)return;
@@ -275,5 +286,67 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
       status.textContent='Não foi possível gerar o comentário: '+String(e?.message||'erro de IA').slice(0,220);
     }finally{if(valid()){generate.disabled=false;}}
   };
-  root.replaceChildren(elem(doc,'h2','LinkedIN Leads — Campanha 01'),notices,acesso,arquivoBox,form,resultado);
+  const fila=elem(doc,'section','','card');
+  const filaResumo=elem(doc,'p','','small muted');
+  filaResumo.setAttribute('role','status');filaResumo.setAttribute('aria-live','polite');
+  const filaMsg=elem(doc,'p','Primeiro perfil será selecionado ao importar o CSV.','small muted');
+  filaMsg.setAttribute('role','status');
+  const btnNext=action(doc,'Próximo perfil',()=>{
+    if(campaignPaused){filaMsg.textContent='Campanha pausada.';return;}
+    const next=nextPending(campaignRows,activeRow);
+    if(next)selectCsvRow(next,false);
+    else filaMsg.textContent='Fim da fila ou todos os próximos perfis já foram processados.';
+  },true);
+  const btnSkip=action(doc,'Sem post → próximo lead',()=>{
+    if(campaignPaused){filaMsg.textContent='Campanha pausada.';return;}
+    if(!activeRow){filaMsg.textContent='Selecione um perfil da lista.';return;}
+    try{
+      const nome=activeRow.lead;
+      const next=skipWithoutPost(campaignRows,activeRow);
+      if(next)selectCsvRow(next,false);
+      else{activeRow=null;renderCsv();}
+      filaMsg.textContent=nome+' marcado Sem post. '+(next?'Próximo lead selecionado.':'Fim da fila.');
+      refreshQueue();
+    }catch(e){filaMsg.textContent=e.message;}
+  },true);
+  const btnLocated=action(doc,'Encontrei um post',()=>{
+    if(campaignPaused||!activeRow)return;
+    const u=linkedinUrl(postUrl.value,'post');
+    if(!u){filaMsg.textContent='Informe o endereço válido da publicação primeiro.';return;}
+    activeRow.postUrl=u;activeRow.post=post.value;
+    activeRow.estado='post_localizado';
+    filaMsg.textContent='Post registrado. Abra a publicação para curtir e confirme a curtida após executar.';
+    renderCsv();
+  },true);
+  const btnLike=action(doc,'Confirmei curtida',()=>{
+    if(campaignPaused||!activeRow)return;
+    activeRow.postUrl=linkedinUrl(postUrl.value,'post');
+    try{
+      setLikeConfirmed(activeRow);
+      filaMsg.textContent='Curtida registrada conforme sua confirmação manual. Agora gere o comentário com IA.';
+      renderCsv();
+    }catch(e){filaMsg.textContent=e.message;}
+  },true);
+  const btnPause=action(doc,'Pausar campanha',()=>{
+    campaignPaused=!campaignPaused;
+    btnPause.textContent=campaignPaused?'Retomar campanha':'Pausar campanha';
+    filaMsg.textContent=campaignPaused?'Campanha pausada; fila sem avanço.':'Campanha retomada.';
+    refreshQueue();
+  },true);
+  function refreshQueue(){
+    const c=campaignSummary(campaignRows);
+    filaResumo.textContent='Total: '+c.total+' | Pendentes: '+c.pendentes+' | Sem post: '+c.semPost+
+      ' | Curtidas confirmadas: '+c.curtidas+' | Comentários confirmados: '+c.confirmados+
+      (activeRow?' | Atual: '+activeRow.lead:'');
+    for(const b of [btnNext,btnSkip,btnLocated,btnLike])b.disabled=campaignPaused||!campaignRows.length;
+    btnSkip.disabled ||= !activeRow;
+    btnLocated.disabled ||= !activeRow;
+    btnLike.disabled ||= !activeRow;
+  }
+  const filaBotoes=elem(doc,'div','','iad-linkedin-buttons');
+  filaBotoes.append(btnNext,btnLocated,btnLike,btnSkip,btnPause);
+  fila.append(elem(doc,'h2','3. Executar fila de perfis'),filaResumo,filaBotoes,filaMsg,
+    elem(doc,'p','Ações externas são manuais nesta versão. Não existe intervalo que garanta evitar bloqueio. Diante de limite, CAPTCHA ou restrição do LinkedIn, pause a campanha. A automação futura exige acesso oficial autorizado e bloqueios de quota.','small muted'));
+  refreshQueue();
+  root.replaceChildren(elem(doc,'h2','LinkedIN Leads — Campanha 01'),notices,acesso,arquivoBox,fila,form,resultado);
 }
