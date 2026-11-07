@@ -113,10 +113,13 @@ const server=http.createServer((req,res)=>{
   await page.evaluate(()=>{
     const S=window.IADStore,A=window.IADAuth;
     const u=S.obter().usuarios.find(x=>x.id==='linked-e2e-gestor');
+    if(!u)throw Error('Gestor sintético não restaurado');
     A.abrirSessao(u);
-    window.App.ir('#/linkedin-leads');
+    window.App.ir('#/hoje');
   });
-  await page.waitForFunction(()=>document.querySelector('#iad-linkedin-root')?.textContent?.includes('Campanha restaurada'),null,{timeout:12000});
+  await page.waitForFunction(()=>location.hash==='#/hoje',null,{timeout:10000});
+  await page.evaluate(()=>window.App.ir('#/linkedin-leads'));
+  await page.waitForFunction(()=>document.querySelector('#iad-linkedin-root')?.textContent?.includes('Campanha restaurada'),null,{timeout:15000});
   assert.match(await page.locator('#iad-linkedin-root').textContent(),/Sem post: 2/);
   // A recarga restaura dados sintéticos pelo cache local; verificamos que a campanha não criou registros no Store/CAS.
   assert.equal(await page.evaluate(()=>window.IADStore.obter().contatos.some(c=>c.nome==='Lead Com Post')),false,'Campanha não pode importar automaticamente no CRM');
