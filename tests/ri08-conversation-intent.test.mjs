@@ -249,3 +249,29 @@ test('decisão resumida do LinkedIn não é rotulada como mensagem literal do pr
  assert.equal(items[0].sourceType,'evento');
  assert.equal(items[0].sourceLabel,'Evento comercial cadastrado no CRM');
 });
+
+test('cache por execução preserva evidências e origens de contas distintas',()=>{
+ const snap=fixture();
+ snap.oportunidades[0].eventos=[];
+ snap.oportunidades[0].notas='Cliente pediu proposta de monitoramento.';
+ snap.contas.push({...base,id:'conta-b',nome:'Indústria Beta'});
+ snap.oportunidades.push({...base,id:'op-b',contaId:'conta-b',eventos:[],
+   notas:'Cliente pediu proposta de monitoramento.'});
+ const radar=buildCommercialOpportunityRadar({snapshot:snap,scope,asOf:'2026-11-06'});
+ const accounts=radar.groups.pistas;
+ assert.equal(accounts.length,2);
+ assert(accounts.some(x=>x.accountId==='conta-a'&&x.sourceOpportunityId==='op-a'));
+ assert(accounts.some(x=>x.accountId==='conta-b'&&x.sourceOpportunityId==='op-b'));
+ assert(accounts.every(x=>x.evidence==='Cliente pediu proposta de monitoramento.'));
+});
+test('cache do classificador tem limite de memória e somente escopo da análise',()=>{
+ const source=readFileSync(new URL('../src/ri/internal-cues.mjs',import.meta.url),'utf8');
+ assert.match(source,/const cacheLocal=new Map\(\)/);
+ assert.match(source,/cacheLocal\.size<512/);
+ assert.match(source,/body\.length<=1600/);
+ const snap=fixture();snap.oportunidades[0].notas='Cliente pediu proposta.';
+ const a=buildCommercialOpportunityRadar({snapshot:snap,scope,asOf:'2026-11-06'});
+ const b=buildCommercialOpportunityRadar({snapshot:snap,scope:{...scope,tenantId:'empresa-b'},asOf:'2026-11-06'});
+ assert(a.groups.pistas.length>0);
+ assert.equal(b.groups.pistas.length,0);
+});

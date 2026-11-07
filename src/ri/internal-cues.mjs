@@ -16,6 +16,19 @@ export function discoverInternalCommercialCues({snapshot,scope,accounts,asOf,lim
   !(accounts instanceof Map)||!day(asOf)||day(asOf)!==asOf)
   throw Error('Escopo e registros internos são obrigatórios');
  const perAccount=new Map();let scanned=0;
+ /* PERF-41: textos de eventos/atividades se repetem dentro da carteira.
+    Evitar executar dezenas de regex para a mesma frase várias vezes.
+    Cache estritamente local a UMA análise, limitado a 512 entradas/1600
+    caracteres, sem persistência, rede, tenant nem dados entre sessões.
+    Preserva o mesmo array imutável de sinais; add() só o consulta. */
+ const cacheLocal=new Map();
+ const localSignals=(text)=>{
+  const body=typeof text==='string'?text:'';
+  if(cacheLocal.has(body))return cacheLocal.get(body);
+  const result=detectCommercialIntents(body);
+  if(cacheLocal.size<512 && body.length<=1600)cacheLocal.set(body,result);
+  return result;
+ };
  const add=(account,op,signal,sourceType,event,date)=>{
   if(!signal||!signal.evidence)return;
   const k=key(account.tenantId,account.id);
@@ -49,7 +62,7 @@ export function discoverInternalCommercialCues({snapshot,scope,accounts,asOf,lim
   const account=accounts.get(key(op.tenantId,op.contaId));
   if(!account||op.desfecho?.tipo)continue;
   scanned++;
-  for(const signal of detectCommercialIntents(op.notas||''))
+  for(const signal of localSignals(op.notas||''))
    add(account,op,signal,'nota',null,null);
   for(const event of (Array.isArray(op.eventos)?op.eventos:[]).slice(0,80)){
    if(!event)continue;
@@ -62,7 +75,7 @@ export function discoverInternalCommercialCues({snapshot,scope,accounts,asOf,lim
       .trim()||short(op.sdr,120);
     const messages=buyerMessagesFromTranscript(event.detalhe,sdr);
     for(const m of messages){
-     for(const signal of detectCommercialIntents(m.text))
+     for(const signal of localSignals(m.text))
       add(account,op,signal,'linkedin',event,date);
     }
     // A IA nao recebe autoridade de escrita: apenas sinais cuja citacao
@@ -76,7 +89,7 @@ export function discoverInternalCommercialCues({snapshot,scope,accounts,asOf,lim
    // Um evento "decision" pode conter síntese escrita pelo vendedor.
    // Apenas uma transcrição atribuída ao prospect pode receber a legenda
    // "Mensagem do prospect no LinkedIn".
-   for(const signal of detectCommercialIntents(text))
+   for(const signal of localSignals(text))
     add(account,op,signal,'evento',event,date);
   }
  }
