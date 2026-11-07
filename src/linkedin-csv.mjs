@@ -11,7 +11,7 @@ const ALIASES={
   post:['posttexto','textopost','conteudopost','postcontent'],
   comentarioLead:['comentariolead','comentariodolead','textocomentario','leadcomment','commenttext']
 };
-function normalizeHeader(value){
+export function normalizeHeader(value){
   return String(value||'').replace(/^\ufeff/,'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
     .toLowerCase().replace(/[^a-z0-9]/g,'');
 }
@@ -68,33 +68,38 @@ export function parseCsvTable(text,{maxRows=10000}={}){
   if(cell||row.length)pushRow();
   return {separator:sep,rows};
 }
+export function columnsFromCsvHeader(header) {
+  const headers=header.map(normalizeHeader);
+  const fields={};
+  for(const [field,aliases] of Object.entries(ALIASES)){
+    fields[field]=headers.findIndex(h=>aliases.includes(h));
+  }
+  if(fields.perfil<0)throw new Error('CSV sem coluna de perfil. Use "LinkedIn", "Perfil LinkedIn" ou "profile_url".');
+  return fields;
+}
+export function csvLeadFromCells(cells,fields,line){
+  const raw=(key,limit)=>fields[key]<0?'':String(cells[fields[key]]||'').trim().slice(0,limit);
+  const profile=normalizeProfile(raw('perfil',700));
+  if(!profile)return null;
+  const item={linha:line,perfil:profile,
+    lead:raw('nome',120),cargo:raw('cargo',140),empresa:raw('empresa',160),
+    resumoPerfil:raw('resumoPerfil',1200),postUrl:raw('postUrl',600),
+    post:raw('post',6000),comentarioLead:raw('comentarioLead',2000),
+    estado:'pendente'};
+  if(!item.lead)item.lead=profile.split('/in/')[1].replace(/\\/$/,'').replace(/[-_]/g,' ').slice(0,120);
+  return item;
+}
 export function importLinkedInCsv(text,{maxRows=10000}={}){
   const {rows,separator}=parseCsvTable(text,{maxRows});
   if(rows.length<2)throw new Error('Inclua cabeçalho e pelo menos uma linha com dados.');
-  const headers=rows[0].map(normalizeHeader);
-  const fields={};
-  for(const [field,aliases] of Object.entries(ALIASES)){
-    const position=headers.findIndex(h=>aliases.includes(h));
-    fields[field]=position;
-  }
-  if(fields.perfil<0)throw new Error('CSV sem coluna de perfil. Use "LinkedIn", "Perfil LinkedIn" ou "profile_url".');
+  const fields=columnsFromCsvHeader(rows[0]);
   const leads=[],problems=[],seen=new Set();
   let invalid=0,duplicates=0;
   rows.slice(1).forEach((cells,i)=>{
-    const raw=(key,limit)=>fields[key]<0?'':String(cells[fields[key]]||'').trim().slice(0,limit);
-    const profile=normalizeProfile(raw('perfil',700));
-    if(!profile){invalid++;if(problems.length<30)problems.push({line:i+2,reason:'Perfil LinkedIn inválido ou não público (/in/ obrigatório).'});return;}
-    if(seen.has(profile)){duplicates++;return;}
-    seen.add(profile);
-    const item={
-      linha:i+2,perfil:profile,
-      lead:raw('nome',120),cargo:raw('cargo',140),
-      empresa:raw('empresa',160),resumoPerfil:raw('resumoPerfil',1200),
-      postUrl:raw('postUrl',600),post:raw('post',6000),
-      comentarioLead:raw('comentarioLead',2000),
-      estado:'pendente'
-    };
-    if(!item.lead)item.lead=profile.split('/in/')[1].replace(/\/$/,'').replace(/[-_]/g,' ').slice(0,120);
+    const item=csvLeadFromCells(cells,fields,i+2);
+    if(!item){invalid++;if(problems.length<30)problems.push({line:i+2,reason:'Perfil LinkedIn inválido ou não público (/in/ obrigatório).'});return;}
+    if(seen.has(item.perfil)){duplicates++;return;}
+    seen.add(item.perfil);
     leads.push(item);
   });
   return {leads,summary:{total:rows.length-1,valid:leads.length,invalid,duplicates,separator,problems}};
