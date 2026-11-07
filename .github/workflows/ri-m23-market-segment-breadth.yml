@@ -7,6 +7,7 @@ on:
       - 'src/ri/market-view.mjs'
       - 'tests/market-edge.test.mjs'
       - 'tests/market-contract.test.mjs'
+      - 'scripts/ri-m23-market-canary-smoke.cjs'
       - 'scripts/ri-m21-market-quality.test.cjs'
       - 'src/config.js'
       - 'sw.js'
@@ -38,6 +39,15 @@ jobs:
       - name: Market discovery, RLS mock, sources and import protection
         run: |
           node --test tests/market-edge.test.mjs tests/market-contract.test.mjs tests/market-prospect-agents.test.mjs scripts/ri-m21-market-quality.test.cjs
+  canary-auth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: HTTP Auth 401 and CORS 204 without paid search
+        run: node scripts/ri-m23-market-canary-smoke.cjs
   visual-and-pwa:
     runs-on: ubuntu-latest
     timeout-minutes: 10
