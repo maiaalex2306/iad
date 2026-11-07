@@ -1,0 +1,52 @@
+name: RI-M21 — Pesquisa de Mercado ICP, UX e Barra Laranja
+on:
+  pull_request:
+    paths:
+      - 'src/ri/market-progress.mjs'
+      - 'src/ri/market-view.mjs'
+      - 'nuvem/funcoes/market-search/index.ts'
+      - 'assets/paleta-acp.css'
+      - 'src/config.js'
+      - 'sw.js'
+      - 'tests/market-progress.test.mjs'
+      - 'scripts/ri-m21-*.cjs'
+      - '.github/workflows/ri-m21-market-quality.yml'
+  push:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - 'src/ri/market-progress.mjs'
+      - 'src/ri/market-view.mjs'
+      - 'nuvem/funcoes/market-search/index.ts'
+      - 'assets/paleta-acp.css'
+      - 'src/config.js'
+      - 'sw.js'
+      - 'scripts/ri-m21-*.cjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Syntax and contracts (no credentials or live searches)
+        run: |
+          node --check src/ri/market-progress.mjs
+          node --check src/ri/market-view.mjs
+          node --test scripts/ri-m21-market-quality.test.cjs tests/market-progress.test.mjs tests/market-prospect-agents.test.mjs
+  chromium:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Install Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Orange animated progress in light, dark and reduced-motion
+        run: node scripts/ri-m21-progress-browser.cjs
