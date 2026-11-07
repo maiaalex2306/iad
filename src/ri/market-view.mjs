@@ -215,7 +215,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
  preflightBtn.type='button';
  const btn=el('button','Buscar empresas','btn iad-market-btn-search');btn.type='submit';
  const quickBtn=el('button','Amostra rápida — pesquisa geral','btn iad-market-btn-check');quickBtn.type='button';
- const nextBatchBtn=el('button','Pesquisar próximo lote — consome cota','btn iad-market-btn-search');nextBatchBtn.type='button';nextBatchBtn.hidden=true;
+ const nextBatchBtn=el('button','Pesquisar próximo lote — consome cota','btn iad-market-batch-next');nextBatchBtn.type='button';nextBatchBtn.hidden=true;
  const batchStatus=el('p','','small iad-market-batch-status');batchStatus.hidden=true;
  const batchMeter=doc.createElement('progress');batchMeter.className='iad-market-batch-meter';batchMeter.hidden=true;
  batchMeter.setAttribute('aria-label','Lotes realmente concluídos');batchMeter.max=1;batchMeter.value=0;
