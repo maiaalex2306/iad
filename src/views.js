@@ -8180,7 +8180,11 @@
 
   function grupoDoLead(l) {
     if (motivoDeDuvida(l)) return 'duvida';
-    if (l.respostaDaIA === 'neutra') return 'cortesia';
+    // Necessidade explícita do prospect vale mais que o rótulo genérico
+    // "neutra" do classificador de segmentos; recusa segue no grupo dúvida.
+    if (l.respostaDaIA === 'neutra' &&
+        !(Array.isArray(l.sinaisDaIA) && l.sinaisDaIA.length) &&
+        !(Array.isArray(l.sinaisLocais) && l.sinaisLocais.length)) return 'cortesia';
     return 'conteudo';
   }
 
@@ -8199,11 +8203,22 @@
        é quem espera há mais tempo — é quem tem mais chance de a conversa
        continuar de onde parou. Quem espera há muito já virou outra conversa,
        e a tela diz isso no próprio cartão. */
-    const ordenados = leads.map(function (l, i) { return { l: l, i: i }; })
+    // Pré-calcular uma vez por lead: evita alocação e redução de sinais
+    // em cada comparação de sort (N log N).
+    const pesos = {pedido_proposta:100,reuniao:95,modernizacao_ete:90,
+      consumo_agua:88,reuso:85,expansao:82,problema:80,custos:77,
+      interesse_solucoes:72,decisao:65,futuro:50};
+    const peso = function (lead) {
+      return (Array.isArray(lead.sinaisDaIA) ? lead.sinaisDaIA : [])
+        .concat(Array.isArray(lead.sinaisLocais) ? lead.sinaisLocais : [])
+        .reduce(function (max,sinal) { return Math.max(max,pesos[sinal.type]||0); },0);
+    };
+    const ordenados = leads.map(function (l, i) { return { l: l, i: i, peso:peso(l) }; })
       .sort(function (a, b) {
         const ga = GRUPOS_DO_LEAD.findIndex(function (g) { return g.id === grupoDoLead(a.l); });
         const gb = GRUPOS_DO_LEAD.findIndex(function (g) { return g.id === grupoDoLead(b.l); });
         if (ga !== gb) return ga - gb;
+        if(a.peso!==b.peso)return b.peso-a.peso;
         const ra = a.l.respostaEm || '';
         const rb = b.l.respostaEm || '';
         if (ra !== rb) return ra < rb ? 1 : -1;
@@ -8214,6 +8229,13 @@
       const l = par.l;
       const i = par.i;
       const duvida = motivoDeDuvida(l);
+      const sinais = (Array.isArray(l.sinaisDaIA) ? l.sinaisDaIA : [])
+        .concat(Array.isArray(l.sinaisLocais) ? l.sinaisLocais : [])
+        .filter(function (s, j, todos) {
+          return s && s.type && s.evidence &&
+            todos.findIndex(function (x) { return x && x.type===s.type; })===j;
+        }).sort(function (a,b) { return (pesos[b.type]||0)-(pesos[a.type]||0); })
+        .slice(0,3);
       const rede = [
         l.grau === 'DISTANCE_1' ? '1\u00ba grau' : '',
         l.mutuos ? l.mutuos + ' em comum' : '',
@@ -8281,6 +8303,13 @@
               return '<b>' + esc(m.nosso ? (l.operador || 'SDR') : (m.de || l.nome || 'Prospect')) + ':</b> ' + esc(m.texto);
             }).join('\n') + '</p>'
           : (l.resposta ? '<p class="origem">\u201c' + esc(l.resposta) + '\u201d</p>' : '')) +
+        (sinais.length
+          ? '<div class="pergunta-pronta"><strong>Sinais comerciais encontrados</strong>' +
+            '<ul>' + sinais.map(function (s) {
+              return '<li><b>' + esc(String(s.type || '').replace(/_/g, ' ')) +
+                '</b>: “' + esc(s.evidence || '') + '”</li>';
+            }).join('') + '</ul><p class="tiny muted">Citações literais do prospect; valide antes de criar uma nova negociação.</p></div>'
+          : '') +
         juntarNaConta(l, i) +
         juntarNaNegociacao(l, i) +
         /* A próxima mensagem, pronta para copiar.
