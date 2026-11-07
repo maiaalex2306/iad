@@ -1,8 +1,9 @@
 'use strict';
-/* Host Windows: CRM e LinkedIn na MESMA janela; sem injeção ou coleta de sessão. */
+/* Host EXCLUSIVO de LinkedIN Leads. O restante do IaD CRM permanece web.
+   Duas vistas nativas nesta funcionalidade, sem injeção ou coleta de sessão. */
 const {app,BaseWindow,WebContentsView,Menu,session}=require('electron');
 const os=require('node:os');
-const {CRM_ORIGIN,LINKEDIN_START,allowedLinkedIn,allowedCrm,profilePartition,splitBounds}=require('./security.cjs');
+const {LINKEDIN_START,LINKEDIN_LEADS_ROUTE,allowedLinkedIn,allowedCrm,isFeatureRoute,profilePartition,splitBounds}=require('./security.cjs');
 const linkedinPartition=profilePartition(process.env.IAD_LINKEDIN_LOCAL_PROFILE||os.userInfo().username);
 let win=null,crm=null,linkedin=null;
 function navigationPolicy(contents,which){
@@ -30,8 +31,21 @@ function newView(partition,kind){
 }
 function createWindow(){
   win=new BaseWindow({width:1480,height:900,minWidth:980,minHeight:600,show:true,
-    title:'IaD CRM Desktop — LinkedIN Leads',backgroundColor:'#f5f7fc'});
-  crm=newView('persist:iadcrm-ui','crm');
+    title:'LinkedIN Leads — IaD CRM',backgroundColor:'#f5f7fc'});
+  crm=newView('persist:iadcrm-linkedin-panel','crm');
+  // Sem transformar o CRM inteiro em desktop: a vista esquerda permanece
+  // vinculada exclusivamente à rota LinkedIN Leads.
+  let redirecting=false;
+  crm.webContents.on('did-navigate-in-page',(_event,url)=>{
+    if(isFeatureRoute(url)||redirecting||!allowedCrm(url))return;
+    redirecting=true;
+    setImmediate(()=>{
+      if(!crm||crm.webContents.isDestroyed()){redirecting=false;return;}
+      crm.webContents.loadURL(LINKEDIN_LEADS_ROUTE)
+        .catch(()=>{})
+        .finally(()=>{redirecting=false;});
+    });
+  });
   linkedin=newView(linkedinPartition,'linkedin');
   win.contentView.addChildView(crm);
   win.contentView.addChildView(linkedin);
@@ -54,9 +68,9 @@ function createWindow(){
   });
   resize();
   Menu.setApplicationMenu(Menu.buildFromTemplate([
-    {label:'IaD CRM',submenu:[
-      {label:'LinkedIN Leads',click:()=>crm.webContents.loadURL(CRM_ORIGIN+'/#/linkedin-leads')},
-      {label:'Atualizar CRM',click:()=>crm.webContents.reload()},
+    {label:'LinkedIN Leads',submenu:[
+      {label:'Voltar à campanha',click:()=>crm.webContents.loadURL(LINKEDIN_LEADS_ROUTE)},
+      {label:'Atualizar campanha',click:()=>crm.webContents.reload()},
       {type:'separator'},{role:'quit'}
     ]},
     {label:'LinkedIn',submenu:[
@@ -75,7 +89,7 @@ function createWindow(){
     ]},
     {label:'Visualização',submenu:[{role:'zoomIn'},{role:'zoomOut'},{role:'resetZoom'},{role:'togglefullscreen'}]}
   ]));
-  crm.webContents.loadURL(CRM_ORIGIN+'/#/linkedin-leads').catch(e=>console.error('CRM:',e.message));
+  crm.webContents.loadURL(LINKEDIN_LEADS_ROUTE).catch(e=>console.error('Campanha LinkedIN Leads:',e.message));
   linkedin.webContents.loadURL(LINKEDIN_START).catch(e=>console.error('LinkedIn:',e.message));
 }
 app.whenReady().then(()=>{
