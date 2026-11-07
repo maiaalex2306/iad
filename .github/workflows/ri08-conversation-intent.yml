@@ -1,0 +1,74 @@
+name: RI-08 linkedhelper commercial intent
+on:
+  pull_request:
+    paths:
+      - 'src/ri/conversation-intent.mjs'
+      - 'src/ri/internal-cues.mjs'
+      - 'src/ri/account-view.mjs'
+      - 'src/ri/opportunity-radar.mjs'
+      - 'src/ia.js'
+      - 'src/app.js'
+      - 'src/views.js'
+      - 'nuvem/funcoes/assistente/index.ts'
+      - 'tests/ri08-conversation-intent.test.mjs'
+      - 'tests/ri08-performance.test.mjs'
+      - 'scripts/ri08-linkedhelper-browser.cjs'
+      - '.github/workflows/ri08-conversation-intent.yml'
+  workflow_dispatch:
+jobs:
+  intents-and-scope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate javascript syntax
+        run: |
+          node --check src/ia.js
+          node --check src/app.js
+          node --check src/views.js
+          node --check src/ri/conversation-intent.mjs
+          node --check src/ri/internal-cues.mjs
+          node --check src/ri/account-view.mjs
+      - name: Run focused regression tests
+        run: node --test tests/ri08-conversation-intent.test.mjs scripts/ri07a-internal-cues.test.cjs
+      - name: Benchmark 5000 opportunities and revision-safe cache
+        run: node --test tests/ri08-performance.test.mjs
+
+  browser-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Replay import preview in real browser
+        run: timeout 150s node scripts/ri08-linkedhelper-browser.cjs
+  staging-transport:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Test staging assistant HTTP/auth gate without credentials
+        shell: bash
+        run: |
+          status=$(curl -sS --retry 2 --max-time 25 \
+            -X POST 'https://bvlfzeblpewlqhssprpv.supabase.co/functions/v1/assistente' \
+            -H 'content-type: application/json' \
+            -d '{"tipo":"diagnostico"}' -o /tmp/ri08-staging-response.json \
+            -w '%{http_code}')
+          echo "RI08_STAGING_HTTP_STATUS=$status"
+          if [ "$status" = "401" ]; then
+            echo "RI08_STAGING_AUTH_GATE=ENFORCED"
+          elif [ "$status" = "503" ]; then
+            echo "::notice::RI08_STAGING_AI_KEYS_MISSING_OR_UNAVAILABLE; authenticated LLM E2E remains blocked"
+          else
+            echo "::error::Unexpected staging status $status: expected unauthenticated 401 or unconfigured 503"
+            exit 1
+          fi

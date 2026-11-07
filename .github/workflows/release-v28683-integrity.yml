@@ -1,0 +1,31 @@
+name: Release v286.83 — RI-08 + PERF-39 + PERF-40
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'scripts/release-v28683-integrity.test.cjs'
+      - 'sw.js'
+      - '.github/workflows/release-v28683-integrity.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Validate syntax
+        run: |
+          node --check src/views.js
+          node --check src/nuvem.js
+          node --check src/performance.js
+          node --check sw.js
+      - name: Verify all three workstreams
+        run: |
+          node --test scripts/release-v28683-integrity.test.cjs
+          node --test scripts/perf39-kanban-index.test.cjs
+          node --test scripts/perf40-sync-diagnostics.test.cjs
+          node --test tests/ri08-conversation-intent.test.mjs
