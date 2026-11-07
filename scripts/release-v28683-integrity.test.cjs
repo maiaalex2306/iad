@@ -13,8 +13,8 @@ test('PWA precache do detector e sem API autenticada em cache',()=>{
  assert(!sw.includes("functions/v1/assistente"));
 });
 test('versão PWA atômica, sem voltar abaixo de v286.83',()=>{
- const cache=read('sw.js').match(/const CACHE = 'iad-crm-v(\\d+)\\.(\\d+)'/)?.slice(1).map(Number);
- const config=read('src/config.js').match(/numero: 'v(\\d+)\\.(\\d+)'/)?.slice(1).map(Number);
+ const cache=read('sw.js').match(/const CACHE = 'iad-crm-v(\d+)\.(\d+)'/)?.slice(1).map(Number);
+ const config=read('src/config.js').match(/numero: 'v(\d+)\.(\d+)'/)?.slice(1).map(Number);
  assert.ok(cache && config,'Versões do cache e do aplicativo precisam existir');
  assert.deepEqual(cache,config,'Versão do SW deve corresponder à versão executada');
  assert.ok(cache[0]>286 || (cache[0]===286 && cache[1]>=83),
