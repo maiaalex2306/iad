@@ -2069,6 +2069,7 @@
              esta aqui pega o que a regra não pega: a recusa educada, a que
              vem enrolada em elogio, a que não usa nenhuma palavra-chave. */
           l.respostaDaIA = achado.resposta || '';
+          l.sinaisDaIA = Array.isArray(achado.sinais) ? achado.sinais.slice(0,3) : [];
           l.porqueRecusa = achado.porqueRecusa || '';
           /* O insight da campanha é o mesmo texto para o lote inteiro; o da
              IA é sobre esta conversa. Quando existem os dois, vale o desta
@@ -8205,8 +8206,21 @@
         (m.nosso ? (lead.operador || 'SDR') : (m.de || lead.nome || 'Prospect')) + ': ' + m.texto;
     }).join('\n');
 
+    /* RI-08: a IA so pode registrar hipoteses citando literalmente o que
+       um prospect escreveu. A fala da SDR nunca e sinal de compra. */
+    const sinaisDaIA = (Array.isArray(lead.sinaisDaIA) ? lead.sinaisDaIA : [])
+      .filter(function (s) {
+        return s && typeof s.type === 'string' && typeof s.evidence === 'string' &&
+          conversa.some(function (m) {
+            return m && m.nosso === false &&
+              String(m.texto || '').toLowerCase().includes(s.evidence.toLowerCase());
+          });
+      }).slice(0,3).map(function (s) {
+        return {type: s.type.slice(0,48), evidence: s.evidence.slice(0,220)};
+      });
     op.eventos.unshift({
       id: Store.uid('evt'), tipo: 'sistema',
+      sinaisDeIntencao: sinaisDaIA,
       data: conversa[conversa.length - 1].quando || Store.hoje(),
       titulo: (jaTinhaConversa ? 'Continuação da conversa no LinkedIn com ' : 'Conversa no LinkedIn com ') +
         (lead.operador || 'a SDR') +
