@@ -409,3 +409,8 @@ nav.tabs a.ativo { color: var(--acp-brand); font-weight: 700; }
 .iad-market-ui .iad-market-batch-meter::-webkit-progress-value {background:var(--acp-accent,#ff682c);border-radius:999px;}
 .iad-market-ui .iad-market-batch-meter::-moz-progress-bar {background:var(--acp-accent,#ff682c);border-radius:999px;}
 .iad-market-ui .iad-market-action-buttons button[hidden] {display:none!important;}
+
+/* CTA exclusivo do próximo lote, sem colidir com o único botão de busca geral. */
+.iad-market-ui .iad-market-batch-next {background:var(--acp-brand-fundo,#4a1078);color:#fff;
+ border:1px solid var(--acp-brand-fundo,#4a1078);border-radius:10px;padding:9px 16px;cursor:pointer;}
+.iad-market-ui .iad-market-batch-next[disabled] {opacity:.6;cursor:default;}
