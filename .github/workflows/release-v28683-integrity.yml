@@ -31,6 +31,7 @@ jobs:
           node --test scripts/perf39-kanban-index.test.cjs
           node --test scripts/perf40-sync-diagnostics.test.cjs
           node --test tests/ri08-conversation-intent.test.mjs
+          node --test scripts/perf41-ab-benchmark.test.mjs
 
   offline-browser:
     runs-on: ubuntu-latest
