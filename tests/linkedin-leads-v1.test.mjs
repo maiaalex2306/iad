@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {importLinkedInCsv,normalizeProfile,parseCsvTable} from '../src/linkedin-csv.mjs';
 import {linkedinUrl,prepareLinkedInCampaign,campaignText} from '../src/linkedin-leads.mjs';
+import {serializeLinkedInCheckpoint,restoreLinkedInCheckpoint} from '../src/linkedin-checkpoint.mjs';
 import {
   TERMINAIS,campaignSummary,nextPending,skipWithoutPost,setProfileOpened,
   setLikeConfirmed,setCommentConfirmed,reviewWindow,canReviewProfile,externalActionGate
@@ -119,6 +120,36 @@ test('Ação externa sempre bloqueada sem integração/escopo e diante de pausas
     remaining:10,now:160_000,lastActionAt:100_000,minIntervalMs:60_000}).ok,true);
 });
 
+test('Checkpoint local: restaura estado com isolamento de usuário, empresa e filtros',()=>{
+  const scope={userId:'usuario-1',tenantId:'empresa-1',role:'gestor',tenantFilter:'empresa-1',ownerFilter:'todos'};
+  const rows=[profile(1),profile(2)];
+  rows[0].postUrl='https://www.linkedin.com/posts/lead1-123';
+  setLikeConfirmed(rows[0]);
+  setCommentConfirmed(rows[0],'Parabéns pela iniciativa sobre água; seria ótimo trocarmos ideias sobre segurança hídrica.');
+  rows[0].rascunho=rows[0].comentarioPublicado;
+  skipWithoutPost(rows,rows[1]);
+  const text=serializeLinkedInCheckpoint({rows,selected:rows[0].perfil,paused:true,scope});
+  assert.doesNotMatch(text,/password|li_at|authorization|cookie/);
+  const result=restoreLinkedInCheckpoint(text,scope);
+  assert.equal(result.rows.length,2);
+  assert.equal(result.rows[0].estado,'confirmado');
+  assert.equal(result.rows[1].estado,'sem_post');
+  assert.equal(result.selected,rows[0].perfil);
+  assert.equal(result.paused,true);
+  assert.throws(()=>restoreLinkedInCheckpoint(text,{...scope,tenantId:'empresa-2'}),/outro usuário, empresa ou filtro/i);
+  assert.throws(()=>restoreLinkedInCheckpoint('{malformed',scope),/JSON/i);
+});
+
+test('Checkpoint invalida confirmação sem registro de curtida ou comentário',()=>{
+  const scope={userId:'u',tenantId:'t'};
+  const row=profile(1);
+  row.estado='confirmado';row.curtidaConfirmada=false;
+  row.postUrl='https://www.linkedin.com/posts/lead1-123';
+  const json=serializeLinkedInCheckpoint({rows:[row],scope});
+  const restored=restoreLinkedInCheckpoint(json,scope);
+  assert.notEqual(restored.rows[0].estado,'confirmado');
+});
+
 test('Integração: menu, importação lazy, PWA e Edge Function preservam o contrato',()=>{
   const app=readFileSync('src/app.js','utf8');
   const cfg=readFileSync('src/config.js','utf8');
@@ -132,6 +163,7 @@ test('Integração: menu, importação lazy, PWA e Edge Function preservam o con
   assert.match(cfg,/IAD_LINKEDIN_LEADS_ENABLED = true/);
   assert.match(sw,/src\/linkedin-campaign-engine\.mjs/);
   assert.match(sw,/src\/linkedin-csv\.mjs/);
+  assert.match(sw,/src\/linkedin-checkpoint\.mjs/);
   assert.match(sw,/src\/linkedin-leads\.mjs/);
   const version=cfg.match(/numero: '(v[\d.]+)'/)?.[1];
   const cache=sw.match(/const CACHE = 'iad-crm-(v[\d.]+)'/)?.[1];
