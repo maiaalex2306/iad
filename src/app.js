@@ -94,6 +94,14 @@
        sistema nenhum. */
     { hash: '#/conversas', ico: V.iconeWhatsapp(17), nome: 'Conversas', render: V.conversas,
       ajuda: 'As conversas de WhatsApp, por pessoa. Mensagem não é evidência: você lê, e quando alguma coisa valeu a pena, registra o que aconteceu — e aí a IA lê e as oito decisões andam.' },
+    ...(global.IAD_LINKEDIN_LEADS_ENABLED === true ? [{
+      hash: '#/linkedin-leads', ico: '🔗', nome: 'LinkedIN Leads',
+      render: function () {
+        return '<section class="card"><h1>LinkedIN Leads</h1>' +
+          '<div id="iad-linkedin-root" aria-live="polite">Preparando a campanha...</div></section>';
+      },
+      ajuda: 'Campanha assistida: análise de post e comentário de lead, rascunho com IA e publicação manual aprovada.'
+    }] : []),
     { hash: '#/revisao', ico: '🔄', nome: 'Revisão', render: V.revisao,
       ajuda: 'A reunião semanal numa tela: o que mudou na decisão de cada cliente nos últimos 7 dias.' },
     { hash: '#/cadastros', ico: '📇', nome: 'Cadastros', render: V.cadastros,
@@ -455,7 +463,7 @@
     const faixa = faixaDeAviso();
     /* RI-M18: URL direta, histórico e App.ir também exigem Gestor/Admin.
        Não importar módulos restritos, não consumir IA, não ler a carteira RI. */
-    if ((hash === '#/inteligencia' || hash === '#/mercado') && !A.ehGestor()) {
+    if ((hash === '#/inteligencia' || hash === '#/mercado' || hash === '#/linkedin-leads') && !A.ehGestor()) {
       conteudo.innerHTML = faixa + '<section class="card" role="alert">' +
         '<h2>Acesso restrito</h2><p>Inteligência Comercial e Inteligência de Mercado ' +
         'estão disponíveis apenas para Gestores e Administradores.</p></section>';
@@ -528,6 +536,7 @@
       if (rota.hash === '#/playbook') iniciarManualSobDemanda();
       else if (rota.hash === '#/inteligencia') iniciarInteligenciaComercial();
       else if (rota.hash === '#/mercado') iniciarMercadoManual();
+      else if (rota.hash === '#/linkedin-leads') iniciarLinkedInLeads();
       else if (rota.hash === '#/dados') { pintarUso(); pintarLeads(); pintarVersao(); }
       else pintarUsuariosNuvem();
       /* O ditado vivia dentro de formulário, onde alguem sempre chamava
@@ -557,7 +566,7 @@
 
     /* PERF-38: marcar conclusão apenas após a tela principal estar no DOM.
        Intelligence e Mercado são lazy: concluem após o mount autorizado. */
-    if (hash !== '#/inteligencia' && hash !== '#/mercado' &&
+    if (hash !== '#/inteligencia' && hash !== '#/mercado' && hash !== '#/linkedin-leads' &&
         global.IADPerformance?.concluirNavegacao)
       global.IADPerformance.concluirNavegacao(hash);
 
@@ -616,6 +625,40 @@
     });
   }
 
+
+  /* LINKEDIN-01: módulo opt-in, carregado apenas quando o gestor abre a rota.
+     Não coleta credenciais nem executa curtidas/publicações externamente. */
+  let moduloLinkedin = null;
+  let geracaoLinkedin = 0;
+  function iniciarLinkedInLeads() {
+    const root = document.getElementById('iad-linkedin-root');
+    if (!root || global.IAD_LINKEDIN_LEADS_ENABLED !== true) return;
+    const token = ++geracaoLinkedin;
+    const assinatura = assinaturaInteligencia(), usuario = A.atual(), nuvem = global.IADNuvem;
+    if (!usuario || !A.ehGestor() || !assinatura || !nuvem) {
+      root.textContent = 'Acesso permitido somente a Gestores e Administradores autenticados.';
+      return;
+    }
+    const arquivo = new URL('src/linkedin-leads.mjs', document.baseURI).href;
+    const pendente = moduloLinkedin || (moduloLinkedin = import(arquivo).catch(function (e) {
+      moduloLinkedin = null; throw e;
+    }));
+    pendente.then(function (m) {
+      if (token !== geracaoLinkedin || !root.isConnected ||
+          location.hash !== '#/linkedin-leads' || assinatura !== assinaturaInteligencia()) return;
+      m.mountLinkedInLeads({
+        root, snapshot: Store.dados(),
+        scope: { token: assinatura, userId: usuario.id, tenantId: Store.contexto().tenantId },
+        getScopeToken: assinaturaInteligencia, nuvem: nuvem
+      });
+      if (global.IADPerformance?.concluirNavegacao)
+        global.IADPerformance.concluirNavegacao('#/linkedin-leads');
+    }).catch(function () {
+      if (token === geracaoLinkedin && root.isConnected &&
+          location.hash === '#/linkedin-leads' && assinatura === assinaturaInteligencia())
+        root.textContent = 'Não foi possível carregar LinkedIN Leads. Nenhum dado foi alterado.';
+    });
+  }
 
   /* RI-M01: carregamento lazy; flag desligada ate existir provedor homologado.
      A pesquisa exige clique BUSCAR e nao altera o Store nem o CAS. */
@@ -1312,7 +1355,7 @@
     const assinatura = autorizado ? 'gestor-admin' : 'outros';
     if (assinatura === assinaturaMenuInteligencia) return;
     nav.innerHTML = ROTAS.filter(function (r) {
-      return !r.foraDasAbas && (autorizado || (r.hash !== '#/inteligencia' && r.hash !== '#/mercado'));
+      return !r.foraDasAbas && (autorizado || (r.hash !== '#/inteligencia' && r.hash !== '#/mercado' && r.hash !== '#/linkedin-leads'));
     }).map(function (r) {
       return '<a href="' + r.hash + '"' + (r.ajuda ? ' data-ajuda-titulo="' + r.nome + '" data-ajuda="' + U.esc(r.ajuda) + '"' : '') +
         '><span class="ico">' + r.ico + '</span>' + r.nome + '</a>';
