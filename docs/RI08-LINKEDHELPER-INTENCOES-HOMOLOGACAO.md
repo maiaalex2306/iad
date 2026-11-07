@@ -39,3 +39,13 @@ Converter falas reais do prospect em hipóteses comerciais rastreáveis, preserv
 6. Apenas então decidir o release de produção, com rollback preservado.
 
 **Status:** código candidato em PR, não homologação real de produção.
+
+
+## Auditoria de performance e deploy isolado — 07/11/2026
+- RI-08 implantada em staging na função `assistente`, versão 1, status ACTIVE; não houve alteração na instância de produção.
+- Benchmark sintético no runner GitHub: 5.000 oportunidades / 30.000 eventos; cálculo frio de 306,67 ms; 100 leituras cacheadas somadas de 0,28 ms; recálculo com revisão nova de 248,56 ms. Esses valores **não** são P95 reais do navegador.
+- Cache depende do token derivado de usuário, filtros e revisão do Store; não reutilizar em outro escopo.
+- A revisão da importação inclui classificação local independente de modelo e catálogo, complementando a IA em lote sem requisições adicionais.
+- Novo smoke test HTTP remoto distingue autenticação (401) de provedor ausente (503), sem gravar dados ou enviar credenciais ao CI.
+- Novo replay Chromium verifica prioridade do interesse real sobre cortesia sem abrir negócio.
+- Necessário teste funcional autenticado com credenciais de staging, além de medir tempos reais no navegador, antes do merge em produção.
