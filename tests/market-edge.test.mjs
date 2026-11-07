@@ -1274,3 +1274,17 @@ test('RI-M22: busca por nome exige território exato, fonte e quota',async()=>{
  const noCitation=await fake.handle(request({action:'investigate',target,filters:query.filters}));
  assert.equal(noCitation.status,200);assert.equal((await noCitation.json()).data.length,0);
 });
+
+test('RI-M22: nome de planta industrial com travessão aceita razão social da mesma marca e cidade',async()=>{
+ const company={...candidate,nome:'General Motors do Brasil Ltda',razaoSocial:'General Motors do Brasil Ltda',cidade:'São José dos Campos',segmento:'Automotivo'};
+ const response=responseOpenAI();
+ response.output.find(b=>b.type==='message').content[0].text=JSON.stringify({empresas:[company]});
+ const h=harness({openai:true,openaiResponse:response});
+ const res=await h.handle(request({action:'investigate',
+  target:{cnpj:null,nome:'General Motors do Brasil – Complexo Industrial de São José dos Campos'},
+  filters:{uf:'SP',cidade:'São José dos Campos',segmento:'Automotivo'}}));
+ assert.equal(res.status,200);
+ const result=await res.json();
+ assert.equal(result.data.length,1);
+ assert.equal(result.targetMatch,'IDENTIDADE_SUGERIDA_NAO_VERIFICADA');
+});
