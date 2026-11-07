@@ -1383,3 +1383,59 @@ test('RI-M23: páginas web consultadas pela OpenAI são capturadas mas não prom
  assert.deepEqual(Array.from(calls[0].body.include),['web_search_call.action.sources']);
  assert.equal(calls[0].body.store,false);
 });
+
+const marketBatchFilters={uf:'SP',municipios:[
+ {codigoIBGE:'3549904',nome:'São José dos Campos',uf:'SP'},
+ {codigoIBGE:'3554102',nome:'Taubaté',uf:'SP'}],
+ ddds:['12'],segmentos:['Automotivo e Mobilidade'],
+ faixasFuncionarios:['201_500'],limit:20};
+test('RI-M24: consulta exatamente um município e subsegmento autorizado, sem ampliar território',async()=>{
+ const company={...candidate,nome:'Sistemista Auto Peças',razaoSocial:'Sistemista Auto Peças',
+  cnpj:null,cidade:'São José dos Campos',uf:'SP',
+  segmento:'Automotivo e Mobilidade - sistemista Tier 2',funcionarios:null};
+ const ai=responseOpenAI();
+ ai.output.find(x=>x.type==='message').content[0].text=JSON.stringify({empresas:[company]});
+ const h=harness({openai:true,catalogNames:['Automotivo e Mobilidade'],openaiResponse:ai});
+ const res=await h.handle(request({action:'search',filters:marketBatchFilters,
+  batch:{municipioIBGE:'3549904',familyIndex:1},provider:'OpenAI'}));
+ assert.equal(res.status,200);
+ const d=await res.json();
+ assert.equal(d.data.length,1);
+ assert.equal(d.discoveryBatch.municipio,'São José dos Campos');
+ assert.equal(d.discoveryBatch.familyIndex,1);
+ assert.equal(d.discoveryBatch.individuallySearched,true);
+ assert.equal(d.discoveryBatch.familyCount,18);
+ assert.equal(d.data[0].cnpj,'','CNPJ ausente continua vazio e não verificado');
+ const calls=aiCalls(h);assert.equal(calls.length,1);
+ assert.match(calls[0].body.input,/uma célula da matriz/i);
+ assert.match(calls[0].body.input,/sistemistas Tier 1\/Tier 2\/Tier 3/i);
+ assert.doesNotMatch(calls[0].body.input,/TODAS AS 18 FAMÍLIAS/i);
+ assert.equal(h.calls.filter(c=>c.url.includes('iad_market_search_reserve')).length,1);
+});
+test('RI-M24: município ou índice inventado não consomem cota nem chamam IA',async()=>{
+ for(const batch of [
+  {municipioIBGE:'3550704',familyIndex:1},
+  {municipioIBGE:'3549904',familyIndex:18},
+  {municipioIBGE:'3549904',familyIndex:-1},
+  {municipioIBGE:'3549904',familyIndex:'1'},
+  {municipioIBGE:'3549904',familyIndex:1,tenant_id:'outro'}
+ ]){
+  const h=harness({openai:true,catalogNames:['Automotivo e Mobilidade']});
+  const res=await h.handle(request({action:'search',filters:marketBatchFilters,batch}));
+  assert.equal(res.status,422);assert.equal((await res.json()).error,'INVALID_DISCOVERY_BATCH');
+  assert.equal(aiCalls(h).length,0);
+  assert.equal(h.calls.filter(c=>c.url.includes('iad_market_search_reserve')).length,0);
+ }
+});
+test('RI-M24: lote não é aceito em ação individual nem para segmento que não seja automotivo',async()=>{
+ const h=harness({openai:true});
+ const res=await h.handle(request({action:'search',filters:{
+  ...marketBatchFilters,segmentos:['Química e Petroquímica']},
+  batch:{municipioIBGE:'3549904',familyIndex:1}}));
+ assert.equal(res.status,422);assert.equal(aiCalls(h).length,0);
+ const i=harness({openai:true,catalogNames:['Automotivo e Mobilidade']});
+ const r=await i.handle(request({action:'investigate',target:{cnpj:candidate.cnpj,nome:candidate.nome},
+  filters:{uf:'SP',cidade:'Jacarei',segmento:'Quimico'},
+  batch:{municipioIBGE:'3549904',familyIndex:1}}));
+ assert.equal(r.status,422);assert.equal(aiCalls(i).length,0);
+});

@@ -399,3 +399,18 @@ nav.tabs a.ativo { color: var(--acp-brand); font-weight: 700; }
 .iad-market-progress-close:focus-visible,.iad-market-progress-reopen:focus-visible {outline:3px solid var(--acp-accent,#ff682c);outline-offset:3px;}
 @media(max-width:520px){.iad-market-progress {padding:12px;}.iad-market-progress-dialog {border-radius:15px;padding:23px 18px;}.iad-market-progress-reopen {bottom:14px;right:14px;left:14px;}}
 @media(prefers-reduced-motion:reduce){.iad-market-progress {backdrop-filter:none;}.iad-market-progress-track[data-state="running"] .iad-market-progress-fill {animation:none;transform:scaleX(.55)}.iad-market-progress-track[data-state="running"]::after {animation:none;display:none}}
+
+/* RI-M24A — progresso REAL: número de lotes concluídos. Não representa cobertura CNPJ. */
+.iad-market-ui .iad-market-batch-status {margin:10px 0 4px;color:var(--acp-text,#272031);font-weight:600;}
+.iad-market-ui .iad-market-batch-meter {display:block;width:100%;height:10px;border:0;border-radius:999px;
+ accent-color:var(--acp-accent,#ff682c);margin:4px 0 12px;}
+.iad-market-ui .iad-market-batch-meter[hidden] {display:none!important;}
+.iad-market-ui .iad-market-batch-meter::-webkit-progress-bar {background:var(--acp-brand-soft,#f3ecfa);border-radius:999px;}
+.iad-market-ui .iad-market-batch-meter::-webkit-progress-value {background:var(--acp-accent,#ff682c);border-radius:999px;}
+.iad-market-ui .iad-market-batch-meter::-moz-progress-bar {background:var(--acp-accent,#ff682c);border-radius:999px;}
+.iad-market-ui .iad-market-action-buttons button[hidden] {display:none!important;}
+
+/* CTA exclusivo do próximo lote, sem colidir com o único botão de busca geral. */
+.iad-market-ui .iad-market-batch-next {background:var(--acp-brand-fundo,#4a1078);color:#fff;
+ border:1px solid var(--acp-brand-fundo,#4a1078);border-radius:10px;padding:9px 16px;cursor:pointer;}
+.iad-market-ui .iad-market-batch-next[disabled] {opacity:.6;cursor:default;}
