@@ -1,9 +1,13 @@
 'use strict';
 /* A/B no MESMO runner, mesmos dados e algoritmo, mudando apenas a memoização. */
-const test=require('node:test'),assert=require('node:assert/strict');
-const fs=require('node:fs'),path=require('node:path'),os=require('node:os');
-const {execFileSync}=require('node:child_process'),{pathToFileURL}=require('node:url');
-const {performance}=require('node:perf_hooks');
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import {execFileSync} from 'node:child_process';
+import {pathToFileURL} from 'node:url';
+import {performance} from 'node:perf_hooks';
 const root=path.resolve(__dirname,'..');
 const baseline='eaf46b932a5a6224651cff57597d3079de51e99f';
 const before=execFileSync('git',['show',baseline+':src/ri/internal-cues.mjs'],
