@@ -19,7 +19,7 @@ test('ambos os motores recebem localização do filtro brasileiro, não do usuá
 });
 test('prompt de descoberta busca mais empresas e fontes individuais sem fabricar CNPJ ou porte',()=>{
  const p=funcs.prompt(f);
- for(const fragment of ['MAPEAMENTO B2B','São José dos Campos','Automotivo e Mobilidade','CNPJ','funcionarios:null',
+ for(const fragment of ['MAPEAMENTO B2B','São José dos Campos','Automotivo e Mobilidade','CNPJ','"funcionarios":null',
    'fontes','JSON','3-4','diversidade','filial','web_search','sem importação automática']){
   assert.ok(p.toLowerCase().includes(fragment.toLowerCase()),'Missing requirement '+fragment);
  }
