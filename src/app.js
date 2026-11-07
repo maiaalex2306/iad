@@ -648,7 +648,9 @@
           location.hash !== '#/linkedin-leads' || assinatura !== assinaturaInteligencia()) return;
       m.mountLinkedInLeads({
         root, snapshot: Store.dados(),
-        scope: { token: assinatura, userId: usuario.id, tenantId: Store.contexto().tenantId },
+        scope: { token: assinatura, userId: usuario.id, tenantId: Store.contexto().tenantId,
+          role: usuario.papel, tenantFilter: (Store.contexto().filtros || {}).tenant || 'todas',
+          ownerFilter: (Store.contexto().filtros || {}).usuario || 'todos' },
         getScopeToken: assinaturaInteligencia, nuvem: nuvem
       });
       if (global.IADPerformance?.concluirNavegacao)
