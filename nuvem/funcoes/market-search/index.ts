@@ -338,6 +338,8 @@ function discoveryInstructions(f,engine=''){
   'CNAE 29 (veículos/peças) e 45 (comércio/reparação) são pistas, NÃO um corte exclusivo: '+
   'empresas com CNAE principal 22, 25, 26, 27, 28, 30, 33, 49, 52, 62 ou 71 também podem integrar a cadeia, '+
   'MAS exija evidência de produto/cliente/serviço automotivo ou de mobilidade. '+
+  'Ao identificar relação efetiva com o setor selecionado, escreva o campo segmento como "Automotivo e Mobilidade - [subsegmento específico]", '+
+  'por exemplo "Automotivo e Mobilidade - injeção plástica para sistemistas". NÃO use o rótulo se não houver vínculo. '+
   'Respeite integralmente as faixas de empregados e o território; empregados não informados ficam pendentes, '+
   'sem exclusão automática nem falsa confirmação. ';
 }
@@ -477,7 +479,12 @@ function reportedICP(entry,f,employees){
  const values={
   municipio:asked.municipio?(entry.cidade?'declarado':'pendente'):'nao_solicitado',
   ddd:asked.ddd?(ddd?'declarado':'pendente'):'nao_solicitado',
-  segmento:asked.segmento?(segment?(selectedSegments.some(x=>normalizedPlace(x)===segment)?'declarado':'a_confirmar'):'pendente'):'nao_solicitado',
+  // "Automotivo e Mobilidade - autopeças" mantém o setor pai declarado;
+  // a subcategoria continua texto informado pela IA, nunca fato confirmado.
+  segmento:asked.segmento?(segment?(selectedSegments.some(x=>{
+   const base=normalizedPlace(x);
+   return segment===base||[' - ',': ',' — ',' / ',' ('].some(sep=>segment.startsWith(base+sep));
+  })?'declarado':'a_confirmar'):'pendente'):'nao_solicitado',
   funcionarios:asked.funcionarios?(Number.isSafeInteger(employees)&&employees>=0?'declarado':'pendente'):'nao_solicitado'
  };
  const requested=Object.values(values).filter(x=>x!=='nao_solicitado');
