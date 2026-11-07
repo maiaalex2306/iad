@@ -388,7 +388,11 @@ function normalizedPlace(value) {
 // Nomes com sufixos societários podem diferir; resultado é apenas hipótese.
 function sameCompanyName(entry,requested){
  const norm=v=>normalizedPlace(v).replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
- const name=norm(requested),names=[norm(entry?.nome),norm(entry?.razaoSocial)].filter(Boolean);
+ // Descritores de unidade (ex.: "General Motors — Complexo Industrial") não
+ // integram necessariamente a razão social; comparar também o núcleo anterior
+ // ao travessão, sempre exigindo vínculo por nome e fonte citada.
+ const name=norm(String(requested||'').split(/[–—|]/)[0]);
+ const names=[norm(entry?.nome),norm(entry?.razaoSocial)].filter(Boolean);
  if(name.length<5)return false;
  const meaningful=name.split(' ').filter(x=>x.length>=4&&
    !['brasil','industria','comercio','servicos','grupo','empresa','sociedade','limitada'].includes(x));
