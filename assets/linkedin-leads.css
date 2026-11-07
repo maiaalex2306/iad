@@ -36,35 +36,3 @@
   #iad-linkedin-root .iad-linkedin-import-row { grid-template-columns:1fr 1fr; }
   #iad-linkedin-root .iad-linkedin-import-row > strong { grid-column:1 / -1; }
 }
-
-/* LinkedIN Leads v1 — layout do workflow assistido. */
-#iad-linkedin-root .ll-head{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:18px}
-#iad-linkedin-root .ll-head h2{font-size:1.5rem;margin:4px 0}
-#iad-linkedin-root .ll-head p{margin:0;color:var(--muted,#667085)}
-#iad-linkedin-root .ll-eyebrow{font-size:11px;font-weight:800;letter-spacing:1.5px}
-#iad-linkedin-root .ll-state{font-size:12px;border:1px solid #cacfe1;padding:10px 14px;border-radius:9px;text-align:right;line-height:1.6;background:var(--fundo,#fafaff)}
-#iad-linkedin-root .ll-layout{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
-#iad-linkedin-root .ll-panel{background:var(--fundo,#fff);border:1px solid var(--borda,#d6dce6);border-radius:12px;padding:18px;margin-bottom:14px}
-#iad-linkedin-root .ll-panel h3{font-size:1.05rem;margin:0 0 12px}
-#iad-linkedin-root .ll-label,#iad-linkedin-root .ll-form label{display:block;font-size:13px;font-weight:650;margin:9px 0 5px}
-#iad-linkedin-root input:not([type=file]),#iad-linkedin-root select,#iad-linkedin-root textarea{width:100%;min-width:0;border:1px solid var(--borda,#ccd2df);border-radius:8px;padding:9px;font:inherit;color:inherit;background:var(--fundo,#fff)}
-#iad-linkedin-root input[type=file]{max-width:100%;margin:5px 0 10px}
-#iad-linkedin-root .ll-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:12px 0}
-#iad-linkedin-root .ll-row>.btn{flex-shrink:0}
-#iad-linkedin-root .ll-row>input{flex:1}
-#iad-linkedin-root .ll-hint{font-size:12px;line-height:1.5;color:var(--muted,#667085)}
-#iad-linkedin-root .ll-count{font-size:13px;font-weight:700}
-#iad-linkedin-root .ll-form{display:grid;grid-template-columns:1fr 1fr;gap:7px 16px}
-#iad-linkedin-root .ll-form label{min-width:0}
-#iad-linkedin-root .ll-form label>*{margin-top:5px}
-#iad-linkedin-root .ll-form .ll-full{grid-column:1/-1}
-#iad-linkedin-root .ll-step{font-size:13px;padding:10px;background:var(--fundo,#f3f4fa);border:1px solid var(--borda,#ddd);border-radius:8px;margin-top:14px}
-#iad-linkedin-root .ll-workflow{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
-#iad-linkedin-root .ll-workflow span{font-size:12px;padding:7px 9px;border-radius:8px;background:var(--fundo,#f2eff9);border:1px solid var(--borda,#ddd7ed)}
-#iad-linkedin-root #ll-analysis{white-space:pre-line}
-#iad-linkedin-root .ll-alert{min-height:22px;margin:14px 0 0;font-weight:600;color:#1a6550;font-size:13px}
-#iad-linkedin-root .ll-alert.erro{color:#b42929}
-#iad-linkedin-root .ll-table{width:100%;border-collapse:collapse;font-size:13px}
-#iad-linkedin-root .ll-table th,#iad-linkedin-root .ll-table td{padding:9px 6px;text-align:left;border-bottom:1px solid var(--borda,#ddd);word-break:break-word}
-#iad-linkedin-root .ll-table th{font-weight:750}
-@media(max-width:780px){#iad-linkedin-root .ll-layout,#iad-linkedin-root .ll-form{grid-template-columns:1fr}#iad-linkedin-root .ll-head{display:block}#iad-linkedin-root .ll-state{text-align:left;margin-top:12px}}
