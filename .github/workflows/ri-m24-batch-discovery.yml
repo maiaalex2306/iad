@@ -1,0 +1,53 @@
+name: RI-M24 — Descoberta REAL em lotes por município e família
+on:
+  pull_request:
+    paths:
+      - 'nuvem/funcoes/market-search/index.ts'
+      - 'src/ri/market-view.mjs'
+      - 'src/ri/market-batches.mjs'
+      - 'src/ri/market-contract.mjs'
+      - 'assets/paleta-acp.css'
+      - 'tests/market-edge.test.mjs'
+      - 'tests/market-batches.test.mjs'
+      - 'src/config.js'
+      - 'sw.js'
+      - '.github/workflows/ri-m24-batch-discovery.yml'
+  push:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - 'nuvem/funcoes/market-search/index.ts'
+      - 'src/ri/market-view.mjs'
+      - 'src/ri/market-batches.mjs'
+      - 'src/config.js'
+      - 'sw.js'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  batch-security-and-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Verify source syntax and test budget, territory, family, dedupe
+        run: |
+          node --check src/ri/market-view.mjs
+          node --check src/ri/market-batches.mjs
+          node --test tests/market-batches.test.mjs tests/market-edge.test.mjs tests/market-contract.test.mjs tests/market-prospect-agents.test.mjs
+  browser-pwa-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Install Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Verify existing progress UI, theme and PWA parity
+        run: |
+          node scripts/ri-m21-progress-browser.cjs
+          node --test scripts/ri-palette-contract.test.cjs tests/market-progress.test.mjs
