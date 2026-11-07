@@ -2025,15 +2025,45 @@
     }
     if (descartados.length) avisoDeDescartados = descartados.length;
 
+    /* RI-08: o interesse explícito precisa aparecer mesmo quando a IA,
+       o catálogo de segmentos ou a consulta ao site indisponibilizarem
+       a classificação profunda. Uma importação dinâmica local por lote;
+       nada de chamadas adicionais a provedores ou escrita automática. */
+    const sinaisLocaisProntos = import(
+      new URL('src/ri/conversation-intent.mjs',document.baseURI).href
+    ).then(function (motor) {
+      lista.forEach(function (lead) {
+        const falas = (Array.isArray(lead.conversa) && lead.conversa.length)
+          ? lead.conversa.filter(function (m) {
+              return m && m.nosso === false && typeof m.texto === 'string';
+            }).map(function (m) { return m.texto; })
+          : (lead.resposta ? [lead.resposta] : []);
+        const encontrados = [], chaves = {};
+        falas.slice(-8).forEach(function (fala) {
+          motor.detectCommercialIntents(fala,{max:6}).forEach(function (sinal) {
+            if(chaves[sinal.type])return;
+            chaves[sinal.type]=true;
+            encontrados.push({type:sinal.type,evidence:sinal.evidence});
+          });
+        });
+        lead.sinaisLocais=encontrados.slice(0,4);
+      });
+    }).catch(function () {
+      /* Resiliência: sem módulo local, continua o importador já homologado. */
+      lista.forEach(function (lead) { lead.sinaisLocais=[]; });
+    });
+
     /* Várias SDRs mandam prospects de segmentos diferentes. Classificar
        empresa por empresa à mão é o que faz ninguém classificar — e sem
        segmento o painel por segmento não diz nada. Uma chamada só para o
        lote inteiro, e o vendedor corrige o que quiser na tela seguinte. */
     const comEmpresa = lista.filter(function (l) { return l.empresa; });
     if (!comEmpresa.length) {
-      espera.close(); espera.remove();
-      marcarContasCandidatas(lista);
-      return App.revisarImportacao(lista, 'Nenhum lead veio com empresa identificada — não há o que classificar.');
+      return sinaisLocaisProntos.then(function () {
+        espera.close(); espera.remove();
+        marcarContasCandidatas(lista);
+        return App.revisarImportacao(lista, 'Nenhum lead veio com empresa identificada — não há o que classificar.');
+      });
     }
     espera.querySelector('h2').textContent = 'Classificando os segmentos…';
       espera.querySelector('p').textContent =
@@ -2046,7 +2076,9 @@
           setor: l.empresaSetor, cidade: l.empresaCidade,
           descricao: l.empresaDescricao, oQueFazLa: l.oQueFazLa,
           contato: l.nome, cargo: l.cargo, headline: l.headline,
-          conversa: l.conversa || []
+          conversa: Array.isArray(l.conversa)&&l.conversa.length ? l.conversa :
+            (l.resposta ? [{de:l.nome||'Prospect',texto:l.resposta,
+              quando:l.respostaEm||'',nosso:false}] : [])
         };
       }), function (aviso) {
         const linha = espera.querySelector('p');
@@ -2069,6 +2101,7 @@
              esta aqui pega o que a regra não pega: a recusa educada, a que
              vem enrolada em elogio, a que não usa nenhuma palavra-chave. */
           l.respostaDaIA = achado.resposta || '';
+          l.sinaisDaIA = Array.isArray(achado.sinais) ? achado.sinais.slice(0,3) : [];
           l.porqueRecusa = achado.porqueRecusa || '';
           /* O insight da campanha é o mesmo texto para o lote inteiro; o da
              IA é sobre esta conversa. Quando existem os dois, vale o desta
@@ -2079,9 +2112,11 @@
              branco cobra os vinte dias. */
           l.pergunta = achado.pergunta || '';
         });
-        espera.close(); espera.remove();
-        marcarContasCandidatas(lista);
-        App.revisarImportacao(lista, r.motivo);
+        return sinaisLocaisProntos.then(function () {
+          espera.close(); espera.remove();
+          marcarContasCandidatas(lista);
+          App.revisarImportacao(lista, r.motivo);
+        });
     }).catch(function (e) {
       espera.close(); espera.remove();
       alert(e.message);
@@ -8205,8 +8240,21 @@
         (m.nosso ? (lead.operador || 'SDR') : (m.de || lead.nome || 'Prospect')) + ': ' + m.texto;
     }).join('\n');
 
+    /* RI-08: a IA so pode registrar hipoteses citando literalmente o que
+       um prospect escreveu. A fala da SDR nunca e sinal de compra. */
+    const sinaisDaIA = (Array.isArray(lead.sinaisDaIA) ? lead.sinaisDaIA : [])
+      .filter(function (s) {
+        return s && typeof s.type === 'string' && typeof s.evidence === 'string' &&
+          conversa.some(function (m) {
+            return m && m.nosso === false &&
+              String(m.texto || '').toLowerCase().includes(s.evidence.toLowerCase());
+          });
+      }).slice(0,3).map(function (s) {
+        return {type: s.type.slice(0,48), evidence: s.evidence.slice(0,220)};
+      });
     op.eventos.unshift({
       id: Store.uid('evt'), tipo: 'sistema',
+      sinaisDeIntencao: sinaisDaIA,
       data: conversa[conversa.length - 1].quando || Store.hoje(),
       titulo: (jaTinhaConversa ? 'Continuação da conversa no LinkedIn com ' : 'Conversa no LinkedIn com ') +
         (lead.operador || 'a SDR') +

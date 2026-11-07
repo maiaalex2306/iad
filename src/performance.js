@@ -238,7 +238,22 @@
     'perf23.rede.auth',
     'perf23.rede.functions',
     'perf23.rede.storage',
-    'perf23.rede.outros'
+    'perf23.rede.outros',
+    /* PERF-40: valores temporais apenas de tabelas estáticas, sem consulta,
+       identidade, quantidade de clientes ou conteúdo; opt-in como PERF-23. */
+    'perf40.sync.full.download',
+    'perf40.sync.full.persist',
+    'perf40.sync.full.marks',
+    'perf40.sync.table.contas',
+    'perf40.sync.table.contatos',
+    'perf40.sync.table.oportunidades',
+    'perf40.sync.table.tarefas',
+    'perf40.sync.table.produtos',
+    'perf40.sync.table.segmentos',
+    'perf40.sync.table.tipos_tarefa',
+    'perf40.sync.table.fontes',
+    'perf40.sync.table.sinais',
+    'perf40.sync.table.notas'
   ];
   function relatorioDiagnostico() {
     const bruto = relatorio(true);
