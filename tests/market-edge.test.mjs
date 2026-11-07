@@ -1405,7 +1405,7 @@ test('RI-M24: consulta exatamente um município e subsegmento autorizado, sem am
  assert.equal(d.discoveryBatch.familyIndex,1);
  assert.equal(d.discoveryBatch.individuallySearched,true);
  assert.equal(d.discoveryBatch.familyCount,18);
- assert.equal(d.data[0].cnpj,null);
+ assert.equal(d.data[0].cnpj,'','CNPJ ausente continua vazio e não verificado');
  const calls=aiCalls(h);assert.equal(calls.length,1);
  assert.match(calls[0].body.input,/uma célula da matriz/i);
  assert.match(calls[0].body.input,/sistemistas Tier 1\/Tier 2\/Tier 3/i);
