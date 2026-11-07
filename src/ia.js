@@ -703,6 +703,13 @@
              nome era um lead que ninguém ia conferir — caía em "Outros" por
              falta de busca, não por falta de segmento. */
           nomes: bloco.itens.map(function (e) { return e.nome || ''; }),
+          /* RI-08: apenas mensagens do prospect, alinhadas por lead.
+             A Edge Function so aceita citacoes que aparecam aqui. */
+          falasDoCliente: bloco.itens.map(function (e) {
+            return (Array.isArray(e.conversa) ? e.conversa : [])
+              .filter(function (m) { return m && m.nosso === false && typeof m.texto === 'string'; })
+              .slice(-8).map(function (m) { return m.texto.slice(0,600); });
+          }),
           /* Quem já veio com descrição do LinkedIn não precisa que o servidor
              vá ao site: é a parte mais cara da entrada e diria o mesmo.
 
@@ -766,7 +773,8 @@
                 segmento: it.segmento || '', confianca: it.confianca || '', porque: it.porque || '',
                 maisProximo: it.maisProximo || '', papel: it.papel || '', insight: it.insight || '',
                 contaExistente: it.contaExistente || '', porqueConta: it.porqueConta || '',
-                resposta: it.resposta || '', porqueRecusa: it.porqueRecusa || ''
+                resposta: it.resposta || '', porqueRecusa: it.porqueRecusa || '',
+                sinais: Array.isArray(it.sinais) ? it.sinais.slice(0,3) : []
               };
             });
           });
