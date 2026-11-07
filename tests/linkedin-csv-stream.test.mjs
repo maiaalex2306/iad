@@ -61,6 +61,17 @@ test('Windows-1252 é suportado quando primeiro lote é inválido em UTF-8',asyn
   assert.equal(result.summary.valid,1);
   assert.equal(result.rows[0].lead,'André');
 });
+test('Windows-1252 com cabeçalho ASCII e acento após 64 KiB não corrompe a importação',async()=>{
+  const header='Nome;LinkedIn\n';
+  const leadLine=i=>'Lead '+i+';https://www.linkedin.com/in/lead-valid-'+i+'/\n';
+  const prefix=Array.from({length:1700},(_,i)=>leadLine(i)).join('');
+  assert.ok(Buffer.byteLength(prefix)>65536);
+  const ending=Buffer.from('Jos\xe9 Silva;https://www.linkedin.com/in/jose-silva/\n','latin1');
+  const bytes=Buffer.concat([Buffer.from(header+prefix,'ascii'),ending]);
+  const out=await collect(fakeFile(bytes),{batchSize:200});
+  assert.equal(out.summary.valid,1701);
+  assert.equal(out.rows.at(-1).lead,'José Silva');
+});
 test('Arquivo acima de 100 MiB, cabeçalhos inválidos e CSV sem dados são recusados',async()=>{
   const tooBig={name:'huge.csv',size:CSV_MAX_BYTES+1,stream:()=>{throw Error('Não deveria ler')}};
   await assert.rejects(()=>importLinkedInCsvStream(tooBig,{onBatch:async()=>({})}),/100/);
