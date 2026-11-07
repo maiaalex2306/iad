@@ -8,6 +8,7 @@ on:
       - 'src/linkedin-leads.mjs'
       - 'src/linkedin-csv.mjs'
       - 'src/linkedin-campaign-engine.mjs'
+      - 'src/linkedin-checkpoint.mjs'
       - 'nuvem/funcoes/assistente/index.ts'
       - 'src/app.js'
       - 'src/config.js'
@@ -30,6 +31,7 @@ jobs:
         run: |
           node --check src/linkedin-csv.mjs
           node --check src/linkedin-campaign-engine.mjs
+          node --check src/linkedin-checkpoint.mjs
           node --check src/linkedin-leads.mjs
           node --check src/app.js
       - name: Testes unitários e contrato
