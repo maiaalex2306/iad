@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Definir senha | IaD CRM</title>
+<style>
+:root { color-scheme: light; font-family: system-ui, -apple-system, Segoe UI, Arial, sans-serif; }
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; background: #f5f3f8; color: #24182d; }
+main { width: 100%; max-width: 460px; background: white; padding: clamp(22px,4vw,38px); border: 1px solid #e3dce9; border-radius: 16px; box-shadow: 0 8px 35px #2b0f4e14; }
+h1 { font-size: 26px; margin: 0 0 8px; color: #491277; }
+p { line-height: 1.5; color: #51465a; }
+label { display: block; font-weight: 600; margin: 18px 0 7px; }
+input { width: 100%; padding: 12px 14px; border: 1px solid #b7aebe; border-radius: 8px; font-size: 16px; }
+button { margin-top: 20px; padding: 12px 18px; width: 100%; color: white; background: #491277; border: 0; border-radius: 8px; font-size: 16px; font-weight: 650; cursor: pointer; }
+button:disabled { opacity: .5; cursor: wait; }
+.revelar { width: auto; margin: 5px 0 0; padding: 5px 0; border: 0; color: #491277; background: transparent; font-size: 13px; font-weight: 600; }
+a { color: #491277; }
+small { display: block; color: #62596a; margin-top: 8px; }
+[hidden] { display: none !important; }
+#status { padding: 12px 14px; margin: 18px 0 4px; background: #f2edf7; border-radius: 8px; overflow-wrap: break-word; }
+#status.error { background: #fff0ee; color: #8a231b; }
+#status.success { background: #e7f6ec; color: #176039; }
+</style>
+</head>
+<body>
+<main>
+  <h1>IaD CRM</h1>
+  <h2>Ativação e recuperação de acesso</h2>
+  <p>No primeiro acesso, ou após uma recuperação, escolha uma nova senha e repita-a para confirmar. Você não precisa informar a senha anterior.</p>
+  <div id="status" role="status" aria-live="polite">Verificando o link…</div>
+  <form id="form-nova" hidden>
+    <label for="nova">Nova senha (mínimo 8 caracteres)</label>
+    <input id="nova" name="new-password" type="password" minlength="8" required autocomplete="new-password">
+    <button type="button" class="revelar" data-input="nova" aria-pressed="false">Mostrar senha</button>
+    <label for="confirmacao">Repita exatamente a nova senha</label>
+    <input id="confirmacao" name="confirm-new-password" type="password" minlength="8" required autocomplete="new-password">
+    <button type="button" class="revelar" data-input="confirmacao" aria-pressed="false">Mostrar senha</button>
+    <button type="submit" id="gravar">Definir nova senha</button>
+  </form>
+  <form id="form-solicitar" hidden>
+    <label for="email">E-mail cadastrado</label>
+    <input id="email" name="email" type="email" autocomplete="email" required>
+    <button type="submit" id="enviar">Enviar novo link de recuperação</button>
+  </form>
+  <p><a href="/">Voltar para o login do IaD CRM</a></p>
+  <small>Se o link expirou, solicite outro nesta página. Seus dados, empresa e permissões não são alterados pela recuperação.</small>
+</main>
+<script src="src/config.js"></script>
+<script src="src/recuperacao.js"></script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+name: UI-01 — Login responsivo sem sobreposição de textos
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  chromium-login-layout:
+    name: UI-01 Chromium real, 8 tamanhos e acessibilidade do conteúdo
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Instalar Chromium Playwright
+        run: |
+          python -m pip install playwright==1.56.0
+          python -m playwright install --with-deps chromium
+      - name: Inspecionar painel HTML real e layout CSS real em 8 viewports
+        run: python nuvem/testes/ui-01-login-layout.py
+      - name: Garantir sintaxe e regressão do painel de acesso
+        run: |
+          node --check src/views.js
+          node --test nuvem/testes/perf-10-cockpit.test.cjs

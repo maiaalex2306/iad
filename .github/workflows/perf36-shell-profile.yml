@@ -1,0 +1,29 @@
+name: PERF-36A — Baseline Chromium do shell sem dados comerciais
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - 'index.html'
+      - 'src/**'
+      - 'scripts/perf36-shell-profile.cjs'
+      - '.github/workflows/perf36-shell-profile.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  shell-profile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validar sintaxe
+        run: node --check scripts/perf36-shell-profile.cjs
+      - name: Instalar Chromium isolado
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Medir carregamento anonimo sem Supabase
+        run: timeout 120s node scripts/perf36-shell-profile.cjs

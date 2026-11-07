@@ -1,0 +1,25 @@
+name: P0 CAS — Multiempresa ACK-only discovery
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ack-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax and tenant-isolated receipt coverage
+        run: |
+          node --check src/nuvem.js
+          node scripts/verificar-versao-shell.cjs
+          node --test scripts/p0-cas-ack-only-admin.test.cjs
+          node --test scripts/p0-cas-durable-receipts.test.cjs
+          node --test scripts/p0-cas-partial-ack.test.cjs
+          node --test scripts/p0-cas-failclosed.test.cjs
+          node --test scripts/p0-cas-diagnostics.test.cjs

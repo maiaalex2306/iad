@@ -1,0 +1,19 @@
+name: P0 — Pages hotfix v286.1
+on:
+  push:
+    branches: ['hotfix/p0-pages-v286-1']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: node --check src/app.js
+      - run: node --test nuvem/testes/p0-pages-v286-1.test.cjs
+      - run: node --test nuvem/testes/*.test.cjs

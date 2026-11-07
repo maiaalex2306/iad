@@ -1,0 +1,15 @@
+# arquivos de teste que nunca devem entrar no repositorio
+*.zip
+
+# A build de homologação, gerada por scripts/build-homologacao.cjs — e
+# recriada toda vez que nuvem/testes/build-homologacao.test.cjs roda.
+#
+# POR QUE ISTO PRECISA ESTAR AQUI
+# Ela não é código: é saída. E não é uma saída qualquer — é o app apontando
+# para OUTRO Supabase, com versão "vNNN-HOMOLOG" e credencial de teste.
+#
+# Esta branch é a que o GitHub Pages publica. Sem esta linha, basta alguém
+# rodar a suíte e dar `git add -A` para 41 arquivos de um build de teste
+# entrarem na árvore do site de produção — e o aviso de "arquivos não
+# versionados" empurra exatamente para esse `git add -A`.
+dist/

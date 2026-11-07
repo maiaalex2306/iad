@@ -1,0 +1,393 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   PALETA AC PARTNERS — tokens para o IAD CRM
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Este arquivo é carregado DEPOIS de styles.css e vence pela ordem da cascata.
+   Os apelidos no fim do bloco fazem o app inteiro mudar de cor sem que nenhuma
+   linha do styles.css precise mudar — e tirar a linha do index.html devolve o
+   app ao azul-marinho, inteiro, num passo só. É de propósito: uma troca de
+   marca que não dá para desfazer em dez segundos é uma troca que ninguém tem
+   coragem de publicar.
+
+   Todos os pares foram medidos, não estimados. As regras usadas:
+     · texto  →  4,5:1 (WCAG AA para texto normal)
+     · componente com significado  →  3:1
+     · divisor decorativo  →  sem exigência (uma linha de 3:1 seria uma tarja)
+
+   ─────────────────────────────────────────────────────────────────────────
+   AS DUAS DESCOBERTAS QUE MOLDARAM ESTA PALETA
+   ─────────────────────────────────────────────────────────────────────────
+
+   1. TEXTO BRANCO NÃO PODE IR SOBRE O LARANJA DA ACP.
+
+      #FF682C com branco dá 2,89:1. Reprova no AA por larga margem — é o pior
+      par de qualquer proposta que envolva esta marca, e é justamente o botão
+      principal. Há duas saídas, e elas não são equivalentes:
+
+        (a) escurecer o laranja até o branco caber  →  #BF4F18
+        (b) manter o laranja da marca e usar texto escuro  →  #FF682C + #2E1508
+
+      (a) parece a saída óbvia e é a errada. O laranja escurecido cai em cima
+      do laranja de "em risco" da escala de severidade: 0,008 de distância de
+      luminância, ou seja, o botão de ação e a barra de alerta viram a mesma
+      cor. Num CRM de decisão isso não é detalhe estético — é o usuário
+      confundindo "clique aqui" com "este negócio está em risco".
+
+      (b) dá 5,92:1 E mantém 0,154 de distância do laranja de severidade.
+      Passa, e continua sendo a cor da marca. É a escolha desta paleta, e é
+      por isso que existe o token --accent-ink: sobre o laranja de ação, a
+      tinta é sempre escura, nos dois temas. Uma regra só, sem exceção.
+
+   2. A MARCA E O SIGNIFICADO SÃO DUAS CAMADAS, E NÃO SE MISTURAM.
+
+      Roxo, laranja e o gradiente são IDENTIDADE: navegação, botões, seleção,
+      foco, login, cabeçalho. Verde, amarelo, âmbar e vermelho são
+      SIGNIFICADO: saúde da decisão, evidência velha, risco, zumbi. Um número
+      pintado de roxo diz "somos a ACP"; o mesmo número em vermelho diz "este
+      negócio está morrendo". Trocar isso apaga a leitura do painel.
+
+      Por isso a escala de severidade foi recalculada para conviver com roxo,
+      não com marinho — e o "warn" foi puxado para o ouro (42°), longe do
+      laranja de ação (20°), que é onde a colisão nasceria.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ---------- MARCA ---------- */
+  --acp-brand:        #6816A8;   /* roxo institucional: navegação, links, seleção, foco */
+  --acp-brand-dark:   #4A1078;   /* roxo profundo: títulos, KPI institucional */
+  /* A superfície da marca é SEMPRE escura, nos dois temas: é o fundo da
+     topbar, do botão, da pill e do avatar, e o que vai em cima dela é branco.
+     Ela existe separada porque --brand e --brand-dark invertem no escuro, e
+     um fundo que inverte deixa de ser fundo. */
+  --acp-brand-fundo:  #4A1078;
+  --acp-brand-fundo2: #6816A8;
+  --acp-brand-soft:   #F3ECFA;   /* fundo de item selecionado e hover */
+
+  /* O laranja é o da ACP, sem retoque. A tinta que vai em cima dele é que
+     muda — e é escura, sempre. */
+  --acp-accent:       #FF682C;
+  --acp-accent-ink:   #2E1508;
+  --acp-accent-soft:  #FFF0E8;   /* fundo do campo preenchido pela IA */
+  --acp-soft-ink:     #2E1508;   /* tinta sobre os fundos suaves */
+
+  /* O gradiente da marca. Só em superfície grande — login, faixa do topo,
+     ícone. Nunca atrás de texto pequeno nem dentro de cartão: gradiente sob
+     texto tem contraste que varia ao longo da própria frase. */
+  --acp-gradient: linear-gradient(110deg, #4A1078 0%, #6816A8 30%, #A72A7E 62%, #FF682C 100%);
+
+  /* ---------- NEUTROS ---------- */
+  /* O cinza tem viés de roxo, de propósito: cinza azulado ao lado de roxo
+     parece sujo. */
+  --acp-bg:           #F8F6FA;
+  --acp-surface:      #FFFFFF;
+  --acp-line:         #E6DFEA;
+  --acp-text:         #241C29;
+  --acp-muted:        #665A6B;
+  --acp-inverso:      #FFFFFF;   /* tinta sobre preenchimento escuro */
+
+  /* ---------- SIGNIFICADO ---------- */
+  /* Recalculados para o fundo claro-arroxeado. A rampa é 148° → 42° → 25° → 1°:
+     verde, ouro, âmbar queimado, vermelho. */
+  --acp-ok:           #14713F;
+  --acp-warn:         #8A6206;
+  --acp-risk:         #B4530C;
+  --acp-dead:         #A8221F;
+
+  --acp-radius:       14px;
+  --acp-shadow:       0 1px 2px rgba(45, 20, 60, .05), 0 6px 20px rgba(45, 20, 60, .06);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   TEMA ESCURO — projetado, não invertido.
+
+   A inversão automática é o que o app faz hoje, e ela tem um defeito real
+   que ninguém viu: o bloco escuro atual redefine navy, laranja, fundo e
+   texto, e NÃO redefine verde, amarelo, âmbar e vermelho. As quatro cores
+   de significado ficam com o valor claro sobre superfície escura. Aqui elas
+   são redefinidas junto, que é a única forma de o escuro continuar dizendo
+   a mesma coisa.
+
+   E o escuro fica: quem usa o app no carro depois da visita, à noite, tem
+   uma razão para isso. Desligar o tema escuro para proteger a identidade é
+   trocar o usuário pela marca.
+   ───────────────────────────────────────────────────────────────────────── */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema="claro"]) {
+    --acp-brand:       #C9A0F0;
+    --acp-brand-dark:  #E0C6FA;
+    --acp-brand-soft:  #2A1B3D;
+    --acp-brand-fundo:  #3A0C60;
+    --acp-brand-fundo2: #571291;
+
+    --acp-accent:      #FF7A3D;
+    --acp-accent-ink:  #2E1508;   /* continua escura: a regra não muda de tema */
+    --acp-accent-soft: #33200F;
+    --acp-soft-ink:    #FF9057;   /* aqui sim inverte: o fundo suave ficou escuro */
+
+    --acp-gradient: linear-gradient(110deg, #3A0C60 0%, #571291 30%, #8C2269 62%, #C4501F 100%);
+
+    --acp-bg:          #14101A;
+    --acp-surface:     #1D1725;
+    --acp-line:        #332B3D;
+    --acp-text:        #EFE9F3;
+    --acp-muted:       #A99DB0;
+    --acp-inverso:     #1A1420;
+
+    --acp-ok:          #4FBF87;
+    --acp-warn:        #D6A83C;
+    --acp-risk:        #C4703C;
+    --acp-dead:        #EE7A75;
+
+    --acp-shadow:      0 1px 2px rgba(0,0,0,.45), 0 8px 24px rgba(0,0,0,.4);
+  }
+}
+
+/* A escolha explícita vence o sistema operacional, nos dois sentidos. */
+:root[data-tema="escuro"] {
+  --acp-brand:       #C9A0F0;
+  --acp-brand-dark:  #E0C6FA;
+  --acp-brand-soft:  #2A1B3D;
+  --acp-brand-fundo:  #3A0C60;
+  --acp-brand-fundo2: #571291;
+  --acp-accent:      #FF7A3D;
+  --acp-accent-ink:  #2E1508;
+  --acp-accent-soft: #33200F;
+  --acp-soft-ink:    #FF9057;
+  --acp-gradient: linear-gradient(110deg, #3A0C60 0%, #571291 30%, #8C2269 62%, #C4501F 100%);
+  --acp-bg:          #14101A;
+  --acp-surface:     #1D1725;
+  --acp-line:        #332B3D;
+  --acp-text:        #EFE9F3;
+  --acp-muted:       #A99DB0;
+  --acp-inverso:     #1A1420;
+  --acp-ok:          #4FBF87;
+  --acp-warn:        #D6A83C;
+  --acp-risk:        #C4703C;
+  --acp-dead:        #EE7A75;
+  --acp-shadow:      0 1px 2px rgba(0,0,0,.45), 0 8px 24px rgba(0,0,0,.4);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   OS APELIDOS — é isto que liga a paleta ao app sem tocar em mais nada.
+
+   Renomear --navy para --brand-primary em todo o CSS de uma vez é uma troca
+   mecânica de centenas de ocorrências no mesmo commit em que a aparência
+   muda: se uma escapar, o elemento fica com uma variável indefinida e some
+   da tela — e ninguém vai achar isso no meio de um diff de mil linhas.
+
+   Com os apelidos, a mudança de marca é este arquivo, e a renomeação vira
+   uma limpeza separada, sem risco e sem pressa. O nome antigo continua certo
+   enquanto durar; o novo já está disponível para o código novo.
+   ═══════════════════════════════════════════════════════════════════════════ */
+:root,
+:root[data-tema="escuro"] {
+  /* --navy e --navy-2 são fundo na maioria das vezes (topbar, botão, pill,
+     avatar, barra de progresso). Apontam para a superfície da marca, que é
+     escura nos dois temas. Os poucos lugares onde eles são TEXTO estão
+     corrigidos no fim deste arquivo. */
+  --navy:        var(--acp-brand-fundo);
+  --navy-2:      var(--acp-brand-fundo2);
+  --orange:      var(--acp-accent);
+  --orange-soft: var(--acp-accent-soft);
+  --bg:          var(--acp-bg);
+  --surface:     var(--acp-surface);
+  --line:        var(--acp-line);
+  --text:        var(--acp-text);
+  --muted:       var(--acp-muted);
+  --ok:          var(--acp-ok);
+  --warn:        var(--acp-warn);
+  --risk:        var(--acp-risk);
+  --dead:        var(--acp-dead);
+  --radius:      var(--acp-radius);
+  --shadow:      var(--acp-shadow);
+  /* O balão de ajuda passa a usar o lilás da própria marca: o mesmo fundo do
+     item selecionado, com o roxo profundo por tinta. #4A1078 sobre #F3ECFA dá
+     12,6:1 — o balão é o texto mais confortável do app. */
+  --dica-fundo:  var(--acp-brand-soft);
+  --dica-tinta:  var(--acp-brand-dark);
+  --dica-borda:  #E0D0F2;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   O QUE AINDA PRECISA DE UMA REGRA, E NÃO SÓ DE UM TOKEN
+
+   Trocar os tokens acima muda a cor do app inteiro. Três lugares precisam de
+   uma linha a mais, porque hoje eles assumem texto branco sobre laranja —
+   o par que reprova.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ---- Onde havia branco sobre laranja ----
+
+   Oito lugares no styles.css assumem texto branco em cima do laranja, e com
+   o laranja da ACP isso dá 2,89:1 em todos eles. Aqui cada um recebe a tinta
+   escura, que dá 5,92:1 sem tirar a cor da marca. */
+.btn.alt,
+button.btn.alt {
+  background: var(--acp-accent);
+  color: var(--acp-accent-ink);
+  font-weight: 600;
+}
+.btn.alt:hover, button.btn.alt:hover { background: #F05A1E; color: var(--acp-accent-ink); }
+
+/* ---- E dois lugares onde o laranja estava certo na cor e errado no papel ----
+
+   `.pill.orange` não é um botão de ação: as seis chamadas no views.js usam
+   essa classe para dizer QUAL OPÇÃO ESTÁ ESCOLHIDA — o grupo do pipeline, o
+   modo lista/kanban, o recorte do histórico, as semanas do aprendizado. Isso
+   é lugar, não ação. Pela regra da própria paleta, é roxo.
+
+   Vale o mesmo para o item ativo do menu, que estava com fundo laranja claro.
+   Agora ele é roxo com uma marca laranja de três pixels na borda: o roxo diz
+   onde você está, e o laranja continua sendo a única cor que pede clique. */
+.pill.orange {
+  color: var(--acp-inverso);
+  background: var(--acp-brand);
+  border-color: var(--acp-brand);
+}
+nav.tabs a.ativo { color: var(--acp-brand); font-weight: 700; }
+@media (min-width: 900px) {
+  nav.tabs a.ativo {
+    background: var(--acp-brand-soft);
+    border-left: 3px solid var(--acp-accent);
+  }
+}
+.kanban .mais:hover {
+  background: var(--acp-accent);
+  border-color: var(--acp-accent);
+  color: var(--acp-accent-ink);
+}
+.dica.urgente .sino { background: var(--acp-accent); color: var(--acp-accent-ink); }
+
+/* ---- Onde o laranja era texto sobre fundo claro ----
+
+   2,89:1. E aqui a correção não é escurecer o laranja: é usar o roxo, porque
+   estes dois casos marcam ONDE VOCÊ ESTÁ, não o que fazer. A regra da marca
+   fica inteira: roxo diz lugar, laranja diz ação. */
+.metodo-tarefa .rotulo { color: var(--acp-brand); }
+.metodo-tarefa { border-left-color: var(--acp-brand); }
+
+/* A faixa da marca. Três pixels embaixo do topo: é a assinatura da ACP sem
+   transformar o cabeçalho num banner.
+
+   E NÃO se declara "position: relative" aqui. A topbar já é sticky no celular
+   e fixed a partir de 900px, e as duas coisas servem de referência para o
+   ::after. Declarar relative sobrescreve o fixed do desktop e joga a barra
+   inteira para dentro do fluxo — o topo vira um bloco roxo de um terço da
+   tela com o logo lá embaixo. Foi exatamente o que aconteceu na primeira
+   tentativa, e só apareceu na captura. */
+.topbar::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0;
+  height: 3px; background: var(--acp-gradient);
+}
+
+/* Foco visível, em roxo, com anel. Vale para teclado — e teclado é como se
+   preenche formulário rápido. */
+:where(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--acp-brand);
+  outline-offset: 2px;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   O PAPEL DUPLO DE --navy, E POR QUE ELE SÓ QUEBRA NO ESCURO
+
+   No styles.css, --navy e --navy-2 são duas coisas ao mesmo tempo: fundo de
+   bloco (topbar, botão, pill, avatar) e cor de texto e de borda. No tema
+   claro isso não incomoda, porque um roxo escuro serve para os dois. No
+   escuro não existe cor que sirva:
+
+     · para ser texto legível sobre a superfície escura → luminância ≥ 0,229
+     · para ser fundo com texto branco em cima          → luminância ≤ 0,183
+
+   As duas faixas não se cruzam. Descobri isso da pior maneira: a primeira
+   captura do tema escuro tinha a topbar em lavanda clara com texto branco em
+   cima — ilegível, e nenhum erro em lugar nenhum.
+
+   Então os papéis foram separados. O apelido aponta para a superfície, que é
+   o uso majoritário, e os poucos lugares onde a variável era TINTA recebem
+   aqui a versão clara.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema="claro"]) a,
+  :root:not([data-tema="claro"]) .ia-fora a,
+  :root:not([data-tema="claro"]) .metodo-tarefa .pergunta,
+  :root:not([data-tema="claro"]) .ordenador.ativo { color: var(--acp-brand); }
+
+  :root:not([data-tema="claro"]) .item:hover,
+  :root:not([data-tema="claro"]) .celula:hover,
+  :root:not([data-tema="claro"]) .kanban .mini:hover { border-color: var(--acp-brand); }
+}
+:root[data-tema="escuro"] a,
+:root[data-tema="escuro"] .ia-fora a,
+:root[data-tema="escuro"] .metodo-tarefa .pergunta,
+:root[data-tema="escuro"] .ordenador.ativo { color: var(--acp-brand); }
+:root[data-tema="escuro"] .item:hover,
+:root[data-tema="escuro"] .celula:hover,
+:root[data-tema="escuro"] .kanban .mini:hover { border-color: var(--acp-brand); }
+
+/* Os oito chips do login herdavam `color: var(--text)` — tinta escura — e
+   ficavam sobre o painel escuro. Não é defeito desta paleta: com o
+   azul-marinho antigo o par era #10202f sobre #0d2b4e, igualmente ilegível.
+   Estava lá desde sempre e só apareceu quando eu olhei a captura do login. */
+.acesso-painel .chip { color: #fff; }
+
+
+/* RI-M12 — Pesquisa de Mercado. Escopo fechado: sem efeito em outras telas. */
+.iad-market-ui { --market-ink:var(--acp-text,#241c29); --market-line:var(--acp-line,#e6dfea); }
+.iad-market-ui > h2 {color:var(--acp-brand-dark,#4a1078);font-size:clamp(1.2rem,1.4vw,1.55rem);margin:0 0 8px;letter-spacing:-.02em;}
+.iad-market-ui > p.small {margin:0 0 22px;line-height:1.6;}
+.iad-market-ui form {display:grid;gap:22px;min-width:0;}
+.iad-market-filter-grid {display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px;align-items:start;min-width:0;}
+.iad-market-ui .iad-market-filter {display:flex;flex-direction:column;gap:9px;min-width:0;margin:0;font-size:14px;font-weight:700;color:var(--market-ink);}
+.iad-market-ui .iad-market-filter-label {font-weight:750;font-size:14px;line-height:1.35;color:var(--market-ink);}
+.iad-market-ui .iad-market-filter > select,.iad-market-ui .iad-market-engine > select {width:100%;min-width:0;min-height:46px;border:1px solid var(--market-line);border-radius:11px;background:var(--acp-bg,#f8f6fa);color:var(--market-ink);font-weight:500;padding:10px 12px;}
+.iad-market-ui .iad-market-picker {position:relative;width:100%;min-width:0;border:1px solid var(--market-line);background:var(--acp-surface,#fff);border-radius:11px;min-height:46px;box-sizing:border-box;}
+.iad-market-ui .iad-market-picker > summary {display:block;list-style:none;cursor:pointer;padding:12px 34px 12px 12px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;font-size:13px;font-weight:500;line-height:20px;color:var(--market-ink);position:relative;min-height:44px;box-sizing:border-box;}
+.iad-market-ui .iad-market-picker > summary::-webkit-details-marker {display:none;}
+.iad-market-ui .iad-market-picker > summary::after {content:'⌄';position:absolute;right:12px;top:9px;color:var(--acp-brand,#6816a8);font-size:20px;line-height:24px;}
+.iad-market-ui .iad-market-picker[open] {z-index:20;border-color:var(--acp-brand,#6816a8);box-shadow:0 0 0 2px var(--acp-brand-soft,#f3ecfa);}
+.iad-market-ui .iad-market-picker[open] > summary::after {transform:rotate(180deg);}
+.iad-market-ui .iad-market-picker-panel {display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:30;padding:10px;background:var(--acp-surface,#fff);border:1px solid var(--market-line);border-radius:12px;box-shadow:0 14px 34px rgba(45,20,60,.18);min-width:260px;box-sizing:border-box;}
+.iad-market-ui .iad-market-picker[open] .iad-market-picker-panel {display:block;}
+.iad-market-ui .iad-market-picker-panel input[type=search] {width:100%;box-sizing:border-box;min-height:40px;margin:0 0 8px;padding:8px 10px;border:1px solid var(--market-line);border-radius:9px;background:var(--acp-bg,#f8f6fa);color:var(--market-ink);}
+.iad-market-ui .market-options {max-height:230px;overflow-y:auto;overscroll-behavior:contain;display:grid;gap:3px;padding-right:3px;}
+.iad-market-ui .market-options .iad-market-option {display:flex;align-items:center;justify-content:flex-start;gap:10px;min-height:38px;box-sizing:border-box;padding:7px 9px;border-radius:8px;font-weight:500;font-size:13px;line-height:1.35;text-align:left;white-space:normal;overflow-wrap:anywhere;cursor:pointer;color:var(--market-ink);}
+.iad-market-ui .market-options .iad-market-option:hover {background:var(--acp-brand-soft,#f3ecfa);}
+.iad-market-ui .market-options .iad-market-option input[type=checkbox] {flex:0 0 16px;width:16px;height:16px;margin:0;accent-color:var(--acp-brand,#6816a8);}
+.iad-market-ui .iad-market-advanced {grid-column:1/-1;border:1px solid var(--market-line);border-radius:11px;background:var(--acp-bg,#f8f6fa);padding:0;min-width:0;}
+.iad-market-ui .iad-market-advanced > summary {cursor:pointer;padding:13px 16px;font-size:14px;font-weight:700;color:var(--market-ink);}
+.iad-market-ui .iad-market-advanced-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;padding:12px 16px 16px;}
+.iad-market-ui .iad-market-actions {display:grid;grid-template-columns:minmax(215px,300px) minmax(0,1fr);gap:24px;align-items:end;}
+.iad-market-ui .iad-market-engine {display:grid;gap:8px;min-width:0;font-size:14px;font-weight:750;color:var(--market-ink);}
+.iad-market-ui .iad-market-action-buttons {display:flex;flex-wrap:wrap;justify-content:flex-end;gap:12px;align-items:center;min-width:0;}
+.iad-market-ui .iad-market-action-buttons .btn {width:auto;min-height:46px;margin:0;display:inline-flex;align-items:center;justify-content:center;gap:8px;box-sizing:border-box;border-radius:11px;padding:11px 18px;font-size:13px;font-weight:750;line-height:1.25;white-space:normal;text-align:center;}
+.iad-market-ui .iad-market-btn-example {background:var(--acp-brand-soft,#f3ecfa);color:var(--acp-brand-dark,#4a1078);border:1px solid transparent;}
+.iad-market-ui .iad-market-btn-check {background:var(--acp-surface,#fff);color:var(--acp-brand-dark,#4a1078);border:1px solid var(--acp-brand,#6816a8);}
+.iad-market-ui .iad-market-btn-search {background:var(--acp-brand-fundo,#4a1078);color:#fff;border:1px solid var(--acp-brand-fundo,#4a1078);min-width:168px;}
+.iad-market-ui .iad-market-action-buttons .btn:focus-visible,.iad-market-ui .iad-market-picker > summary:focus-visible {outline:3px solid var(--acp-accent,#ff682c);outline-offset:2px;}
+@media(max-width:1150px){.iad-market-filter-grid {grid-template-columns:repeat(3,minmax(0,1fr));}.iad-market-ui .iad-market-actions {grid-template-columns:1fr;gap:12px;}.iad-market-ui .iad-market-action-buttons {justify-content:flex-start;}}
+@media(max-width:720px){.iad-market-filter-grid {grid-template-columns:repeat(2,minmax(0,1fr));}.iad-market-ui .iad-market-picker-panel {min-width:min(260px,80vw);}.iad-market-ui .iad-market-action-buttons .btn {flex:1 1 210px;}}
+@media(max-width:460px){.iad-market-filter-grid {grid-template-columns:minmax(0,1fr);}.iad-market-ui .iad-market-picker-panel {min-width:0;}.iad-market-ui .iad-market-actions {grid-template-columns:1fr;}}
+
+.iad-market-ui .iad-market-error {padding:12px 14px;background:var(--acp-accent-soft,#fff0e8);color:var(--acp-soft-ink,#2e1508);border:1px solid var(--acp-accent,#ff682c);border-radius:10px;font-size:13px;font-weight:600;line-height:1.55;}
+
+
+/* RI-M19 — diálogo de pesquisa: progresso indeterminado real, sem % fictícia. */
+.iad-market-progress[hidden],.iad-market-progress-reopen[hidden],.iad-market-progress-bar[hidden] {display:none!important;}
+.iad-market-progress {position:fixed;inset:0;z-index:12000;display:grid;place-items:center;padding:20px;background:rgba(28,12,44,.56);box-sizing:border-box;backdrop-filter:blur(3px);}
+.iad-market-progress-dialog {width:min(100%,530px);max-height:min(88vh,700px);overflow-y:auto;box-sizing:border-box;padding:clamp(23px,3vw,36px);background:var(--acp-surface,#fff);border:1px solid var(--acp-line,#e6dfea);border-radius:20px;box-shadow:0 28px 72px rgba(30,12,44,.27);color:var(--acp-text,#241c29);}
+.iad-market-progress-eyebrow {display:block;font-size:11px;letter-spacing:.12em;font-weight:800;color:var(--acp-brand-dark,#4a1078);margin:0 0 12px;}
+.iad-market-progress-title {margin:0 0 12px;font-size:clamp(22px,3vw,28px);line-height:1.2;color:var(--acp-brand-dark,#4a1078);font-weight:800;}
+.iad-market-progress-description {margin:0 0 18px;line-height:1.5;font-size:15px;overflow-wrap:anywhere;}
+.iad-market-progress-bar {display:block;width:100%;height:9px;margin:12px 0 20px;accent-color:var(--acp-brand,#6816a8);border:0;border-radius:12px;overflow:hidden;}
+.iad-market-progress-bar::-webkit-progress-bar {background:var(--acp-brand-soft,#f3ecfa);}
+.iad-market-progress-bar::-webkit-progress-value {background:var(--acp-brand,#6816a8);}
+.iad-market-progress-phase {font-size:14px;line-height:1.5;font-weight:750;margin:0 0 8px;color:var(--acp-brand-dark,#4a1078);}
+.iad-market-progress-time {margin:0 0 12px;font-size:14px;font-variant-numeric:tabular-nums;font-weight:650;}
+.iad-market-progress-note {margin:0 0 22px;font-size:12px;line-height:1.6;color:var(--acp-muted,#665b6f);}
+.iad-market-progress-actions {display:flex;justify-content:flex-end;flex-wrap:wrap;gap:10px;}
+.iad-market-progress-close {background:var(--acp-brand-fundo,#4a1078);color:#fff;border:1px solid var(--acp-brand-fundo,#4a1078);border-radius:10px;min-height:44px;padding:10px 18px;font-weight:750;}
+.iad-market-progress-reopen {position:fixed;bottom:22px;right:22px;z-index:11999;background:var(--acp-brand-fundo,#4a1078);color:#fff;border:1px solid var(--acp-brand-fundo,#4a1078);border-radius:999px;padding:12px 19px;box-shadow:0 9px 27px rgba(40,14,66,.26);font-weight:750;}
+.iad-market-progress-close:focus-visible,.iad-market-progress-reopen:focus-visible {outline:3px solid var(--acp-accent,#ff682c);outline-offset:3px;}
+@media(max-width:520px){.iad-market-progress {padding:12px;}.iad-market-progress-dialog {border-radius:15px;padding:23px 18px;}.iad-market-progress-reopen {bottom:14px;right:14px;left:14px;}}
+@media(prefers-reduced-motion:reduce){.iad-market-progress {backdrop-filter:none;}}

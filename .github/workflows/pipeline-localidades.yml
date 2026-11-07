@@ -1,0 +1,24 @@
+name: Pipeline localities regression
+on:
+  pull_request:
+    branches:
+      - claude/decisoes-estagios-vendas-eckjo0
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regional-filters:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Check browser JavaScript syntax
+        run: |
+          node --check src/localidades.js
+          node --check src/app.js
+          node --check src/views.js
+          node --check src/config.js
+          node --check sw.js
+      - name: Test UF, municipality lookup and pipeline filtering
+        run: node --test nuvem/testes/pipeline-localidades.test.cjs

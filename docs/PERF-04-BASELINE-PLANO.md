@@ -1,0 +1,109 @@
+# PERF-04 — Auditoria instrumentada da v273 e plano de aceleração
+
+**Referência funcional:** IaD CRM v273 publicada em `claude/decisoes-estagios-vendas-eckjo0`, incluindo o hotfix do service worker.  
+**Branch:** `performance/iad-perf-04-instrumentacao`.  
+**Status:** exclusivamente medição, diagnóstico e CI; **sem deploy ou SQL em produção**.
+
+## Objetivo mensurável
+
+Reduzir o custo de carregar, navegar e operar o CRM sem mudar nenhum número do Decision Engine e sem perder alterações na sincronização. O baseline da v273 deve existir **antes** de qualquer refatoração de performance.
+
+## Fontes verificadas
+- GitHub: `index.html` importa 33 scripts; `src/app.js` tem ~548 mil caracteres, `src/views.js` ~669 mil, `src/store.js` ~95 mil e `src/nuvem.js` ~103 mil.
+- `src/perf-02.js` e `src/pipeline-performance.js` invalidam caches com a revisão global `Store.revisao()`, o que pode recomputar mais do que o registro alterado.
+- `src/views.js` já limita cartões iniciais do Pipeline a 48, mas prepara resumos da carteira antes do recorte visual.
+- Supabase Performance Advisors de produção (30/10/2026): **10 avisos auth_rls_initplan**, **11 chaves estrangeiras sem índice de suporte**, **23 índices sem utilização registrada**. Nenhum foi alterado; é necessário verificar `EXPLAIN (ANALYZE, BUFFERS)` antes de criar/remover índices.
+- Referência anterior: teste Chromium sintético de 243 oportunidades com primeiro render ~31,6 ms, p50 aquecido ~6,8 ms e p95 aquecido ~10,9 ms. **Não extrapolar** para outras telas ou navegação com autenticação.
+
+## Baseline executado — evidências da v273 (Chromium)
+
+Execução original: [GitHub Actions #41000265989](https://github.com/maiaalex2306/iad/actions/runs/41000265989), artefato `perf04-baseline-v273-browser`. Dataset **389 oportunidades, 778 tarefas**, usuário gestor sintético e segundo tenant sintético isolado. 12 telas mensuradas, 0 erros de JavaScript.
+
+**p95 aquecido** (5 repetições após a primeira, HTML + inserção síncrona no DOM), em ms:
+
+| Tela | p95 (ms) | HTML p95 (ms) | DOM p95 (ms) | Ordem de atenção |
+|---|---:|---:|---:|---|
+| Nutrição | **767,3** | 758,9 | 8,8 | **P0 — gargalo dominante** |
+| Revisão | 33,4 | 15,4 | 19,5 | P1 |
+| Painel | 29,6 | 27,3 | 2,5 | P1 |
+| Tarefas | 13,7 | 12,0 | 1,7 | P1 |
+| Pipeline | 10,7 | 6,6 | 4,2 | P1 |
+| Contas | 6,8 | 5,1 | 1,7 | P2 |
+| Cadastros | 4,9 | 3,0 | 2,0 | P2 |
+| Método | 4,6 | 0,5 | 4,1 | P2 |
+| Hoje | 4,0 | 2,8 | 1,2 | P2 |
+| Cockpit | 3,9 | 2,5 | 1,7 | P2 |
+| Configuração | 2,0 | 2,0 | 0,1 | P2 |
+| Notas | 0,1 | 0,0 | 0,1 | P2 |
+
+**Causa principal confirmada por instrumentação adicional:** na execução [GitHub Actions #41000480451](https://github.com/maiaalex2306/iad/actions/runs/41000480451), `V.nutricao()` consumiu **763,6 ms** e o perfil contabilizou:
+- `E.resumo(op)`: **389 chamadas / 739,4 ms (~96,8% da duração)**;
+- `E.potencial(op)`: 1.165 chamadas / **5,5 ms (~0,7%)**;
+- `E.iad(op)`: 776 chamadas / 0,8 ms.
+Assim, a hipótese inicial sobre `potencialDe` **não se confirmou como gargalo principal**.
+
+**Mecanismo identificado no código:** `src/views.js` → `listaDaNutricao` chama `E.resumo(op)` uma vez por linha. Quando o parâmetro de índice está ausente, `src/engine.js` → `tarefasAtrasadas(op)` chama `Store.dados().tarefas.filter(...)` para cada oportunidade. Isso materializa recortes de dados e percorre tarefas repetidamente (até ~389 × 778 verificações sintéticas, além de custo de `Store.dados()`), em vez de um único agrupamento. `src/pipeline-performance.js` já implementa a estratégia correta: contabilizar tarefas vencidas uma vez e chamar `E.resumo(op, atrasadasIndex)`.
+
+**Correção P0-01 proposta (AINDA NÃO APLICADA):** calcular `atrasadasIndex` uma vez por revisão de tarefas e escopo; passar o índice a cada `E.resumo` em Nutrição; reutilizar os resumos no filtro de saúde, se ativado; validar paridade exata de todas as faixas, tarefas vencidas, seleção, ordenação e isolamento tenant. Apenas depois otimizar chamadas de potencial (ganho marginal).
+
+Benchmark do Pipeline da mesma execução: 389 oportunidades, primeiro render 36,7 ms, p50 após aquecimento 13,8 ms e p95 14,4 ms, 48 cartões iniciais. Valores não incluem rede/login e variam com a carga do runner; toda comparação posterior deve rodar com método idêntico.
+
+## Instrumentação entregue neste PR
+- `scripts/perf04-baseline-browser.cjs`: Chromium isolado; 389 oportunidades sintéticas; mede 12 telas, seis amostras por tela (uma primeira + cinco aquecidas); separa tempo de geração HTML do custo síncrono de inserção no DOM; registra p50/p95, heap disponível, cardinalidades e erros JS.
+- `.github/workflows/perf-04-baseline.yml`: publica artefato JSON, repete paridade do Decision Engine em 243/1000/5000 negócios, executa regressões de caches, CAS, offline e deltas, e testa concorrência com GoTrue/Postgres **descartável**.
+- Todos os dados do benchmark são sintéticos; servidor local intercepta configuração para evitar conexão à produção; requisições externas são bloqueadas no navegador.
+
+**IMPORTANTE:** os tempos abaixo do JSON medem somente a geração de HTML e inserção síncrona no DOM. Não substituem INP/LCP, custo de transporte autenticado, tempo de APIs nem primeiro login real. A próxima rodada precisa medir essas etapas em homologação autenticada, sem registrar conteúdo comercial.
+
+## Correção P0-01 implementada e medida — Nutrição
+
+**Alteração de código:** `src/views.js`, função `listaDaNutricao`: agrega uma vez as tarefas abertas vencidas do `est.tarefas` já restrito por sessão/tenant e passa `atrasadasIndex` para `E.resumo(op, atrasadasIndex)`, inclusive no filtro por saúde. Não altera `src/engine.js`, cálculo do IAD, política RLS nem operações CAS.
+
+**Teste diferencial simultâneo em Chromium, mesma base e runner:**
+- [PERF-04 execução #41041210680](https://github.com/maiaalex2306/iad/actions/runs/41041210680)
+- Código original v273 `ccf80d289cb6dc3425ec996ac72b022db52b7781`: **375,9 ms p95**
+- Código candidato: **8,7 ms p95**
+- Melhoria observada de processamento `nutricao()`: **97,69%**, equivalente a aproximadamente **43,2× mais rápido** nesse benchmark
+- **Paridade integral HTML: PASS** em oito cenários: carteira ativa sem filtros, aba Nutrição, saúde IAD=0, saúde IAD 1–4, busca ativa, busca Nutrição, filtro de potencial e usuário de outro tenant.
+- **Tarefas vencidas: PASS** (389 oportunidades verificadas frente ao cálculo original).
+- Benchmark realizado sobre **389 oportunidades sintéticas e 778 tarefas**, sem rede ou conta de produção, HTML gerado em Chromium no mesmo processo. Não confundir estes resultados com LCP, INP ou latência real.
+
+**Gate:** `scripts/perf04-baseline-browser.cjs` lê o `views.js` original da v273 com `git show`, injeta a versão original e a candidata em ambientes isolados dentro da mesma página e falha caso qualquer HTML divergir, contador vencido divergente ou redução p95 menor que 50%. Artefato JSON: `perf04-nutricao-differential.json` via GitHub Actions.
+
+**Situação:** correção P0-01 concluída na branch de homologação, **não publicada**. Para promover: 3 jobs PERF-04 e todos os workflows de regressão da branch precisam terminar em sucesso, incluindo GoTrue/Postgres descartável. Nenhum SQL de produção previsto nesta correção.
+
+## Intervenções P0 — maior prioridade
+
+| Função / tela | Arquivos-alvo | Problema verificável | Intervenção proposta | Critério de aceite |
+|---|---|---|---|---|
+| Nutrição — prioridade P0 absoluta | `src/views.js`, `src/engine.js` | p95 756–767 ms no baseline; E.resumo consome 739 ms por 389 chamadas com tarefasAtrasadas sem índice | Agrupar tarefas vencidas uma vez e passar índice a E.resumo; memoizar por revisão | Mesmo IAD, tarefas vencidas, ordem, seleção e tenant; p95 menor no mesmo benchmark |
+| Todas as rotas | `src/app.js`, `src/views.js` | Render centralizado e telas HTML grandes | Render seletivo; repintar bloco afetado e preservar foco/scroll | Melhorar p95 por tela vs JSON v273; nenhuma regressão E2E |
+| Pipeline | `src/views.js`, `src/pipeline-performance.js` | Resumos de todas as oportunidades antes dos 48 cartões visíveis | Memoização incremental por ID/revisão; indexação de filtros | Mesmos cartões, totais e filtros; menor p95 em 389/1k/5k |
+| Hoje | `src/perf-hoje.js`, `src/perf-02.js`, `src/views.js` | Recomputação global após edições não relacionadas | Revisões por entidade, cálculo só dos negócios alterados | Paridade exata de prioridade, urgência e orientação |
+| Cockpit | `src/views.js`, `src/app.js` | HTML e dados pesados concentrados | Render inicial essencial + abas/histórico lazy | Mesmo conteúdo final e histórico, menor tempo até interatividade |
+| Login/primeira carga | `index.html`, `src/app.js`, `sw.js` | 33 scripts no boot | Bundle modular, lazy por rota; preservar offline e ordem de dependências | Menor byte transferido e LCP; cold/warm PWA preservados |
+| Sincronização | `src/nuvem.js`, `src/sincronia.js`, `src/cas-queue.js` | Transporte/serialização podem competir com navegação | Contabilizar bytes, solicitações e tempos; coalescer sem descartar ACK | 0 perda/duplicidade; 0 cross-tenant; GoTrue CAS E2E aprovado |
+
+## Intervenções P1 — após P0 validado
+
+| Função / tela | Arquivos | Ação | Gate |
+|---|---|---|---|
+| Contas e contatos | `src/store.js`, `src/views.js` | Busca indexada, debounce e listas virtuais | Resultado/escopo idênticos |
+| Tarefas | `src/views.js`, `src/engine.js` | Índice por prazo, status, dono e oportunidade | Prazos e histórico sem diferenças |
+| Painel, Revisão, gráficos | `src/views.js`, `src/graficos.js` | Agregados memoizados por revisão seletiva | KPIs e totais exatamente iguais |
+| Cadastros, Nutrição | `src/views.js`, `src/app.js` | Filtragem incremental e render seletivo | Nenhum registro omitido/duplicado |
+| Campanhas, importações | `src/app.js`, `src/integracoes.js` | Worker por lote e progresso cancelável | CSV/ações idênticos |
+| IA e conversas | `src/ia.js`, `src/conversa.js` | Concorrência limitada e cache por entrada/revisão | Sem respostas trocadas de usuário/empresa |
+| SQL/RLS | `nuvem/` (nova migration apenas após aprovação) | Reescrever auth functions independentes da linha com `(SELECT ...)` e avaliar índices | RLS com 2+ tenants idêntico; `EXPLAIN` melhor; rollback testado |
+| Índices PostgreSQL | Banco | Validar FKs, taxas de uso, cardinalidade | Nunca remover índice com base somente em advisor |
+
+## Gates inegociáveis antes de otimizar e promover
+1. **Paridade jurídica/comercial do Decision Engine:** comparação campo a campo para 243, 1000 e 5000 oportunidades, incluindo estado de cache frio/quente e alterações.
+2. **Zero regressão de CAS/Sync:** concorrência, lost ACK, delete offline, criação offline, token/sessão, duas empresas e permissões GoTrue/RLS.
+3. **Nenhuma regressão de filtros e contagens:** dashboards, nutrição, pipeline e tarefas continuam determinísticos.
+4. **Benchmark equivalente:** mesmo runner, amostras, dataset, escopo, tamanho e método; reportar mediana/p95 antes/depois e variação percentual **somente após medir**.
+5. **Sem alterações de produção neste PR.** Homologar mudanças seguintes em nova etapa, sem ativação prematura.
+
+## Uso dos resultados
+
+Artefatos: `perf04-baseline-v273-browser` e `perf04-decision-engine-parity` no GitHub Actions. Os dados são JSON e podem sustentar uma comparação v273 → candidato por tela. Até a execução da bateria, **não declarar percentuais de melhoria**.

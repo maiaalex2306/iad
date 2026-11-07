@@ -1,0 +1,55 @@
+name: RI-01C — Release PWA e menu Inteligência Comercial
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - 'index.html'
+      - 'scripts/perf35-parallel-shell-browser.cjs'
+      - 'src/config.js'
+      - 'sw.js'
+      - 'scripts/ri01-release-shell.test.cjs'
+      - 'scripts/ri01-release-offline-browser.cjs'
+      - '.github/workflows/ri-01c-release.yml'
+      - 'src/ri/**'
+      - 'src/app.js'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  shell:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Release contracts and existing read-only regressions
+        run: |
+          node --test scripts/ri01-release-shell.test.cjs
+          node scripts/verificar-versao-shell.cjs
+          node --test scripts/ri-account-view.test.cjs scripts/ri-account-briefing.test.cjs scripts/ri-portfolio-analytics.test.cjs
+          node --test scripts/p0-cas-readonly-portfolio.test.cjs
+      - name: JavaScript modules syntax
+        run: |
+          node --check src/app.js
+          node --check sw.js
+          node --check src/ri/account-view.mjs
+          node --check src/ri/account-briefing.mjs
+          node --check src/ri/portfolio-analytics.mjs
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Browser PWA cache and navigation contract
+        run: |
+          node scripts/ri01-release-offline-browser.cjs
+          node scripts/perf35-parallel-shell-browser.cjs
