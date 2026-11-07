@@ -1992,7 +1992,16 @@
         return proxima(ultimo, pagina + 1);
       });
     }
-    return proxima(null, 0);
+    /* PERF-40: ler cada tabela completa é um custo central da abertura.
+       Instrumentação opt-in usa SOMENTE nomes internos fixos de tabelas.
+       Nunca registra SQL, URLs, IDs, tenants, tokens ou conteúdo comercial.
+       A paginação e o resultado permanecem exatamente como antes. */
+    const perf = global.IADPerformance;
+    return perf && typeof perf.medirPromessa === 'function'
+      ? perf.medirPromessa('perf40.sync.table.' + t.remota, function () {
+          return proxima(null, 0);
+        })
+      : proxima(null, 0);
   }
 
   /* PERF-03B: após a primeira leitura completa desta sessão, o journal
@@ -2364,7 +2373,12 @@
       );
     });
 
-    return Promise.all(buscas).then(function (resultados) {
+    const perf40 = global.IADPerformance;
+    const downloads = Promise.all(buscas);
+    const medidos = perf40 && typeof perf40.medirPromessa === 'function'
+      ? perf40.medirPromessa('perf40.sync.full.download', function () { return downloads; })
+      : downloads;
+    return medidos.then(function (resultados) {
       const falhas = resultados.filter(function (r) { return r.erro; });
       if (falhas.length) {
         throw new Error(falhas.map(function (f) { return f.tabela + ': ' + f.erro; }).join(' — '));
@@ -2388,14 +2402,22 @@
       /* Escrever o que acabou de chegar não pode disparar um envio de volta:
          seria um laço, e um laço que reescreve o servidor com a cópia que ele
          mesmo mandou. */
-      Store.semSincronizar(function () {
-        resultados.forEach(function (r) { estado[r.local] = r.linhas; });
-        Store.salvar();
-      });
+      const persistir = function () {
+        Store.semSincronizar(function () {
+          resultados.forEach(function (r) { estado[r.local] = r.linhas; });
+          Store.salvar();
+        });
+      };
+      if (perf40 && typeof perf40.medir === 'function')
+        perf40.medir('perf40.sync.full.persist', persistir);
+      else persistir();
 
       if (Store.memorizarRevisoesRemotas) Store.memorizarRevisoesRemotas(veio.oportunidades || []);
       const quantos = resultados.reduce(function (s, r) { return s + r.linhas.length; }, 0);
-      return marcarOQueDesceu().then(function () { return quantos; });
+      const atualizarMarcas = function () { return marcarOQueDesceu(); };
+      return (perf40 && typeof perf40.medirPromessa === 'function'
+        ? perf40.medirPromessa('perf40.sync.full.marks', atualizarMarcas)
+        : atualizarMarcas()).then(function () { return quantos; });
     }).finally(function () { notificarCarga({ativa:false}); });
   }
 
