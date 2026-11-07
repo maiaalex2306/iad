@@ -25,6 +25,14 @@ export function mountLinkedInLeads({root,scope,getScopeToken,nuvem}={}){
   if(!root||!root.ownerDocument||!scope||typeof getScopeToken!=='function')
     throw new Error('Sessão autorizada de Gestor/Admin exigida.');
   const d=root.ownerDocument,token=scope.token;
+  // CSS só na rota LinkedIN Leads: mantém a primeira tela do CRM leve.
+  if(!d.getElementById('iad-linkedin-style')){
+    const style=d.createElement('link');
+    style.id='iad-linkedin-style';
+    style.rel='stylesheet';
+    style.href=new URL('assets/linkedin-leads.css',d.baseURI).href;
+    d.head.appendChild(style);
+  }
   const valid=()=>scopeEqual(scope,token,getScopeToken,root);
   const ui=el(d,'div','','iad-linkedin-console');
   const title=el(d,'h2','LinkedIN Leads — Campanhas');
