@@ -117,9 +117,15 @@ test('se IA nao realizou pesquisa web, descartar dados gerados',async()=>{
  assert.equal(body.error,'AI_SEARCH_UNAVAILABLE');
  assert.deepEqual(Array.from(body.failedProviders),['OpenAI']);
 });
-test('sem fonte citada pela ferramenta web nao retornar empresa inventada',async()=>{
+test('sem fonte citada: apenas nome no Finder, nunca fonte inventada, shortlist ou importação',async()=>{
  const h=harness({openai:true,openaiResponse:responseOpenAI(true,false)}),res=await h.handle(request(query));
- assert.equal(res.status,200);assert.equal((await res.json()).data.length,0);
+ assert.equal(res.status,200);
+ const result=await res.json();
+ assert.equal(result.data.length,1,'Não ocultar hipótese exploratória sem fonte');
+ assert.equal(result.data[0].fonteStatus,'pendente_sem_fonte');
+ assert.equal(result.data[0].fontes.length,0,'Jamais criar referência não citada');
+ assert.equal(result.data[0].contatos.length,0);
+ assert.equal(result.diagnostics.pendingUncitedSource,1);
 });
 test('Claude usa Messages API com web_search e limite de buscas',async()=>{
  const h=harness({claude:true}),res=await h.handle(request(query));
@@ -741,15 +747,17 @@ test('RI-M04: preflight tem cooldown e segunda chamada nao solicita provider nem
  assert.equal(h.calls.filter(x=>x.url.includes('iad_market_search_reserve')).length,0);
 });
 
-test('RI-M05: diagnostico de resultado vazio explicita falta de URL citada, sem expor CNPJ nem URL',async()=>{
+test('RI-M05: diagnóstico preserva hipótese sem URL como PENDENTE, sem expor CNPJ ou URL',async()=>{
  const h=harness({openai:true,openaiResponse:responseOpenAI(true,false)});
  const response=await h.handle(request(query));
  assert.equal(response.status,200);
  const body=await response.json();
- assert.equal(body.data.length,0);
+ assert.equal(body.data.length,1);
+ assert.equal(body.data[0].fontes.length,0);
  assert.equal(body.diagnostics.candidates,1);
- assert.equal(body.diagnostics.rejectedUncitedSource,1);
- assert.equal(body.diagnostics.accepted,0);
+ assert.equal(body.diagnostics.pendingUncitedSource,1);
+ assert.equal(body.diagnostics.rejectedUncitedSource,0);
+ assert.equal(body.diagnostics.accepted,1);
  assert.equal(body.diagnostics.rejectedInvalidCnpj,0);
  assert.ok(!JSON.stringify(body.diagnostics).includes(URL_COMPANY));
  assert.ok(!JSON.stringify(body.diagnostics).includes(candidate.cnpj));
