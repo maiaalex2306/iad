@@ -20,7 +20,7 @@ function assertCompatible({config,worker,index,intents,radar,authStatus}) {
   const [major,minor] = version.split('.').map(Number);
   if (major < 286 || (major === 286 && minor < 83))
     throw Error('PRODUCTION_VERSION_BELOW_RELEASE_FLOOR');
-  if (!/IAD CRM/i.test(index) || !/<form\b/i.test(index))
+  if (!/IAD CRM/i.test(index) || !/<div\s+class=["\']app["\']/i.test(index) || !/src\/auth\.js/.test(index))
     throw Error('PUBLIC_LOGIN_SHELL_INVALID');
   if (!intents.includes('detector local de intencoes comerciais'))
     throw Error('RI08_ASSET_INVALID');
