@@ -113,11 +113,12 @@ export function normalizeMarketCompanies(companies,{source='',retrievedAt=''}={}
   const stages=Object.values(qualificacaoICP).filter(x=>x!=='nao_solicitado');
   qualificacaoICP.statusGeral=stages.length&&stages.every(x=>x==='declarado')&&
    rawICP.statusGeral==='declarado_nao_verificado'?'declarado_nao_verificado':'pendente';
-  output.push({cnpj,fonteStatus:Array.isArray(x.fontes)&&x.fontes.some(v=>isReviewableSourceURL(v?.url))?'citada_pelo_provedor':'pendente_sem_fonte',identidadeStatus:cnpj?'cnpj_validado':'pendente_cnpj',nome:name,razaoSocial:str(x.razaoSocial),
+  output.push({cnpj,fonteStatus:Array.isArray(x.fontes)&&x.fontes.some(v=>isReviewableSourceURL(v?.url))?'citada_pelo_provedor':Array.isArray(x.fontesConsultadas)&&x.fontesConsultadas.some(v=>isReviewableSourceURL(v?.url))?'consultada_sem_citacao':'pendente_sem_fonte',identidadeStatus:cnpj?'cnpj_validado':'pendente_cnpj',nome:name,razaoSocial:str(x.razaoSocial),
    cidade:str(x.cidade),uf:str(x.uf,2).toUpperCase(),segmento:str(x.segmento||x.cnaePrimario),cnae:str(x.cnae),porte:str(x.porte),site:str(x.site),telefone:str(x.telefone),
    qualificacaoICP,funcionarios:x.funcionarios??null,faixaFuncionariosStatus:['pendente','aderente_nao_verificado','nao_solicitado'].includes(x.faixaFuncionariosStatus)?x.faixaFuncionariosStatus:'nao_solicitado',faturamento:x.faturamento??null,faturamentoStatus:'nao_confirmado',funcionariosStatus:'nao_confirmado',
    source:str(source),retrievedAt:str(retrievedAt,40),
    fontes:Array.isArray(x.fontes)?x.fontes.slice(0,15).filter(v=>v&&/^https?:\/\//i.test(str(v.url,500))).map(v=>({url:str(v.url,500),titulo:str(v.titulo,180)})):[],
+   fontesConsultadas:Array.isArray(x.fontesConsultadas)?x.fontesConsultadas.slice(0,6).filter(v=>isReviewableSourceURL(v?.url)).map(v=>({url:str(v.url,500),titulo:str(v.titulo,180)})):[],
    providers:Array.isArray(x.providers)?x.providers.slice(0,3).filter(v=>v==='OpenAI'||v==='Anthropic'):[],
    territorioCorroborado:x.territorioCorroborado===true,
    conflitos:Array.isArray(x.conflitos)?x.conflitos.slice(0,12).filter(v=>v&&['cidade','uf','razaoSocial','segmento'].includes(v.campo)).map(v=>({campo:v.campo,valorOriginal:str(v.valorOriginal),valorDivergente:str(v.valorDivergente),provedor:str(v.provedor,30)})):[],
