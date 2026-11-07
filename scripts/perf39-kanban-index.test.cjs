@@ -71,6 +71,7 @@ test('segurança: não mexer em desenho de cards nem escrever no Store',()=>{
  assert.doesNotMatch(body,/Store\.|fetch\s*\(|localStorage|sessionStorage|\.sort\s*\(/);
  const cfg=fs.readFileSync(path.join(root,'src/config.js'),'utf8');
  const sw=fs.readFileSync(path.join(root,'sw.js'),'utf8');
- assert.match(cfg,/numero:\s*'v286\.82'/);
- assert.match(sw,/iad-crm-v286\.82/);
+ const version=cfg.match(/numero:\s*'(v286\.\d+)'/)?.[1];
+ assert.ok(version,'versão v286 declarada');
+ assert.ok(sw.includes('iad-crm-'+version),'config.js e sw.js na mesma versão');
 });

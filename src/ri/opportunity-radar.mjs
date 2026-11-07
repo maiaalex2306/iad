@@ -160,7 +160,9 @@ export function buildCommercialOpportunityRadar({snapshot,scope,asOf}={}){
   if(!sig||!id(sig.tenantId)||!id(sig.contaId)||!ownerAllowed(sig,scope))continue;
   const a=accounts.get(JSON.stringify([sig.tenantId,sig.contaId]));
   if(!a)continue;
-  const url=safeUrl(sig.url||sig.sourceUrl||sig.fonteUrl);
+  // O schema real de public.sinais guarda o endereço de origem em 'fonte'.
+  // Só HTTPS válido entra no radar, nunca uma origem textual como LinkedHelper.
+  const url=safeUrl(sig.url||sig.sourceUrl||sig.fonteUrl||sig.fonte);
   const when=dateFrom(sig.dataPublicacao||sig.quando||sig.data);
   if(!url||!when||when>asOf||deltaDays(when,asOf)>180)continue;
   if(!['expansao','investimento','contratacao','licenciamento','projeto','mudanca_operacional'].includes(norm(sig.tipo)))continue;

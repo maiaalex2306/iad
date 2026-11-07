@@ -62,6 +62,33 @@ test('RI-04: notícias registradas precisam de data e HTTPS, e fonte é sinal a 
  assert.match(v.groups.news[0].evidence,/dependem de conferência/);
  assert.doesNotMatch(JSON.stringify(v),/Falsa notícia|Notícia futura|Notícia privada/);
 });
+
+test('RI-04: noticia usa HTTPS do campo fonte presente em public.sinais',async()=>{
+ const s=empty();
+ s.sinais=[
+  {id:'schema-real',tenantId:'ta',contaId:'a',donoId:'u1',tipo:'investimento',
+   titulo:'Investimento confirmado na fonte',quando:'2026-11-02',
+   fonte:'https://example.org/industria/investimento'},
+  {id:'origem-textual',tenantId:'ta',contaId:'a',donoId:'u1',tipo:'expansao',
+   titulo:'Origem sem link',quando:'2026-11-02',fonte:'LinkedHelper'},
+  {id:'origem-insegura',tenantId:'ta',contaId:'a',donoId:'u1',tipo:'expansao',
+   titulo:'Fonte insegura',quando:'2026-11-02',fonte:'javascript:alert(1)'},
+  {id:'origem-credenciada',tenantId:'ta',contaId:'a',donoId:'u1',tipo:'expansao',
+   titulo:'URL com credenciais',quando:'2026-11-02',
+   fonte:'https://usuario:senha@example.org/a'},
+  {id:'outro-tenant',tenantId:'tb',contaId:'x',donoId:'u1',tipo:'investimento',
+   titulo:'Fonte privada',quando:'2026-11-02',fonte:'https://example.org/privada'}
+ ];
+ const before=JSON.stringify(s);
+ const actual=await run(s);
+ assert.equal(actual.groups.news.length,1);
+ assert.equal(actual.groups.news[0].headline,'Investimento confirmado na fonte');
+ assert.equal(actual.groups.news[0].sourceUrl,'https://example.org/industria/investimento');
+ assert.equal(actual.groups.news[0].status,'verificar_fonte');
+ assert.equal(JSON.stringify(s),before,'o radar não regrava sinais');
+ for(const unsafe of ['Origem sem link','Fonte insegura','URL com credenciais','Fonte privada'])
+  assert.ok(!JSON.stringify(actual).includes(unsafe),unsafe);
+});
 test('RI-04: crescimento qualifica apenas o CRM, com amostra e data suficientes',async()=>{
  const s=empty();
  const recent=['2026-11-01','2026-10-19','2026-09-10','2026-08-05','2026-07-02','2026-06-21'];
