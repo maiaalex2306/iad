@@ -8,7 +8,7 @@ export function isAutomotiveUmbrella(filters){
  return values.some(s=>/automotivo|mobilidade/.test(clean(s)));
 }
 export function buildMarketBatchPlan(filters){
- if(!isAutomotiveUmbrella(filters))return [];
+ if(!isAutomotiveUmbrella(filters)||(Array.isArray(filters?.segmentos)&&filters.segmentos.length!==1))return [];
  const cities=Array.isArray(filters?.municipios)?filters.municipios:[];
  if(cities.length<1||cities.length>15)return [];
  const seen=new Set(),out=[];
