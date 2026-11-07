@@ -1,6 +1,18 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),http=require('node:http');
 const assert=require('node:assert/strict'),{chromium}=require('playwright');
+/* O nome do cache vem do sw.js, nao de um literal. Fixado em 'iad-crm-v286.83',
+   este teste passava so enquanto a versao fosse exatamente essa: no bump
+   seguinte ele abria um cache que nao existe mais e falhava para sempre na
+   linha do assert do cache — verificado simulando v286.84. E a mesma doenca
+   dos tres testes que fixavam a versao (consertados na v286.49): vermelho
+   permanente por estar desatualizado, nao por ter achado problema. */
+const CACHE_ATIVO=(()=>{
+ const fonte=fs.readFileSync(path.resolve(__dirname,'..','sw.js'),'utf8');
+ const achado=/const CACHE\s*=\s*['"](iad-crm-v[\d.]+)['"]/.exec(fonte);
+ assert(achado,'nao li o nome do cache em sw.js');
+ return achado[1];
+})();
 const root=path.resolve(__dirname,'..'),types={'.html':'text/html','.js':'text/javascript',
  '.mjs':'text/javascript','.css':'text/css','.png':'image/png',
  '.svg':'image/svg+xml','.webmanifest':'application/manifest+json'};
@@ -25,17 +37,33 @@ const server=http.createServer((req,res)=>{
   page.on('dialog',d=>d.dismiss());
   await page.route('**/*',r=>r.request().url().startsWith(origin+'/')?r.continue():r.abort());
   await page.goto(origin+'/',{waitUntil:'domcontentloaded',timeout:30000});
+  /* `navigator.serviceWorker.ready` resolve quando JA EXISTE worker ativo, mas
+     `registration.active.state` lido nesse instante ainda pode dizer
+     'activating': o handler de `activate` do sw.js roda com waitUntil e a
+     transicao para 'activated' vem um tique depois. Amostrar o estado uma vez
+     e, portanto, uma corrida — passou em d54d03b e d831337 e falhou em 4c548e3,
+     mesmo script, so sob carga da CI. Esperar a transicao em vez de amostra-la
+     torna o teste deterministico sem afrouxar o que ele exige. */
   const active=await page.evaluate(async()=>{
    const registration=await navigator.serviceWorker.register('/sw.js',{scope:'/'});
-   await navigator.serviceWorker.ready;return registration.active?.state;
+   await navigator.serviceWorker.ready;
+   const worker=registration.active||registration.waiting||registration.installing;
+   if(!worker)return null;
+   if(worker.state!=='activated'){
+    await new Promise(ok=>{
+     const ver=()=>{if(worker.state==='activated'){worker.removeEventListener('statechange',ver);ok();}};
+     worker.addEventListener('statechange',ver);ver();
+    });
+   }
+   return worker.state;
   });
   assert.equal(active,'activated');
   await page.waitForFunction(()=>!!navigator.serviceWorker.controller,null,{timeout:20000});
-  const cache=await page.evaluate(async()=>{
-   const c=await caches.open('iad-crm-v286.83'),r=await c.match('/src/ri/conversation-intent.mjs');
+  const cache=await page.evaluate(async(nome)=>{
+   const c=await caches.open(nome),r=await c.match('/src/ri/conversation-intent.mjs');
    return {found:!!r,valid:!!r&&(await r.text()).includes('INTENT_KINDS'),items:(await c.keys()).length};
-  });
-  assert(cache.found&&cache.valid);
+  },CACHE_ATIVO);
+  assert(cache.found&&cache.valid,'cache '+CACHE_ATIVO+' sem o modulo esperado');
   await context.setOffline(true);
   await page.reload({waitUntil:'domcontentloaded',timeout:25000});
   const offline=await page.evaluate(async()=>{
