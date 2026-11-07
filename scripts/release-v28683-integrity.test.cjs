@@ -12,9 +12,13 @@ test('PWA precache do detector e sem API autenticada em cache',()=>{
  assert.match(sw,/CHAVES_SENSIVEIS/);
  assert(!sw.includes("functions/v1/assistente"));
 });
-test('versão v286.83 é atômica no PWA',()=>{
- assert.match(read('sw.js'),/CACHE = 'iad-crm-v286\.83'/);
- assert.match(read('src/config.js'),/numero: 'v286\.83'/);
+test('versão PWA atômica, sem voltar abaixo de v286.83',()=>{
+ const cache=read('sw.js').match(/const CACHE = 'iad-crm-v(\\d+)\\.(\\d+)'/)?.slice(1).map(Number);
+ const config=read('src/config.js').match(/numero: 'v(\\d+)\\.(\\d+)'/)?.slice(1).map(Number);
+ assert.ok(cache && config,'Versões do cache e do aplicativo precisam existir');
+ assert.deepEqual(cache,config,'Versão do SW deve corresponder à versão executada');
+ assert.ok(cache[0]>286 || (cache[0]===286 && cache[1]>=83),
+  'O aplicativo não pode retroceder em relação ao release RI-08 v286.83');
 });
 test('PERF-39 Kanban e RI-08 mensagens convivem',()=>{
  const v=read('src/views.js');
