@@ -96,6 +96,20 @@ export async function nextPendingLead(db,scope,campaign,afterLine=0){
   const rows=await cursorQuery(db,scope,campaign,afterLine+1,1,row=>!TERMINAL.has(row.estado));
   return rows[0]||null;
 }
+/* Grava o status do lead e os contadores da campanha na MESMA transação.
+   Uma falha de quota/disco aborta ambos, evitando contadores fantasmas. */
+export function commitLeadAndMeta(db,scope,row,meta){
+  if(!row||!row.scope||!row.campaign||!Number.isInteger(row.linha)||!meta?.campaign)
+    return Promise.reject(new Error('Registro de campanha incompleto.'));
+  const key=scopeKeyOf(scope);
+  if(row.scope!==key||row.campaign!==meta.campaign)
+    return Promise.reject(new Error('Escopo ou campanha divergente: gravação bloqueada.'));
+  return run(db,['leads','meta'],'readwrite',(tx,done)=>{
+    tx.objectStore('leads').put(row);
+    tx.objectStore('meta').put({...meta,scope:key});
+    done(true);
+  });
+}
 export function putLead(db,row){
   if(!row||!row.scope||!row.campaign||!Number.isInteger(row.linha))
     return Promise.reject(new Error('Lead sem identidade da campanha.'));
