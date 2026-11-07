@@ -448,7 +448,16 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
      const link=doc.createElement('a');link.href=f.url;link.target='_blank';link.rel='noopener noreferrer';
      link.textContent=(f.titulo||f.url);card.appendChild(link);card.appendChild(el('p',''));
     }
-   }else card.appendChild(el('p','Sem URL HTTPS pública para revisão: não utilizar como fato.','small muted'));
+   }else card.appendChild(el('p','Sem URL efetivamente citada para esta empresa: hipótese NÃO validada.','small muted'));
+   if(Array.isArray(company.fontesConsultadas)&&company.fontesConsultadas.length){
+    card.appendChild(el('h5','Páginas consultadas pela busca — vínculo com a empresa NÃO comprovado'));
+    for(const f of company.fontesConsultadas.slice(0,6)){
+     if(!isReviewableSourceURL(f?.url))continue;
+     const link=doc.createElement('a');link.href=f.url;link.target='_blank';
+     link.rel='noopener noreferrer';link.textContent=f.titulo||f.url;card.appendChild(link);
+     card.appendChild(el('p','Página consultada, não citada como prova individual.','small muted'));
+    }
+   }
    if(company.insights.length){card.appendChild(el('h5','Insights — hipoteses a investigar'));for(const insight of company.insights)card.appendChild(el('p',insight,'small'));}
    if(company.conflitos?.length){
     card.appendChild(el('h5','Divergencias entre IAs — verificar antes de qualificar'));
