@@ -11,6 +11,7 @@ import {interpretSector} from './sector-intelligence.mjs';
 import {verifyMarketTenantScope,marketTenantMessage} from './market-tenant-scope.mjs';
 import {marketCityCacheForDocument} from './market-city-cache.mjs';
 import {mountMarketSearchProgress} from './market-progress.mjs';
+import {buildMarketBatchPlan,mergeMarketBatchCandidates} from './market-batches.mjs';
 /**
  * Pull only the server-confirmed RI-M01 import into the local Pipeline.
  * Never upload local edits. Refuse the pull when CAS/pending state is unknown.
@@ -59,6 +60,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
  if(!root||!root.ownerDocument||!snapshot||!scope||typeof getScopeToken!=='function'||!nuvem)throw Error('Sessao e dados autorizados obrigatorios');
  const doc=root.ownerDocument,els=new Map();let currentRequest=0,controller=null,selected=new Set(),importKeys=new Map(),importing=false;
  const cancelInvestigations=new Set();
+ let batchSession=null,batchIntent='automatico';
  const valid=()=>root.isConnected&&getScopeToken()===scope.token;
  const el=(tag,text='',className='')=>{const n=doc.createElement(tag);n.textContent=String(text);if(className)n.className=className;return n};
  root.classList.add('iad-market-ui');
@@ -212,9 +214,16 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
  const preflightBtn=el('button','Verificar acesso às IAs','btn iad-market-btn-check');
  preflightBtn.type='button';
  const btn=el('button','Buscar empresas','btn iad-market-btn-search');btn.type='submit';
+ const quickBtn=el('button','Amostra rápida — pesquisa geral','btn iad-market-btn-check');quickBtn.type='button';
+ const nextBatchBtn=el('button','Pesquisar próximo lote — consome cota','btn iad-market-btn-search');nextBatchBtn.type='button';nextBatchBtn.hidden=true;
+ const batchStatus=el('p','','small iad-market-batch-status');batchStatus.hidden=true;
+ const batchMeter=doc.createElement('progress');batchMeter.className='iad-market-batch-meter';batchMeter.hidden=true;
+ batchMeter.setAttribute('aria-label','Lotes realmente concluídos');batchMeter.max=1;batchMeter.value=0;
+ const batchHint=el('p','Automotivo e Mobilidade: Buscar empresas inicia uma varredura por cidade e subsegmento, um lote por clique e cota. O contador é real, mas não representa cobertura exaustiva. Ao sair desta tela os resultados acumulados não são salvos.','small muted');
  const results=el('div','','iad-market-results'),review=el('div','','iad-market-review');
  const actions=el('div','','iad-market-actions'),actionButtons=el('div','','iad-market-action-buttons');
-  actionButtons.append(demoBtn,preflightBtn,btn);actions.append(aiHolder,limitHolder,actionButtons);
+  actionButtons.append(demoBtn,preflightBtn,quickBtn,btn,nextBatchBtn);
+  actions.append(aiHolder,limitHolder,actionButtons,batchHint,batchStatus,batchMeter);
   form.append(grid,actions);
  root.replaceChildren(el('h2','Pesquisar empresas fora do CRM'),el('p','Pesquisa iniciada manualmente. Fontes, custos e cobertura dependem do provedor contratado. Os dados nao sao fatos confirmados ate verificacao.','small muted'),form,status,results,review);
  const progress=mountMarketSearchProgress({doc,host:root});
@@ -538,33 +547,57 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
    importing=false;agree.disabled=false;agree.checked=false;importBtn.disabled=true;
   });
  }
+ quickBtn.addEventListener('click',()=>{batchIntent='rapido';form.requestSubmit();});
+ nextBatchBtn.addEventListener('click',()=>{
+  if(!batchSession||batchSession.next>=batchSession.cells.length)return;
+  batchIntent='continuar';form.requestSubmit();
+ });
  form.addEventListener('submit',async ev=>{
   ev.preventDefault();if(!valid())return;
   if(!catalogReady){show(catalogBlockReason);return;}
    if(cityLoading){show('Aguarde a consulta de cidades no IBGE.');return;}
-  let filters;try{filters=normalizeMarketFilters({
-   ...Object.fromEntries([...els].map(([k,v])=>[k,v.value])),
-   uf:ufSelect.value,
-   municipios:cityPick.get().map(x=>x.value),
-   ddds:dddPick.get().map(x=>x.value),
-   segmentos:segmentPick.get().map(x=>x.value),
-   faixasFuncionarios:bandPick.get().map(x=>x.value),
-   limit:Number(batchLimit.value)
-  });}catch(e){show(e.message);return;}
+  const intent=batchIntent;batchIntent='automatico';
+  let filters;
+  if(intent==='continuar'&&batchSession){
+   filters=batchSession.filters;
+  }else{
+   try{filters=normalizeMarketFilters({
+    ...Object.fromEntries([...els].map(([k,v])=>[k,v.value])),
+    uf:ufSelect.value,
+    municipios:cityPick.get().map(x=>x.value),
+    ddds:dddPick.get().map(x=>x.value),
+    segmentos:segmentPick.get().map(x=>x.value),
+    faixasFuncionarios:bandPick.get().map(x=>x.value),
+    limit:Number(batchLimit.value)
+   });}catch(e){show(e.message);return;}
+   const cells=intent==='rapido'?[]:buildMarketBatchPlan(filters);
+   batchSession=cells.length?{filters,provider:aiSelect.value,cells,next:0,companies:[]}:null;
+   batchStatus.hidden=!batchSession;batchMeter.hidden=!batchSession;nextBatchBtn.hidden=true;
+   if(batchSession){
+    batchMeter.max=cells.length;batchMeter.value=0;
+    batchStatus.textContent='Plano: '+cells.length+' combinações de cidade e subsegmento, 1 lote por clique e cota.';
+   }
+  }
+  if(intent==='continuar'&&!batchSession){show('A pesquisa anterior não está mais disponível. Inicie novamente.');return;}
+  const cell=batchSession?.cells[batchSession.next]||null;
+  if(batchSession&&!cell){show('Todos os lotes planejados já foram executados.');return;}
   const session=nuvem.sessao(),config=nuvem.config();
   if(!session?.access_token||!config?.url||!config?.chave){show('Autenticacao de nuvem necessaria para pesquisar empresas.');return;}
   if(controller)controller.abort();
   for(const stop of cancelInvestigations)stop();cancelInvestigations.clear();
   controller=new AbortController();const seq=++currentRequest;
-  results.replaceChildren();review.replaceChildren();btn.disabled=true;demoBtn.disabled=true;
+  if(!batchSession||batchSession.next===0){results.replaceChildren();review.replaceChildren();}
+  btn.disabled=true;demoBtn.disabled=true;quickBtn.disabled=true;nextBatchBtn.disabled=true;
   const providerLabel=aiSelect.value==='both'?'ChatGPT e Claude':aiSelect.value==='OpenAI'?'ChatGPT':'Claude';
-  show('Pesquisando sites e noticias com as IAs configuradas no IaD...');
+  show(cell?'Pesquisando lote '+(batchSession.next+1)+'/'+batchSession.cells.length+
+   ': '+cell.municipio+', família '+(cell.familyIndex+1)+'/18.':'Pesquisando sites e notícias com as IAs configuradas no IaD...');
   progress.start(providerLabel);progress.waiting();
   let responseReceived=false;
   try{
    const response=await fetch(config.url.replace(/\/$/,'')+'/functions/v1/market-search',{method:'POST',
     headers:{'Content-Type':'application/json','apikey':config.chave,'Authorization':'Bearer '+session.access_token},
-    body:JSON.stringify({action:'search',filters,provider:aiSelect.value}),signal:controller.signal});
+    body:JSON.stringify({action:'search',filters,provider:batchSession?.provider||aiSelect.value,
+    ...(cell?{batch:{municipioIBGE:cell.municipioIBGE,familyIndex:cell.familyIndex}}:{})}),signal:controller.signal});
    responseReceived=true;
    const payload=await response.json();
    if(seq!==currentRequest||!valid())return;
@@ -584,6 +617,14 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
    }
    progress.processing();
    const companies=normalizeMarketCompanies(payload.data||[],{source:payload.source||'Nao identificada',retrievedAt:payload.retrievedAt||''});
+   if(cell){
+    const confirmed=payload.discoveryBatch;
+    if(!confirmed||confirmed.municipioIBGE!==cell.municipioIBGE||
+       confirmed.familyIndex!==cell.familyIndex||confirmed.individuallySearched!==true){
+     const message='Servidor não confirmou a célula pesquisada. Nenhum resultado foi incorporado à varredura.';
+     show(message,{error:true});progress.fail(message);return;
+    }
+   }
    const unavailable=Array.isArray(payload.failedProviders)?payload.failedProviders.filter(p=>p==='OpenAI'||p==='Anthropic'):[];
    const partialWarning=payload.partial===true?('ATENCAO: pesquisa parcial. Falha em '+(unavailable.join(' e ')||'um provedor')+'. '+failureDescription(payload.failures)+'. '):'';
    const usageText=Array.isArray(payload.usage)?payload.usage.filter(u=>u&&['OpenAI','Anthropic'].includes(u.provider)).map(u=>{
@@ -609,7 +650,16 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
    const sourcedCount=companies.filter(c=>(c.fontes||[]).some(f=>isReviewableSourceURL(f?.url))).length;
    const withoutSource=companies.length-sourcedCount;
    show(partialWarning+'Pesquisa exploratoria: '+companies.length+' nomes candidatos; '+sourcedCount+' com URL HTTPS citada pelo provedor; '+withoutSource+' SEM fonte individual (apenas investigação, jamais qualificação/importação); '+companies.filter(c=>!c.cnpj).length+' com CNPJ pendente. Cobertura total desconhecida, fontes ainda nao verificadas. Nenhuma gravacao realizada.'+rejectedText+(usageText?' Consumo informado: '+usageText+'. Custo em R$ a apurar.':''));
-   renderCompanies(companies,payload.source||'Fornecedor',payload.retrievedAt||'data nao fornecida');
+   if(batchSession&&cell){
+    batchSession.companies=mergeMarketBatchCandidates(batchSession.companies,companies);
+    batchSession.next++;
+    batchMeter.value=batchSession.next;
+    batchStatus.textContent='Lotes concluídos: '+batchSession.next+'/'+batchSession.cells.length+
+     '; empresas candidatas únicas: '+batchSession.companies.length+
+     '; continuar exige clique e nova cota de pesquisa.';
+    nextBatchBtn.hidden=batchSession.next>=batchSession.cells.length;
+    renderCompanies(batchSession.companies,payload.source||'Fornecedor',payload.retrievedAt||'data nao fornecida');
+   }else renderCompanies(companies,payload.source||'Fornecedor',payload.retrievedAt||'data nao fornecida');
    // Planejamento amplo não equivale a consultar cada combinação municipal e
    // setorial. Expor as 18 famílias sem afirmar cobertura exaustiva.
    const plan=payload.discoveryPlan;
@@ -631,7 +681,7 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
    const message=responseReceived?'A pesquisa respondeu, mas os resultados não puderam ser processados. Nenhuma alteração no CRM.':'Falha de conexão durante a pesquisa. Confira o resultado antes de repetir, pois a solicitação pode ter sido recebida pelo servidor.';
    show(message,{error:true});progress.fail(message);
   }}
-  finally{if(seq===currentRequest&&valid()){btn.disabled=false;demoBtn.disabled=false;}}
+  finally{if(seq===currentRequest&&valid()){btn.disabled=false;demoBtn.disabled=false;quickBtn.disabled=false;nextBatchBtn.disabled=false;}}
  });
  return ()=>{progress.dispose();doc.removeEventListener('pointerdown',closePickers);doc.removeEventListener('keydown',closePickers);root.classList.remove('iad-market-ui');catalogController.abort();stopResearchMetrics();if(controller)controller.abort();for(const stop of cancelInvestigations)stop();cancelInvestigations.clear();if(preflightController)preflightController.abort();if(cityRequest)cityRequest.abort();currentRequest++;};
 }
