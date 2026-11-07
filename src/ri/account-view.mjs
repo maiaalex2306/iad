@@ -97,8 +97,8 @@ export function mountAccountIntelligence({root,snapshot,scope,getScopeToken}={})
  add(intro,'h2','Onde podemos gerar novos negócios?','iad-ri-section-title');
  add(intro,'p','Selecione um tipo de oportunidade. O radar só apresenta hipóteses fundamentadas; quando faltam dados, indica o que registrar ou validar.','iad-ri-section-intro');
  const groups=[
-  {id:'pistas',title:'Pistas da carteira',desc:'Projetos, solicitações e necessidades citados nos registros',
-   empty:'Nenhuma expressão comercial inequívoca foi localizada nas notas ou nos eventos autorizados. Esse resultado não significa ausência de oportunidades; a investigação com IA contextual permanece uma evolução necessária.'},
+  {id:'pistas',title:'Pistas da carteira',desc:'Intenções de compra e necessidades distintas encontradas nas conversas e registros',
+   empty:'Nenhuma intenção comercial reconhecida nos registros autorizados. Verifique se as conversas do LinkedHelper foram importadas e se o histórico contém falas do prospect.'},
   {id:'upsell',title:'Upsell',desc:'Ampliar contratos e soluções de clientes existentes',empty:'Nenhum cliente com venda ganha e itens contratados suficientes para sugerir ampliação. Registre produtos efetivamente vendidos nos negócios ganhos.'},
   {id:'crossSell',title:'Cross-sell',desc:'Investigar soluções complementares no mesmo segmento',empty:'Faltam referências de compras reais, com produtos vinculados, em outras contas do mesmo segmento. Não vamos sugerir itens aleatórios.'},
   {id:'forgotten',title:'Contas esquecidas',desc:'Retomar relacionamentos sem atividade registrada',empty:'Nenhuma conta sem atividade documentada há 90 dias e sem compromisso futuro, dentro da carteira autorizada.'},
@@ -142,7 +142,7 @@ export function mountAccountIntelligence({root,snapshot,scope,getScopeToken}={})
   htitle.textContent=g.title;
   hdesc.textContent=g.desc;
   info.textContent=selected==='pistas'
-   ?'Triagem por regras sobre textos internos, não análise por IA. Confirme contexto, atualidade e interlocutor antes de agir.'
+   ?'Triagem local de mensagens e histórico; sinais interpretados por IA só entram quando a citação literal é conferida. Revise antes de agir.'
    :'Hipóteses de trabalho — cada indicação exige validação pelo responsável antes de contato ou proposta.';
   const items=radar.groups[selected];
   const fragment=doc.createDocumentFragment();
@@ -167,6 +167,17 @@ export function mountAccountIntelligence({root,snapshot,scope,getScopeToken}={})
    const detail=add(card,'div','','iad-ri-radar-evidence');
    add(detail,'strong','Por que apareceu');
    add(detail,'p',item.evidence);
+   if(selected==='pistas'&&Array.isArray(item.relatedSignals)&&item.relatedSignals.length){
+    const section=add(detail,'section','','iad-ri-related-intents');
+    add(section,'strong','Outras necessidades e intenções nesta conta');
+    const list=add(section,'ul');
+    for(const signal of item.relatedSignals){
+     const li=add(list,'li');
+     add(li,'strong',signal.headline);
+     add(li,'p',signal.evidence);
+     add(li,'small','Ação: '+signal.action,'iad-ri-radar-source-label');
+    }
+   }
    if(item.sourceLabel){
     add(detail,'small','Fonte interna: '+item.sourceLabel+
       (item.date?' · '+item.date:''),'iad-ri-radar-source-label');
