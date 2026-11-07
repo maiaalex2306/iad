@@ -2,6 +2,29 @@
    Os estados nunca implicam curtida/publicação comprovada pelo LinkedIn:
    confirmação manual e retorno de API são evidências distintas. */
 export const TERMINAIS = Object.freeze(['sem_post','confirmado','descartado']);
+export const REVIEW_WINDOW_MS = 24*60*60*1000;
+export const DEFAULT_REVIEW_LIMIT = 20;
+/* Meta INTERNA de revisão humana (não é limite oficial do LinkedIn).
+   Calculada exclusivamente sobre a fila carregada na aba atual. */
+export function reviewWindow(rows, now=Date.now(), max=DEFAULT_REVIEW_LIMIT) {
+  const limit=Math.max(1,Math.min(500,Math.trunc(Number(max)||DEFAULT_REVIEW_LIMIT)));
+  const cutoff=now-REVIEW_WINDOW_MS;
+  const profiles=new Set();
+  for(const row of Array.isArray(rows)?rows:[]){
+    const when=Date.parse(row?.perfilAbertoEm||'');
+    if(Number.isFinite(when)&&when>cutoff&&when<=now)profiles.add(String(row.perfil||row.lead||''));
+  }
+  return {limit,used:profiles.size,remaining:Math.max(0,limit-profiles.size),windowMs:REVIEW_WINDOW_MS};
+}
+export function canReviewProfile(rows,row,now=Date.now(),max=DEFAULT_REVIEW_LIMIT){
+  if(!row||!Array.isArray(rows)||!rows.includes(row))return {ok:false,reason:'Perfil fora da fila.'};
+  if(TERMINAIS.includes(row.estado))return {ok:false,reason:'Este lead já foi encerrado.'};
+  const counts=reviewWindow(rows,now,max);
+  const t=Date.parse(row.perfilAbertoEm||'');
+  if(Number.isFinite(t)&&t>now-REVIEW_WINDOW_MS&&t<=now)return {ok:true,alreadyCounted:true,...counts};
+  if(counts.remaining<=0)return {ok:false,reason:'Meta interna de revisão de 20 perfis/24h atingida nesta aba.',...counts};
+  return {ok:true,alreadyCounted:false,...counts};
+}
 export function campaignSummary(rows) {
   const result={total:0,pendentes:0,perfilAberto:0,semPost:0,curtidas:0,rascunhos:0,confirmados:0,falhas:0};
   for(const r of Array.isArray(rows)?rows:[]){
@@ -29,17 +52,19 @@ export function nextPending(rows,current=null){
 }
 export function skipWithoutPost(rows,current,when=new Date().toISOString()){
   if(!current||!Array.isArray(rows)||!rows.includes(current))throw Error('Lead não está na fila.');
-  if(current.estado==='confirmado')throw Error('Lead concluído não pode ser marcado sem post.');
+  if(TERMINAIS.includes(current.estado)||current.curtidaConfirmada)throw Error('Lead concluído ou curtido não pode ser marcado sem post.');
   current.estado='sem_post';current.semPostEm=when;current.postUrl='';current.post='';
   return nextPending(rows,current);
 }
 export function setProfileOpened(row,when=new Date().toISOString()){
   if(!row||TERMINAIS.includes(row.estado))throw Error('Lead encerrado não pode ser reaberto sem revisão.');
-  row.perfilAbertoEm=when;row.estado='perfil_aberto';return row;
+  if(!row.perfilAbertoEm)row.perfilAbertoEm=when;
+  row.estado='perfil_aberto';return row;
 }
 export function setLikeConfirmed(row,when=new Date().toISOString()){
   if(!row||TERMINAIS.includes(row.estado))throw Error('Lead encerrado.');
   if(!row.postUrl)throw Error('Primeiro identifique a publicação.');
+  if(row.curtidaConfirmada)return row;
   row.curtidaConfirmada=true;row.curtidaConfirmadaEm=when;row.estado='curtido';
   return row;
 }
