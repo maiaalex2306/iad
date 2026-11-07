@@ -16,13 +16,16 @@ export function reviewWindow(rows, now=Date.now(), max=DEFAULT_REVIEW_LIMIT) {
   }
   return {limit,used:profiles.size,remaining:Math.max(0,limit-profiles.size),windowMs:REVIEW_WINDOW_MS};
 }
-export function canReviewProfile(rows,row,now=Date.now(),max=DEFAULT_REVIEW_LIMIT){
+export function canReviewProfile(rows,row,now=Date.now(),max=DEFAULT_REVIEW_LIMIT,minSpacingMs=60_000){
   if(!row||!Array.isArray(rows)||!rows.includes(row))return {ok:false,reason:'Perfil fora da fila.'};
   if(TERMINAIS.includes(row.estado))return {ok:false,reason:'Este lead já foi encerrado.'};
   const counts=reviewWindow(rows,now,max);
   const t=Date.parse(row.perfilAbertoEm||'');
   if(Number.isFinite(t)&&t>now-REVIEW_WINDOW_MS&&t<=now)return {ok:true,alreadyCounted:true,...counts};
-  if(counts.remaining<=0)return {ok:false,reason:'Meta interna de revisão de 20 perfis/24h atingida nesta aba.',...counts};
+  if(counts.remaining<=0)return {ok:false,reason:'Meta interna de revisão de perfis/24h atingida nesta aba.',...counts};
+  const last=Math.max(0,...rows.map(x=>Date.parse(x?.perfilAbertoEm||'')).filter(x=>Number.isFinite(x)&&x<=now));
+  const nextAt=last+Math.max(0,Number(minSpacingMs)||0);
+  if(last&&nextAt>now)return {ok:false,reason:'Intervalo operacional entre revisões ainda não cumprido.',nextAt,...counts};
   return {ok:true,alreadyCounted:false,...counts};
 }
 export function campaignSummary(rows) {
@@ -58,7 +61,9 @@ export function skipWithoutPost(rows,current,when=new Date().toISOString()){
 }
 export function setProfileOpened(row,when=new Date().toISOString()){
   if(!row||TERMINAIS.includes(row.estado))throw Error('Lead encerrado não pode ser reaberto sem revisão.');
-  if(!row.perfilAbertoEm)row.perfilAbertoEm=when;
+  const old=Date.parse(row.perfilAbertoEm||'');
+  const current=Date.parse(when);
+  if(!Number.isFinite(old)||old<=current-REVIEW_WINDOW_MS)row.perfilAbertoEm=when;
   row.estado='perfil_aberto';return row;
 }
 export function setLikeConfirmed(row,when=new Date().toISOString()){
