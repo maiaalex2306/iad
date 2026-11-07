@@ -290,6 +290,52 @@ function combineProfessionalContacts(results,target){
  const decisores=[...contacts.values()].sort((a,b)=>a.nome.localeCompare(b.nome,'pt-BR')).slice(0,8);
  return {decisores,diagnostico:{...stats,apresentados:decisores.length}};
 }
+// Taxonomia de DESCOBERTA para termos guarda-chuva. Não altera segmento
+// autorizado no cadastro, CNAE legal, filtros de porte ou qualificação.
+// Cada família exige evidência concreta de atuação/fornecimento no ecossistema.
+const AUTOMOTIVE_DISCOVERY_FAMILIES=Object.freeze([
+ 'montadoras: carros, comerciais leves, SUVs, ônibus, caminhões, motocicletas, micro-ônibus, veículos especiais, implementos rodoviários, carrocerias e reboques',
+ 'sistemistas Tier 1/Tier 2/Tier 3, fabricantes e distribuidores industriais de autopeças, reposição e componentes OEM',
+ 'motores, usinagem de motores, transmissões, engrenagens, eixos, redutores, embreagens e conjuntos de powertrain',
+ 'freios, direção, suspensão, sistemas hidráulicos, pneumática e componentes de segurança veicular',
+ 'chicotes, cabos, conectores, eletrônica embarcada, sensores, ECUs, painéis, infotainment, telemática e rastreamento de frotas',
+ 'baterias, eletrificação, motores elétricos, power electronics, inversores, recarga e infraestrutura de mobilidade elétrica',
+ 'pneus, borracha técnica, vedação, mangueiras, elastômeros, rodas e peças de borracha automotiva',
+ 'injeção plástica, moldagem técnica, polímeros, termoformagem, peças plásticas e acabamentos internos de veículos',
+ 'estamparia, metalurgia, chaparia, corte/dobra, caldeiraria, soldagem, estruturas e componentes metálicos para veículos',
+ 'usinagem CNC, fundição, forjaria, tratamento térmico, ferramentarias, moldes, matrizes, dispositivos e prototipagem automotiva',
+ 'bancos, estofados, espumas, revestimentos, painéis, vidros, espelhos, faróis, iluminação e interiores',
+ 'máquinas, automação industrial, robótica, integradores, metrologia, testes, laboratórios e engenharia de desenvolvimento automotivo',
+ 'frotistas, transportadoras, logística de autopeças, operadores de distribuição e armazéns da cadeia automotiva',
+ 'concessionárias, revendas de veículos, atacadistas e distribuidores de peças, auto centers, manutenção e oficinas de frotas',
+ 'locação de veículos, mobilidade compartilhada, gestão de frotas, aplicativos de transporte, ônibus urbanos e transporte coletivo',
+ 'mobilidade ferroviária, micromobilidade, bicicletas e seus componentes, motocicletas e veículos elétricos leves',
+ 'remanufatura, recuperação de motores, reciclagem e reaproveitamento de componentes automotivos',
+ 'softwares e serviços de engenharia, gestão, IoT, manutenção, simulação, segurança e inspeção COM CLIENTES OU PRODUTOS automotivos'
+]);
+function discoveryTaxonomy(f){
+ const names=[...(f.segmentos||[]),...(f.segmento?[f.segmento]:[])];
+ return names.some(n=>normalizedPlace(n).includes('automotivo')||
+   normalizedPlace(n).includes('mobilidade'))?AUTOMOTIVE_DISCOVERY_FAMILIES:[];
+}
+function discoveryInstructions(f){
+ const families=discoveryTaxonomy(f);
+ if(!families.length)return '';
+ const cities=f.municipios?.length?f.municipios.map(m=>m.nome):(f.cidade?[f.cidade]:[]);
+ return 'O SEGMENTO GUARDA-CHUVA AUTOMOTIVO E MOBILIDADE DEVE ABRANGER TODAS AS 18 FAMÍLIAS DE SUBSEGMENTOS, E NÃO SÓ MONTADORAS. '+
+  'Famílias de descoberta (OR entre elas, desde que exista vínculo concreto com automobilístico ou mobilidade): '+
+  families.map((x,i)=>(i+1)+'. '+x).join(' | ')+'. '+
+  (cities.length?'Territórios municipais a cobrir SEM privilegiar a maior cidade: '+JSON.stringify(cities)+'. ':'')+
+  'Distribua a descoberta entre cidades, subsegmentos, fornecedores menores, distribuidores, serviços e indústria; '+
+  'busque empresas Tier 2 e Tier 3 e não apenas GM, Volkswagen ou multinacionais. '+
+  'Combine variações de pesquisa por município e família, e sinônimos como autopeças, ferramentaria, injeção plástica, '+
+  'usinagem, estampagem, frotas e mobilidade elétrica. '+
+  'CNAE 29 (veículos/peças) e 45 (comércio/reparação) são pistas, NÃO um corte exclusivo: '+
+  'empresas com CNAE principal 22, 25, 26, 27, 28, 30, 33, 49, 52, 62 ou 71 também podem integrar a cadeia, '+
+  'MAS exija evidência de produto/cliente/serviço automotivo ou de mobilidade. '+
+  'Respeite integralmente as faixas de empregados e o território; empregados não informados ficam pendentes, '+
+  'sem exclusão automática nem falsa confirmação. ';
+}
 function prompt(f,target=null,mode='investigate') {
  if(mode==='enrich'&&target)return 'INVESTIGAÇÃO WEB DE DECISORES PROFISSIONAIS de uma empresa com CNPJ exato '+JSON.stringify(target)+
   ', contexto territorial '+JSON.stringify(f)+'. Encontre APENAS nomes e cargos profissionais publicamente associados à entidade jurídica exata. Priorize site oficial e páginas corporativas. Retorne JSON estrito {"decisores":[{"cnpj":"...","nome":"...","cargo":"...","fonte":"https://...","linkedin":"https://www.linkedin.com/in/... ou null","emailCorporativo":"e-mail corporativo explicitamente publicado ou null"}]}. Até 8. Fonte e LinkedIn somente se citados pela web_search. Não invente e-mails por padrão de domínio, não utilize e-mail pessoal, telefone celular, WhatsApp, perfis privados nem informações sensíveis. Se vínculo não for sustentado, retorne array vazio. Dados são hipóteses e exigem revisão.';
@@ -309,12 +355,16 @@ function prompt(f,target=null,mode='investigate') {
    '"fontes":[{"url":"https://...","titulo":"..."}],"contatos":[],"noticias":[],"insights":[]}]}. '+
    'Toda URL precisa estar citada pela ferramenta web_search. Sem identidade compatível retorne {"empresas":[]}.';
  if(target)return 'INVESTIGAÇÃO INDEPENDENTE DE UMA EMPRESA ESPECÍFICA. Pesquise na WEB somente a empresa com CNPJ e nome '+JSON.stringify(target)+', localizada no recorte '+JSON.stringify(f)+'. Use fontes primárias e páginas corporativas quando disponíveis. Responda somente JSON com chave empresas, com NO MÁXIMO UMA empresa, contendo cnpj, razaoSocial, nome, cidade, uf, ddd, segmento, porte, site, telefone, funcionarios, faturamento, fontes:[{url,titulo}], contatos:[{nome,cargo,email,telefone,fonte}], noticias:[{titulo,url,data}], insights:[]. Se não conseguir obter o MESMO CNPJ com fonte web citada, devolva {"empresas":[]}. Nunca substitua por CNPJ parecido ou outra filial. Contatos, cargos, números e notícias somente com URL citada; desconhecidos devem ser null ou lista vazia. Evite inventar conclusões e intenção de compra.';
- const targetCount=Math.min(f.limit,20);
+ const targetCount=f.limit; // Teto solicitado (até 50); cobertura NÃO exaustiva.
  return 'MAPEAMENTO B2B COM PESQUISA WEB REAL NO BRASIL. Filtros solicitados: '+JSON.stringify(f)+
+  '. '+discoveryInstructions(f)+
   '. Investigue em consultas distintas: (1) empresas com operações no território e segmento; '+
   '(2) fabricantes, fornecedores industriais, filiais e estabelecimentos com atividade identificável; '+
   '(3) CNPJ, porte e empregados em fonte citada. '+
-  'Priorize empresas com evidência individual de aderência ao ICP, não apenas diretórios agregados. '+
+  'Na DESCOBERTA, varra também diretórios empresariais, relações de fornecedores, associações setoriais, listagens locais e sites comerciais; '+
+  'use esses resultados para ampliar NOMES, sem afirmar identidade validada, CNPJ, quadro de empregados ou vínculo confirmado. '+
+  'Priorize diversidade setorial e geográfica, empresas de médio porte, prestadores especializados e fornecedores menores. '+
+  'Validação de identidade, empregados e ICP é etapa posterior — não restrinja a descoberta a quem já publica todos os campos. '+
   'Fontes preferidas: sites corporativos, cadastros públicos, relatórios e imprensa. '+
   'Um ranking geral ou Wikipédia não valida CNPJ, funcionários ou operação industrial. '+
   'Não confunda marca, grupo, matriz, unidade e filial; diferencie indústria, serviços e comércio. '+
