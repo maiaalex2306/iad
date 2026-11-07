@@ -897,6 +897,15 @@ Deno.serve(async req=>{
    ...(target?{targetMatch:target.cnpj?
     (companies.length?'CNPJ_RELATADO_PELO_PROVEDOR':'CNPJ_NAO_CORROBORADO'):
     (companies.length?'IDENTIDADE_SUGERIDA_NAO_VERIFICADA':'IDENTIDADE_NAO_LOCALIZADA')}:{}),
+   ...(action==='search'?{discoveryPlan:{
+     sectorExpansion:discoveryTaxonomy(f).length?'automotivo_mobilidade':'sem_taxonomia_expandida',
+     familyCount:discoveryTaxonomy(f).length,
+     families:[...discoveryTaxonomy(f)],
+     municipalityCount:f.municipios.length||(f.cidade?1:0),
+     requestedLimit:f.limit,
+     coverage:'amostragem_exploratoria',
+     allFamiliesIndividuallySearched:false
+   }}:{}),
    total:null,hasMore:target?false:null,coverage:'exploratoria',coverageStatus:'unknown',
    territoryVerified:false,warning:(partial?'Uma ou mais IAs nao concluiram a pesquisa; cobertura parcial. ':'')+
    (target?(target.cnpj?
