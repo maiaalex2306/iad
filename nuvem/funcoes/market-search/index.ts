@@ -483,7 +483,7 @@ function combineAI(results,limit,f,diagnostics={}) {
  // Aggregate-only diagnostics; never log names, IDs, URLs or prompts.
  const counts={candidates:0,rejectedTerritory:0,rejectedEmployees:0,
   rejectedInvalidCnpj:0,rejectedMissingName:0,rejectedUncitedSource:0,
-  mergedDuplicates:0,accepted:0};
+  pendingUncitedSource:0,mergedDuplicates:0,accepted:0};
  for(const r of results){
   if(!r.searched)continue;
   const list=Array.isArray(r.parsed.empresas)?r.parsed.empresas:[];
@@ -510,7 +510,10 @@ function combineAI(results,limit,f,diagnostics={}) {
    const nome=str(entry.nome||entry.razaoSocial,160);
    if(!nome){counts.rejectedMissingName++;continue;}
    const sources=(Array.isArray(entry.fontes)?entry.fontes:[]).map(f=>({url:canonicalUrl(f.url),titulo:str(f.titulo,150)})).filter(f=>f.url&&r.urls.has(f.url));
-   if(!sources.length){counts.rejectedUncitedSource++;continue;}
+   // RI-M23: descoberta ≠ validação. Empresas sem URL citada permanecem
+    // APENAS na fila de pesquisa não verificável; sem fonte, nenhum
+    // contato/notícia, shortlist ou importação. Não promover a fato.
+    if(!sources.length)counts.pendingUncitedSource++;
    const normalizedName=normalizedPlace(nome).replace(/[^a-z0-9]/g,'');
    if(!cnpj&&normalizedName.length<4){counts.rejectedMissingName++;continue;}
    const researchKey=cnpj?'cnpj:'+cnpj:'pending:'+normalizedName+'|'+normalizedPlace(entry.cidade||f.cidade)+'|'+str(entry.uf||f.uf,2).toUpperCase();
@@ -538,6 +541,7 @@ function combineAI(results,limit,f,diagnostics={}) {
       existing.qualificacaoICP[key]='declarado';
     }
     for(const src of sources)if(!existing.fontes.some(x=>x.url===src.url))existing.fontes.push(src);
+     if(existing.fontes.length)existing.fonteStatus='citada_pelo_provedor';
     // Merge only contacts whose source was independently cited by this
     // provider; never borrow another provider's global citation set.
     for(const c of contatos){
@@ -550,7 +554,7 @@ function combineAI(results,limit,f,diagnostics={}) {
     }
     continue;
    }
-   out.set(researchKey,{cnpj,identidadeStatus:cnpj?'cnpj_validado':'pendente_cnpj',razaoSocial:str(entry.razaoSocial||entry.nome),nome:str(entry.nome||entry.razaoSocial),cidade:str(entry.cidade),uf:str(entry.uf,2).toUpperCase(),porte:str(entry.porte),segmento:str(entry.segmento),site:str(entry.site,200),telefone:str(entry.telefone,60),funcionarios:entry.funcionarios??null,faixaFuncionariosStatus:f.faixasFuncionarios.length?(Number.isSafeInteger(employees)?'aderente_nao_verificado':'pendente'):'nao_solicitado',qualificacaoICP:icp,faturamento:entry.faturamento??null,contatos,noticias,insights:Array.isArray(entry.insights)?entry.insights.slice(0,6).map(s=>str(s,250)):[],fontes:sources,providers:[r.engine],conflitos:[],territorioCorroborado:false});
+   out.set(researchKey,{fonteStatus:sources.length?'citada_pelo_provedor':'pendente_sem_fonte',cnpj,identidadeStatus:cnpj?'cnpj_validado':'pendente_cnpj',razaoSocial:str(entry.razaoSocial||entry.nome),nome:str(entry.nome||entry.razaoSocial),cidade:str(entry.cidade),uf:str(entry.uf,2).toUpperCase(),porte:str(entry.porte),segmento:str(entry.segmento),site:str(entry.site,200),telefone:str(entry.telefone,60),funcionarios:entry.funcionarios??null,faixaFuncionariosStatus:f.faixasFuncionarios.length?(Number.isSafeInteger(employees)?'aderente_nao_verificado':'pendente'):'nao_solicitado',qualificacaoICP:icp,faturamento:entry.faturamento??null,contatos,noticias,insights:Array.isArray(entry.insights)?entry.insights.slice(0,6).map(s=>str(s,250)):[],fontes:sources,providers:[r.engine],conflitos:[],territorioCorroborado:false});
   }
  }
  counts.accepted=Math.min(out.size,limit);
