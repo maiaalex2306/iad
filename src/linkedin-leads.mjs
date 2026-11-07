@@ -92,6 +92,15 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
   if(!root||!root.ownerDocument||!scope||typeof getScopeToken!=='function')
     throw new Error('Sessão autorizada obrigatória.');
   const doc=root.ownerDocument,session=sessionFor(scope);
+  /* Estilo somente quando a rota for aberta; não bloqueia a primeira tela
+     do CRM. Sem duplicar a tag em navegações e repaints sucessivos. */
+  if(!doc.getElementById('iad-linkedin-style')){
+    const stylesheet=doc.createElement('link');
+    stylesheet.id='iad-linkedin-style';
+    stylesheet.rel='stylesheet';
+    stylesheet.href=new URL('assets/linkedin-leads.css',doc.baseURI).href;
+    doc.head.appendChild(stylesheet);
+  }
   const valid=()=>root.isConnected&&getScopeToken()===scope.token;
   const notices=elem(doc,'p','Fluxo: login → CSV → abrir perfil → procurar post → curtir → analisar → comentar sobre água → próximo lead. Sem post: marcar e avançar. Ações externas exigem sua confirmação no LinkedIn.','small muted');
   const safe=elem(doc,'p','Sua senha é digitada somente em linkedin.com. O IaD CRM não solicita nem armazena senha, cookies ou tokens do LinkedIn.','small muted');
@@ -421,6 +430,7 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
   },true);
   const btnPause=action(doc,'Pausar campanha',()=>{
     campaignPaused=!campaignPaused;session.paused=campaignPaused;
+    if(campaignPaused)requestVersion++; /* invalida IA iniciada antes da pausa */
     btnPause.textContent=campaignPaused?'Retomar campanha':'Pausar campanha';
     filaMsg.textContent=campaignPaused?'Campanha pausada; fila sem avanço.':'Campanha retomada.';
     refreshQueue();
