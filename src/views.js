@@ -8264,6 +8264,13 @@
               return '<b>' + esc(m.nosso ? (l.operador || 'SDR') : (m.de || l.nome || 'Prospect')) + ':</b> ' + esc(m.texto);
             }).join('\n') + '</p>'
           : (l.resposta ? '<p class="origem">\u201c' + esc(l.resposta) + '\u201d</p>' : '')) +
+        (Array.isArray(l.sinaisDaIA) && l.sinaisDaIA.length
+          ? '<div class="pergunta-pronta"><strong>Intenções detectadas — hipóteses da IA</strong>' +
+            '<ul>' + l.sinaisDaIA.slice(0,3).map(function (s) {
+              return '<li><b>' + esc(String(s.type || '').replace(/_/g, ' ')) +
+                '</b>: “' + esc(s.evidence || '') + '”</li>';
+            }).join('') + '</ul><p class="tiny muted">Citações literais do prospect; valide antes de criar uma nova negociação.</p></div>'
+          : '') +
         juntarNaConta(l, i) +
         juntarNaNegociacao(l, i) +
         /* A próxima mensagem, pronta para copiar.
