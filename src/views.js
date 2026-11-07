@@ -2590,16 +2590,33 @@
   function kanban(resumos, totais) {
     const etapas = P.ETAPAS.filter(function (e) { return e !== 'Venda'; });
     const todos = totais || resumos;
+    /* PERF-39: indexar uma única vez as etapas. A versão anterior percorria
+       as listas inteiras DUAS vezes por coluna (filter + reduce).
+       Preservar a ordem original de cada etapa, valor, HTML e regras de drag. */
+    const quantidades = new Map(), visiveis = new Map();
+    for (const etapa of etapas) {
+      quantidades.set(etapa, { total: 0, valor: 0 });
+      visiveis.set(etapa, []);
+    }
+    for (const r of todos) {
+      const bucket = quantidades.get(r.op.etapa);
+      if (bucket) {
+        bucket.total++;
+        bucket.valor += (r.op.valor || 0);
+      }
+    }
+    for (const r of resumos) {
+      const bucket = visiveis.get(r.op.etapa);
+      if (bucket) bucket.push(r);
+    }
     const colunas = etapas.map(function (etapa) {
-      const doGrupo = resumos.filter(function (r) { return r.op.etapa === etapa; });
-      const completos = todos.filter(function (r) { return r.op.etapa === etapa; });
-      const valor = completos.reduce(function (s, r) { return s + (r.op.valor || 0); }, 0);
-      const cartoes = doGrupo.map(function (r) { return cartaoKanban(r, etapas); }).join('') ||
+      const grupo = visiveis.get(etapa), contagem = quantidades.get(etapa);
+      const cartoes = grupo.map(function (r) { return cartaoKanban(r, etapas); }).join('') ||
         '<div class="vazio tiny">—</div>';
       return '<section class="coluna" ondragover="event.preventDefault()" ondrop="App.soltar(event,\'' + etapa + '\')">' +
         '<header><div class="row" style="gap:6px"><strong>' + esc(etapa) + '</strong><span class="espaco"></span>' +
         '<button class="mais" title="Cadastro rápido nesta etapa" onclick="App.cadastroRapido(\'' + etapa + '\')">+</button></div>' +
-        '<span class="tiny muted">' + completos.length + ' · ' + U.compacto(valor) + '</span></header>' +
+        '<span class="tiny muted">' + contagem.total + ' · ' + U.compacto(contagem.valor) + '</span></header>' +
         '<div class="cartoes">' + cartoes + '</div></section>';
     }).join('');
 
