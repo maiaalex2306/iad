@@ -99,7 +99,7 @@ export function normalizeMarketCompanies(companies,{source='',retrievedAt=''}={}
   const name=str(x.nome||x.nomeFantasia||x.razaoSocial);
   // Candidata exploratória sem fonte NÃO é descartada: permanece sem
   // status de validação, fora da shortlist qualificada e nunca importável.
-  if(!name)continue;
+  if(!cnpj&&!name)continue; // Preserva contratos antigos de CNPJ válido sem nome preenchido.
   const key=cnpj?'cnpj:'+cnpj:'pending:'+folded(name)+'|'+folded(x.cidade)+'|'+str(x.uf,2).toUpperCase();
   if(seen.has(key))continue;seen.add(key);
   const contacts=Array.isArray(x.contatos)?x.contatos.slice(0,15):[];
