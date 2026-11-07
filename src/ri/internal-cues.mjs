@@ -56,7 +56,10 @@ export function discoverInternalCommercialCues({snapshot,scope,accounts,asOf,lim
    const date=day(event.data||event.quando);
    if(date&&date>asOf)continue;
    if(event.tipo==='sistema'&&/Conversa no LinkedIn/i.test(event.titulo||'')){
-    const sdr=short(op.sdr,120)||((/conversa no linkedin com (.+?)\s*\(/i.exec(event.titulo||'')||[])[1]||'');
+    // O operador pode mudar entre importações. O título pertence à conversa
+    // desta entrega; usar op.sdr primeiro confunde outra SDR com um prospect.
+    const sdr=((/conversa no linkedin com (.+?)\s*\(/i.exec(event.titulo||'')||[])[1]||'')
+      .trim()||short(op.sdr,120);
     const messages=buyerMessagesFromTranscript(event.detalhe,sdr);
     for(const m of messages){
      for(const signal of detectCommercialIntents(m.text))

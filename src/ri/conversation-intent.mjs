@@ -30,7 +30,9 @@ const topicRules=[
 export const INTENT_KINDS=Object.freeze(rules.map(r=>r.id));
 const topics=normal=>topicRules.filter(([,rx])=>rx.test(normal)).map(([id])=>id);
 function fragments(text){
- return short(text,1600).split(/(?:\r?\n|(?<=[.!?;])\s+)/).map(s=>s.trim()).filter(Boolean).slice(0,18);
+ return short(text,1600)
+  .split(/(?:\r?\n|(?<=[.!?;])\s+|,\s+(?=mas\b)|\s+(?=mas\b))/i)
+  .map(s=>s.trim()).filter(Boolean).slice(0,18);
 }
 export function detectCommercialIntents(text,{sellerContext='',max=6}={}){
  const signals=[];const seen=new Set();
@@ -66,6 +68,22 @@ export function validateAiIntents(items,buyerMessages){
   const key=raw.type+'|'+fold(excerpt);
   if(seen.has(key))continue;seen.add(key);
   const rule=rules.find(r=>r.id===raw.type);
+  // A citação literal não autoriza atribuir QUALQUER categoria à fala.
+  // Exigimos um termo-âncora compatível para intenções concretas; outras
+  // inferências continuam como hipóteses de descoberta, sem qualificação.
+  const anchors={
+   pedido_proposta:/\b(?:proposta|orcamento|cotacao|preco|valores?)\b/,
+   reuniao:/\b(?:reuniao|conversar|agendar|visita|encontro|call)\b/,
+   modernizacao_ete:/\b(?:ete|efluentes?|estacao de tratamento)\b/,
+   consumo_agua:/\b(?:agua|consumo|vazao|perdas?|hidric[oa])\b/,
+   reuso:/\b(?:reuso|reutiliz|aproveitamento)\w*/,
+   expansao:/\b(?:expansao|ampliacao|ampliando|expandindo|nova planta|nova unidade|nova fabrica|capacidade)\b/,
+   custos:/\b(?:custos?|despesas?|gastos?|economia|desperdicio)\b/,
+   interesse_solucoes:/\b(?:interess|conhecer|soluc|apresent|entender|saber mais)\w*/,
+   decisao:/\b(?:decisao|aprova|diretoria|comite|compras)\w*/,
+   futuro:/\b(?:semestre|ano que vem|proximo ano|futuro|mais para frente)\b/
+  };
+  if(anchors[raw.type]&&!anchors[raw.type].test(fold(excerpt)))continue;
   results.push({type:rule.id,headline:rule.label,evidence:excerpt,action:rule.action,
    priority:rule.priority,topics:topics(fold(excerpt)),source:'ia_validada',status:'hipotese'});
  }
@@ -76,13 +94,23 @@ export function validateAiIntents(items,buyerMessages){
  */
 export function buyerMessagesFromTranscript(detail,sdrName=''){
  const sdr=fold(sdrName);if(!sdr)return [];
- const result=[];
- for(const line of String(detail||'').split(/\r?\n/).slice(0,80)){
-  const m=/^(?:\d{1,2}\/\d{1,2}\/\d{4}|\d{4}-\d{2}-\d{2})\s*[·\-]\s*([^:]{2,100}):\s*(.+)$/.exec(line.trim());
-  if(!m)continue;
-  const author=fold(m[1]);
-  if(author===sdr||author.includes(sdr)||sdr.includes(author)||author==='sdr')continue;
-  result.push({author:m[1].trim(),text:m[2].trim()});
+ const result=[];let current=null;
+ // As mensagens podem conter quebras de linha: o autor é determinado SOMENTE
+ // pelo marcador da transcrição, nunca por um nome presente no corpo.
+ for(const line of String(detail||'').slice(0,16000).split(/\r?\n/).slice(0,120)){
+  const m=/^(?:\d{1,2}\/\d{1,2}\/\d{4}|\d{4}-\d{2}-\d{2})\s*[·\-]\s*([^:]{2,100}):\s*(.*)$/.exec(line.trim());
+  if(m){
+   const author=fold(m[1]);
+   if(author===sdr||author.includes(sdr)||sdr.includes(author)||author==='sdr'){
+    current=null;continue;
+   }
+   current={author:m[1].trim(),text:short(m[2],1200)};
+   result.push(current);
+   continue;
+  }
+  if(current&&line.trim()&&current.text.length<1200){
+   current.text=short(current.text+' '+line.trim(),1200);
+  }
  }
  return result.slice(0,40);
 }

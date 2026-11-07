@@ -11,6 +11,7 @@ on:
       - 'src/views.js'
       - 'nuvem/funcoes/assistente/index.ts'
       - 'tests/ri08-conversation-intent.test.mjs'
+      - 'tests/ri08-performance.test.mjs'
       - '.github/workflows/ri08-conversation-intent.yml'
   workflow_dispatch:
 jobs:
@@ -32,3 +33,5 @@ jobs:
           node --check src/ri/account-view.mjs
       - name: Run focused regression tests
         run: node --test tests/ri08-conversation-intent.test.mjs scripts/ri07a-internal-cues.test.cjs
+      - name: Benchmark 5000 opportunities and revision-safe cache
+        run: node --test tests/ri08-performance.test.mjs

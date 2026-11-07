@@ -7,7 +7,20 @@ import {buildAccountBriefing} from './account-briefing.mjs';
 import {localBusinessDate} from './portfolio-analytics.mjs';
 import {buildCommercialOpportunityRadar} from './opportunity-radar.mjs';
 
-const id = value => typeof value === 'string' && value.trim().length > 0;
+// Cache limitado ao snapshot e ao token de sessão/permissão/revisão do Store.
+ // Um logout, mudança de gestor/filtro ou escrita altera o token e invalida.
+ // WeakMap permite descarte de snapshots antigos, sem armazenamento permanente.
+ const radarCache=new WeakMap();
+ export function buildCachedCommercialRadar({snapshot,scope,asOf}={}){
+  if(!snapshot||typeof snapshot!=='object'||!scope?.token)
+   return buildCommercialOpportunityRadar({snapshot,scope,asOf});
+  const cached=radarCache.get(snapshot);
+  if(cached&&cached.token===scope.token&&cached.asOf===asOf)return cached.radar;
+  const radar=buildCommercialOpportunityRadar({snapshot,scope,asOf});
+  radarCache.set(snapshot,{token:scope.token,asOf,radar});
+  return radar;
+ }
+ const id = value => typeof value === 'string' && value.trim().length > 0;
 const fold = value => String(value == null ? '' : value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 const str = (value,fallback='') => typeof value==='string' && value.trim() ? value.trim().slice(0,200) : fallback;
 const usableScope = scope => !!scope && id(scope.userId) &&
@@ -51,7 +64,7 @@ export function mountAccountIntelligence({root,snapshot,scope,getScopeToken}={})
  if(!root||!root.ownerDocument||!snapshot||!usableScope(scope)||typeof getScopeToken!=='function')
   throw Error('Destino, sessão e carteira autorizada são obrigatórios');
  const doc=root.ownerDocument;
- const radar=buildCommercialOpportunityRadar({snapshot,scope,asOf:localBusinessDate()});
+ const radar=buildCachedCommercialRadar({snapshot,scope,asOf:localBusinessDate()});
  let active=true,selected='pistas',searchLimit=8;
  const valid=()=>{
   if(!active||!root.isConnected)return false;

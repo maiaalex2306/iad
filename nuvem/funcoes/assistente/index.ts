@@ -2207,7 +2207,7 @@ function validarSegmentos(bruto: Record<string, unknown>, ctx: Record<string, un
     if (!item || typeof item !== 'object') continue;
     const o = item as Record<string, unknown>;
     const n = Number(o.n);
-    if (!isFinite(n) || n < 1) continue;
+    if (!Number.isSafeInteger(n) || n < 1 || n > 100) continue;
 
     const segmento = casar(o.segmento, validos) || 'Outros';
     const maisProximo = casar(o.maisProximo, nomes);
@@ -2242,7 +2242,10 @@ function validarSegmentos(bruto: Record<string, unknown>, ctx: Record<string, un
     const tiposValidos = ['pedido_proposta','reuniao','modernizacao_ete','consumo_agua',
       'reuso','expansao','problema','custos','interesse_solucoes','decisao','futuro'];
     const sinais: Array<{type:string;evidence:string}> = [];
-    if(resposta === 'positiva' && Array.isArray(o.sinais)){
+    // A identificação da necessidade independe do rótulo geral da resposta:
+    // "Estamos avaliando reduzir custo" pode ser neutra na cadência, mas
+    // a necessidade explícita deve sobreviver. Recusa jamais vira sinal.
+    if(resposta !== 'negativa' && Array.isArray(o.sinais)){
       for(const sinal of (o.sinais as unknown[]).slice(0,6)){
         if(!sinal || typeof sinal !== 'object')continue;
         const candidato=sinal as Record<string,unknown>;

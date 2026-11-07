@@ -2046,7 +2046,9 @@
           setor: l.empresaSetor, cidade: l.empresaCidade,
           descricao: l.empresaDescricao, oQueFazLa: l.oQueFazLa,
           contato: l.nome, cargo: l.cargo, headline: l.headline,
-          conversa: l.conversa || []
+          conversa: Array.isArray(l.conversa)&&l.conversa.length ? l.conversa :
+            (l.resposta ? [{de:l.nome||'Prospect',texto:l.resposta,
+              quando:l.respostaEm||'',nosso:false}] : [])
         };
       }), function (aviso) {
         const linha = espera.querySelector('p');

@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs';
 import {detectCommercialIntents,validateAiIntents,buyerMessagesFromTranscript}
  from '../src/ri/conversation-intent.mjs';
 import {buildCommercialOpportunityRadar} from '../src/ri/opportunity-radar.mjs';
+import {buildCachedCommercialRadar} from '../src/ri/account-view.mjs';
 
 const base={tenantId:'empresa-a',donoId:'gestor-a'};
 function fixture(){
@@ -128,4 +129,54 @@ test('integração de IA em lote preserva validação literal na Edge Function',
  assert.match(edge,/sinais:\s*sinais/);
  assert.match(frontend,/sinais:\s*Array\.isArray/);
  assert.match(importer,/sinaisDeIntencao/);
+});
+
+test('SDR de cada conversa é reconhecida mesmo quando muda na mesma conta',()=>{
+ const snap=fixture();
+ snap.oportunidades[0].sdr='Rosa Oliveira';
+ snap.oportunidades[0].eventos.unshift({
+  id:'evento-3',tipo:'sistema',data:'2026-11-05',
+  titulo:'Continuação da conversa no LinkedIn com Carla Silva (2 mensagens)',
+  detalhe:'05/11/2026 · Carla Silva: Podemos conversar sobre nossas soluções?\n'+
+   '05/11/2026 · Maria Compradora: Obrigada pelo contato!'
+ });
+ const groups=buildCommercialOpportunityRadar({snapshot:snap,scope,asOf:'2026-11-06'}).groups;
+ assert(!JSON.stringify(groups.pistas).includes('Podemos conversar sobre nossas soluções?'));
+});
+test('mensagens de cliente em múltiplas linhas não perdem necessidade',()=>{
+ const transcript='05/11/2026 · Rosa Oliveira: Nosso produto tem monitoramento\n'+
+ '05/11/2026 · Maria Compradora: Bom dia, \n'+
+ 'queremos reduzir o consumo de água e modernizar a ETE.\n'+
+ '05/11/2026 · Rosa Oliveira: Posso enviar uma proposta?';
+ const buyers=buyerMessagesFromTranscript(transcript,'Rosa Oliveira');
+ assert.equal(buyers.length,1);
+ assert.match(buyers[0].text,/modernizar a ETE/);
+ assert(detectCommercialIntents(buyers[0].text).some(s=>s.type==='consumo_agua'));
+});
+test('recusa parcial não oculta necessidade diferente',()=>{
+ const x=detectCommercialIntents('Não precisamos de nova ETE, mas queremos reduzir o consumo de água.');
+ assert(x.some(s=>s.type==='consumo_agua'));
+ assert(!x.some(s=>s.type==='modernizacao_ete'));
+});
+test('IA não pode rotular interesse genérico como pedido de proposta',()=>{
+ const x=validateAiIntents(
+  [{type:'pedido_proposta',evidence:'Quero conhecer as soluções'},
+   {type:'interesse_solucoes',evidence:'Quero conhecer as soluções'}],
+  ['Quero conhecer as soluções de vocês']);
+ assert.equal(x.length,1);
+ assert.equal(x[0].type,'interesse_solucoes');
+});
+test('cache retorna mesma análise sem custo e respeita token de sessão/revisão',()=>{
+ const snap=fixture();const session={...scope,token:'u1|tenant-a|revision-1'};
+ const a=buildCachedCommercialRadar({snapshot:snap,scope:session,asOf:'2026-11-06'});
+ const b=buildCachedCommercialRadar({snapshot:snap,scope:session,asOf:'2026-11-06'});
+ assert.strictEqual(a,b);
+ snap.oportunidades[0].eventos.push({id:'x',tipo:'activity',data:'2026-11-06',
+  titulo:'Cliente pediu proposta formal'});
+ const changed=buildCachedCommercialRadar({snapshot:snap,
+  scope:{...session,token:'u1|tenant-a|revision-2'},asOf:'2026-11-06'});
+ assert.notStrictEqual(a,changed);
+ const alternate=buildCachedCommercialRadar({snapshot:snap,
+  scope:{role:'gestor',userId:'outro',tenantId:'empresa-b',token:'u2|empresa-b|rev2'},asOf:'2026-11-06'});
+ assert.equal(alternate.groups.pistas.length,0);
 });
