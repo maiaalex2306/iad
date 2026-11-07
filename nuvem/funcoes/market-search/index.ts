@@ -325,7 +325,29 @@ function discoveryTaxonomy(f){
  return names.some(n=>normalizedPlace(n).includes('automotivo')||
    normalizedPlace(n).includes('mobilidade'))?AUTOMOTIVE_DISCOVERY_FAMILIES:[];
 }
+// Validation is done before quota reservation. The client cannot invent cells.
+function discoveryBatchCell(raw,f,action){
+ if(raw===undefined||raw===null)return null;
+ if(action!=='search'||!raw||typeof raw!=='object'||Array.isArray(raw)||
+  Object.keys(raw).some(k=>!['municipioIBGE','familyIndex'].includes(k)))throw Error('INVALID_DISCOVERY_BATCH');
+ const families=discoveryTaxonomy(f),idx=raw.familyIndex,code=String(raw.municipioIBGE??'');
+ const city=f.municipios.find(m=>m.codigoIBGE===code);
+ if(!city||families.length!==18||!Number.isInteger(idx)||idx<0||idx>=families.length)
+  throw Error('INVALID_DISCOVERY_BATCH');
+ return {municipioIBGE:code,municipio:city.nome,uf:city.uf,familyIndex:idx,family:families[idx]};
+}
 function discoveryInstructions(f,engine=''){
+ if(f.discoveryCell){
+  const c=f.discoveryCell;
+  return 'PESQUISA REAL DE UMA CÉLULA DA MATRIZ: município obrigatório '+JSON.stringify(c.municipio+'/'+c.uf)+
+   ' IBGE '+c.municipioIBGE+', família específica '+JSON.stringify(c.family)+'. '+
+   'Pesquise exclusivamente esta combinação de município e subsetor. Use sinônimos comerciais, CNAEs candidatos, diretórios, fornecedores Tier 2/Tier 3 e empresas médias industriais. '+
+   'Priorize diversidade e empresas menores em vez de repetir GM e Volkswagen. '+
+   'Exija vínculo plausível com automotivo/mobilidade. Nomes encontrados sem CNPJ, fonte individual ou headcount continuam somente como hipóteses. '+
+   'Não descarte por ausência de informação; não declare funcionários ou identidade confirmados quando faltarem provas. '+
+   'Este lote tem uma única cobrança de quota após o clique explícito do usuário. ';
+ }
+
  const families=discoveryTaxonomy(f);
  if(!families.length)return '';
  const focus=engine==='OpenAI'?families.filter((_,i)=>i%2===0):
@@ -818,6 +840,10 @@ Deno.serve(async req=>{
    if(!f.segmentos.length||f.segmentos.some(x=>!allowed.has(normalizedPlace(x))))
     return output({error:'SEGMENT_NOT_AUTHORIZED'},422,origin);
   }
+  let discoveryBatch=null;
+  try{discoveryBatch=discoveryBatchCell(body?.batch,f,action)}
+  catch{return output({error:'INVALID_DISCOVERY_BATCH'},422,origin)}
+  const searchFilters=discoveryBatch?{...f,cidade:discoveryBatch.municipio,municipios:[],discoveryCell:discoveryBatch}:f;
   const openai=aiKey('openai'),claude=aiKey('anthropic');
   if((provider==='OpenAI'&&!openai)||(provider==='Anthropic'&&!claude))
    return output({error:'AI_PROVIDER_NOT_CONFIGURED',provider},503,origin);
@@ -845,8 +871,8 @@ Deno.serve(async req=>{
    note:'A cota pode ter sido reservada, mas nenhuma IA foi chamada.'},503,origin);
   const auditActor={tenant_id:profile.tenant_id,id:user.id};
   const jobs=[];
-  if(openai&&provider!=='Anthropic')jobs.push({engine:'OpenAI',promise:queryAI('OpenAI',openai,f,target,action)});
-  if(claude&&provider!=='OpenAI')jobs.push({engine:'Anthropic',promise:queryAI('Anthropic',claude,f,target,action)});
+  if(openai&&provider!=='Anthropic')jobs.push({engine:'OpenAI',promise:queryAI('OpenAI',openai,searchFilters,target,action)});
+  if(claude&&provider!=='OpenAI')jobs.push({engine:'Anthropic',promise:queryAI('Anthropic',claude,searchFilters,target,action)});
   const outcomes=await Promise.allSettled(jobs.map(x=>x.promise));
   // A provider returning JSON without a recorded web_search execution
   // is not a successful market search, even when its text looks plausible.
@@ -905,7 +931,7 @@ Deno.serve(async req=>{
    (Array.isArray(r.parsed?.empresas)?r.parsed.empresas:[])
     .filter(entry=>target.cnpj?cnpjReal(entry?.cnpj)===target.cnpj:
       sameCompanyName(entry,target.nome)).slice(0,target.cnpj?1:3)}})):results;
-  const companies=combineAI(focusedResults,f.limit,f,diagnostics,{allowUncited:action==='search'});
+  const companies=combineAI(focusedResults,f.limit,searchFilters,diagnostics,{allowUncited:action==='search'});
   console.info('[market-search] filtering_summary',JSON.stringify({completedProviders:results.length,...diagnostics}));
   const stored=await auditFinish(url,service,auditId,auditActor,results,failedProviders,companies.length);
   return output({researchId:auditId,auditStatus:stored?'RECORDED':'INCOMPLETE',
@@ -916,6 +942,12 @@ Deno.serve(async req=>{
    ...(target?{targetMatch:target.cnpj?
     (companies.length?'CNPJ_RELATADO_PELO_PROVEDOR':'CNPJ_NAO_CORROBORADO'):
     (companies.length?'IDENTIDADE_SUGERIDA_NAO_VERIFICADA':'IDENTIDADE_NAO_LOCALIZADA')}:{}),
+   ...(discoveryBatch?{discoveryBatch:{
+    municipioIBGE:discoveryBatch.municipioIBGE,municipio:discoveryBatch.municipio,
+    familyIndex:discoveryBatch.familyIndex,family:discoveryBatch.family,
+    familyCount:18,municipalityCount:f.municipios.length,
+    coverage:'somente_esta_celula',individuallySearched:true
+   }}:{}),
    ...(action==='search'?{discoveryPlan:{
      sectorExpansion:discoveryTaxonomy(f).length?'automotivo_mobilidade':'sem_taxonomia_expandida',
      familyCount:discoveryTaxonomy(f).length,
