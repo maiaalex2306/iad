@@ -449,7 +449,9 @@ test('tempo maximo de busca maior que 35s e menor que idle 150s, sem retry',()=>
  assert.match(source,/category:code,elapsedMs:/);
  assert.match(source,/provider_http/);
  assert.match(source,/provider_invalid_json/);
- assert.match(source,/search_context_size:'low'/);
+ assert.match(source,/search_context_size:'medium',user_location:researchLocation\\(f\\)/);
+ assert.match(source,/max_tool_calls:3,max_output_tokens:6000/);
+ assert.match(source,/max_uses:3,user_location:researchLocation\\(f\\)/);
 });
 
 test('preserva candidata com nome e fonte web mas sem CNPJ',async()=>{
@@ -1168,7 +1170,7 @@ test('RI-M20: OpenAI HTTP 200 incompleto por max_output_tokens não é sucesso',
  assert.equal(body.failures[0].category,'OUTPUT_TOKEN_LIMIT');
  const calls=aiCalls(h);
  assert.equal(calls.length,1,'não repetir pesquisas pagas automaticamente');
- assert.equal(calls[0].body.max_output_tokens,4000);
+ assert.equal(calls[0].body.max_output_tokens,6000);
  assert.equal(calls[0].body.reasoning.effort,'low');
  assert.equal(calls[0].body.max_tool_calls,2);
  assert.equal(calls[0].body.tool_choice,'required');
@@ -1182,7 +1184,7 @@ test('RI-M20: Claude max_tokens distingue truncamento de erro de ferramenta',asy
  const body=await response.json();
  assert.equal(body.failures[0].category,'OUTPUT_TOKEN_LIMIT');
  assert.equal(aiCalls(h).length,1);
- assert.equal(aiCalls(h)[0].body.max_tokens,4096);
+ assert.equal(aiCalls(h)[0].body.max_tokens,6000);
  assert.equal(aiCalls(h)[0].body.tools[0].max_uses,2);
 });
 test('RI-M20: Claude pause_turn permanece falha até haver resposta final',async()=>{
