@@ -1,6 +1,7 @@
 /* RI-M24A — Plano explícito de descoberta externa por município e família.
  * Sem pesquisas no boot e sem modificação da carteira do CRM.
  * Cada célula requer um clique e uma reserva de cota feita pelo backend. */
+import {isReviewableSourceURL} from './market-contract.mjs';
 export const AUTOMOTIVE_BATCH_FAMILY_COUNT=18;
 const clean=s=>String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 export function isAutomotiveUmbrella(filters){
@@ -37,16 +38,23 @@ export function mergeMarketBatchCandidates(previous=[],incoming=[]){
   const key=candidateKey(c);
   if(!key)return;
   const idx=known.get(key);
-  if(idx===undefined){known.set(key,result.length);result.push({...c});return;}
+  if(idx===undefined){
+   known.set(key,result.length);
+   result.push({...c,
+    fontes:(Array.isArray(c.fontes)?c.fontes:[]).filter(x=>isReviewableSourceURL(x?.url)).slice(0,15),
+    fontesConsultadas:(Array.isArray(c.fontesConsultadas)?c.fontesConsultadas:[])
+     .filter(x=>isReviewableSourceURL(x?.url)).slice(0,10)});
+   return;
+  }
   const first=result[idx];
   // Não confundir dois CNPJs diferentes nem inventar corroboracão.
   const sources=new Map();
   for(const src of [...(first.fontes||[]),...(c.fontes||[])]){
-   if(src&&typeof src.url==='string'&&/^https:\/\//i.test(src.url))sources.set(src.url,src);
+   if(src&&isReviewableSourceURL(src.url))sources.set(src.url,src);
   }
   const consulted=new Map();
   for(const src of [...(first.fontesConsultadas||[]),...(c.fontesConsultadas||[])]){
-   if(src&&typeof src.url==='string'&&/^https:\/\//i.test(src.url))consulted.set(src.url,src);
+   if(src&&isReviewableSourceURL(src.url))consulted.set(src.url,src);
   }
   result[idx]={...first,
    fontes:[...sources.values()].slice(0,15),
