@@ -22,7 +22,8 @@ export function discoverInternalCommercialCues({snapshot,scope,accounts,asOf,lim
   let record=perAccount.get(k);
   if(!record){record={account,signals:new Map()};perAccount.set(k,record);}
   const topic=(signal.topics||[])[0]||'geral';
-  const typeKey=signal.type+'|'+topic;
+  /* Projetos diferentes da mesma conta mantem necessidades independentes. */
+  const typeKey=signal.type+'|'+topic+'|'+op.id;
   const item={
    kind:'pistas',tenantId:account.tenantId,accountId:account.id,
    accountName:short(account.nome||account.razaoSocial,180)||'Conta sem nome',
