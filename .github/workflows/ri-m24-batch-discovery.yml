@@ -9,6 +9,7 @@ on:
       - 'assets/paleta-acp.css'
       - 'tests/market-edge.test.mjs'
       - 'tests/market-batches.test.mjs'
+      - 'scripts/ri-m24-batch-ui-contract.test.cjs'
       - 'src/config.js'
       - 'sw.js'
       - '.github/workflows/ri-m24-batch-discovery.yml'
@@ -35,7 +36,7 @@ jobs:
         run: |
           node --check src/ri/market-view.mjs
           node --check src/ri/market-batches.mjs
-          node --test tests/market-batches.test.mjs tests/market-edge.test.mjs tests/market-contract.test.mjs tests/market-prospect-agents.test.mjs
+          node --test scripts/ri-m24-batch-ui-contract.test.cjs tests/market-batches.test.mjs tests/market-edge.test.mjs tests/market-contract.test.mjs tests/market-prospect-agents.test.mjs
   browser-pwa-regression:
     runs-on: ubuntu-latest
     timeout-minutes: 12
