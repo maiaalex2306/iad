@@ -59,10 +59,19 @@ const server=http.createServer((req,res)=>{
     window.IADPerformance.relatorioDiagnostico()['perf38.nav.hoje']?.chamadas||0);
   await page.locator('nav.tabs a[href="#/hoje"]').click();
   await page.waitForFunction(()=>location.hash==='#/hoje',null,{timeout:10000});
-  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  /* Hash atualiza antes do evento hashchange e dos dois frames do render.
+     Esperar a métrica efetivamente registrada elimina corrida de teste. */
+  const chegou=await page.waitForFunction(anterior=>
+      (window.IADPerformance.relatorioDiagnostico()['perf38.nav.hoje']?.chamadas||0)>anterior,
+    menuAntes,{timeout:6000}).then(()=>true,()=>false);
   const menuDepois=await page.evaluate(()=>
     window.IADPerformance.relatorioDiagnostico()['perf38.nav.hoje']?.chamadas||0);
-  assert.equal(menuDepois,menuAntes+1,'clique real no menu precisa gerar uma amostra');
+  const diagnostico=await page.evaluate(()=>({
+    ativo:window.IADPerformance.ativo(),hash:location.hash,
+    duracoes:Object.keys(window.IADPerformance.relatorioDiagnostico()).filter(x=>x.startsWith('perf38.nav.'))
+  }));
+  assert.ok(chegou&&menuDepois===menuAntes+1,
+    'clique real no menu precisa gerar uma amostra: '+JSON.stringify({menuAntes,menuDepois,diagnostico}));
   const result=await page.evaluate(async()=>{
    const twoFrames=()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
    for(let i=0;i<12;i++){
