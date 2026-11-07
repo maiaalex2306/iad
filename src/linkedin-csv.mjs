@@ -86,7 +86,7 @@ export function csvLeadFromCells(cells,fields,line){
     resumoPerfil:raw('resumoPerfil',1200),postUrl:raw('postUrl',600),
     post:raw('post',6000),comentarioLead:raw('comentarioLead',2000),
     estado:'pendente'};
-  if(!item.lead)item.lead=profile.split('/in/')[1].replace(/\\/$/,'').replace(/[-_]/g,' ').slice(0,120);
+  if(!item.lead)item.lead=profile.split('/in/')[1].replace(/\/$/,'').replace(/[-_]/g,' ').slice(0,120);
   return item;
 }
 export function importLinkedInCsv(text,{maxRows=10000}={}){
