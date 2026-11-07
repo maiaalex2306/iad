@@ -5,9 +5,9 @@ const edge=read('nuvem/funcoes/market-search/index.ts');
 const css=read('assets/paleta-acp.css');
 const progress=read('src/ri/market-progress.mjs');
 const view=read('src/ri/market-view.mjs');
-const from=edge.indexOf('function prompt('),to=edge.indexOf('async function queryAI(',from);
+const from=edge.indexOf('const AUTOMOTIVE_DISCOVERY_FAMILIES='),to=edge.indexOf('async function queryAI(',from);
 assert.ok(from>0&&to>from,'Must find pure prompt and researchLocation functions');
-const funcs=vm.runInNewContext(edge.slice(from,to)+';({prompt,researchLocation})');
+const funcs=vm.runInNewContext("function normalizedPlace(v){return String(v||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').trim().toLowerCase()}\n"+edge.slice(from,to)+';({prompt,researchLocation,discoveryTaxonomy,discoveryInstructions})');
 const f={uf:'SP',cidade:'',municipios:[{nome:'São José dos Campos',uf:'SP',codigoIBGE:'3549904'}],ddds:['12'],segmentos:['Automotivo e Mobilidade'],faixasFuncionarios:['101_200','201_500'],limit:20};
 test('ambos os motores recebem localização do filtro brasileiro, não do usuário',()=>{
  const loc=funcs.researchLocation(f);
