@@ -28,7 +28,7 @@ test('prompt de descoberta busca mais empresas e fontes individuais sem fabricar
  assert.ok(tiny.includes('até 3 empresas'));
 });
 test('orçamento de pesquisa é explícito, limitado e não altera quota/identidade',()=>{
- assert.match(edge,/max_tool_calls:3,max_output_tokens:6000,store:false/);
+ assert.match(edge,/max_tool_calls:3,max_output_tokens:6000,include:\['web_search_call.action.sources'\],store:false/);
  assert.match(edge,/max_tokens:6000/);
  assert.match(edge,/iad_market_search_reserve/);
  assert.match(edge,/function cnpjReal\(/);
