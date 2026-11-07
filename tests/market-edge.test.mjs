@@ -1342,3 +1342,19 @@ test('RI-M23: investigação por nome sem fonte segue recusando resultado não c
  assert.equal(body.diagnostics.rejectedUncitedSource,1);
  assert.equal(body.diagnostics.pendingUncitedSource,0);
 });
+
+test('RI-M23: descrição do subsegmento mantém declaração do setor guarda-chuva, sem validar porte sozinho',async()=>{
+ const entry={...candidate,segmento:'Automotivo e Mobilidade - fornecedor Tier 2 de componentes',funcionarios:null,ddd:''};
+ const response=responseOpenAI();
+ response.output.find(x=>x.type==='message').content[0].text=JSON.stringify({empresas:[entry]});
+ const h=harness({openai:true,openaiResponse:response,catalogNames:['Automotivo e Mobilidade']});
+ const res=await h.handle(request({action:'search',provider:'OpenAI',filters:{
+  uf:'SP',cidade:'Jacarei',segmentos:['Automotivo e Mobilidade'],ddds:['12'],faixasFuncionarios:['201_500'],limit:20
+ }}));
+ assert.equal(res.status,200);
+ const body=await res.json();
+ assert.equal(body.data.length,1);
+ assert.equal(body.data[0].qualificacaoICP.segmento,'declarado');
+ assert.equal(body.data[0].qualificacaoICP.funcionarios,'pendente');
+ assert.equal(body.data[0].qualificacaoICP.statusGeral,'pendente');
+});
