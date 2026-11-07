@@ -2025,15 +2025,45 @@
     }
     if (descartados.length) avisoDeDescartados = descartados.length;
 
+    /* RI-08: o interesse explícito precisa aparecer mesmo quando a IA,
+       o catálogo de segmentos ou a consulta ao site indisponibilizarem
+       a classificação profunda. Uma importação dinâmica local por lote;
+       nada de chamadas adicionais a provedores ou escrita automática. */
+    const sinaisLocaisProntos = import(
+      new URL('src/ri/conversation-intent.mjs',document.baseURI).href
+    ).then(function (motor) {
+      lista.forEach(function (lead) {
+        const falas = (Array.isArray(lead.conversa) && lead.conversa.length)
+          ? lead.conversa.filter(function (m) {
+              return m && m.nosso === false && typeof m.texto === 'string';
+            }).map(function (m) { return m.texto; })
+          : (lead.resposta ? [lead.resposta] : []);
+        const encontrados = [], chaves = {};
+        falas.slice(-8).forEach(function (fala) {
+          motor.detectCommercialIntents(fala,{max:6}).forEach(function (sinal) {
+            if(chaves[sinal.type])return;
+            chaves[sinal.type]=true;
+            encontrados.push({type:sinal.type,evidence:sinal.evidence});
+          });
+        });
+        lead.sinaisLocais=encontrados.slice(0,4);
+      });
+    }).catch(function () {
+      /* Resiliência: sem módulo local, continua o importador já homologado. */
+      lista.forEach(function (lead) { lead.sinaisLocais=[]; });
+    });
+
     /* Várias SDRs mandam prospects de segmentos diferentes. Classificar
        empresa por empresa à mão é o que faz ninguém classificar — e sem
        segmento o painel por segmento não diz nada. Uma chamada só para o
        lote inteiro, e o vendedor corrige o que quiser na tela seguinte. */
     const comEmpresa = lista.filter(function (l) { return l.empresa; });
     if (!comEmpresa.length) {
-      espera.close(); espera.remove();
-      marcarContasCandidatas(lista);
-      return App.revisarImportacao(lista, 'Nenhum lead veio com empresa identificada — não há o que classificar.');
+      return sinaisLocaisProntos.then(function () {
+        espera.close(); espera.remove();
+        marcarContasCandidatas(lista);
+        return App.revisarImportacao(lista, 'Nenhum lead veio com empresa identificada — não há o que classificar.');
+      });
     }
     espera.querySelector('h2').textContent = 'Classificando os segmentos…';
       espera.querySelector('p').textContent =
@@ -2082,9 +2112,11 @@
              branco cobra os vinte dias. */
           l.pergunta = achado.pergunta || '';
         });
-        espera.close(); espera.remove();
-        marcarContasCandidatas(lista);
-        App.revisarImportacao(lista, r.motivo);
+        return sinaisLocaisProntos.then(function () {
+          espera.close(); espera.remove();
+          marcarContasCandidatas(lista);
+          App.revisarImportacao(lista, r.motivo);
+        });
     }).catch(function (e) {
       espera.close(); espera.remove();
       alert(e.message);

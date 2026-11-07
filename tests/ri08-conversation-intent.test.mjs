@@ -180,3 +180,24 @@ test('cache retorna mesma análise sem custo e respeita token de sessão/revisã
   scope:{role:'gestor',userId:'outro',tenantId:'empresa-b',token:'u2|empresa-b|rev2'},asOf:'2026-11-06'});
  assert.equal(alternate.groups.pistas.length,0);
 });
+
+test('IA não interpreta citação parcial de recusa como interesse',()=>{
+ const x=validateAiIntents(
+  [{type:'interesse_solucoes',evidence:'queremos conhecer soluções'}],
+  ['Não queremos conhecer soluções nesta etapa.']);
+ assert.deepEqual(x,[]);
+});
+test('IA preserva intenção afirmativa após recusa parcial',()=>{
+ const x=validateAiIntents(
+  [{type:'consumo_agua',evidence:'queremos reduzir o consumo de água'}],
+  ['Não precisamos de nova ETE, mas queremos reduzir o consumo de água.']);
+ assert.equal(x.length,1);
+});
+test('importação faz triagem local antes de depender da IA de segmentos',()=>{
+ const app=readFileSync(new URL('../src/app.js',import.meta.url),'utf8');
+ const views=readFileSync(new URL('../src/views.js',import.meta.url),'utf8');
+ assert.match(app,/const sinaisLocaisProntos = import\(/);
+ assert.match(app,/lead\.sinaisLocais=encontrados/);
+ assert.match(views,/l\.sinaisLocais/);
+ assert.match(views,/Sinais comerciais encontrados/);
+});

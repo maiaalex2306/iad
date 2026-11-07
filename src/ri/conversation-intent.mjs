@@ -59,12 +59,15 @@ export function detectCommercialIntents(text,{sellerContext='',max=6}={}){
 export function validateAiIntents(items,buyerMessages){
  if(!Array.isArray(items)||!Array.isArray(buyerMessages))return [];
  const originals=buyerMessages.filter(m=>typeof m==='string').map(s=>short(s,1200));
+ // A citação isolada "queremos" pode ser retirada de "não queremos".
+ // Conferir a cláusula inteira impede que uma recusa vire intenção de compra.
  const results=[];const seen=new Set();
  for(const raw of items.slice(0,6)){
   if(!raw||typeof raw!=='object'||!INTENT_KINDS.includes(raw.type))continue;
   const excerpt=short(raw.evidence,220);
-  if(!excerpt||!originals.some(s=>fold(s).includes(fold(excerpt))))continue;
-  if(negation.test(fold(excerpt)))continue;
+  if(!excerpt || negation.test(fold(excerpt)))continue;
+  if(!originals.some(s=>fragments(s).some(part=>
+    fold(part).includes(fold(excerpt)) && !negation.test(fold(part)))))continue;
   const key=raw.type+'|'+fold(excerpt);
   if(seen.has(key))continue;seen.add(key);
   const rule=rules.find(r=>r.id===raw.type);
