@@ -332,7 +332,7 @@ function discoveryBatchCell(raw,f,action){
   Object.keys(raw).some(k=>!['municipioIBGE','familyIndex'].includes(k)))throw Error('INVALID_DISCOVERY_BATCH');
  const families=discoveryTaxonomy(f),idx=raw.familyIndex,code=String(raw.municipioIBGE??'');
  const city=f.municipios.find(m=>m.codigoIBGE===code);
- if(!city||families.length!==18||!Number.isInteger(idx)||idx<0||idx>=families.length)
+ if(!city||families.length!==18||(f.segmentos.length>1)||!Number.isInteger(idx)||idx<0||idx>=families.length)
   throw Error('INVALID_DISCOVERY_BATCH');
  return {municipioIBGE:code,municipio:city.nome,uf:city.uf,familyIndex:idx,family:families[idx]};
 }
