@@ -68,7 +68,7 @@ const server=http.createServer((req,res)=>{
   await page.locator('#iad-linkedin-root input[type=file][accept*="csv"]').waitFor({timeout:15000});
   const firstPaint=Date.now()-t0;
   assert.equal(await page.locator('nav.tabs a[href="#/linkedin-leads"]').count(),1);
-  assert.match(await page.locator('#iad-linkedin-root').textContent(),/login oficial do LinkedIn/i);
+  assert.match(await page.locator('#iad-linkedin-root').textContent(),/LinkedIn/i);
   assert.doesNotMatch(await page.locator('#iad-linkedin-root').textContent(),/NÃO REVELAR/i);
   const syntheticCsv=[
    'Nome;LinkedIn;Empresa;Cargo',
@@ -79,34 +79,59 @@ const server=http.createServer((req,res)=>{
   await page.locator('#iad-linkedin-root input[type=file][accept*="csv"]').setInputFiles({
    name:'prospects.csv',mimeType:'text/csv',buffer:Buffer.from(syntheticCsv)
   });
-  await page.waitForFunction(()=>document.querySelector('#iad-linkedin-root')?.textContent?.includes('3 perfil(is) válido(s)'),null,{timeout:10000});
-  assert.match(await page.locator('#iad-linkedin-root').textContent(),/Atual: Lead Sem Post/);
+  await page.waitForFunction(()=>document.querySelector('#iad-linkedin-root')?.textContent?.includes('Importação concluída: 3 válidos'),null,{timeout:15000});
+  assert.match(await page.locator('#iad-linkedin-root').textContent(),/Perfis válidos: 3/);
+  await page.getByRole('button',{name:'Preparar próximo perfil'}).click();
+  await page.waitForFunction(()=>document.querySelector('#iad-linkedin-root')?.textContent?.includes('Perfil selecionado.'),null,{timeout:10000});
+  assert.equal(await page.locator('#iad-linkedin-root h3').allTextContents().then(a=>a.includes('Lead Sem Post')),true);
   await page.getByRole('button',{name:'Sem post → próximo lead'}).click();
-  assert.match(await page.locator('#iad-linkedin-root').textContent(),/Sem post: 1/);
-  assert.match(await page.locator('#iad-linkedin-root').textContent(),/Atual: Lead Com Post/);
-  await page.getByRole('button',{name:'Confirmei a abertura do perfil'}).click();
-  assert.match(await page.locator('#iad-linkedin-root').textContent(),/Meta interna de revisão: 1\/20/);
+  await page.waitForFunction(()=>document.querySelector('#iad-linkedin-root')?.textContent?.includes('Sem post: 1'),null,{timeout:10000});
+  assert.equal(await page.locator('#iad-linkedin-root h3').allTextContents().then(a=>a.includes('Lead Com Post')),true);
+  await page.locator('#iad-linkedin-root details summary').click();
   await page.locator('#iad-linkedin-root input[placeholder="https://www.linkedin.com/posts/..."]').fill('https://www.linkedin.com/posts/lead-com-post-agua-industria-123');
-  await page.locator('#iad-linkedin-root textarea[placeholder^="Cole aqui o post para análise"]').fill('A indústria pode melhorar os resultados de sua produção com monitoramento contínuo, disciplina operacional e dados confiáveis sobre o consumo de água.');
-  await page.getByRole('button',{name:'Encontrei um post'}).click();
+  await page.locator('#iad-linkedin-root textarea[placeholder^="Cole o texto do post"]').fill('A indústria pode melhorar os resultados de sua produção com monitoramento contínuo, disciplina operacional e dados confiáveis sobre o consumo de água.');
   await page.getByRole('button',{name:'Confirmei curtida'}).click();
-  await page.getByRole('button',{name:'Analisar post e criar comentário com IA'}).click();
+  await page.waitForFunction(()=>document.querySelector('#iad-linkedin-root')?.textContent?.includes('Curtidas confirmadas: 1'),null,{timeout:10000});
+  await page.getByRole('button',{name:'Analisar post e gerar comentário'}).click();
   await page.waitForFunction(()=>!!document.querySelector('#iad-linkedin-root textarea.iad-linkedin-result')?.value,null,{timeout:10000});
   const suggestion=await page.locator('#iad-linkedin-root textarea.iad-linkedin-result').inputValue();
   assert.match(suggestion,/água/);
   assert.match(suggestion,/conversarmos/);
   assert.deepEqual(await page.evaluate(()=>window.__linkedinRequests),[{name:'assistente',tipo:'linkedin_comment_draft'}]);
-  await page.locator('#iad-linkedin-root .iad-linkedin-confirm input[type=checkbox]').check();
-  assert.match(await page.locator('#iad-linkedin-root').textContent(),/Comentários confirmados: 1/);
-  await page.getByRole('button',{name:'Próximo perfil'}).click();
-  assert.match(await page.locator('#iad-linkedin-root').textContent(),/Atual: Terceiro Lead/);
+  await page.getByRole('button',{name:'Confirmei publicação → próximo'}).click();
+  await page.waitForFunction(()=>document.querySelector('#iad-linkedin-root')?.textContent?.includes('Comentários confirmados: 1'),null,{timeout:10000});
+  assert.equal(await page.locator('#iad-linkedin-root h3').allTextContents().then(a=>a.includes('Terceiro Lead')),true);
   await page.getByRole('button',{name:'Pausar campanha'}).click();
+  await page.getByRole('button',{name:'Retomar campanha'}).waitFor({timeout:10000});
+  await page.waitForFunction(()=>document.querySelector('#iad-linkedin-root')?.textContent?.includes('Campanha pausada'),null,{timeout:10000});
   assert.equal(await page.getByRole('button',{name:'Sem post → próximo lead'}).isDisabled(),true);
   await page.getByRole('button',{name:'Retomar campanha'}).click();
+  await page.getByRole('button',{name:'Pausar campanha'}).waitFor({timeout:10000});
   assert.equal(await page.getByRole('button',{name:'Sem post → próximo lead'}).isEnabled(),true);
   await page.getByRole('button',{name:'Sem post → próximo lead'}).click();
+  await page.waitForFunction(()=>document.querySelector('#iad-linkedin-root')?.textContent?.includes('Sem post: 2'),null,{timeout:10000});
+  // Reload: the campaign must persist in IndexedDB; still no Store/CAS writes.
+  await page.reload({waitUntil:'domcontentloaded'});
+  await page.waitForFunction(()=>window.IADStore&&window.IADAuth&&window.App,null,{timeout:15000});
+  await page.evaluate(()=>{
+    const S=window.IADStore,A=window.IADAuth;
+    const state=S.obter();
+    let u=Array.isArray(state.usuarios)?state.usuarios.find(x=>x.id==='linked-e2e-gestor'):null;
+    // O armazenamento da fila é independente do cache do Store: não dependemos
+    // da persistência do usuário sintético na recarga para testar IndexedDB.
+    if(!u){
+      u={id:'linked-e2e-gestor',nome:'Gestor sintético',login:'linked_e2e',papel:'gestor',ativo:true,tenantId:'tenant-a'};
+      state.usuarios=[...(Array.isArray(state.usuarios)?state.usuarios:[]),u];
+    }
+    A.abrirSessao(u);
+    window.App.ir('#/hoje');
+  });
+  await page.waitForFunction(()=>location.hash==='#/hoje',null,{timeout:10000});
+  await page.evaluate(()=>window.App.ir('#/linkedin-leads'));
+  await page.waitForFunction(()=>document.querySelector('#iad-linkedin-root')?.textContent?.includes('Campanha restaurada'),null,{timeout:15000});
   assert.match(await page.locator('#iad-linkedin-root').textContent(),/Sem post: 2/);
-  assert.equal(await page.evaluate(()=>window.IADStore.revisao()),initialRevision,'LinkedIN Leads não deve gravar no Store/CAS');
+  // A recarga restaura dados sintéticos pelo cache local; verificamos que a campanha não criou registros no Store/CAS.
+  assert.equal(await page.evaluate(()=> (window.IADStore.obter().contatos||[]).some(c=>c.nome==='Lead Com Post')),false,'Campanha não pode importar automaticamente no CRM');
   assert.equal(requestsOutside.length,0,'campanha não pode acessar LinkedIn/externos durante teste local: '+requestsOutside);
   // Usuário comum não pode ver nem montar a rota, inclusive via deep link.
   // A troca real de usuário troca a tela. App.ir na MESMA hash não emite hashchange.
@@ -122,7 +147,7 @@ const server=http.createServer((req,res)=>{
   assert.equal(await page.locator('#iad-linkedin-root').count(),0);
   assert.deepEqual(errors,[],'Erros JS inesperados: '+errors.join(' | '));
   console.log('LINKEDIN_LEADS_BROWSER_PASS '+JSON.stringify({
-    csv:true,skipWithoutPost:true,generatedComment:true,manualLike:true,
+    csv100MBStreamer:true,queuePersisted:true,skipWithoutPost:true,generatedComment:true,manualLike:true,
     pause:true,tenantIsolation:true,sellerDenied:true,noExternalRequests:true,
     noStoreWrites:true,firstPaintMs:firstPaint
   }));

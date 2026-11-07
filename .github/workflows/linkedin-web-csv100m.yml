@@ -1,0 +1,64 @@
+name: LinkedIN Leads v286.91 — CSV 100 MiB, UI e Browser
+on:
+  push:
+    branches:
+      - release/linkedin-leads-web-csv100-v28691-20261107
+    paths:
+      - 'src/linkedin-*.mjs'
+      - 'src/app.js'
+      - 'src/config.js'
+      - 'sw.js'
+      - 'tests/linkedin-*.mjs'
+      - 'scripts/linkedin-leads-browser.cjs'
+      - '.github/workflows/linkedin-web-csv100m.yml'
+  pull_request:
+    paths:
+      - 'src/linkedin-*.mjs'
+      - 'src/app.js'
+      - 'src/config.js'
+      - 'sw.js'
+      - 'tests/linkedin-*.mjs'
+      - 'scripts/linkedin-leads-browser.cjs'
+      - '.github/workflows/linkedin-web-csv100m.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: linkedin-web-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  logic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Sintaxe
+        run: |
+          node --check src/linkedin-csv.mjs
+          node --check src/linkedin-csv-stream.mjs
+          node --check src/linkedin-queue-db.mjs
+          node --check src/linkedin-comment-core.mjs
+          node --check src/linkedin-leads-console.mjs
+          node --check src/app.js
+          node --check scripts/linkedin-leads-browser.cjs
+      - name: Testes de parser, CSV 100 MiB, segurança e contrato de roles
+        run: |
+          node --max-old-space-size=512 --test tests/linkedin-csv-stream.test.mjs
+          node --test tests/linkedin-leads-v1.test.mjs tests/intelligence-manager-contract.test.mjs
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: E2E real em Chromium (dados sintéticos sem LinkedIn)
+        run: timeout 180s node scripts/linkedin-leads-browser.cjs
