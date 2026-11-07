@@ -115,8 +115,14 @@ const server=http.createServer((req,res)=>{
   await page.waitForFunction(()=>window.IADStore&&window.IADAuth&&window.App,null,{timeout:15000});
   await page.evaluate(()=>{
     const S=window.IADStore,A=window.IADAuth;
-    const u=S.obter().usuarios.find(x=>x.id==='linked-e2e-gestor');
-    if(!u)throw Error('Gestor sintético não restaurado');
+    const state=S.obter();
+    let u=Array.isArray(state.usuarios)?state.usuarios.find(x=>x.id==='linked-e2e-gestor'):null;
+    // O armazenamento da fila é independente do cache do Store: não dependemos
+    // da persistência do usuário sintético na recarga para testar IndexedDB.
+    if(!u){
+      u={id:'linked-e2e-gestor',nome:'Gestor sintético',login:'linked_e2e',papel:'gestor',ativo:true,tenantId:'tenant-a'};
+      state.usuarios=[...(Array.isArray(state.usuarios)?state.usuarios:[]),u];
+    }
     A.abrirSessao(u);
     window.App.ir('#/hoje');
   });
@@ -125,7 +131,7 @@ const server=http.createServer((req,res)=>{
   await page.waitForFunction(()=>document.querySelector('#iad-linkedin-root')?.textContent?.includes('Campanha restaurada'),null,{timeout:15000});
   assert.match(await page.locator('#iad-linkedin-root').textContent(),/Sem post: 2/);
   // A recarga restaura dados sintéticos pelo cache local; verificamos que a campanha não criou registros no Store/CAS.
-  assert.equal(await page.evaluate(()=>window.IADStore.obter().contatos.some(c=>c.nome==='Lead Com Post')),false,'Campanha não pode importar automaticamente no CRM');
+  assert.equal(await page.evaluate(()=> (window.IADStore.obter().contatos||[]).some(c=>c.nome==='Lead Com Post')),false,'Campanha não pode importar automaticamente no CRM');
   assert.equal(requestsOutside.length,0,'campanha não pode acessar LinkedIn/externos durante teste local: '+requestsOutside);
   // Usuário comum não pode ver nem montar a rota, inclusive via deep link.
   // A troca real de usuário troca a tela. App.ir na MESMA hash não emite hashchange.
