@@ -315,7 +315,7 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
     const link=linkedinUrl(postUrl.value,'post');
     if(!link){status.textContent='URL de publicação inválida.';return;}
     doc.defaultView.open(link,'_blank','noopener,noreferrer');
-    status.textContent='Publicação aberta. Curta o comentário do lead e publique o texto aprovado diretamente no LinkedIn.';
+    status.textContent='Publicação aberta. Curta a publicação do lead e publique o comentário aprovado diretamente no LinkedIn.';
   },true);
   const caixaConfirmacao=elem(doc,'label','','iad-linkedin-confirm');
   const confirmado=elem(doc,'input');confirmado.type='checkbox';
