@@ -5,6 +5,19 @@
 import {importLinkedInCsv} from './linkedin-csv.mjs';
 import {campaignSummary,nextPending,skipWithoutPost,setProfileOpened,setLikeConfirmed,setCommentConfirmed,canReviewProfile,reviewWindow,TERMINAIS} from './linkedin-campaign-engine.mjs';
 
+/* Não salvar perfis, textos nem tokens em localStorage: a fila é retida
+   somente enquanto o módulo está carregado. Escopo diferente destrói a anterior. */
+let memoryScope='',memoryState=null;
+function sessionFor(scope){
+  const identity=JSON.stringify([scope.userId||'',scope.tenantId||'',scope.role||'',
+    scope.tenantFilter||'',scope.ownerFilter||'']);
+  if(identity!==memoryScope){
+    memoryScope=identity;
+    memoryState={rows:[],selected:'',paused:false};
+  }
+  return memoryState;
+}
+
 export function linkedinUrl(input,kind='post') {
   let parsed;
   try { parsed=new URL(String(input||'').trim()); } catch (_) { return ''; }
@@ -77,7 +90,7 @@ function selectOption(doc,value,label) {
 export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={}) {
   if(!root||!root.ownerDocument||!scope||typeof getScopeToken!=='function')
     throw new Error('Sessão autorizada obrigatória.');
-  const doc=root.ownerDocument;
+  const doc=root.ownerDocument,session=sessionFor(scope);
   const valid=()=>root.isConnected&&getScopeToken()===scope.token;
   const notices=elem(doc,'p','Fluxo: login → CSV → abrir perfil → procurar post → curtir → analisar → comentar sobre água → próximo lead. Sem post: marcar e avançar. Ações externas exigem sua confirmação no LinkedIn.','small muted');
   const safe=elem(doc,'p','Sua senha é digitada somente em linkedin.com. O IaD CRM não solicita nem armazena senha, cookies ou tokens do LinkedIn.','small muted');
@@ -102,7 +115,9 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
   const csvPage=elem(doc,'span','','small muted');
   csvPager.append(csvPrevious,csvPage,csvNext);csvPager.hidden=true;
   arquivoBox.append(csvFile,csvStatus,csvSearch,csvRows,csvPager);
-  let campaignRows=[],page=0,activeRow=null,requestVersion=0,campaignPaused=false;
+  let campaignRows=session.rows,page=0,
+    activeRow=campaignRows.find(x=>x.perfil===session.selected)||null,
+    requestVersion=0,campaignPaused=session.paused;
   function openProfileFor(row,providedUrl) {
     if(!valid()||campaignPaused){status.textContent='Campanha pausada ou sessão alterada.';return;}
     const url=linkedinUrl(providedUrl||row?.perfil,'profile');
@@ -155,7 +170,8 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
       const text=await readCsv(file);
       if(!valid())return;
       const parsed=importLinkedInCsv(text);
-      campaignRows=parsed.leads;page=0;activeRow=null;requestVersion++;campaignPaused=false;
+      campaignRows=parsed.leads;session.rows=campaignRows;session.selected='';
+      page=0;activeRow=null;requestVersion++;campaignPaused=false;session.paused=false;
       btnPause.textContent='Pausar campanha';
       csvSearch.value='';
       const s=parsed.summary;
@@ -194,14 +210,24 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
   const estilo=elem(doc,'select');
   [['consultivo','Consultiva'],['tecnico','Técnica'],['objetivo','Objetiva']].forEach(x=>estilo.append(selectOption(doc,x[0],x[1])));
   estiloLabel.append(estilo);form.append(estiloLabel);
+  for(const [input,key] of [[postUrl,'postUrl'],[post,'post'],[comentarioLead,'comentarioLead'],
+    [resumoPerfil,'resumoPerfil'],[solucao,'solucao'],[estilo,'estilo']]){
+    input.addEventListener('input',()=>{
+      if(activeRow)activeRow[key]=input.value.slice(0,8500);
+    });
+    input.addEventListener('change',()=>{
+      if(activeRow)activeRow[key]=input.value.slice(0,8500);
+    });
+  }
   function selectCsvRow(item,scroll=true) {
     if(!valid())return;
-    activeRow=item;requestVersion++;
+    activeRow=item;session.selected=item.perfil;requestVersion++;
     picker.value='';
     lead.value=item.lead||'';cargo.value=item.cargo||'';
     empresa.value=item.empresa||'';perfil.value=item.perfil||'';
     resumoPerfil.value=item.resumoPerfil||'';postUrl.value=linkedinUrl(item.postUrl,'post')||'';
     post.value=item.post||'';comentarioLead.value=item.comentarioLead||'';
+    solucao.value=item.solucao||'';estilo.value=item.estilo||'consultivo';
     textArea.value=item.rascunho||'';analise.textContent=item.fundamento||'';
     bCopiar.disabled=!textArea.value;textArea.disabled=!textArea.value;
     confirmado.checked=item.estado==='confirmado';registro.textContent='';
@@ -212,7 +238,7 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
   picker.addEventListener('change',()=>{
     const c=contatos[Number(picker.value)];
     if(!c||picker.value==='')return;
-    activeRow=null;requestVersion++;renderCsv();
+    activeRow=null;session.selected='';requestVersion++;renderCsv();
     lead.value=String(c.nome||'').slice(0,120);cargo.value=String(c.cargo||'').slice(0,140);
     empresa.value=(empresas.get(String(c.contaId))||'').slice(0,160);
     perfil.value=linkedinUrl(c.linkedin,'profile')||'';
@@ -328,7 +354,7 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
       const nome=activeRow.lead;
       const next=skipWithoutPost(campaignRows,activeRow);
       if(next)selectCsvRow(next,false);
-      else{activeRow=null;requestVersion++;renderCsv();}
+      else{activeRow=null;session.selected='';requestVersion++;renderCsv();}
       filaMsg.textContent=nome+' marcado Sem post. '+(next?'Próximo lead selecionado.':'Fim da fila.');
       refreshQueue();
     }catch(e){filaMsg.textContent=e.message;}
@@ -354,7 +380,7 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
     }catch(e){filaMsg.textContent=e.message;}
   },true);
   const btnPause=action(doc,'Pausar campanha',()=>{
-    campaignPaused=!campaignPaused;
+    campaignPaused=!campaignPaused;session.paused=campaignPaused;
     btnPause.textContent=campaignPaused?'Retomar campanha':'Pausar campanha';
     filaMsg.textContent=campaignPaused?'Campanha pausada; fila sem avanço.':'Campanha retomada.';
     refreshQueue();
@@ -374,6 +400,12 @@ export function mountLinkedInLeads({root,snapshot,scope,getScopeToken,nuvem}={})
   filaBotoes.append(btnReviewed,btnLocated,btnLike,btnSkip,btnNext,btnPause);
   fila.append(elem(doc,'h2','3. Executar fila de perfis'),filaResumo,filaBotoes,filaMsg,
     elem(doc,'p','A revisão tem intervalo interno de 60 segundos e meta de até 20 perfis por 24 horas, calculados somente nesta lista aberta (não persistem após recarregar). Não são limites do LinkedIn. Ações externas são manuais nesta versão. Não existe intervalo que garanta evitar bloqueio. Diante de limite, CAPTCHA ou restrição do LinkedIn, pause a campanha. A automação futura exige acesso oficial autorizado e bloqueios de quota.','small muted'));
+  btnPause.textContent=campaignPaused?'Retomar campanha':'Pausar campanha';
   refreshQueue();
   root.replaceChildren(elem(doc,'h2','LinkedIN Leads — Campanha 01'),notices,acesso,arquivoBox,fila,form,resultado);
+  if(campaignRows.length){
+    csvStatus.textContent='Fila retomada na memória desta aba: '+campaignRows.length+' perfis. Recarregar o navegador descarta a fila.';
+    if(activeRow)selectCsvRow(activeRow,false);
+    else renderCsv();
+  }
 }
