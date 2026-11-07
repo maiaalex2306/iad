@@ -470,12 +470,18 @@ test('preserva candidata com nome e fonte web mas sem CNPJ',async()=>{
  assert.equal(body.data[0].cnpj,'');
  assert.equal(body.data[0].identidadeStatus,'pendente_cnpj');
 });
-test('sem CNPJ e sem citacao registrada nao gera candidata',async()=>{
+test('sem CNPJ e sem citacao: hipótese exploratória visível mas sem fonte validada',async()=>{
  const response=responseOpenAI(true,false);
  response.output.find(b=>b.type==='message').content[0].text=JSON.stringify({empresas:[{...candidate,cnpj:null}]});
  const h=harness({openai:true,openaiResponse:response}),res=await h.handle(request(query));
  assert.equal(res.status,200);
- assert.equal((await res.json()).data.length,0);
+ const body=await res.json();
+ assert.equal(body.data.length,1);
+ assert.equal(body.data[0].cnpj,'');
+ assert.equal(body.data[0].identidadeStatus,'pendente_cnpj');
+ assert.equal(body.data[0].fonteStatus,'pendente_sem_fonte');
+ assert.equal(body.data[0].fontes.length,0);
+ assert.equal(body.data[0].contatos.length,0);
 });
 
 test('modo ChatGPT consulta apenas OpenAI e preserva quota',async()=>{
