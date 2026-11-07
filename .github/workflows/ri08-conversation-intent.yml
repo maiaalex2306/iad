@@ -13,6 +13,8 @@ on:
       - 'tests/ri08-conversation-intent.test.mjs'
       - 'tests/ri08-performance.test.mjs'
       - 'scripts/ri08-linkedhelper-browser.cjs'
+      - 'scripts/ri08-staging-readiness.cjs'
+      - 'scripts/ri08-staging-readiness.test.cjs'
       - '.github/workflows/ri08-conversation-intent.yml'
   workflow_dispatch:
 jobs:
