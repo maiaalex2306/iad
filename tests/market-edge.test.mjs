@@ -1296,3 +1296,49 @@ test('RI-M22: nome de planta industrial com travessão aceita razão social da m
  assert.equal(result.data.length,1);
  assert.equal(result.targetMatch,'IDENTIDADE_SUGERIDA_NAO_VERIFICADA');
 });
+
+test('RI-M23: Automotivo e Mobilidade expande para 18 famílias, inclusive fornecedores e serviços, com 5 cidades',async()=>{
+ const cities=[
+  {codigoIBGE:'3549904',nome:'São José dos Campos',uf:'SP'},
+  {codigoIBGE:'3554102',nome:'Taubaté',uf:'SP'},
+  {codigoIBGE:'3508504',nome:'Caçapava',uf:'SP'},
+  {codigoIBGE:'3524402',nome:'Jacarei',uf:'SP'},
+  {codigoIBGE:'3538006',nome:'Pindamonhangaba',uf:'SP'}
+ ];
+ const f={uf:'SP',municipios:cities,ddds:['12'],segmentos:['Automotivo e Mobilidade'],
+  faixasFuncionarios:['201_500','501_1000','1001_5000','5001_10000','10001_plus'],limit:50};
+ const h=harness({openai:true,claude:true,catalogNames:['Automotivo e Mobilidade']});
+ const res=await h.handle(request({action:'search',filters:f,provider:'both'}));
+ assert.equal(res.status,200);
+ const body=await res.json();
+ assert.equal(body.discoveryPlan.familyCount,18);
+ assert.equal(body.discoveryPlan.municipalityCount,5);
+ assert.equal(body.discoveryPlan.requestedLimit,50);
+ assert.equal(body.discoveryPlan.allFamiliesIndividuallySearched,false);
+ const providers=aiCalls(h);
+ assert.equal(providers.length,2,'O orçamento de cota e provedor não é multiplicado pelas famílias');
+ const openai=providers.find(c=>c.url.includes('openai.com')).body.input;
+ const claude=providers.find(c=>c.url.includes('anthropic.com')).body.messages[0].content;
+ for(const prompt of [openai,claude]){
+  for(const token of ['Automotivo e Mobilidade','São José dos Campos','Taubaté','Caçapava',
+   'Jacarei','Pindamonhangaba','usinagem CNC','autopeças','estamparia','eletrificação',
+   'frotistas','concessionárias','mobilidade compartilhada','Tier 2','serviços de engenharia']){
+   assert.ok(prompt.includes(token),'Falta subsegmento/cidade: '+token);
+  }
+  assert.match(prompt,/18 FAMÍLIAS/);
+  assert.match(prompt,/até 50 empresas/);
+  assert.match(prompt,/Respeite integralmente as faixas/);
+ }
+ assert.notEqual(openai,claude,'Motores com prioridades distintas reduzem repetição de megamarcas');
+ assert.equal(h.calls.filter(c=>c.url.includes('iad_market_search_reserve')).length,1);
+});
+test('RI-M23: investigação por nome sem fonte segue recusando resultado não citado',async()=>{
+ const h=harness({openai:true,openaiResponse:responseOpenAI(true,false)});
+ const res=await h.handle(request({action:'investigate',target:{cnpj:null,nome:'Empresa A'},
+  filters:{uf:'SP',cidade:'Jacarei',segmento:'Quimico'}}));
+ assert.equal(res.status,200);
+ const body=await res.json();
+ assert.equal(body.data.length,0,'CNPJ e identidade individuais exigem fonte realmente citada');
+ assert.equal(body.diagnostics.rejectedUncitedSource,1);
+ assert.equal(body.diagnostics.pendingUncitedSource,0);
+});
