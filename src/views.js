@@ -2613,9 +2613,9 @@
       const grupo = visiveis.get(etapa), contagem = quantidades.get(etapa);
       const cartoes = grupo.map(function (r) { return cartaoKanban(r, etapas); }).join('') ||
         '<div class="vazio tiny">—</div>';
-      return '<section class="coluna" ondragover="event.preventDefault()" ondrop="App.soltar(event,\\'' + etapa + '\\')">' +
+      return '<section class="coluna" ondragover="event.preventDefault()" ondrop="App.soltar(event,\'' + etapa + '\')">' +
         '<header><div class="row" style="gap:6px"><strong>' + esc(etapa) + '</strong><span class="espaco"></span>' +
-        '<button class="mais" title="Cadastro rápido nesta etapa" onclick="App.cadastroRapido(\\'' + etapa + '\\')">+</button></div>' +
+        '<button class="mais" title="Cadastro rápido nesta etapa" onclick="App.cadastroRapido(\'' + etapa + '\')">+</button></div>' +
         '<span class="tiny muted">' + contagem.total + ' · ' + U.compacto(contagem.valor) + '</span></header>' +
         '<div class="cartoes">' + cartoes + '</div></section>';
     }).join('');
@@ -2624,7 +2624,7 @@
       '<p class="tiny muted" style="margin-top:8px">Arraste o cartão para mudar a etapa, ou use as setas. A mudança fica registrada no histórico.</p>';
   }
 
-    function cartaoKanban(r, etapas) {
+  function cartaoKanban(r, etapas) {
     const i = etapas.indexOf(r.op.etapa);
     const seta = function (destino, simbolo, titulo) {
       if (destino < 0 || destino >= etapas.length) return '';
