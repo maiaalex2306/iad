@@ -1,0 +1,35 @@
+{
+  "name": "iadcrm-linkedin-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "IaD CRM Desktop — navegador LinkedIn integrado (prévia técnica)",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.cjs",
+    "package:win": "electron-builder --win portable --x64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "45.2.3",
+    "electron-builder": "26.1.0"
+  },
+  "build": {
+    "appId": "br.com.iadcrm.linkedin",
+    "productName": "LinkedIN Leads - IaD CRM",
+    "files": [
+      "main.cjs",
+      "security.cjs",
+      "package.json",
+      "README.md"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        "portable"
+      ],
+      "artifactName": "IaDCRM-LinkedIN-Leads-Preview-${version}-${arch}.${ext}"
+    }
+  }
+}

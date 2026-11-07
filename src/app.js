@@ -100,7 +100,7 @@
         return '<section class="card"><h1>LinkedIN Leads</h1>' +
           '<div id="iad-linkedin-root" aria-live="polite">Preparando a campanha...</div></section>';
       },
-      ajuda: 'Campanha assistida: análise de post e comentário de lead, rascunho com IA e publicação manual aprovada.'
+      ajuda: 'Campanha LinkedIn com importação CSV até 100 MB, fila persistente e análise de publicações com IA. As interações externas permanecem supervisionadas.'
     }] : []),
     { hash: '#/revisao', ico: '🔄', nome: 'Revisão', render: V.revisao,
       ajuda: 'A reunião semanal numa tela: o que mudou na decisão de cada cliente nos últimos 7 dias.' },
@@ -639,7 +639,7 @@
       root.textContent = 'Acesso permitido somente a Gestores e Administradores autenticados.';
       return;
     }
-    const arquivo = new URL('src/linkedin-leads.mjs', document.baseURI).href;
+    const arquivo = new URL('src/linkedin-leads-console.mjs', document.baseURI).href;
     const pendente = moduloLinkedin || (moduloLinkedin = import(arquivo).catch(function (e) {
       moduloLinkedin = null; throw e;
     }));
