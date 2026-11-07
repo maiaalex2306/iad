@@ -1,0 +1,36 @@
+name: LinkedIN Leads — testes de campanha assistida
+on:
+  push:
+    branches:
+      - feature/linkedin-leads-assisted-v1-20261107
+  pull_request:
+    paths:
+      - 'src/linkedin-leads.mjs'
+      - 'src/linkedin-csv.mjs'
+      - 'src/linkedin-campaign-engine.mjs'
+      - 'nuvem/funcoes/assistente/index.ts'
+      - 'src/app.js'
+      - 'src/config.js'
+      - 'sw.js'
+      - 'tests/linkedin-leads-v1.test.mjs'
+      - '.github/workflows/linkedin-leads.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Sintaxe JavaScript
+        run: |
+          node --check src/linkedin-csv.mjs
+          node --check src/linkedin-campaign-engine.mjs
+          node --check src/linkedin-leads.mjs
+          node --check src/app.js
+      - name: Testes unitários e contrato
+        run: node --test tests/linkedin-leads-v1.test.mjs
