@@ -52,7 +52,7 @@ export function mountMarketInvestigation({card,company,doc,nuvem,valid,provider,
    const providers=(Array.isArray(payload.providers)?payload.providers:[])
     .filter(p=>p==='OpenAI'||p==='Anthropic');
    line('IAs participantes: '+(providers.join(' + ')||'não informado')+
-    '. Nenhum resultado alterou a carteira ou a shortlist anterior.');
+    '. Este resultado NÃO foi incorporado ao CRM nem alterou a prioridade anterior.');
    if(payload.partial===true)line('Pesquisa parcial: um ou mais provedores não concluíram.');
    if(!found.length){
     line(company.cnpj?'CNPJ exato não corroborado nas respostas citadas.':
