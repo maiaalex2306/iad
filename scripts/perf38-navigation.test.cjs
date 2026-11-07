@@ -94,5 +94,7 @@ test('contrato de instrumentação: rotas estáticas e mount lazy, versão conju
  assert.match(app,/concluirNavegacao\('#\/mercado'\)/);
  assert.match(views,/Navegação real entre telas/);
  assert.match(views,/Bloqueios de interface/);
- assert.match(cfg,/v286\.81/);assert.match(sw,/iad-crm-v286\.81/);
+ const versao=cfg.match(/numero:\s*'(v286\.\d+)'/);
+ assert.ok(versao,'número de versão declarado');
+ assert.ok(sw.includes('iad-crm-'+versao[1]),'versão de PWA e config iguais');
 });
