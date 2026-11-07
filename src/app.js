@@ -555,6 +555,12 @@
     rolagemAnterior = hash;
     ultimaAssinaturaSync = assinaturaDaTelaParaSync();
 
+    /* PERF-38: marcar conclusão apenas após a tela principal estar no DOM.
+       Intelligence e Mercado são lazy: concluem após o mount autorizado. */
+    if (hash !== '#/inteligencia' && hash !== '#/mercado' &&
+        global.IADPerformance?.concluirNavegacao)
+      global.IADPerformance.concluirNavegacao(hash);
+
     /* A IaD aparece uma vez por dia, na primeira tela depois do login — e
        depois do render, nunca antes: abrir um diálogo modal sobre uma tela
        ainda em branco assusta e não dá contexto nenhum. O setTimeout é isso,
@@ -601,6 +607,8 @@
         },
         getScopeToken:assinaturaInteligencia
       });
+      if(global.IADPerformance?.concluirNavegacao)
+        global.IADPerformance.concluirNavegacao('#/inteligencia');
     }).catch(function() {
       if(token===geracaoInteligencia&&root.isConnected&&
           location.hash==='#/inteligencia'&&assinatura===assinaturaInteligencia())
@@ -651,6 +659,8 @@
         getScopeToken: assinaturaInteligencia, nuvem,
         getSnapshot: function () { return Store.dados(); }
       });
+      if(global.IADPerformance?.concluirNavegacao)
+        global.IADPerformance.concluirNavegacao('#/mercado');
     }).catch(function () {
       if (token === geracaoMercado && root.isConnected &&
           location.hash === '#/mercado' && assinatura === assinaturaInteligencia())
@@ -1277,6 +1287,22 @@
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') fecharMenuUsuario();
   });
+
+  /* PERF-38: o menu principal usa <a href>, não App.ir.
+     Acompanhar cliques diretos sem interceptar navegação e sem coletar URLs.
+     Modificadores/nova aba não são uma abertura desta sessão. */
+  document.addEventListener('click', function (evento) {
+    if (!global.IADPerformance?.ativo?.() ||
+        evento.defaultPrevented || evento.button !== 0 ||
+        evento.altKey || evento.ctrlKey || evento.metaKey || evento.shiftKey) return;
+    const alvo = evento.target;
+    const link = alvo && typeof alvo.closest === 'function'
+      ? alvo.closest('nav.tabs a[href^="#/"]') : null;
+    if (!link || link.target && link.target !== '_self') return;
+    const rota = link.getAttribute('href');
+    if (rota && rota !== location.hash)
+      global.IADPerformance.iniciarNavegacao(rota);
+  }, true);
 
   let assinaturaMenuInteligencia = null;
   function montarNav() {
@@ -2144,6 +2170,9 @@
           location.hash !== hash && global.IADPerformance) {
         global.IADPerformance.iniciarAbertura();
       }
+      /* Apenas rotas literais permitidas serão medidas, nunca URLs nem IDs. */
+      if (hash !== location.hash && global.IADPerformance?.iniciarNavegacao)
+        global.IADPerformance.iniciarNavegacao(hash);
       location.hash = hash;
     },
     abrir: function (id) {

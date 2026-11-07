@@ -26,6 +26,8 @@ jobs:
           node --check nuvem/testes/perf-24-inapp-diagnostics.test.cjs
       - name: Testar métricas, botões e exportação sem dados comerciais
         run: node --test nuvem/testes/perf-24-inapp-diagnostics.test.cjs
+      - name: Verificar PERF-38 privacidade, interrupção e métricas por jornada
+        run: node --test scripts/perf38-navigation.test.cjs
       - name: Instalar Chromium Playwright
         run: |
           python -m pip install playwright==1.56.0

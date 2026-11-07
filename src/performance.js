@@ -28,6 +28,60 @@
     try { return funcao(); }
     finally { registrar(nome, agora() - inicio); }
   }
+  /* PERF-38: jornada REAL na própria sessão autenticada, opt-in.
+     Uma navegação conta só quando iniciada por gesto do usuário via App.ir.
+     Os nomes são FIXOS: nunca registrar hashes, IDs de conta, URL, tokens ou textos. */
+  const ROTAS_DIAGNOSTICO = Object.freeze({
+    '#/hoje':'hoje', '#/painel':'painel', '#/pipeline':'pipeline',
+    '#/tarefas':'tarefas', '#/conversas':'conversas',
+    '#/revisao':'revisao', '#/cadastros':'cadastros',
+    '#/inteligencia':'inteligencia', '#/mercado':'mercado'
+  });
+  let navegacao = null, proximoTokenNavegacao = 0, observadorLongTask = null;
+  function iniciarNavegacao(hash) {
+    if (!ativo) return false;
+    const rota = ROTAS_DIAGNOSTICO[hash];
+    navegacao = rota ? {rota,hash,token:++proximoTokenNavegacao,inicio:agora()} : null;
+    return !!navegacao;
+  }
+  function concluirNavegacao(hash) {
+    if (!ativo || !navegacao) return false;
+    const registro=navegacao;
+    if (registro.hash!==hash) { navegacao=null; return false; }
+    /* Duas frames são um proxy de prontidão, não prova do paint.
+       Rotas lazy só concluem depois do mount do módulo autorizado. */
+    if (typeof global.requestAnimationFrame!=='function') { navegacao=null; return false; }
+    global.requestAnimationFrame(function () {
+      if (!ativo||navegacao!==registro||global.location?.hash!==registro.hash) return;
+      global.requestAnimationFrame(function () {
+        if (!ativo||navegacao!==registro||global.location?.hash!==registro.hash) return;
+        registrar('perf38.nav.'+registro.rota,agora()-registro.inicio);
+        navegacao=null;
+      });
+    });
+    return true;
+  }
+  function iniciarLongTasks() {
+    if (observadorLongTask||typeof global.PerformanceObserver!=='function') return;
+    try {
+      const obs=new global.PerformanceObserver(function (lista) {
+        if (!ativo) return;
+        for(const e of lista.getEntries()){
+          /* Nunca coletar attribution, URL, nome ou metadados do evento. */
+          if (e&&Number.isFinite(e.duration))
+            registrar('perf38.main-thread.longtask',e.duration);
+        }
+      });
+      obs.observe({type:'longtask',buffered:false});
+      observadorLongTask=obs;
+    }catch(_) { observadorLongTask=null; }
+  }
+  function pararLongTasks() {
+    if (!observadorLongTask) return;
+    try { observadorLongTask.disconnect(); } catch(_) {}
+    observadorLongTask=null;
+  }
+
   /* PERF-23: a mesma métrica para Promise, incluindo falhas.
      Nunca armazena payload, endpoint, token, ID ou motivo de erro.
      Preserva o resultado e rejeição da operação original e não mede
@@ -141,6 +195,10 @@
      IDs, emails, URLs ou outros valores comerciais. Não alterar o relatório
      de engenharia legado nem coletar informações em segundo plano. */
   const CHAVES_DIAGNOSTICO = [
+    'perf38.nav.hoje', 'perf38.nav.painel', 'perf38.nav.pipeline',
+    'perf38.nav.tarefas', 'perf38.nav.conversas', 'perf38.nav.revisao',
+    'perf38.nav.cadastros', 'perf38.nav.inteligencia', 'perf38.nav.mercado',
+    'perf38.main-thread.longtask',
     'perf17.cockpit.clique-a-dois-frames',
     'perf17.cockpit.etapa-rota',
     'perf17.cockpit.etapa-html',
@@ -203,11 +261,12 @@
   }
 
   global.IADPerformance = {
-    iniciar: function () { ativo = true; return 'Medição iniciada — não envia dados.'; },
-    parar: function () { ativo = false; abertura = null; return relatorio(); },
-    limpar: function () { abertura = null; Object.keys(amostras).forEach(function(k){delete amostras[k];}); },
+    iniciar: function () { ativo = true; iniciarLongTasks(); return 'Medição iniciada — não envia dados.'; },
+    parar: function () { ativo = false; abertura = null; navegacao=null; pararLongTasks(); return relatorio(); },
+    limpar: function () { abertura = null; navegacao=null; Object.keys(amostras).forEach(function(k){delete amostras[k];}); },
     medir: medir, medirPromessa: medirPromessa, registrar: registrar, relatorio: relatorio,
     medirDoisFrames: medirDoisFrames, agora: agora,
+    iniciarNavegacao: iniciarNavegacao, concluirNavegacao: concluirNavegacao,
     iniciarAbertura: iniciarAbertura, aberturaPendente: aberturaPendente,
     etapaAbertura: etapaAbertura, cancelarAbertura: cancelarAbertura,
     exportarJSON: exportarJSON,
