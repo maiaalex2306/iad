@@ -1,0 +1,46 @@
+name: LinkedIN Leads Desktop POC & CSV100MB
+on:
+  push:
+    branches:
+      - feature/linkedin-leads-ux-csv100m-20261107
+    paths:
+      - 'desktop/linkedin-leads/**'
+      - 'src/linkedin-csv.mjs'
+      - 'src/linkedin-csv-stream.mjs'
+      - 'src/linkedin-queue-db.mjs'
+      - 'src/linkedin-comment-core.mjs'
+      - 'tests/linkedin-csv-stream.test.mjs'
+      - '.github/workflows/linkedin-desktop-csv100m.yml'
+  pull_request:
+    paths:
+      - 'desktop/linkedin-leads/**'
+      - 'src/linkedin-csv.mjs'
+      - 'src/linkedin-csv-stream.mjs'
+      - 'src/linkedin-queue-db.mjs'
+      - 'src/linkedin-comment-core.mjs'
+      - 'tests/linkedin-csv-stream.test.mjs'
+      - '.github/workflows/linkedin-desktop-csv100m.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  csv100mb:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check syntax
+        run: |
+          node --check src/linkedin-csv.mjs
+          node --check src/linkedin-csv-stream.mjs
+          node --check src/linkedin-queue-db.mjs
+          node --check src/linkedin-comment-core.mjs
+          node --check desktop/linkedin-leads/main.cjs
+          node --check desktop/linkedin-leads/security.cjs
+      - name: Validate CSV parser, real 100 MiB stream and desktop security
+        run: |
+          node --max-old-space-size=512 --test tests/linkedin-csv-stream.test.mjs
+          node --test desktop/linkedin-leads/test/security.test.cjs
