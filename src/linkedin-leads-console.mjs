@@ -90,7 +90,6 @@ export function mountLinkedInLeads({root,scope,getScopeToken,nuvem}={}){
   ui.append(title,intro,account,imports,queue,postPanel,warning);
   root.replaceChildren(ui);
   let db=null,meta=null,current=null,busy=false,abort=null,request=0,uiGeneration=0;
-  const scopeKey=JSON.stringify([scope.userId,scope.tenantId,scope.role,scope.tenantFilter,scope.ownerFilter]);
   const show=(messageText,err=false)=>{
     if(!valid())return;
     message.textContent=messageText;
@@ -176,7 +175,7 @@ export function mountLinkedInLeads({root,scope,getScopeToken,nuvem}={}){
     finally{busy=false;disabled();}
   }
   async function confirmLike(){
-    if(!valid()||!current||busy||meta?.paused)return;
+    if(!valid()||!current||busy||meta?.paused||TERMINAL.has(current.estado))return;
     const link=linkedinUrl(postUrl.value,'post');
     if(!link)return show('Informe a URL de publicação válida antes da confirmação.',true);
     try{
@@ -189,7 +188,7 @@ export function mountLinkedInLeads({root,scope,getScopeToken,nuvem}={}){
     }catch(e){show('Falha ao salvar curtida: '+e.message,true);}
   }
   async function generate(){
-    if(!valid()||!current||busy||meta?.paused)return;
+    if(!valid()||!current||busy||meta?.paused||TERMINAL.has(current.estado))return;
     let prepared;
     try{
       prepared=prepareLinkedInCampaign({...current,postUrl:postUrl.value,post:postText.value,
@@ -275,9 +274,10 @@ export function mountLinkedInLeads({root,scope,getScopeToken,nuvem}={}){
         }
       });
       if(!valid()||ctrl.signal.aborted)throw new Error('Importação interrompida pela mudança de sessão.');
+      current=null;uiGeneration++;
       meta={campaign:temporary,valid:result.summary.valid,semPost:0,descartados:0,
         curtidas:0,confirmados:0,paused:false,activeLine:0,createdAt:new Date().toISOString()};
-      await persist();current=null;uiGeneration++;showCurrent();
+      await persist();showCurrent();
       await renderPage();
       importStatus.textContent='Importação concluída: '+result.summary.valid+' válidos, '+
         result.summary.duplicates+' duplicados, '+result.summary.invalid+' inválidos.';
@@ -291,6 +291,7 @@ export function mountLinkedInLeads({root,scope,getScopeToken,nuvem}={}){
     }finally{if(abort===ctrl)abort=null;file.value='';cancel.hidden=true;progress.hidden=true;disabled();}
   });
   draft.addEventListener('input',()=>{if(current)current.rascunho=limit(draft.value,1300);disabled();});
+  draft.addEventListener('change',()=>{if(current&&db)putLead(db,current).catch(()=>{});});
   async function init(){
     try{
       db=await openLinkedInQueue();
@@ -300,7 +301,7 @@ export function mountLinkedInLeads({root,scope,getScopeToken,nuvem}={}){
       if(meta?.campaign){
         current=meta.activeLine?await leadAt(db,scope,meta.campaign,meta.activeLine):null;
         if(!valid())return;
-        if(!current)current=await nextPendingLead(db,scope,meta.campaign,0);
+        if(!current||TERMINAL.has(current.estado))current=await nextPendingLead(db,scope,meta.campaign,0);
         showCurrent();await renderPage();
         importStatus.textContent='Campanha restaurada do armazenamento local deste navegador.';
         show('Fila retomada. Os dados não foram enviados ao CRM nem ao LinkedIn.');
