@@ -1,9 +1,9 @@
 'use strict';
 /* Host EXCLUSIVO de LinkedIN Leads. O restante do IaD CRM permanece web.
    Duas vistas nativas nesta funcionalidade, sem injeção ou coleta de sessão. */
-const {app,BaseWindow,WebContentsView,Menu,session}=require('electron');
+const {app,BaseWindow,WebContentsView,Menu,session,shell}=require('electron');
 const os=require('node:os');
-const {LINKEDIN_START,LINKEDIN_LEADS_ROUTE,allowedLinkedIn,allowedCrm,isFeatureRoute,profilePartition,splitBounds}=require('./security.cjs');
+const {CRM_ORIGIN,LINKEDIN_START,LINKEDIN_LEADS_ROUTE,allowedLinkedIn,allowedCrm,isFeatureRoute,profilePartition,splitBounds}=require('./security.cjs');
 const linkedinPartition=profilePartition(process.env.IAD_LINKEDIN_LOCAL_PROFILE||os.userInfo().username);
 let win=null,crm=null,linkedin=null;
 function navigationPolicy(contents,which){
@@ -71,6 +71,11 @@ function createWindow(){
     {label:'LinkedIN Leads',submenu:[
       {label:'Voltar à campanha',click:()=>crm.webContents.loadURL(LINKEDIN_LEADS_ROUTE)},
       {label:'Atualizar campanha',click:()=>crm.webContents.reload()},
+      {label:'Voltar ao IaD CRM web',click:async()=>{
+        // A saída encerra as duas WebContentsView; o CRM geral segue no browser.
+        await shell.openExternal(CRM_ORIGIN+'/#/hoje');
+        if(win&&!win.isDestroyed())win.close();
+      }},
       {type:'separator'},{role:'quit'}
     ]},
     {label:'LinkedIn',submenu:[
