@@ -17,6 +17,13 @@ function allowedCrm(raw){
   const url=parsedHttps(raw);
   return !!url&&url.origin===CRM_ORIGIN;
 }
+/** O host especializado pode mostrar o site do CRM somente na rota LinkedIN Leads.
+ * A autenticação continua sendo responsabilidade do CRM web. */
+const LINKEDIN_LEADS_ROUTE=CRM_ORIGIN+'/#/linkedin-leads';
+function isFeatureRoute(raw){
+  const url=parsedHttps(raw);
+  return !!url&&url.origin===CRM_ORIGIN&&url.hash==='#/linkedin-leads';
+}
 function profilePartition(profile='default'){
   const normalized=String(profile||'default').slice(0,256);
   const digest=crypto.createHash('sha256').update(normalized).digest('hex').slice(0,20);
@@ -28,4 +35,4 @@ function splitBounds(width,height,ratio=0.44){
   const left=Math.max(420,Math.min(650,Math.round(w*ratio),w-460));
   return {crm:{x:0,y:0,width:left,height:h},linkedin:{x:left,y:0,width:w-left,height:h}};
 }
-module.exports={CRM_ORIGIN,LINKEDIN_START,allowedLinkedIn,allowedCrm,profilePartition,splitBounds};
+module.exports={CRM_ORIGIN,LINKEDIN_START,LINKEDIN_LEADS_ROUTE,allowedLinkedIn,allowedCrm,isFeatureRoute,profilePartition,splitBounds};
