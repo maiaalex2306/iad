@@ -87,8 +87,8 @@ export function externalActionGate({approved=false,scopes=[],neededScope='',now=
   if(!approved||!neededScope||!Array.isArray(scopes)||!scopes.includes(neededScope))
     return {ok:false,reason:'Integração ou permissão oficial ausente.',nextAt:null};
   if(stop)return {ok:false,reason:'Campanha pausada pelo operador.',nextAt:null};
-  if(remaining!==null&&(!Number.isFinite(remaining)||remaining<=0))
-    return {ok:false,reason:'Orçamento de ações esgotado ou desconhecido.',nextAt:null};
+  if(remaining===null||!Number.isFinite(remaining)||remaining<=0)
+    return {ok:false,reason:'Orçamento de ações desconhecido ou esgotado.',nextAt:null};
   const delayedUntil=Math.max(Number(retryAfterAt)||0,(Number(lastActionAt)||0)+Math.max(0,Number(minIntervalMs)||0));
   if(delayedUntil>now)return {ok:false,reason:'Aguardar janela autorizada.',nextAt:delayedUntil};
   return {ok:true,reason:'Dentro da política configurada.',nextAt:now};
