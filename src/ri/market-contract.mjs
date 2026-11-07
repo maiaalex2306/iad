@@ -97,8 +97,9 @@ export function normalizeMarketCompanies(companies,{source='',retrievedAt=''}={}
   // A claimed but invalid identifier is never silently downgraded to pending.
   if(rawCnpj&&!cnpj)continue;
   const name=str(x.nome||x.nomeFantasia||x.razaoSocial);
-  const evidence=Array.isArray(x.fontes)?x.fontes.filter(v=>v&&/^https?:\/\//i.test(str(v.url,500))):[];
-  if(!cnpj&&(!name||!evidence.length))continue;
+  // Candidata exploratória sem fonte NÃO é descartada: permanece sem
+  // status de validação, fora da shortlist qualificada e nunca importável.
+  if(!name)continue;
   const key=cnpj?'cnpj:'+cnpj:'pending:'+folded(name)+'|'+folded(x.cidade)+'|'+str(x.uf,2).toUpperCase();
   if(seen.has(key))continue;seen.add(key);
   const contacts=Array.isArray(x.contatos)?x.contatos.slice(0,15):[];
@@ -112,7 +113,7 @@ export function normalizeMarketCompanies(companies,{source='',retrievedAt=''}={}
   const stages=Object.values(qualificacaoICP).filter(x=>x!=='nao_solicitado');
   qualificacaoICP.statusGeral=stages.length&&stages.every(x=>x==='declarado')&&
    rawICP.statusGeral==='declarado_nao_verificado'?'declarado_nao_verificado':'pendente';
-  output.push({cnpj,identidadeStatus:cnpj?'cnpj_validado':'pendente_cnpj',nome:name,razaoSocial:str(x.razaoSocial),
+  output.push({cnpj,fonteStatus:Array.isArray(x.fontes)&&x.fontes.some(v=>isReviewableSourceURL(v?.url))?'citada_pelo_provedor':'pendente_sem_fonte',identidadeStatus:cnpj?'cnpj_validado':'pendente_cnpj',nome:name,razaoSocial:str(x.razaoSocial),
    cidade:str(x.cidade),uf:str(x.uf,2).toUpperCase(),segmento:str(x.segmento||x.cnaePrimario),cnae:str(x.cnae),porte:str(x.porte),site:str(x.site),telefone:str(x.telefone),
    qualificacaoICP,funcionarios:x.funcionarios??null,faixaFuncionariosStatus:['pendente','aderente_nao_verificado','nao_solicitado'].includes(x.faixaFuncionariosStatus)?x.faixaFuncionariosStatus:'nao_solicitado',faturamento:x.faturamento??null,faturamentoStatus:'nao_confirmado',funcionariosStatus:'nao_confirmado',
    source:str(source),retrievedAt:str(retrievedAt,40),
