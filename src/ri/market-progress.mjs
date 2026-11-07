@@ -23,8 +23,15 @@ export function mountMarketSearchProgress({doc,host}={}){
  title.id='iad-market-progress-title';
  const info=make('p','Aguarde a confirmação do servidor.','iad-market-progress-description');
  info.id='iad-market-progress-description';
+ // Elemento nativo mantém o estado acessível (indeterminado, sem atributo value).
+ // A faixa laranja é DECORATIVA e cresce visualmente, não mede progresso real.
  const bar=make('progress',undefined,'iad-market-progress-bar');
- bar.max=100;bar.removeAttribute?.('value'); // sem porcentagem inventada
+ bar.max=100;bar.removeAttribute?.('value');
+ bar.setAttribute('aria-label','Pesquisa em andamento; percentual real indisponível');
+ const track=make('div',undefined,'iad-market-progress-track');
+ track.setAttribute('aria-hidden','true');track.hidden=true;
+ const fill=make('span',undefined,'iad-market-progress-fill');
+ track.append(fill);
  const phase=make('p','Preparando solicitação','iad-market-progress-phase');
  phase.setAttribute('role','status');phase.setAttribute('aria-live','polite');
  const elapsed=make('p','Tempo decorrido: 0 s','iad-market-progress-time');
@@ -32,7 +39,7 @@ export function mountMarketSearchProgress({doc,host}={}){
  const actions=make('div',undefined,'iad-market-progress-actions');
  const close=make('button','Ocultar acompanhamento','btn iad-market-progress-close');
  close.type='button';actions.append(close);
- dialog.append(eyebrow,title,info,bar,phase,elapsed,note,actions);
+ dialog.append(eyebrow,title,info,bar,track,phase,elapsed,note,actions);
  overlay.append(dialog);
  const reopen=make('button','Pesquisa em andamento · acompanhar','btn iad-market-progress-reopen');
  reopen.type='button';reopen.hidden=true;
@@ -51,7 +58,8 @@ export function mountMarketSearchProgress({doc,host}={}){
   info.textContent='Solicitação manual iniciada com '+String(provider||'as IAs selecionadas')+'.';
   phase.textContent='Preparando envio autenticado ao servidor';
   bar.hidden=false;bar.removeAttribute?.('value');
-  note.textContent='Os provedores respondem pelo servidor. O acompanhamento não estima porcentagens.';
+  track.hidden=false;track.setAttribute('data-state','running');
+  note.textContent='A faixa laranja é uma animação visual, não um percentual medido. A pesquisa continua mesmo com o painel oculto.';
   close.textContent='Ocultar acompanhamento';
   updateTime();timer=setInterval(updateTime,1000);
   reveal();
@@ -65,6 +73,7 @@ export function mountMarketSearchProgress({doc,host}={}){
  function finish({count=0,partial=false}={}){
   if(state!=='running')return;
   state='done';stopTimer();updateTime();bar.hidden=true;
+  track.hidden=false;track.setAttribute('data-state','done');
   title.textContent=partial?'Pesquisa parcialmente concluída':'Pesquisa concluída';
   phase.textContent='Resposta recebida e organizada no painel.';
   info.textContent=Number.isSafeInteger(count)&&count>0
@@ -78,6 +87,7 @@ export function mountMarketSearchProgress({doc,host}={}){
  function fail(message){
   if(state!=='running')return;
   state='error';stopTimer();updateTime();bar.hidden=true;
+  track.hidden=true;track.setAttribute('data-state','error');
   title.textContent='Não foi possível concluir a pesquisa';
   phase.textContent='A solicitação terminou sem resultados confirmados.';
   info.textContent=String(message||'O servidor não concluiu a solicitação.').slice(0,650);
@@ -98,7 +108,7 @@ export function mountMarketSearchProgress({doc,host}={}){
   getState:()=>state,
   overlay,reopen,
   dispose(){
-   stopTimer();state='disposed';overlay.hidden=true;reopen.hidden=true;
+   stopTimer();state='disposed';track.hidden=true;overlay.hidden=true;reopen.hidden=true;
    doc.removeEventListener?.('keydown',keyDown);
   }
  });
