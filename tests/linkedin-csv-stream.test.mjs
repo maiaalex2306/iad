@@ -90,16 +90,21 @@ test('Arquivos grandes usam batches, sem materializar toda lista no parser',asyn
   const tailBytes=CSV_MAX_BYTES-header.length-repeatedCount*repeated.length;
   const tail=Buffer.from(prefix+'y'.repeat(tailBytes-Buffer.byteLength(prefix)-1)+'\n');
   assert.equal(header.length+repeatedCount*repeated.length+tail.length,CSV_MAX_BYTES);
-  let position=0;
-  const file={name:'100m.csv',size:CSV_MAX_BYTES,stream:()=>new ReadableStream({
-    pull(controller){
-      if(position===0)controller.enqueue(header);
-      else if(position<=repeatedCount)controller.enqueue(repeated);
-      else if(position===repeatedCount+1)controller.enqueue(tail);
-      else {controller.close();return;}
-      position++;
-    }
-  })};
+  // File.stream() do navegador oferece um fluxo novo a cada abertura.
+  // O fixture deve reproduzir essa característica para a detecção de charset
+  // e a importação (duas passagens sem carregar o arquivo todo na memória).
+  const file={name:'100m.csv',size:CSV_MAX_BYTES,stream:()=>{
+    let position=0;
+    return new ReadableStream({
+      pull(controller){
+        if(position===0)controller.enqueue(header);
+        else if(position<=repeatedCount)controller.enqueue(repeated);
+        else if(position===repeatedCount+1)controller.enqueue(tail);
+        else {controller.close();return;}
+        position++;
+      }
+    });
+  }};
   let maxBatch=0,total=0,progress=0;
   const started=performance.now();
   const data=await importLinkedInCsvStream(file,{onBatch:async rows=>{
