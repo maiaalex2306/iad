@@ -2,7 +2,7 @@
  * Não inspeciona DOM do LinkedIn nem executa curtidas/comentários externos.
  * Na versão desktop, links abertos são encaminhados ao WebContentsView integrado. */
 import {importLinkedInCsvStream,CSV_MAX_BYTES} from './linkedin-csv-stream.mjs';
-import {openLinkedInQueue,metaOf,saveMeta,addLeadBatch,leadAt,nextPendingLead,putLead,deleteCampaign,pageOf} from './linkedin-queue-db.mjs';
+import {openLinkedInQueue,metaOf,saveMeta,addLeadBatch,leadAt,nextPendingLead,putLead,commitLeadAndMeta,deleteCampaign,pageOf} from './linkedin-queue-db.mjs';
 import {linkedinUrl,prepareLinkedInCampaign,campaignText} from './linkedin-comment-core.mjs';
 
 const STATUS={
@@ -139,6 +139,10 @@ export function mountLinkedInLeads({root,scope,getScopeToken,nuvem}={}){
   }
   async function nextLead(){
     if(!valid()||!meta?.campaign||busy||meta.paused)return;
+    if(current&&!TERMINAL.has(current.estado)){
+      show('Conclua o lead ou utilize Sem post / Já interagido antes de avançar.',true);
+      return;
+    }
     busy=true;disabled();
     try{
       const next=await nextPendingLead(db,scope,meta.campaign,current?.linha||0);
@@ -153,6 +157,8 @@ export function mountLinkedInLeads({root,scope,getScopeToken,nuvem}={}){
       show('Confirme a curtida e revise um comentário de pelo menos 20 caracteres.',true);return;
     }
     busy=true;disabled();
+    const beforeRow={...current},beforeMeta={...meta};
+    let committed=false;
     try{
       if(TERMINAL.has(current.estado))throw new Error('Este lead já foi encerrado.');
       if(status==='confirmado'){
@@ -164,28 +170,44 @@ export function mountLinkedInLeads({root,scope,getScopeToken,nuvem}={}){
       else {meta.descartados=(meta.descartados||0)+1;}
       current.estado=status;
       const old=current;
-      await putLead(db,old);
+      meta.activeLine=old.linha;meta.lastUpdatedAt=new Date().toISOString();
+      await commitLeadAndMeta(db,scope,old,meta);
+      committed=true;
       const next=await nextPendingLead(db,scope,meta.campaign,old.linha);
       if(!valid())return;
       current=next||null;uiGeneration++;
       await persist();
       showCurrent();
       show(next?'Registrado. Próximo perfil carregado.':'Fim da fila; progresso registrado localmente.');
-    }catch(e){show('Não foi possível registrar o resultado: '+e.message,true);}
-    finally{busy=false;disabled();}
+    }catch(e){
+      if(!committed){
+        current=beforeRow;meta=beforeMeta;showCurrent();
+        show('Não foi possível salvar a interação: '+e.message,true);
+      }else{
+        showCurrent();
+        show('Interação gravada; não foi possível carregar o próximo perfil: '+e.message,true);
+      }
+    }finally{busy=false;disabled();}
   }
   async function confirmLike(){
     if(!valid()||!current||busy||meta?.paused||TERMINAL.has(current.estado))return;
     const link=linkedinUrl(postUrl.value,'post');
     if(!link)return show('Informe a URL de publicação válida antes da confirmação.',true);
+    const beforeRow={...current},beforeMeta={...meta};
+    busy=true;disabled();
     try{
       current.postUrl=link;current.post=limit(postText.value,6000);
       if(!current.curtidaConfirmada){current.curtidaConfirmada=true;meta.curtidas=(meta.curtidas||0)+1;}
       current.curtidaConfirmadaEm=current.curtidaConfirmadaEm||new Date().toISOString();
       if(current.estado!=='rascunho')current.estado='curtido';
-      await putLead(db,current);await persist();showCurrent();
+      meta.activeLine=current.linha;meta.lastUpdatedAt=new Date().toISOString();
+      await commitLeadAndMeta(db,scope,current,meta);
+      showCurrent();
       show('Curtida registrada conforme sua confirmação; o CRM não verificou a ação no LinkedIn.');
-    }catch(e){show('Falha ao salvar curtida: '+e.message,true);}
+    }catch(e){
+      current=beforeRow;meta=beforeMeta;showCurrent();
+      show('Falha ao salvar curtida: '+e.message,true);
+    }finally{busy=false;disabled();}
   }
   async function generate(){
     if(!valid()||!current||busy||meta?.paused||TERMINAL.has(current.estado))return;
@@ -230,9 +252,12 @@ export function mountLinkedInLeads({root,scope,getScopeToken,nuvem}={}){
   }
   async function togglePause(){
     if(!meta||busy)return;
-    meta.paused=!meta.paused;request++;
-    try{await persist();showCurrent();show(meta.paused?'Campanha pausada.':'Campanha retomada.');}
-    catch(e){show('Falha ao gravar pausa: '+e.message,true);}
+    const previous=meta.paused;
+    meta.paused=!previous;request++;
+    // Feedback imediato; a gravação é assíncrona e reverte em caso de falha.
+    showCurrent();show(meta.paused?'Campanha pausada.':'Campanha retomada.');
+    try{await persist();}
+    catch(e){meta.paused=previous;showCurrent();show('Falha ao gravar pausa: '+e.message,true);}
   }
   async function renderPage(){
     if(!db||!meta?.campaign||!valid())return;
