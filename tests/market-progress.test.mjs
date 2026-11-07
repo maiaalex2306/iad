@@ -31,6 +31,12 @@ test('busca pendente mostra progresso indeterminado, tempo e permite ocultar/rea
   assert.ok(f.walk(f.host,n=>n.tagName==='progress'));
   const bar=f.walk(f.host,n=>n.tagName==='progress');
   assert.equal(bar.attributes.value,undefined,'não pode inventar percentuais');
+  const track=f.walk(f.host,n=>n.className==='iad-market-progress-track');
+  const fill=f.walk(track,n=>n.className==='iad-market-progress-fill');
+  assert.ok(fill,'faixa laranja decorativa precisa existir');
+  assert.equal(track.hidden,false);
+  assert.equal(track.attributes['aria-hidden'],'true');
+  assert.equal(track.attributes['data-state'],'running');
   assert.match(f.walk(f.host,n=>n.className==='iad-market-progress-phase').textContent,/Aguardando resposta/);
   assert.match(f.walk(f.host,n=>n.className==='iad-market-progress-time').textContent,/0 s/);
   const close=f.walk(f.host,n=>n.className?.includes('iad-market-progress-close'));
@@ -45,6 +51,8 @@ test('busca pendente mostra progresso indeterminado, tempo e permite ocultar/rea
   assert.match(f.walk(f.host,n=>n.className==='iad-market-progress-title').textContent,/parcialmente concluída/);
   assert.match(f.walk(f.host,n=>n.className==='iad-market-progress-description').textContent,/2 empresa/);
   assert.equal(bar.hidden,true);
+  assert.equal(track.hidden,false);
+  assert.equal(track.attributes['data-state'],'done','somente a resposta real finaliza a animação');
   close.fire('click');assert.equal(p.overlay.hidden,true);
  }finally{p.dispose();}
 });
@@ -54,6 +62,7 @@ test('falhas da API são apresentadas, sem alegar que a quota foi devolvida',()=
   p.start('Claude');
   p.fail('Limite diário de pesquisas atingido');
   assert.equal(p.getState(),'error');
+  assert.equal(f.walk(f.host,n=>n.className==='iad-market-progress-track').hidden,true);
   assert.match(f.walk(f.host,n=>n.className==='iad-market-progress-description').textContent,/Limite diário/);
   assert.equal(p.reopen.hidden,true);
  }finally{p.dispose();}

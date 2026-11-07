@@ -372,6 +372,21 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
    top.appendChild(el('p','Próxima ação sugerida: '+row.nextAction,'small muted'));
   }
   machine.appendChild(top);
+  // Hipóteses incompletas permanecem numa fila de INVESTIGAÇÃO, não na
+  // shortlist do ICP nem em importações automáticas.
+  const pendingResearch=workflow.candidates.filter(x=>
+   x.status==='verificacao_obrigatoria'||x.status==='duplicidade_a_revisar').slice(0,10);
+  if(pendingResearch.length){
+   const queue=el('section','','iad-market-research-queue');
+   queue.appendChild(el('h4','Prioridade de investigação — dados pendentes'));
+   queue.appendChild(el('p','Fila exploratória para validação humana; empresas ainda não qualificadas e não prontas para importação.','small muted'));
+   for(let i=0;i<pendingResearch.length;i++){
+    const row=pendingResearch[i],c=row.company;
+    queue.appendChild(el('p','#'+(i+1)+' · '+(c.nome||c.razaoSocial)+
+     ' · prontidão '+row.score+'/100 · '+row.nextAction,'small'));
+   }
+   machine.appendChild(queue);
+  }
   results.appendChild(machine);
   const pending=data.filter(c=>!c.cnpj).length;
   const pendingICP=data.filter(c=>c.qualificacaoICP?.statusGeral!=='declarado_nao_verificado').length;
