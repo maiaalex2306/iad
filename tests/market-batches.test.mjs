@@ -20,6 +20,7 @@ test('RI-M24: cinco municípios × 18 famílias = 90 células reais e distintas'
 });
 test('RI-M24: a taxonomia não vaza para segmentos de outros setores nem cidades sem IBGE',()=>{
  assert.equal(buildMarketBatchPlan({...filters,segmentos:['Química e Petroquímica']}).length,0);
+ assert.equal(buildMarketBatchPlan({...filters,segmentos:['Automotivo e Mobilidade','Química e Petroquímica']}).length,0,'Não omitir um segundo segmento escolhido');
  assert.equal(buildMarketBatchPlan({...filters,municipios:[{codigoIBGE:'not-ibge',nome:'Outra',uf:'SP'}]}).length,0);
  assert.equal(buildMarketBatchPlan({...filters,municipios:[...filters.municipios,filters.municipios[0]]}).length,90);
 });
