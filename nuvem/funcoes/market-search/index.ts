@@ -297,7 +297,32 @@ function prompt(f,target=null,mode='investigate') {
   '. Busque SOMENTE acontecimentos sobre esta entidade jurídica: expansões, investimentos, contratações executivas, licenças, projetos e mudanças operacionais. Prefira notícias corporativas e documentos públicos, com data de publicação. Responda ESTRITAMENTE JSON {"sinais":[{"cnpj":"...","tipo":"expansao|investimento|contratacao|licenciamento|projeto|mudanca_operacional|outro","titulo":"...","resumo":"...","dataPublicacao":"YYYY-MM-DD ou null","url":"https://..."}]}. Máximo 8. Cada URL deve ser citada pela sua ferramenta web_search. Sem CNPJ exato, evento, data ou fonte confiável, omita o item. Não deduza interesse em comprar ou orçamento de vendas; retorno vazio é aceitável.';
 
  if(target)return 'INVESTIGAÇÃO INDEPENDENTE DE UMA EMPRESA ESPECÍFICA. Pesquise na WEB somente a empresa com CNPJ e nome '+JSON.stringify(target)+', localizada no recorte '+JSON.stringify(f)+'. Use fontes primárias e páginas corporativas quando disponíveis. Responda somente JSON com chave empresas, com NO MÁXIMO UMA empresa, contendo cnpj, razaoSocial, nome, cidade, uf, ddd, segmento, porte, site, telefone, funcionarios, faturamento, fontes:[{url,titulo}], contatos:[{nome,cargo,email,telefone,fonte}], noticias:[{titulo,url,data}], insights:[]. Se não conseguir obter o MESMO CNPJ com fonte web citada, devolva {"empresas":[]}. Nunca substitua por CNPJ parecido ou outra filial. Contatos, cargos, números e notícias somente com URL citada; desconhecidos devem ser null ou lista vazia. Evite inventar conclusões e intenção de compra.';
- return 'PESQUISE NA WEB empresas reais com recorte '+JSON.stringify(f)+'. Busque sites corporativos, bases publicas e noticias. Responda somente JSON com chave empresas (array): cada empresa possui cnpj, razaoSocial, nome, cidade, uf, ddd, segmento, porte, site, telefone, funcionarios, faturamento, fontes:[{url,titulo}], contatos:[{nome,cargo,email,telefone,fonte}], noticias:[{titulo,url,data}], insights:[]. Quando uma empresa mencionada nas fontes ainda nao tiver CNPJ encontrado, use cnpj=null e preserve-a como candidata pendente. Nunca invente CNPJ. Toda empresa precisa ter nome e URL realmente citada pela ferramenta web. Valores nao encontrados=null. NUNCA invente empresa ou pessoa. Para DDD/regiao pesquisa e exploratoria, sem promessa de cobertura total. Para filtros em listas aplique OU dentro do campo e E entre campos (municipios, DDDs, segmentos e faixas de empregados). Informe o numero de funcionarios apenas com fonte verificavel; caso contrario use null. Maximo '+f.limit+' empresas.';
+ const targetCount=Math.min(f.limit,20);
+ return 'MAPEAMENTO B2B COM PESQUISA WEB REAL NO BRASIL. Filtros solicitados: '+JSON.stringify(f)+
+  '. Investigue em consultas distintas: (1) empresas com operações no território e segmento; '+
+  '(2) fabricantes, fornecedores industriais, filiais e estabelecimentos com atividade identificável; '+
+  '(3) CNPJ, porte e empregados em fonte citada. '+
+  'Priorize empresas com evidência individual de aderência ao ICP, não apenas diretórios agregados. '+
+  'Fontes preferidas: sites corporativos, cadastros públicos, relatórios e imprensa. '+
+  'Um ranking geral ou Wikipédia não valida CNPJ, funcionários ou operação industrial. '+
+  'Não confunda marca, grupo, matriz, unidade e filial; diferencie indústria, serviços e comércio. '+
+  'Nos filtros, use OU dentro de cada lista e E entre campos (município, DDD, segmento e faixas de empregados). '+
+  'Número de funcionários deve ser inteiro com referência documental correspondente, senão funcionarios:null. '+
+  'Na ausência de identificação documental, use cnpj:null; nunca invente CNPJ, cargo, e-mail, receita ou fonte. '+
+  'Busque diversidade até '+targetCount+' empresas COM fontes individuais; não pare nas primeiras 3-4, '+
+  'mas retorne menos se não houver evidência. Nunca complete a quantidade inventando. '+
+  'Retorne SOMENTE JSON válido sem markdown: {"empresas":[{"cnpj":null,"razaoSocial":"...",'+
+  '"nome":"...","cidade":"...","uf":"...","ddd":null,"segmento":"...","porte":null,'+
+  '"site":null,"telefone":null,"funcionarios":null,"faturamento":null,'+
+  '"fontes":[{"url":"https://...","titulo":"..."}],"contatos":[],"noticias":[],"insights":[]}]}. '+
+  'Cada fonte URL deve ter sido citada realmente pela ferramenta web_search e mencionar a empresa indicada; '+
+  'todos os desconhecidos ficam null. Pesquisa exploratória, sem garantia de cobertura integral e sem importação automática.';
+}
+// Localização é exclusivamente o território autorizado nos filtros.
+function researchLocation(f){
+ const city=f.cidade||(f.municipios?.length===1?f.municipios[0].nome:'');
+ return {type:'approximate',country:'BR',
+  ...(f.uf?{region:f.uf}:{}),...(city?{city}:{})};
 }
 async function queryAI(engine,key,f,target=null,mode='investigate') {
  const instructions='Pesquisador B2B: use sempre a ferramenta web_search, inclua URLs citadas e retorne JSON sem inventar fatos.';
@@ -308,12 +333,12 @@ async function queryAI(engine,key,f,target=null,mode='investigate') {
   // GPT-5: esforço baixo deixa orçamento para a busca e a resposta JSON.
   // Não aplicar reasoning a modelos sem suporte (por exemplo gpt-4.1).
   body={model,instructions,input:prompt(f,target,mode),
-   tools:[{type:'web_search',search_context_size:'low'}],tool_choice:'required',
-   max_tool_calls:2,max_output_tokens:4000,store:false,
+   tools:[{type:'web_search',search_context_size:'medium',user_location:researchLocation(f)}],tool_choice:'required',
+   max_tool_calls:3,max_output_tokens:6000,store:false,
    ...(/^gpt-[56](?:[.-]|$)/i.test(model)?{reasoning:{effort:'low'}}:{})};
  } else {
   uri='https://api.anthropic.com/v1/messages';headers={'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json'};
-  body={model:Deno.env.get('IA_MODELO_PESQUISA_ANTHROPIC')||Deno.env.get('IA_MODELO_ANTHROPIC')||'claude-opus-5',system:instructions,max_tokens:4096,messages:[{role:'user',content:prompt(f,target,mode)}],tools:[{type:'web_search_20250305',name:'web_search',max_uses:2}]};
+  body={model:Deno.env.get('IA_MODELO_PESQUISA_ANTHROPIC')||Deno.env.get('IA_MODELO_ANTHROPIC')||'claude-opus-5',system:instructions,max_tokens:6000,messages:[{role:'user',content:prompt(f,target,mode)}],tools:[{type:'web_search_20250305',name:'web_search',max_uses:3,user_location:researchLocation(f)}]};
  }
  // Short searches need enough time for the hosted web tool, but always stay
  // below Supabase's 150s request idle limit. No hidden retry or extra quota.
