@@ -601,6 +601,22 @@ export function mountMarketDiscovery({root,snapshot,scope,getScopeToken,nuvem,ge
    const withoutSource=companies.length-sourcedCount;
    show(partialWarning+'Pesquisa exploratoria: '+companies.length+' nomes candidatos; '+sourcedCount+' com URL HTTPS citada pelo provedor; '+withoutSource+' SEM fonte individual (apenas investigação, jamais qualificação/importação); '+companies.filter(c=>!c.cnpj).length+' com CNPJ pendente. Cobertura total desconhecida, fontes ainda nao verificadas. Nenhuma gravacao realizada.'+rejectedText+(usageText?' Consumo informado: '+usageText+'. Custo em R$ a apurar.':''));
    renderCompanies(companies,payload.source||'Fornecedor',payload.retrievedAt||'data nao fornecida');
+   // Planejamento amplo não equivale a consultar cada combinação municipal e
+   // setorial. Expor as 18 famílias sem afirmar cobertura exaustiva.
+   const plan=payload.discoveryPlan;
+   if(plan?.sectorExpansion==='automotivo_mobilidade'&&Array.isArray(plan.families)&&plan.families.length){
+    const details=doc.createElement('details');
+    details.className='iad-market-discovery-plan';
+    const summary=doc.createElement('summary');
+    summary.textContent='Automotivo e Mobilidade — '+plan.families.length+
+     ' famílias de subsegmentos consideradas na descoberta';
+    details.appendChild(summary);
+    details.appendChild(el('p','Escopo solicitado: '+String(plan.municipalityCount||0)+
+     ' municípios; '+String(plan.families.length)+' famílias; teto '+String(plan.requestedLimit||20)+
+     ' nomes por consulta. As famílias são hipóteses de busca; uma única rodada NÃO pesquisa cada combinação.','small muted'));
+    for(const family of plan.families.slice(0,25))details.appendChild(el('p','• '+String(family).slice(0,280),'small'));
+    results.prepend(details);
+   }
    progress.finish({count:companies.length,partial:payload.partial===true});
   }catch(e){if(seq===currentRequest&&valid()&&e?.name!=='AbortError'){
    const message=responseReceived?'A pesquisa respondeu, mas os resultados não puderam ser processados. Nenhuma alteração no CRM.':'Falha de conexão durante a pesquisa. Confira o resultado antes de repetir, pois a solicitação pode ter sido recebida pelo servidor.';
