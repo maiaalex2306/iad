@@ -21,3 +21,18 @@
   #iad-linkedin-root .iad-linkedin-grid { grid-template-columns:1fr; }
   #iad-linkedin-root .iad-linkedin-buttons .btn { width:100%; }
 }
+
+#iad-linkedin-root .iad-linkedin-import-list { display:grid; gap:8px; margin:12px 0; }
+#iad-linkedin-root .iad-linkedin-import-row {
+  display:grid; grid-template-columns:minmax(160px,1.5fr) minmax(160px,1.5fr) minmax(90px,.8fr) auto auto;
+  align-items:center; gap:8px; padding:10px;
+  border:1px solid var(--borda,#c9ced7); border-radius:9px;
+}
+#iad-linkedin-root .iad-linkedin-import-row > * { min-width:0; overflow-wrap:anywhere; }
+#iad-linkedin-root .iad-linkedin-import-row .btn { white-space:nowrap; }
+#iad-linkedin-root .iad-linkedin-import-list + .iad-linkedin-buttons { justify-content:center; }
+#iad-linkedin-root input[type=file] { display:block; padding:10px 0; max-width:100%; }
+@media (max-width:900px) {
+  #iad-linkedin-root .iad-linkedin-import-row { grid-template-columns:1fr 1fr; }
+  #iad-linkedin-root .iad-linkedin-import-row > strong { grid-column:1 / -1; }
+}
