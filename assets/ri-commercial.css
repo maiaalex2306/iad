@@ -15,7 +15,7 @@
 #iad-ri-root :where(button,input){font:inherit;}
 #iad-ri-root :where(button){cursor:pointer;}
 #iad-ri-root :where(button:focus-visible,input:focus-visible){
-  outline:3px solid var(--orange,#ef6407);outline-offset:3px;
+  outline:3px solid var(--acp-accent,#ff682c);outline-offset:3px;
 }
 #iad-ri-root :where(button[hidden]){display:none!important;}
 #iad-ri-root .iad-ri-hero {
@@ -33,7 +33,7 @@
 }
 #iad-ri-root .iad-ri-hero-subtitle{font-size:.92rem;line-height:1.65;color:rgba(255,255,255,.9);max-width:610px;}
 #iad-ri-root .iad-ri-tags{display:flex;gap:7px;flex-wrap:wrap;margin-top:17px;}
-#iad-ri-root .iad-ri-tag{border:1px solid rgba(237,248,255,.25);border-radius:999px;
+#iad-ri-root .iad-ri-tag{border:1px solid rgba(255,255,255,.25);border-radius:999px;
   padding:4px 10px;font-size:.66rem;font-weight:600;color:rgba(255,255,255,.95);background:rgba(255,255,255,.07);}
 #iad-ri-root .iad-ri-hero-stat{flex:0 0 185px;display:flex;flex-direction:column;justify-content:center;
   gap:5px;align-items:flex-start;align-self:stretch;border-left:1px solid rgba(255,255,255,.24);
@@ -58,7 +58,7 @@
 #iad-ri-root .iad-ri-kpi{min-width:0;display:flex;flex-direction:column;gap:6px;
   background:var(--bg,#f4f6f9);border:1px solid var(--ci-line);
   border-radius:13px;padding:18px 17px;}
-#iad-ri-root .iad-ri-kpi-feature{border-color:var(--pri-borda,#b6d4f2);background:var(--acp-brand-soft,#f3ecfa);}
+#iad-ri-root .iad-ri-kpi-feature{border-color:var(--acp-line,#e6dfea);background:var(--acp-brand-soft,#f3ecfa);}
 #iad-ri-root .iad-ri-kpi-label{font-size:.72rem;color:var(--ci-muted);font-weight:650;line-height:1.25;}
 #iad-ri-root .iad-ri-kpi-value{font-size:clamp(1.24rem,2.1vw,1.85rem);letter-spacing:-.045em;line-height:1.12;
   overflow-wrap:anywhere;color:var(--ci-ink);font-variant-numeric:tabular-nums;}
