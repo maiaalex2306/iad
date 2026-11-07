@@ -1219,3 +1219,58 @@ test('RI-M20: pesquisa parcial indica apenas IA que realmente concluiu a web sea
  assert.equal(body.data.length,1,'resultado legítimo do Claude preservado sem importar');
  assert.equal(aiCalls(h).length,2,'nenhum retry ou chamada extra');
 });
+
+test('RI-M22: investigação por nome sem CNPJ permite sugerir identidade com fonte web, sem importar',async()=>{
+ const h=harness({openai:true});
+ const body={action:'investigate',provider:'OpenAI',target:{cnpj:null,nome:'Empresa A'},
+  filters:{uf:'SP',cidade:'Jacarei',segmento:'Quimico',limit:1}};
+ const res=await h.handle(request(body));
+ assert.equal(res.status,200);
+ const result=await res.json();
+ assert.equal(result.data.length,1);
+ assert.equal(result.data[0].cnpj,candidate.cnpj);
+ assert.equal(result.targetMatch,'IDENTIDADE_SUGERIDA_NAO_VERIFICADA');
+ assert.match(result.warning,/validação em fonte independente/i);
+ assert.equal(result.data[0].fontes[0].url,URL_COMPANY);
+ const calls=aiCalls(h);
+ assert.equal(calls.length,1);
+ assert.match(calls[0].body.input,/BUSCA DE IDENTIDADE EMPRESARIAL POR NOME E TERRITÓRIO/);
+ assert.equal(h.calls.filter(c=>c.url.includes('iad_market_search_reserve')).length,1);
+ assert.equal(h.calls.filter(c=>c.url.includes('/rest/v1/contas')).length,0);
+});
+test('RI-M22: rejeita empresa sem relação com nome solicitado, mesmo com CNPJ e URL citada',async()=>{
+ const openai=responseOpenAI();
+ openai.output.find(b=>b.type==='message').content[0].text=JSON.stringify({empresas:[{...candidate,nome:'Indústrias Estranhas',razaoSocial:'Outro Grupo'}]});
+ const h=harness({openai:true,openaiResponse:openai});
+ const res=await h.handle(request({action:'investigate',target:{cnpj:null,nome:'Empresa A'},filters:query.filters}));
+ assert.equal(res.status,200);
+ const result=await res.json();
+ assert.equal(result.data.length,0);
+ assert.equal(result.targetMatch,'IDENTIDADE_NAO_LOCALIZADA');
+});
+test('RI-M22: CNPJ explicitamente inválido, nome curto e enriquecimento sem CNPJ são bloqueados antes da cota',async()=>{
+ for(const target of [{cnpj:'000',nome:'Empresa A'},{cnpj:null,nome:'A'},{cnpj:null,nome:'Empresa <x>'}]){
+  const h=harness({openai:true});
+  const res=await h.handle(request({action:'investigate',target,filters:query.filters}));
+  assert.equal(res.status,422);
+  assert.equal(aiCalls(h).length,0);
+  assert.equal(h.calls.filter(c=>c.url.includes('iad_market_search_reserve')).length,0);
+ }
+ const h=harness({openai:true});
+ const res=await h.handle(request({action:'enrich',target:{cnpj:null,nome:'Empresa A'},filters:query.filters}));
+ assert.equal(res.status,422);
+ assert.equal(aiCalls(h).length,0);
+});
+test('RI-M22: busca por nome exige território exato, fonte e quota',async()=>{
+ const target={cnpj:null,nome:'Empresa A'};
+ const wrong=harness({openai:true});
+ const r=await wrong.handle(request({action:'investigate',target,
+   filters:{uf:'SP',ddd:'12',segmento:'Quimico'}}));
+ assert.equal(r.status,422);assert.equal(aiCalls(wrong).length,0);
+ const quota=harness({openai:true,quotaAllowed:false});
+ const q=await quota.handle(request({action:'investigate',target,filters:query.filters}));
+ assert.equal(q.status,429);assert.equal(aiCalls(quota).length,0);
+ const fake=harness({openai:true,openaiResponse:responseOpenAI(true,false)});
+ const noCitation=await fake.handle(request({action:'investigate',target,filters:query.filters}));
+ assert.equal(noCitation.status,200);assert.equal((await noCitation.json()).data.length,0);
+});
