@@ -1,7 +1,7 @@
-# IaD CRM Desktop — LinkedIN Leads (prévia técnica)
+# LinkedIN Leads — módulo desktop exclusivo do IaD CRM (prévia técnica)
 
 ## Objetivo
-Abrir **IaD CRM e LinkedIn na mesma janela nativa** no Windows, com sessões distintas. Não é uma extensão de navegador. A vista esquerda carrega `https://www.iadcrm.com.br/#/linkedin-leads` e a direita carrega o LinkedIn.
+Abrir **somente a funcionalidade LinkedIN Leads e o LinkedIn na mesma janela nativa**, sem converter o CRM geral em aplicativo. Todo o restante do IaD CRM continua sendo utilizado normalmente no site. A vista esquerda carrega `https://www.iadcrm.com.br/#/linkedin-leads` e a direita carrega o LinkedIn.
 
 ## Comportamento entregue
 - LinkedIn abre na metade direita; os links para `linkedin.com` abertos pelo CRM através de `window.open` são redirecionados para a vista integrada.
@@ -34,3 +34,8 @@ A versão inicial admite apenas **um perfil LinkedIn por perfil local do sistema
 - Não desabilitar sandbox/webSecurity.
 - Não interceptar pedidos HTTP ou injetar scripts na view LinkedIn.
 - Não publicar curtidas ou comentários sem verificar o canal e o modo de autorização.
+
+## Escopo estrito
+O host nativo abre exclusivamente a rota `#/linkedin-leads`. Se a navegação no painel interno tentar ir a outra rota do CRM, o host retorna à rota da campanha. Para acessar Hoje, Pipeline, Inteligência Comercial e qualquer outra funcionalidade, continue utilizando o site normal em seu navegador. O host é opcional e só consome recursos enquanto estiver aberto.
+
+**Ainda não existe integração de abertura automática do aplicativo desktop ao clicar no menu do CRM web.** O shell da POC deve ser iniciado separadamente; essa ponte precisa ser homologada em Windows, após a definição do protocolo de instalação e empacotamento.
