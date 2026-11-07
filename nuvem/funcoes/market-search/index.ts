@@ -157,8 +157,15 @@ function aiSummary(result,engine) {
  const completion=researchCompletion(engine,result,blocks,finalResponse,completedSearch);
  const textBlocks=engine==='OpenAI'?blocks.filter(b=>b.type==='message').flatMap(b=>b.content||[]):blocks.filter(b=>b.type==='text');
  const texts=textBlocks.map(b=>b.text||'').join('\n');
- const urls=new Set();
+ // URLs realmente CITADAS e URLs apenas CONSULTADAS pela ferramenta não
+ // comprovam a mesma coisa. As consultadas nunca autorizam importação.
+ const urls=new Set(),consultedUrls=new Set();
  for(const b of blocks) {
+  if(engine==='OpenAI'&&b.type==='web_search_call'&&b.status==='completed'){
+   for(const item of (Array.isArray(b.action?.sources)?b.action.sources:[])){
+    const u=signalPublicURL(item?.url);if(u)consultedUrls.add(u);
+   }
+  }
   for(const item of (Array.isArray(b.content)?b.content:[])){
    if(item.url&&canonicalUrl(item.url))urls.add(canonicalUrl(item.url));
    for(const an of (Array.isArray(item.annotations)?item.annotations:[])){const u=canonicalUrl(an.url||(an.url_citation&&an.url_citation.url));if(u)urls.add(u)}
@@ -178,7 +185,7 @@ function aiSummary(result,engine) {
    :safeCount(metering.server_tool_use?.web_search_requests),
   costBRL:null
  };
- return {engine,searched,urls,parsed:parseAI(texts),usage,
+ return {engine,searched,urls,consultedUrls,parsed:parseAI(texts),usage,
   failureCategory:completion.failureCategory,diagnostic:completion.diagnostic};
 }
 // RI-M09: sinais externos são HIPÓTESES auditáveis, não intenção de compra.
@@ -403,7 +410,7 @@ async function queryAI(engine,key,f,target=null,mode='investigate') {
   // Não aplicar reasoning a modelos sem suporte (por exemplo gpt-4.1).
   body={model,instructions,input:prompt(f,target,mode,engine),
    tools:[{type:'web_search',search_context_size:'medium',user_location:researchLocation(f)}],tool_choice:'required',
-   max_tool_calls:3,max_output_tokens:6000,store:false,
+   max_tool_calls:3,max_output_tokens:6000,include:['web_search_call.action.sources'],store:false,
    ...(/^gpt-[56](?:[.-]|$)/i.test(model)?{reasoning:{effort:'low'}}:{})};
  } else {
   uri='https://api.anthropic.com/v1/messages';headers={'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json'};
@@ -521,7 +528,9 @@ function combineAI(results,limit,f,diagnostics={},options={}) {
    if(rawCnpj&&!cnpj){counts.rejectedInvalidCnpj++;continue;}
    const nome=str(entry.nome||entry.razaoSocial,160);
    if(!nome){counts.rejectedMissingName++;continue;}
-   const sources=(Array.isArray(entry.fontes)?entry.fontes:[]).map(f=>({url:canonicalUrl(f.url),titulo:str(f.titulo,150)})).filter(f=>f.url&&r.urls.has(f.url));
+   const reportedSources=(Array.isArray(entry.fontes)?entry.fontes:[]).map(f=>({url:signalPublicURL(f.url),titulo:str(f.titulo,150)})).filter(f=>f.url);
+   const sources=reportedSources.filter(f=>r.urls.has(f.url));
+   const consultedSources=reportedSources.filter(f=>!r.urls.has(f.url)&&r.consultedUrls?.has(f.url)).slice(0,6);
    // RI-M23: descoberta ≠ validação. Empresas sem URL citada permanecem
     // APENAS na fila de pesquisa não verificável; sem fonte, nenhum
     // contato/notícia, shortlist ou importação. Não promover a fato.
@@ -556,7 +565,9 @@ function combineAI(results,limit,f,diagnostics={},options={}) {
       existing.qualificacaoICP[key]='declarado';
     }
     for(const src of sources)if(!existing.fontes.some(x=>x.url===src.url))existing.fontes.push(src);
-     if(existing.fontes.length)existing.fonteStatus='citada_pelo_provedor';
+    for(const src of consultedSources)if(!existing.fontesConsultadas.some(x=>x.url===src.url))existing.fontesConsultadas.push(src);
+    if(existing.fontes.length)existing.fonteStatus='citada_pelo_provedor';
+    else if(existing.fontesConsultadas.length)existing.fonteStatus='consultada_sem_citacao';
     // Merge only contacts whose source was independently cited by this
     // provider; never borrow another provider's global citation set.
     for(const c of contatos){
@@ -569,7 +580,8 @@ function combineAI(results,limit,f,diagnostics={},options={}) {
     }
     continue;
    }
-   out.set(researchKey,{fonteStatus:sources.length?'citada_pelo_provedor':'pendente_sem_fonte',cnpj,identidadeStatus:cnpj?'cnpj_validado':'pendente_cnpj',razaoSocial:str(entry.razaoSocial||entry.nome),nome:str(entry.nome||entry.razaoSocial),cidade:str(entry.cidade),uf:str(entry.uf,2).toUpperCase(),porte:str(entry.porte),segmento:str(entry.segmento),site:str(entry.site,200),telefone:str(entry.telefone,60),funcionarios:entry.funcionarios??null,faixaFuncionariosStatus:f.faixasFuncionarios.length?(Number.isSafeInteger(employees)?'aderente_nao_verificado':'pendente'):'nao_solicitado',qualificacaoICP:icp,faturamento:entry.faturamento??null,contatos,noticias,insights:Array.isArray(entry.insights)?entry.insights.slice(0,6).map(s=>str(s,250)):[],fontes:sources,providers:[r.engine],conflitos:[],territorioCorroborado:false});
+   out.set(researchKey,{fonteStatus:sources.length?'citada_pelo_provedor':consultedSources.length?'consultada_sem_citacao':'pendente_sem_fonte',
+     fontesConsultadas:consultedSources,cnpj,identidadeStatus:cnpj?'cnpj_validado':'pendente_cnpj',razaoSocial:str(entry.razaoSocial||entry.nome),nome:str(entry.nome||entry.razaoSocial),cidade:str(entry.cidade),uf:str(entry.uf,2).toUpperCase(),porte:str(entry.porte),segmento:str(entry.segmento),site:str(entry.site,200),telefone:str(entry.telefone,60),funcionarios:entry.funcionarios??null,faixaFuncionariosStatus:f.faixasFuncionarios.length?(Number.isSafeInteger(employees)?'aderente_nao_verificado':'pendente'):'nao_solicitado',qualificacaoICP:icp,faturamento:entry.faturamento??null,contatos,noticias,insights:Array.isArray(entry.insights)?entry.insights.slice(0,6).map(s=>str(s,250)):[],fontes:sources,providers:[r.engine],conflitos:[],territorioCorroborado:false});
   }
  }
  counts.accepted=Math.min(out.size,limit);
