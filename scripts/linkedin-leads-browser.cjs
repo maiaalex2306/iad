@@ -119,7 +119,7 @@ const server=http.createServer((req,res)=>{
   await page.waitForFunction(()=>document.querySelector('#iad-linkedin-root')?.textContent?.includes('Campanha restaurada'),null,{timeout:12000});
   assert.match(await page.locator('#iad-linkedin-root').textContent(),/Sem post: 2/);
   // A recarga restaura dados sintéticos pelo cache local; verificamos que a campanha não criou registros no Store/CAS.
-  assert.equal(await page.evaluate(()=>window.IADStore.dados().contatos.some(c=>c.nome==='Lead Com Post')),false,'Campanha não pode importar automaticamente no CRM');
+  assert.equal(await page.evaluate(()=>window.IADStore.obter().contatos.some(c=>c.nome==='Lead Com Post')),false,'Campanha não pode importar automaticamente no CRM');
   assert.equal(requestsOutside.length,0,'campanha não pode acessar LinkedIn/externos durante teste local: '+requestsOutside);
   // Usuário comum não pode ver nem montar a rota, inclusive via deep link.
   // A troca real de usuário troca a tela. App.ir na MESMA hash não emite hashchange.
