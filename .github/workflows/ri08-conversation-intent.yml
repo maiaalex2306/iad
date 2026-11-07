@@ -31,4 +31,4 @@ jobs:
           node --check src/ri/internal-cues.mjs
           node --check src/ri/account-view.mjs
       - name: Run focused regression tests
-        run: node --test tests/ri08-conversation-intent.test.mjs
+        run: node --test tests/ri08-conversation-intent.test.mjs scripts/ri07a-internal-cues.test.cjs
