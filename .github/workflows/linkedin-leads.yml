@@ -14,6 +14,8 @@ on:
       - 'src/config.js'
       - 'sw.js'
       - 'tests/linkedin-leads-v1.test.mjs'
+      - 'tests/intelligence-manager-contract.test.mjs'
+      - 'scripts/linkedin-leads-browser.cjs'
       - '.github/workflows/linkedin-leads.yml'
   workflow_dispatch:
 permissions:
@@ -35,4 +37,21 @@ jobs:
           node --check src/linkedin-leads.mjs
           node --check src/app.js
       - name: Testes unitários e contrato
-        run: node --test tests/linkedin-leads-v1.test.mjs
+        run: |
+          node --test tests/linkedin-leads-v1.test.mjs
+          node --test tests/intelligence-manager-contract.test.mjs
+
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar Chromium isolado para replay
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Fluxo completo com 3 perfis sintéticos
+        run: timeout 150s node scripts/linkedin-leads-browser.cjs
