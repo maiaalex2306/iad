@@ -3071,7 +3071,7 @@ Deno.serve(async (req: Request) => {
        Reunião, notas e desenvolvimento também continuam no bom, sempre — é
        deles que sai nota, e nota errada não aparece como erro na tela. */
     const usaRapido = tipo === 'segmentos' || tipo === 'pessoas' ||
-      tipo === 'intencao' ||
+      tipo === 'intencao' || tipo === 'linkedin_comment_draft' ||
       (tipo === 'plano' && !!ctx.etapaNova);
 
     /* Quantos leads vieram neste bloco. Sai da própria entrada — cada lead
