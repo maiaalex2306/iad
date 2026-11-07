@@ -8187,6 +8187,17 @@
         const ga = GRUPOS_DO_LEAD.findIndex(function (g) { return g.id === grupoDoLead(a.l); });
         const gb = GRUPOS_DO_LEAD.findIndex(function (g) { return g.id === grupoDoLead(b.l); });
         if (ga !== gb) return ga - gb;
+        /* RI-08: pedidos concretos e necessidades do prospect acima de
+           cortesia genérica. Nenhuma pontuação altera o IAD. */
+        const peso = function (lead) {
+          const pesos = {pedido_proposta:100,reuniao:95,modernizacao_ete:90,
+            consumo_agua:88,reuso:85,expansao:82,problema:80,custos:77,
+            interesse_solucoes:72,decisao:65,futuro:50};
+          return (Array.isArray(lead.sinaisDaIA) ? lead.sinaisDaIA : [])
+            .reduce(function (max,sinal) { return Math.max(max,pesos[sinal.type]||0); },0);
+        };
+        const pa=peso(a.l),pb=peso(b.l);
+        if(pa!==pb)return pb-pa;
         const ra = a.l.respostaEm || '';
         const rb = b.l.respostaEm || '';
         if (ra !== rb) return ra < rb ? 1 : -1;
