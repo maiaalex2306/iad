@@ -11,8 +11,8 @@ test('RI-M18: bandeiras das duas áreas ativas sem abrir importação automátic
 });
 test('RI-M18: navegação protege as duas áreas com a mesma regra de Gestor/Admin',()=>{
  assert.match(app,/const autorizado = A\.ehGestor\(\)/);
- assert.match(app,/r\.hash !== '#\/inteligencia' && r\.hash !== '#\/mercado'/);
- assert.match(app,/hash === '#\/inteligencia' \|\| hash === '#\/mercado'\) && !A\.ehGestor\(\)/);
+ assert.match(app,/r\.hash !== '#\/inteligencia' && r\.hash !== '#\/mercado' && r\.hash !== '#\/linkedin-leads'/);
+ assert.match(app,/hash === '#\/inteligencia' \|\| hash === '#\/mercado' \|\| hash === '#\/linkedin-leads'\) && !A\.ehGestor\(\)/);
  assert.doesNotMatch(app,/acesso inicial exclusivo do administrador/i);
 });
 test('RI-M18: backend de produção já aceita Gestor e Admin, antes da reserva paga',()=>{
