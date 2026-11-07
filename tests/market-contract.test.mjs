@@ -128,7 +128,7 @@ test('pesquisa preserva empresa sem CNPJ como pendente sem permitir importacao',
  assert.equal(plan.operation,'review_existing');
  assert.throws(()=>buildMarketImportRequest(rows[0],{contas:[],oportunidades:[]},{tenantId,userId:'u1'},'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),/revisao|CNPJ|cadastrada/i);
 });
-test('identidade pendente requer fonte e nome e nunca transforma CNPJ invalido em pendencia',()=>{
+test('identidade pendente sem fonte é exibida somente como hipótese; CNPJ inválido continua rejeitado',()=>{
  const items=[
   {cnpj:null,nome:'Com Evidencia',fontes:[{url:'https://example.org/fonte'}]},
   {cnpj:null,nome:'Sem Evidencia',fontes:[]},
@@ -136,8 +136,13 @@ test('identidade pendente requer fonte e nome e nunca transforma CNPJ invalido e
   {cnpj:'123invalid',nome:'Documento Invalido',fontes:[{url:'https://example.org/fonte'}]}
  ];
  const found=normalizeMarketCompanies(items,{source:'IA Web'});
- assert.equal(found.length,1);
+ assert.equal(found.length,2);
  assert.equal(found[0].nome,'Com Evidencia');
+ assert.equal(found[1].nome,'Sem Evidencia');
+ assert.equal(found[1].fontes.length,0);
+ assert.equal(found[1].fonteStatus,'pendente_sem_fonte');
+ assert.throws(()=>buildMarketImportRequest(found[1],{contas:[],oportunidades:[]},
+  {tenantId:'t',userId:'u'},'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),/revisao|CNPJ|cadastrada/i);
 });
 
 test('contrato JSON multisselecao usa UF SP, Mogi IBGE, DDD 11, quimica e 2 faixas',()=>{
