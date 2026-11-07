@@ -1185,7 +1185,7 @@ test('RI-M20: Claude max_tokens distingue truncamento de erro de ferramenta',asy
  assert.equal(body.failures[0].category,'OUTPUT_TOKEN_LIMIT');
  assert.equal(aiCalls(h).length,1);
  assert.equal(aiCalls(h)[0].body.max_tokens,6000);
- assert.equal(aiCalls(h)[0].body.tools[0].max_uses,2);
+ assert.equal(aiCalls(h)[0].body.tools[0].max_uses,3);
 });
 test('RI-M20: Claude pause_turn permanece falha até haver resposta final',async()=>{
  const paused=responseClaude();paused.stop_reason='pause_turn';
