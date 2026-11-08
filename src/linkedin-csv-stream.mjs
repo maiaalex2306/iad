@@ -171,7 +171,7 @@ export async function importLinkedInCsvStream(file,{
   const reader=file.stream().getReader();
   let decoder,first=true,bytesRead=0,separator=null,headerProbe='';
   let quoted=false,afterQuote=false,skipLF=false,field='',record=[];
-  let fields=null,recordIndex=0,invalid=0,duplicates=0,valid=0;
+  let fields=null,hasHeader=true,recordIndex=0,invalid=0,duplicates=0,valid=0;
   let batch=[],problems=[],lastPercent=-1,invalidReasons=Object.create(null);
   function append(c){
     if(field.length>=MAX_FIELD)throw new Error('Campo CSV maior que 20 mil caracteres. Revise o formato.');
@@ -185,7 +185,10 @@ export async function importLinkedInCsvStream(file,{
     recordIndex++;
     if(recordIndex===1){
       fields=columnsFromCsvHeader(cells);
-      return;
+      // LH accepts CSV consisting only of profile URLs without any header.
+      // If the first record contains a LinkedIn address, process it as data.
+      hasHeader=!cells.some(cell=>/linkedin\.com/i.test(String(cell||'')));
+      if(hasHeader)return;
     }
     const lead=csvLeadFromCells(cells,fields,recordIndex);
     if(!lead){
@@ -281,9 +284,9 @@ export async function importLinkedInCsvStream(file,{
     if(field.length||record.length)endRecord();
     await flush();
     if(!fields)throw new Error('Cabeçalho do CSV ausente.');
-    if(recordIndex<2)throw new Error('CSV sem linhas de leads.');
+    if(recordIndex<(hasHeader?2:1))throw new Error('CSV sem linhas de leads.');
     onProgress({percent:100,bytesRead,totalBytes:file.size,valid,invalid,duplicates});
-    return {summary:{total:recordIndex-1,valid,invalid,duplicates,separator,problems,invalidReasons,diagnosticTruncated:invalid>problems.length}};
+    return {summary:{total:recordIndex-(hasHeader?1:0),valid,invalid,duplicates,separator,problems,invalidReasons,diagnosticTruncated:invalid>problems.length}};
   }catch(e){
     try{await reader.cancel();}catch{}
     throw e;
