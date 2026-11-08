@@ -133,7 +133,7 @@ const server=http.createServer((req,res)=>{
   // Importação TXT de 821 URLs sem cabeçalho, sem manipular Store/CAS.
   const txt821=Array.from({length:821},(_,i)=>
     'https://www.linkedin.com/in/lead-texto-'+(i+1)+'/').join('\n');
-  await page.locator('#iad-linkedin-root input[type=file]').setInputFiles({
+  await page.locator('#iad-linkedin-root input[type=file][accept*="csv"]').setInputFiles({
     name:'821-perfis.txt',mimeType:'text/plain',buffer:Buffer.from(txt821)
   });
   await page.waitForFunction(()=>document.querySelector('#iad-linkedin-root')?.textContent
