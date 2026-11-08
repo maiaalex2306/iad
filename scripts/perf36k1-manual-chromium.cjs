@@ -95,6 +95,37 @@ const server = http.createServer((req, res) => {
     assert.equal(guides.tocComplete,true,'Índice precisa conter links para todos os guias');
     assert.equal(guides.summaryCount,2,'Navegação agrupada para não sobrecarregar o índice');
     assert.equal(guides.oldSection,true,'Método anterior permanece preservado');
+    const training=await page.evaluate(()=>{
+      const store=window.IADStore,originalContext=store.contexto;
+      const key='iad:treino24:v1:treino-browser-user:treino-browser-tenant';
+      try{
+        store.contexto=()=>({usuario:{id:'treino-browser-user'},tenantId:'treino-browser-tenant',
+          admin:false,gestor:false,filtros:{tenant:'todas'}});
+        const root=document.getElementById('conteudo');
+        root.innerHTML=window.IADViews.playbook();
+        const p=root.querySelector('#iad-treino-24h');
+        const idx=p&&root.querySelector('h1#iad-treino-titulo');
+        const manual=root.querySelector('.carimbo-versao');
+        const before=!!idx&&!!manual&&p.compareDocumentPosition(manual)&Node.DOCUMENT_POSITION_FOLLOWING;
+        const start=p.querySelector('button[onclick*="iniciarTreinamento"]');
+        if(start)start.click();
+        const c=root.querySelector('#iad-treino-preparar');
+        if(c){c.checked=true;c.dispatchEvent(new Event('change',{bubbles:true}));}
+        const saved=JSON.parse(localStorage.getItem(key)||'{}');
+        const after=!!root.querySelector('#iad-treino-preparar:checked')&&
+          root.querySelector('#iad-treino-24h').textContent.includes('1/7');
+        root.innerHTML=window.IADViews.playbook();
+        const persisted=!!root.querySelector('#iad-treino-preparar:checked');
+        localStorage.removeItem(key);
+        return {before:!!before,after,persisted,hasStarted:!!saved.inicio,
+          done:saved.concluidas?.length||0};
+      } finally {store.contexto=originalContext;}
+    });
+    assert.equal(training.before,true,'Painel aparece antes do Manual');
+    assert.equal(training.after,true,'Clique no checklist atualiza painel');
+    assert.equal(training.persisted,true,'Checklist sobrevive a reabertura');
+    assert.equal(training.done,1,'Uma única etapa registrada no estado local');
+    assert.equal(training.hasStarted,true,'A jornada só é iniciada por ação humana');
     await page.setViewportSize({width:375,height:750});
     const mobile=await page.evaluate(()=>({
       viewport:innerWidth,
@@ -127,7 +158,7 @@ const server = http.createServer((req, res) => {
       scope:'chromium-local-anonymous-synthetic', bootScripts:boot.scriptCount,
       removedFromStartup:true, importedOnce:true, htmlParity:true,
       offlinePrecache:true, bytesOfManual:loaded.contentLength,
-      updatedGuides:10, responsive375:true, groupedIndex:true
+      updatedGuides:10, responsive375:true, groupedIndex:true, training24h:true, manualProgressPersistence:true
     }));
     await context.close();
   } finally {

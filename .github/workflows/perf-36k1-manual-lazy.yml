@@ -11,6 +11,7 @@ on:
       - 'scripts/perf36k1-manual-chromium.cjs'
       - 'tests/perf36k1-manual-lazy.test.cjs'
       - 'tests/manual-v28697.test.cjs'
+      - 'tests/treinamento24h.test.cjs'
       - '.github/workflows/perf-36k1-manual-lazy.yml'
   workflow_dispatch:
 permissions:
@@ -32,7 +33,7 @@ jobs:
           node --check src/views-manual.js
           node --check src/app.js
           node --check sw.js
-          node --test tests/perf36k1-manual-lazy.test.cjs tests/manual-v28697.test.cjs
+          node --test tests/perf36k1-manual-lazy.test.cjs tests/manual-v28697.test.cjs tests/treinamento24h.test.cjs
   manual-chromium:
     runs-on: ubuntu-latest
     timeout-minutes: 15

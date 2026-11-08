@@ -7,6 +7,20 @@
 
 > **Estados distintos:** funcionalidade implementada no repositório, testes automatizados aprovados, backend/Edge Function implantado, operação autenticada homologada e versão pública publicada não são equivalentes. As ações de inteligência não escrevem automaticamente no CRM. A importação da Inteligência de Mercado continua bloqueada no piloto.
 
+## Painel — Aprenda Vendendo: primeiras 24 horas
+
+A tela **Treinamento de Vendas** (rota `#/playbook`, antigo nome de menu “Método”) abre com o painel prático **Aprenda Vendendo — 24 horas**, antes do Manual. O roteiro de sete etapas acompanha as primeiras 24 horas corridas desde o clique voluntário em **Iniciar minha jornada**. As etapas têm janelas indicativas de 0–2, 2–5, 5–8, 8–12, 12–17, 17–21 e 21–24 horas.
+
+O treinamento foi desenhado para aprender a operação essencial **executando atividades com registros reais autorizados**, terminando com uma shortlist de contatos e convites de reunião enviados. Concluir o roteiro não garante fechamento, confirmação de reuniões nem domínio absoluto do CRM: a resposta é decisão do comprador.
+
+**Meta prática orientativa:** revisar 15–20 leads, identificar pelo menos cinco contatos e canais confiáveis, executar 5–10 abordagens personalizadas e registrar pelo menos três convites concretos para reunião com próximos passos. Cada marcação é manual e **não representa comprovação automática** de mensagem, lead importado, reunião agendada ou score IAD.
+
+O avanço é salvo **apenas no navegador**, com chave isolada por usuário e empresa e sem armazenar contatos, mensagens ou outros dados da carteira. Para administradores, selecione uma empresa específica antes de iniciar. O progresso não é sincronizado entre dispositivos; quando o armazenamento local estiver indisponível, a interface informa que as marcações só serão mantidas durante a sessão.
+
+Gestores podem consultar Inteligência Comercial e investigar dados externos em Inteligência de Mercado, respeitando o bloqueio atual de importação do piloto; vendedores devem usar sua carteira autorizada, Cadastros, Pipeline, Hoje e Tarefas. Se não houver leads iniciais, o operador deve obter uma lista autorizada, usar cadastro/importação revisada ou o processo configurado do Linked Helper. Nenhum lead é criado, enviado ou importado pelo treinamento.
+
+As sete entregas verificáveis cobrem ambientação, ICP, qualificação de sinais, validação de interlocutores, abordagem, gestão de respostas/evidências e solicitação de reuniões. O Manual metodológico completo permanece imediatamente após o painel, com índice de capítulos e as oito decisões.
+
 ## Navegação rápida
 
 - 1. Guia de operação: da oportunidade ao próximo compromisso

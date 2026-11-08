@@ -2125,3 +2125,35 @@ table.cenarios th .tiny { display: block; font-weight: 400; }
 .gaveta .iad-geo-item:hover,
 .gaveta .iad-geo-item:focus-visible { background: #f2edfb; outline: 2px solid #6d34a4; outline-offset: -2px; }
 .gaveta .iad-geo-vazio { display: block; padding: 12px; color: var(--muted, #5d7085); font-size: 13px; }
+
+/* TREINO-24: painel de aprendizagem, limitado à rota Método (agora Treinamento).
+   Usa tokens do tema, sem personalizar dados ou carregar imagens/bibliotecas. */
+.iad-treino { border-top: 3px solid var(--orange); margin-bottom: 18px; }
+.iad-treino-cabecalho { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.iad-treino h1 { margin: 6px 0 8px; font-size: clamp(1.2rem, 2.2vw, 1.75rem); }
+.iad-treino-cabecalho p { max-width: 850px; }
+.iad-treino-contador { min-width: 112px; text-align: right; white-space: nowrap; }
+.iad-treino-contador strong { display: block; font-size: 1.6rem; color: var(--navy); }
+.iad-treino-contador span { display: block; font-size: .7rem; color: var(--muted); }
+.iad-treino-progresso { display: grid; grid-template-columns: minmax(120px, 1fr) auto; align-items: center; gap: 12px; margin: 10px 0 12px; }
+.iad-treino-progresso progress { width: 100%; height: 12px; accent-color: var(--ok); }
+.iad-treino-progresso span { font-size: .78rem; font-weight: 600; }
+.iad-treino-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+.iad-treino-etapa { border: 1px solid var(--line); background: var(--surface); border-radius: 11px; padding: 14px; min-width: 0; }
+.iad-treino-etapa.concluida { border-color: var(--ok); }
+.iad-treino-linha { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+.iad-treino-linha h3 { font-size: 1rem; margin: 0; }
+.iad-treino-hora { flex: none; font-size: .78rem; border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; font-weight: 750; }
+.iad-treino-etapa p { margin: 7px 0; overflow-wrap: anywhere; }
+.iad-treino-acoes { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.iad-treino-acoes label { display: inline-flex; align-items: center; gap: 7px; font-size: .78rem; cursor: pointer; }
+.iad-treino-acoes input { width: 17px; height: 17px; accent-color: var(--ok); }
+.iad-treino-final { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 12px; }
+.iad-treino-final a { font-weight: 700; }
+@media (max-width: 720px) {
+ .iad-treino-grid { grid-template-columns: 1fr; }
+ .iad-treino-cabecalho { flex-wrap: wrap; }
+ .iad-treino-contador { text-align: left; }
+ .iad-treino-progresso { grid-template-columns: 1fr; }
+ .iad-treino-linha { flex-wrap: wrap; }
+}
