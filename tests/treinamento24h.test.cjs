@@ -31,7 +31,7 @@ test('TR-24: painel fica antes do Manual e tem sete etapas verificáveis',()=>{
  assert.match(html,/21–24h/);
  assert.equal((html.match(/Etapa realizada/g)||[]).length,7);
  assert.match(html,/Iniciar minha jornada de 24 horas/);
- assert.match(html,/importa automaticamente/);
+ assert.match(html,/Peça ao gestor a lista/);
  assert.match(html,/Inteligência Comercial e Mercado são restritas a gestores/);
  assert.match(html,/Manual do IAD CRM/);
 });

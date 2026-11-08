@@ -2471,7 +2471,8 @@
     catch(_){TREINO_MEMORIA.set(escopo.chave,payload);return false;}
   }
   function atualizarPainelTreino(foco) {
-    if(global.location?.hash!=='#/playbook')return;
+    /* A presença do próprio painel é a guarda; a rota pode estar sendo montada
+       por um render assíncrono sem que o hash tenha sido atualizado ainda. */
     const antigo=global.document?.getElementById('iad-treino-24h');
     if(!antigo)return;
     antigo.outerHTML=manualDoTreinamento24h();
