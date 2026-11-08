@@ -127,7 +127,10 @@ export function findLinkedInProfileInCells(cells,fields){
 /** Extract confirmed profile URL patterns from arbitrary TXT/HTML/CSV text.
  * Do not treat company pages, posts, or other domains as personal profiles. */
 export function extractLinkedInProfilesFromText(text){
-  const input=String(text||'');
+  // Listas copiadas podem ter links separados por vírgula/ponto-e-vírgula;
+  // essas pontuações também pertencem a IDs do Sales Navigator, por isso
+  // só separam links quando imediatamente antecedem outro domínio LinkedIn.
+  const input=String(text||'').replace(/[,;](?=\s*(?:https?:\/\/)?(?:[a-z0-9-]+\.)*linkedin\.com\/)/gi,' ');
   const matches=input.match(/(?:https?:\/\/)?(?:[a-z0-9-]+\.)*linkedin\.com\/[^\s<>"'()[\]{}]+/gi)||[];
   const result=[],seen=new Set();
   for(let raw of matches){
