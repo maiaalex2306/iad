@@ -1,0 +1,65 @@
+name: LinkedIN Leads — v286.93 campaign handoff
+on:
+  pull_request:
+    paths:
+      - 'src/linkedin-campaign-portable.mjs'
+      - 'src/linkedin-leads-console.mjs'
+      - 'src/linkedin-checkpoint.mjs'
+      - 'scripts/linkedin-leads-browser.cjs'
+      - 'tests/linkedin-campaign-portable.test.mjs'
+      - 'sw.js'
+      - 'src/config.js'
+      - '.github/workflows/linkedin-campaign-handoff-v28693.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contract-and-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check JavaScript syntax
+        run: |
+          node --check src/linkedin-campaign-portable.mjs
+          node --check src/linkedin-leads-console.mjs
+          node --check scripts/linkedin-leads-browser.cjs
+      - name: Contract, legacy checkpoint and authorization
+        run: node --test tests/linkedin-campaign-portable.test.mjs tests/linkedin-leads-v1.test.mjs
+  browser:
+    needs: contract-and-security
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Playwright Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: E2E backup 821 profiles → replace → restore and reject cross-tenant
+        run: timeout 160s node scripts/linkedin-leads-browser.cjs
+  release-coherence:
+    needs: contract-and-security
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Verify v286.93 cache + entrypoint
+        run: |
+          node - <<'NODE'
+          const fs=require('node:fs');
+          const c=fs.readFileSync('src/config.js','utf8');
+          const sw=fs.readFileSync('sw.js','utf8');
+          if(!c.includes("numero: 'v286.93'")||!sw.includes("const CACHE = 'iad-crm-v286.93'"))
+            throw Error('Config/SW version mismatch');
+          if(!sw.includes("./src/linkedin-campaign-portable.mjs"))
+            throw Error('Portable helper absent from precache');
+          if(!fs.existsSync('src/linkedin-campaign-portable.mjs'))throw Error('Module missing');
+          NODE
