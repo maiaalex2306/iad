@@ -1,5 +1,7 @@
 # IAD CRM — Gestão comercial orientada à decisão
 
+> **Documentação atual — 08/11/2026:** a série v286 usa Supabase/PostgreSQL e sincronização com o servidor. Os parágrafos históricos abaixo descrevem a origem do produto e NÃO devem ser lidos como o estado operacional atual. O manual técnico e funcional atualizado está em [docs/MANUAL-COMPLETO-v28695.md](docs/MANUAL-COMPLETO-v28695.md) e os novos capítulos estão na tela **Método**. Baseline pública verificada: **v286.94**; **v286.95** é a alteração proposta de contatos no radar e atualização documental, sujeita a revisão, testes e publicação.
+
 > O funil organiza. A decisão fecha.
 
 CRM que não mede o que o vendedor fez, e sim **o que mudou na decisão do comprador**.

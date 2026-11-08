@@ -55,27 +55,28 @@ test('PERF-36K1: o Manual não é analisado no shell inicial', () => {
   assert.ok(core.length < 530000);
 });
 
-test('PERF-36K1: HTML do Método é idêntico ao da versão estável v286.74', () => {
-  const old = execFileSync('git',
-    ['show', originalCommit + ':src/views.js'],
-    {cwd:root, encoding:'utf8', maxBuffer:4*1024*1024});
-  const ctxOld = setup();
-  vm.runInNewContext(old, ctxOld, {filename:'views-original.js'});
-  const expected = ctxOld.IADViews.playbook();
-  assert.match(expected, /Manual do IAD CRM/);
-  assert.ok(expected.length > 100000, 'conteúdo integral do Manual');
-
-  const ctx = setup();
-  vm.runInNewContext(read('src/views.js'), ctx, {filename:'src/views.js'});
-  const before = ctx.IADViews.playbook();
-  assert.match(before, /iad-manual-loading/);
-  assert.equal(before.includes('Manual do IAD CRM'), false);
-
-  vm.runInNewContext(read('src/views-manual.js'), ctx, {filename:'src/views-manual.js'});
-  const actual = ctx.IADViews.playbook();
-  assert.strictEqual(actual, expected, 'HTML deve ser byte a byte equivalente');
-  assert.equal(actual.includes('iad-manual-loading'), false);
-  assert.equal(ctx.IADViews.playbook(), actual, 'reabertura determinística');
+test('PERF-36K1: capitulos anteriores preservados e novidades documentadas sem duplicar Manual', () => {
+  const ctx=setup();
+  vm.runInNewContext(read('src/views.js'),ctx,{filename:'src/views.js'});
+  const before=ctx.IADViews.playbook();
+  assert.match(before,/iad-manual-loading/,'manual permanece lazy');
+  vm.runInNewContext(read('src/views-manual.js'),ctx,{filename:'src/views-manual.js'});
+  const actual=ctx.IADViews.playbook();
+  assert.match(actual,/Manual do IAD CRM/);
+  for(const name of ['m-regra','m-oito','m-regua','m-caminho','m-dia',
+    'm-fila','m-potencial','m-nutricao','m-lh','m-telas','m-pipeline',
+    'm-conversas','m-ia','m-limites','m-cadencia']) {
+    assert.ok(actual.includes('id="'+name+'"'),'secao historica ausente: '+name);
+  }
+  for(const name of ['m-novidades','m-inteligencia','m-mercado-novo',
+    'm-linkleads-novo','m-tecnologias','m-operacao']) {
+    assert.ok(actual.includes('id="'+name+'"'),'capitulo novo ausente: '+name);
+    assert.equal(actual.split('id="'+name+'"').length-1,1,'capitulo repetido: '+name);
+  }
+  assert.match(actual,/Inteligência Comercial/);
+  assert.match(actual,/Supabase/);
+  assert.match(actual,/Contato a confirmar/);
+  assert.equal(ctx.IADViews.playbook(),actual,'reabertura deterministica');
 });
 
 test('PERF-36K1: referências críticas não alteradas', () => {

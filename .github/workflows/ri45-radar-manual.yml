@@ -1,0 +1,48 @@
+name: RI-45 — contatos no radar, manual e coerencia PWA
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - 'src/ri/radar-contact.mjs'
+      - 'src/ri/account-view.mjs'
+      - 'assets/ri-commercial.css'
+      - 'src/views-manual.js'
+      - 'src/config.js'
+      - 'sw.js'
+      - 'tests/ri45-radar-contact.test.mjs'
+      - '.github/workflows/ri45-radar-manual.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Syntax
+        run: |
+          node --check src/ri/radar-contact.mjs
+          node --check src/ri/account-view.mjs
+          node --check src/views-manual.js
+          node --check sw.js
+      - name: Segurança, relacionamento e regressao RI-08
+        run: |
+          node --test tests/ri45-radar-contact.test.mjs
+          node --test tests/ri08-conversation-intent.test.mjs
+          node --test scripts/ri-account-view.test.cjs
+          node --test scripts/ri07a-internal-cues.test.cjs
+      - name: Versao coerente e arquivo precache
+        run: |
+          node - <<'NODE'
+          const fs=require('node:fs');
+          const c=fs.readFileSync('src/config.js','utf8');
+          const sw=fs.readFileSync('sw.js','utf8');
+          const v=c.match(/numero:\s*'(v\d+\.\d+)'/)?.[1];
+          if(!v||!sw.includes("const CACHE = 'iad-crm-"+v+"'"))throw Error('Versao/cache divergentes');
+          for(const f of ['src/ri/radar-contact.mjs','src/views-manual.js']){
+            if(!fs.existsSync(f)||!sw.includes("'./"+f+"'"))throw Error('Arquivo nao precacheado: '+f);
+          }
+          NODE

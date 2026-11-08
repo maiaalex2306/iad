@@ -6,6 +6,7 @@
 import {buildAccountBriefing} from './account-briefing.mjs';
 import {localBusinessDate} from './portfolio-analytics.mjs';
 import {buildCommercialOpportunityRadar} from './opportunity-radar.mjs';
+import {buildRadarContactIndex} from './radar-contact.mjs';
 
 // Cache limitado ao snapshot e ao token de sessão/permissão/revisão do Store.
  // Um logout, mudança de gestor/filtro ou escrita altera o token e invalida.
@@ -65,6 +66,7 @@ export function mountAccountIntelligence({root,snapshot,scope,getScopeToken}={})
   throw Error('Destino, sessão e carteira autorizada são obrigatórios');
  const doc=root.ownerDocument;
  const radar=buildCachedCommercialRadar({snapshot,scope,asOf:localBusinessDate()});
+ const contactForRadar=buildRadarContactIndex({snapshot,scope});
  let active=true,selected='pistas',searchLimit=8;
  const valid=()=>{
   if(!active||!root.isConnected)return false;
@@ -177,6 +179,25 @@ export function mountAccountIntelligence({root,snapshot,scope,getScopeToken}={})
    add(copy,'span',item.status==='verificar_fonte'?'FONTE A CONFERIR':'HIPÓTESE COMERCIAL','iad-ri-radar-status');
    add(copy,'h3',item.headline,'iad-ri-radar-card-title');
    add(copy,'p',item.accountName+(item.segment?' · '+item.segment:''),'iad-ri-radar-account');
+   if(selected==='pistas'){
+    const person=contactForRadar(item);
+    const contactLine=add(copy,'div','','iad-ri-radar-contact');
+    if(!person){
+     add(contactLine,'span','Contato a confirmar','iad-ri-radar-contact-muted');
+    }else{
+     add(contactLine,'strong','Contato: '+person.name,'iad-ri-radar-contact-name');
+     if(person.relation.includes('autoria a confirmar'))
+      add(contactLine,'small','(contato da empresa)','iad-ri-radar-contact-muted');
+     if(person.linkedin){
+      const link=add(contactLine,'a','LinkedIn','iad-ri-radar-contact-link');
+      link.href=person.linkedin;link.target='_blank';link.rel='noopener noreferrer';
+     }
+     if(person.phone){
+      const phone=add(contactLine,'a',person.phone.label,'iad-ri-radar-contact-link');
+      phone.href=person.phone.href;
+     }
+    }
+   }
    const detail=add(card,'div','','iad-ri-radar-evidence');
    add(detail,'strong','Por que apareceu');
    add(detail,'p',item.evidence);
