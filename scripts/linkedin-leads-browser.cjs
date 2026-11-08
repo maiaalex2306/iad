@@ -139,6 +139,17 @@ const server=http.createServer((req,res)=>{
   await page.waitForFunction(()=>document.querySelector('#iad-linkedin-root')?.textContent
     ?.includes('Importação concluída: 821 válidos'),null,{timeout:15000});
   assert.match(await page.locator('#iad-linkedin-root').textContent(),/Perfis válidos: 821/);
+  // Checkpoint: preservar a campanha integral antes de trocar de navegador.
+  await page.locator('#iad-linkedin-root details summary')
+    .filter({hasText:'Transferir campanha entre navegador'}).click();
+  const [download]=await Promise.all([
+    page.waitForEvent('download',{timeout:12000}),
+    page.getByRole('button',{name:'Exportar campanha (.json)'}).click()
+  ]);
+  const checkpointBytes=fs.readFileSync(await download.path());
+  const checkpointData=JSON.parse(checkpointBytes.toString('utf8'));
+  assert.equal(checkpointData.rows.length,821,'backup paginado não pode conter somente 10 perfis');
+  assert.ok(!checkpointBytes.toString('utf8').includes('li_at'));
   // O operador também pode colar links sem abrir arquivo nem informar colunas.
   await page.locator('#iad-linkedin-root details summary')
     .filter({hasText:'Ou colar lista de perfis'}).click();
@@ -148,6 +159,22 @@ const server=http.createServer((req,res)=>{
   await page.waitForFunction(()=>document.querySelector('#iad-linkedin-root')?.textContent
     ?.includes('Importação concluída: 2 válidos'),null,{timeout:15000});
   assert.match(await page.locator('#iad-linkedin-root').textContent(),/Perfis válidos: 2/);
+  page.removeAllListeners('dialog');
+  page.on('dialog',dialog=>dialog.accept());
+  await page.locator('#iad-linkedin-root input[aria-label="Restaurar campanha LinkedIN Leads"]')
+    .setInputFiles({name:'checkpoint.json',mimeType:'application/json',buffer:checkpointBytes});
+  await page.waitForFunction(()=>document.querySelector('#iad-linkedin-root')?.textContent
+    ?.includes('Checkpoint restaurado: 821 perfis'),null,{timeout:15000});
+  assert.match(await page.locator('#iad-linkedin-root').textContent(),/Perfis válidos: 821/);
+  // Verificar fail closed: um backup de outra empresa não pode alterar a fila.
+  const invalidCheckpoint=JSON.parse(checkpointBytes.toString('utf8'));
+  invalidCheckpoint.scope='[\\"outra-pessoa\\",\\"outro-tenant\\"]';
+  await page.locator('#iad-linkedin-root input[aria-label="Restaurar campanha LinkedIN Leads"]')
+    .setInputFiles({name:'outro-tenant.json',mimeType:'application/json',
+      buffer:Buffer.from(JSON.stringify(invalidCheckpoint))});
+  await page.waitForFunction(()=>document.querySelector('#iad-linkedin-root')?.textContent
+    ?.includes('Falha na restauração:'),null,{timeout:15000});
+  assert.match(await page.locator('#iad-linkedin-root').textContent(),/Perfis válidos: 821/);
   // A recarga restaura dados sintéticos pelo cache local; verificamos que a campanha não criou registros no Store/CAS.
   assert.equal(await page.evaluate(()=> (window.IADStore.obter().contatos||[]).some(c=>c.nome==='Lead Com Post')),false,'Campanha não pode importar automaticamente no CRM');
   assert.equal(requestsOutside.length,0,'campanha não pode acessar LinkedIn/externos durante teste local: '+requestsOutside);
@@ -165,7 +192,7 @@ const server=http.createServer((req,res)=>{
   assert.equal(await page.locator('#iad-linkedin-root').count(),0);
   assert.deepEqual(errors,[],'Erros JS inesperados: '+errors.join(' | '));
   console.log('LINKEDIN_LEADS_BROWSER_PASS '+JSON.stringify({
-    csv100MBStreamer:true,txt821:true,pasteLinks:true,queuePersisted:true,skipWithoutPost:true,generatedComment:true,manualLike:true,
+    csv100MBStreamer:true,txt821:true,pasteLinks:true,checkpoint821:true,checkpointTenantFailClosed:true,queuePersisted:true,skipWithoutPost:true,generatedComment:true,manualLike:true,
     pause:true,tenantIsolation:true,sellerDenied:true,noExternalRequests:true,
     noStoreWrites:true,firstPaintMs:firstPaint
   }));
