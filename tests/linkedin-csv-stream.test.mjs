@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {importLinkedInCsv,normalizeProfile,columnsFromCsvHeader,csvLeadFromCells} from '../src/linkedin-csv.mjs';
+import {importLinkedInCsv,normalizeProfile,columnsFromCsvHeader,csvLeadFromCells,profileFailureReason} from '../src/linkedin-csv.mjs';
 import {importLinkedInCsvStream,CSV_MAX_BYTES,CSV_BATCH_SIZE} from '../src/linkedin-csv-stream.mjs';
 
 function fakeFile(bytes,name='leads.csv'){
@@ -19,6 +19,50 @@ async function collect(file,options={}){
   },...options});
   return {...result,rows};
 }
+test('Aceita perfis convencionais, IDs opacos, Sales Navigator, Recruiter e legado',()=>{
+ const cases=[
+  ['https://www.linkedin.com/in/joao-silva-1234/?trk=abc','https://www.linkedin.com/in/joao-silva-1234/'],
+  ['https://www.linkedin.com/in/ACoAAA8BYqEBCGLg_vT_ca6mMEqkpp9nVffJ3hc/','https://www.linkedin.com/in/ACoAAA8BYqEBCGLg_vT_ca6mMEqkpp9nVffJ3hc/'],
+  ['https://www.linkedin.com/sales/profile/251749025,sSHS,name','https://www.linkedin.com/sales/profile/251749025,sSHS,name'],
+  ['https://www.linkedin.com/sales/people/ACwAAA8BYqEBlKc364xhzvygIeuJJ3rATiwe2NE,name,sSHS','https://www.linkedin.com/sales/people/ACwAAA8BYqEBlKc364xhzvygIeuJJ3rATiwe2NE,name,sSHS'],
+  ['https://www.linkedin.com/recruiter/profile/251749025,sSHS,name','https://www.linkedin.com/recruiter/profile/251749025,sSHS,name'],
+  ['https://www.linkedin.com/profile/view?id=williamhgates','https://www.linkedin.com/profile/view?id=williamhgates'],
+  ['https://www.linkedin.com/in/joao-silva-1234/details/experience/','https://www.linkedin.com/in/joao-silva-1234/']
+ ];
+ for(const [actual,expected] of cases)assert.equal(normalizeProfile(actual),expected,actual);
+});
+test('Rejeita domínios maliciosos, empresas e links sem identidade de perfil',()=>{
+ for(const bad of [
+ 'https://linkedin.com.evil.com/in/test','https://www.linkedin.com/company/exemplo/',
+ 'https://www.linkedin.com/jobs/view/123','javascript:alert(1)',
+ 'https://user:password@www.linkedin.com/in/johnsmith','https://www.linkedin.com:8443/in/johnsmith',
+ 'https://www.linkedin.com/in/%2Fadmin'
+ ])assert.equal(normalizeProfile(bad),'',bad);
+});
+test('A coluna LinkedIn prevalece sobre URL genérica e o fallback funciona',async()=>{
+ const csv='Nome;URL;LinkedIn;Cargo\n'+
+ 'Helena;https://empresa.com.br;https://www.linkedin.com/in/helena-baptista/;Diretora\n'+
+ 'Janaina;https://www.linkedin.com/company/empresa/;https://www.linkedin.com/sales/people/ACwAAA8BYqEBlKc364xhzvygIeuJJ3rATiwe2NE,name,sSHS;Gestora\n';
+ const out=await collect(fakeFile(csv));
+ assert.equal(out.summary.valid,2);
+ assert.equal(out.summary.invalid,0);
+ assert.match(out.rows[0].perfil,/helena-baptista/);
+ assert.match(out.rows[1].perfil,/sales\/people/);
+});
+test('Motivos de rejeição identificam linha, valor e identidade',async()=>{
+ const csv='Nome;LinkedIn\n'+
+ 'Sem perfil;\nEmpresa;https://www.linkedin.com/company/exemplo/\n'+
+ 'Site externo;https://example.org\nTexto;procurar depois\n'+
+ 'Valido;https://www.linkedin.com/in/pessoa-valida/\n';
+ const out=await collect(fakeFile(csv));
+ assert.equal(out.summary.valid,1);
+ assert.equal(out.summary.invalid,4);
+ assert.deepEqual({...out.summary.invalidReasons},
+ {sem_link:1,formato_linkedin_nao_suportado:1,link_externo:1,campo_sem_url:1});
+ assert.deepEqual(out.summary.problems.map(p=>p.line),[2,3,4,5]);
+ assert.equal(out.summary.problems[1].name,'Empresa');
+ assert.match(out.summary.problems[1].url,/company/);
+});
 test('Cabeçalhos UTF-8 e linhas multipartidas são processadas',async()=>{
   const input='Nome;LinkedIn;Empresa;Resumo Perfil\r\n'+
    '"Maria; da Silva";"https://www.linkedin.com/in/maria-silva/";"Bio";"Texto com quebra\r\nde linha"\r\n'+
