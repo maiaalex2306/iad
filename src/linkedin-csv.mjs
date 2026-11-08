@@ -15,20 +15,50 @@ export function normalizeHeader(value){
   return String(value||'').replace(/^\ufeff/,'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
     .toLowerCase().replace(/[^a-z0-9]/g,'');
 }
+/* LinkedIn URLs are identifiers, not automatically confirmed live profiles.
+ * Keep opaque member IDs case-sensitive (ACo...); do not alter sales IDs.
+ * Reject non-LinkedIn domains, credentials and non-profile routes.
+ */
 export function normalizeProfile(input){
-  const raw=String(input||'').trim();
-  if(!raw||raw.length>700)return '';
+  const source=String(input||'').trim().replace(/[\u200b-\u200d\uFEFF]/g,'');
+  if(!source||source.length>2000)return '';
+  const embedded=source.match(/https?:\/\/(?:[a-z0-9-]+\.)*linkedin\.com\/[^\s"'<>)]{1,900}/i);
+  const raw=embedded?embedded[0]:source;
   let u;
-  try{u=new URL(/^https?:\/\//i.test(raw)?raw:'https://'+raw);}
-  catch(_){return '';}
-  if(u.protocol!=='https:'||!/(^|\.)linkedin\.com$/i.test(u.hostname) ||
-     u.username||u.password)return '';
-  const match=/^\/in\/([a-z0-9_%-]{3,200})\/?$/i.exec(u.pathname);
-  if(!match)return '';
-  let slug;
-  try{slug=decodeURIComponent(match[1]);}catch(_){return '';}
-  if(!/^[a-z0-9_-]{3,200}$/i.test(slug))return '';
-  return 'https://www.linkedin.com/in/'+slug.toLowerCase()+'/';
+  try{u=new URL(/^https?:\/\//i.test(raw)?raw:'https://'+raw);}catch{return '';}
+  if(u.username||u.password||u.port||!/^(?:[a-z0-9-]+\.)*linkedin\.com$/i.test(u.hostname))return '';
+  if(!['https:','http:'].includes(u.protocol))return '';
+  const path=u.pathname.replace(/\/+$/,'');
+  const profile=/^\/in\/([^/]+)(?:\/.*)?$/i.exec(path);
+  if(profile){
+    let slug;
+    try{slug=decodeURIComponent(profile[1]);}catch{return '';}
+    if(slug.length>200||!(/^[\p{L}\p{N}._-]{1,200}$/u.test(slug)))return '';
+    const opaque=/^(?:ACo|ACw)[a-zA-Z0-9_-]{8,}$/.test(slug);
+    const canonical=opaque?slug:slug.toLowerCase();
+    return 'https://www.linkedin.com/in/'+encodeURIComponent(canonical)+'/';
+  }
+  if(/^\/profile\/view$/i.test(path)){
+    const id=(u.searchParams.get('id')||'').trim();
+    if(!/^[a-zA-Z0-9_.-]{1,200}$/.test(id))return '';
+    return 'https://www.linkedin.com/profile/view?id='+encodeURIComponent(id);
+  }
+  const specialized=/^\/(sales\/(?:people|profile)|recruiter\/profile)\/([^/?#]+)$/i.exec(path);
+  if(specialized){
+    let value;
+    try{value=decodeURIComponent(specialized[2]);}catch{return '';}
+    if(value.length>350||!(/^[\p{L}\p{N}_,.\-]{2,350}$/u.test(value)))return '';
+    return 'https://www.linkedin.com/'+specialized[1].toLowerCase()+'/'+encodeURIComponent(value).replace(/%2C/gi,',');
+  }
+  return '';
+}
+export function profileFailureReason(cells,fields){
+  const positions=fields.perfilCandidatos?.length?fields.perfilCandidatos:[fields.perfil];
+  const values=positions.filter(i=>i>=0).map(i=>String(cells[i]||'').trim());
+  if(!values.some(Boolean))return 'sem_link';
+  if(values.some(v=>/linkedin\.com/i.test(v)))return 'formato_linkedin_nao_suportado';
+  if(values.some(v=>/https?:\/\/|www\./i.test(v)))return 'link_externo';
+  return 'campo_sem_url';
 }
 function chooseSeparator(header){
   const counters={',':0,';':0,'\t':0};
@@ -74,19 +104,33 @@ export function columnsFromCsvHeader(header) {
   for(const [field,aliases] of Object.entries(ALIASES)){
     fields[field]=headers.findIndex(h=>aliases.includes(h));
   }
+  const profileLike=headers.map((header,i)=>({header,i}))
+    .filter(x=>ALIASES.perfil.includes(x.header));
+  const explicit=profileLike.filter(x=>x.header!=='url');
+  const generic=profileLike.filter(x=>x.header==='url');
+  // Priority: LinkedIn-specific column first, generic "URL" last.
+  fields.perfilCandidatos=[...explicit,...generic].map(x=>x.i);
+  fields.perfil=fields.perfilCandidatos[0]??-1;
   if(fields.perfil<0)throw new Error('CSV sem coluna de perfil. Use "LinkedIn", "Perfil LinkedIn" ou "profile_url".');
   return fields;
 }
 export function csvLeadFromCells(cells,fields,line){
   const raw=(key,limit)=>fields[key]<0?'':String(cells[fields[key]]||'').trim().slice(0,limit);
-  const profile=normalizeProfile(raw('perfil',700));
+  let profile='';
+  for(const index of fields.perfilCandidatos||[fields.perfil]){
+    profile=normalizeProfile(cells[index]);
+    if(profile)break;
+  }
   if(!profile)return null;
   const item={linha:line,perfil:profile,
     lead:raw('nome',120),cargo:raw('cargo',140),empresa:raw('empresa',160),
     resumoPerfil:raw('resumoPerfil',1200),postUrl:raw('postUrl',600),
     post:raw('post',6000),comentarioLead:raw('comentarioLead',2000),
     estado:'pendente'};
-  if(!item.lead)item.lead=profile.split('/in/')[1].replace(/\/$/,'').replace(/[-_]/g,' ').slice(0,120);
+  if(!item.lead){
+    const slug=profile.split('/in/')[1];
+    item.lead=(slug?decodeURIComponent(slug).replace(/\/$/,'').replace(/[-_]/g,' '):'Perfil LinkedIn').slice(0,120);
+  }
   return item;
 }
 export function importLinkedInCsv(text,{maxRows=10000}={}){
@@ -97,7 +141,7 @@ export function importLinkedInCsv(text,{maxRows=10000}={}){
   let invalid=0,duplicates=0;
   rows.slice(1).forEach((cells,i)=>{
     const item=csvLeadFromCells(cells,fields,i+2);
-    if(!item){invalid++;if(problems.length<30)problems.push({line:i+2,reason:'Perfil LinkedIn inválido ou não público (/in/ obrigatório).'});return;}
+    if(!item){invalid++;if(problems.length<30)problems.push({line:i+2,reason:profileFailureReason(cells,fields)});return;}
     if(seen.has(item.perfil)){duplicates++;return;}
     seen.add(item.perfil);
     leads.push(item);
