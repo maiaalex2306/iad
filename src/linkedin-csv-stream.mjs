@@ -1,7 +1,7 @@
 /* Importação progressiva de CSV até 100 MiB.
    Sem file.arrayBuffer() integral, sem construir um array gigante de perfis.
    Cada lote pode ser persistido em IndexedDB. Não faz requisições ao LinkedIn. */
-import {columnsFromCsvHeader,csvLeadFromCells} from './linkedin-csv.mjs';
+import {columnsFromCsvHeader,csvLeadFromCells,profileFailureReason} from './linkedin-csv.mjs';
 
 export const CSV_MAX_BYTES=100*1024*1024;
 export const CSV_BATCH_SIZE=350;
@@ -81,7 +81,7 @@ export async function importLinkedInCsvStream(file,{
   let decoder,first=true,bytesRead=0,separator=null,headerProbe='';
   let quoted=false,afterQuote=false,skipLF=false,field='',record=[];
   let fields=null,recordIndex=0,invalid=0,duplicates=0,valid=0;
-  let batch=[],problems=[],lastPercent=-1;
+  let batch=[],problems=[],lastPercent=-1,invalidReasons=Object.create(null);
   function append(c){
     if(field.length>=MAX_FIELD)throw new Error('Campo CSV maior que 20 mil caracteres. Revise o formato.');
     field+=c;
@@ -99,7 +99,14 @@ export async function importLinkedInCsvStream(file,{
     const lead=csvLeadFromCells(cells,fields,recordIndex);
     if(!lead){
       invalid++;
-      if(problems.length<30)problems.push({line:recordIndex,reason:'URL de perfil LinkedIn inválida'});
+      const reason=profileFailureReason(cells,fields);
+      invalidReasons[reason]=(invalidReasons[reason]||0)+1;
+      if(problems.length<2000){
+        const pos=fields.perfilCandidatos?.[0]??fields.perfil;
+        problems.push({line:recordIndex,reason,
+          name:fields.nome>=0?String(cells[fields.nome]||'').slice(0,100):'',
+          url:pos>=0?String(cells[pos]||'').slice(0,350):''});
+      }
       return;
     }
     batch.push(lead);
@@ -185,7 +192,7 @@ export async function importLinkedInCsvStream(file,{
     if(!fields)throw new Error('Cabeçalho do CSV ausente.');
     if(recordIndex<2)throw new Error('CSV sem linhas de leads.');
     onProgress({percent:100,bytesRead,totalBytes:file.size,valid,invalid,duplicates});
-    return {summary:{total:recordIndex-1,valid,invalid,duplicates,separator,problems}};
+    return {summary:{total:recordIndex-1,valid,invalid,duplicates,separator,problems,invalidReasons,diagnosticTruncated:invalid>problems.length}};
   }catch(e){
     try{await reader.cancel();}catch{}
     throw e;
