@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {importLinkedInCsv,normalizeProfile,columnsFromCsvHeader,csvLeadFromCells,profileFailureReason} from '../src/linkedin-csv.mjs';
+import {importLinkedInCsv,normalizeProfile,columnsFromCsvHeader,csvLeadFromCells,profileFailureReason,extractLinkedInProfilesFromText} from '../src/linkedin-csv.mjs';
 import {importLinkedInCsvStream,CSV_MAX_BYTES,CSV_BATCH_SIZE} from '../src/linkedin-csv-stream.mjs';
 
 function fakeFile(bytes,name='leads.csv'){
@@ -92,6 +92,56 @@ test('Mais de um perfil distinto sem coluna específica não importa pessoa amb�
  assert.equal(out.summary.valid,0);
  assert.equal(out.summary.invalid,1);
  assert.equal(out.summary.invalidReasons.perfil_ambiguo,1);
+});
+test('TXT simples sem cabeçalho aceita perfis convencionais, Sales Navigator e Recruiter',async()=>{
+ const input=[
+  'https://www.linkedin.com/in/diretora-industrial/',
+  'linkedin.com/in/ACoAAA8BYqEBCGLg_vT_ca6mMEqkpp9nVffJ3hc/',
+  'https://www.linkedin.com/sales/profile/251749025,sSHS,name',
+  'www.linkedin.com/recruiter/profile/300086559,jf3i,CAP'
+ ].join('\n')+'\n';
+ const out=await collect(fakeFile(input,'perfis.txt'));
+ assert.equal(out.summary.total,4);
+ assert.equal(out.summary.valid,4);
+ assert.equal(out.summary.invalid,0);
+ assert.deepEqual(out.rows.map(x=>x.sourceLine),[1,2,3,4]);
+ assert.ok(out.rows[1].perfil.includes('ACoAAA'));
+});
+test('TXT com links misturados em texto reconhece múltiplos perfis na mesma linha',async()=>{
+ const input='Diretora: https://www.linkedin.com/in/diretora-exemplo/; gerente: https://www.linkedin.com/in/gerente-exemplo/.\n'+
+  'https://www.linkedin.com/in/diretora-exemplo/?trk=profile\n'+
+  'Páginas de empresas https://www.linkedin.com/company/acme/\n'+
+  'https://linkedin.com.evil.org/in/atacante\n';
+ const out=await collect(fakeFile(input,'perfis.txt'));
+ assert.equal(out.summary.total,5);
+ assert.equal(out.summary.valid,2);
+ assert.equal(out.summary.duplicates,1);
+ assert.equal(out.summary.invalid,2);
+ assert.equal(out.rows.length,2);
+ assert.equal(out.summary.problems[0].line,3);
+});
+test('Lista TXT com 821 perfis válidos e sem cabeçalho mantém fila sequencial',async()=>{
+ const list=Array.from({length:821},(_,i)=>'https://www.linkedin.com/in/lead-industrial-'+(i+1)+'/').join('\r\n')+'\r\n';
+ const out=await collect(fakeFile(list,'821-perfis.txt'),{batchSize:350});
+ assert.equal(out.summary.total,821);
+ assert.equal(out.summary.valid,821);
+ assert.equal(out.rows.length,821);
+ assert.equal(out.rows.at(-1).linha,821);
+ assert.equal(out.rows.at(-1).sourceLine,821);
+});
+test('TXT UTF-16 e Windows-1252 mantém leitura de URLs e números de linha',async()=>{
+ const text='Diretor José: https://www.linkedin.com/in/diretor-industrial/\r\n';
+ const utf16=Buffer.concat([Buffer.from([0xff,0xfe]),Buffer.from(text,'utf16le')]);
+ const a=await collect(fakeFile(utf16,'lista.txt'));
+ assert.equal(a.summary.valid,1);
+ const latin1=Buffer.from(text,'latin1');
+ const b=await collect(fakeFile(latin1,'lista.txt'));
+ assert.equal(b.summary.valid,1);
+ assert.equal(b.rows[0].perfil,a.rows[0].perfil);
+});
+test('Extrator de TXT não interpreta páginas de empresa e publicações como pessoas',()=>{
+ assert.deepEqual(extractLinkedInProfilesFromText('https://linkedin.com/company/abc/ https://linkedin.com/posts/abc/'),[]);
+ assert.deepEqual(extractLinkedInProfilesFromText('Perfil: https://linkedin.com/in/pessoa-alvo/'),['https://www.linkedin.com/in/pessoa-alvo/']);
 });
 test('Cabeçalhos UTF-8 e linhas multipartidas são processadas',async()=>{
   const input='Nome;LinkedIn;Empresa;Resumo Perfil\r\n'+
