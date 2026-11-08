@@ -43,4 +43,4 @@ window.IAD_MARKET_ENABLED = true;
 window.IAD_MARKET_IMPORT_ENABLED = false;
 /* LinkLeads: o menu abre o app desktop (linkleads://); o modo assistido no navegador continua disponível. */
 window.IAD_LINKEDIN_LEADS_ENABLED = true;
-window.IADVersao = { numero: 'v286.98', data: '2026-11-08' };
+window.IADVersao = { numero: 'v286.99', data: '2026-11-08' };
