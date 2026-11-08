@@ -66,8 +66,8 @@ export function mountAccountIntelligence({root,snapshot,scope,getScopeToken}={})
   throw Error('Destino, sessão e carteira autorizada são obrigatórios');
  const doc=root.ownerDocument;
  const radar=buildCachedCommercialRadar({snapshot,scope,asOf:localBusinessDate()});
- const contactForRadar=buildRadarContactIndex({snapshot,scope,items:radar.groups.pistas});
- let active=true,selected='pistas',searchLimit=8;
+ let contactForRadar=()=>null,contactIndexSignature='';
+ let active=true,selected='pistas',searchLimit=8,visiblePistas=12,orderPistas='recente',onlyToday=false;
  const valid=()=>{
   if(!active||!root.isConnected)return false;
   try{return getScopeToken()===scope.token;}catch{return false;}
@@ -128,8 +128,24 @@ export function mountAccountIntelligence({root,snapshot,scope,getScopeToken}={})
  const heading=add(spotlight,'div','','iad-ri-radar-panel-head');
  const htitle=add(heading,'h2','','iad-ri-section-title');
  const hdesc=add(heading,'p','','iad-ri-section-intro');
+ const tools=add(spotlight,'div','','iad-ri-radar-toolbar');
+ const count=add(tools,'span','','iad-ri-radar-count');
+ const today=add(tools,'button','','iad-ri-radar-today');
+ today.type='button';today.setAttribute('aria-pressed','false');
+ const sortLabel=add(tools,'label','Ordenar: ','iad-ri-radar-order');
+ const sort=add(sortLabel,'select');
+ for(const opt of [{value:'recente',name:'Mais recentes'},{value:'prioridade',name:'Maior prioridade'}]){
+  const option=add(sort,'option',opt.name);option.value=opt.value;
+ }
+ sort.value=orderPistas;
  const cards=add(spotlight,'div','','iad-ri-radar-results');
+ const morePistas=add(spotlight,'button','Ver mais pistas','iad-ri-radar-more');
+ morePistas.type='button';
  const info=add(spotlight,'p','Hipóteses de trabalho — cada indicação exige validação pelo responsável antes de contato ou proposta.','iad-ri-note');
+ const sortByRecency=(a,b)=>
+  (b.enteredAt||b.date||'').localeCompare(a.enteredAt||a.date||'')||
+  b.priority-a.priority||(b.date||'').localeCompare(a.date||'')||
+  a.accountName.localeCompare(b.accountName,'pt-BR');
  function goToAccount(row){
   if(!secure()||!row.accountId)return;
   selectAccount(row.accountId,row.tenantId);
@@ -157,9 +173,33 @@ export function mountAccountIntelligence({root,snapshot,scope,getScopeToken}={})
   htitle.textContent=g.title;
   hdesc.textContent=g.desc;
   info.textContent=selected==='pistas'
-   ?'Triagem local de mensagens e histórico; sinais interpretados por IA só entram quando a citação literal é conferida. Revise antes de agir.'
+   ?'Data de entrada no CRM e data da fala são diferentes. Registros novos sem sinal explícito aparecem como “REVISAR”, não como intenção de compra comprovada. Só as falas validadas são hipóteses comerciais.'
    :'Hipóteses de trabalho — cada indicação exige validação pelo responsável antes de contato ou proposta.';
-  const items=radar.groups[selected];
+  const all=radar.groups[selected];
+  const ordered=selected==='pistas'?[...all].sort(orderPistas==='recente'?sortByRecency:
+   (a,b)=>b.priority-a.priority||sortByRecency(a,b)):all;
+  const items=selected==='pistas'&&onlyToday?
+   ordered.filter(x=>x.enteredAt===radar.asOf):ordered;
+  const displayed=selected==='pistas'?items.slice(0,visiblePistas):items;
+  if(selected==='pistas'){
+   // Indexar apenas cartões efetivamente visíveis, mesmo com milhares de pistas.
+   const signature=displayed.map(item=>JSON.stringify([item.tenantId,item.sourceOpportunityId]))
+    .sort().join('|');
+   if(signature!==contactIndexSignature){
+    contactForRadar=buildRadarContactIndex({snapshot,scope,items:displayed});
+    contactIndexSignature=signature;
+   }
+  }
+  tools.hidden=selected!=='pistas';
+  if(selected==='pistas'){
+   const todayCount=all.filter(x=>x.enteredAt===radar.asOf).length;
+   today.textContent='Entradas de hoje ('+todayCount+')';
+   today.setAttribute('aria-pressed',String(onlyToday));
+   today.classList.toggle('active',onlyToday);
+   count.textContent='Exibindo '+displayed.length+' de '+items.length+' registros';
+  }
+  morePistas.hidden=selected!=='pistas'||displayed.length>=items.length;
+  if(!morePistas.hidden)morePistas.textContent='Ver mais '+Math.min(12,items.length-displayed.length)+' registros';
   const fragment=doc.createDocumentFragment();
   if(!items.length){
    const empty=add(fragment,'div','','iad-ri-radar-empty');
@@ -172,30 +212,36 @@ export function mountAccountIntelligence({root,snapshot,scope,getScopeToken}={})
     });
    }
   }
-  for(const item of items){
+  for(const item of displayed){
    const card=add(fragment,'article','','iad-ri-radar-card');
    const top=add(card,'div','','iad-ri-radar-card-head');
    const copy=add(top,'div','','iad-ri-radar-card-copy');
-   add(copy,'span',item.status==='verificar_fonte'?'FONTE A CONFERIR':'HIPÓTESE COMERCIAL','iad-ri-radar-status');
+   add(copy,'span',item.status==='verificar_fonte'?'FONTE A CONFERIR':item.status==='revisao'?'NOVO REGISTRO · REVISAR':'HIPÓTESE COMERCIAL','iad-ri-radar-status');
    add(copy,'h3',item.headline,'iad-ri-radar-card-title');
    add(copy,'p',item.accountName+(item.segment?' · '+item.segment:''),'iad-ri-radar-account');
    if(selected==='pistas'){
+    if(item.enteredAt)
+     add(copy,'small','Entrada no CRM: '+item.enteredAt,'iad-ri-radar-entered');
     const person=contactForRadar(item);
     const contactLine=add(copy,'div','','iad-ri-radar-contact');
-    if(!person){
-     add(contactLine,'span','Contato a confirmar','iad-ri-radar-contact-muted');
-    }else{
-     add(contactLine,'strong','Contato: '+person.name,'iad-ri-radar-contact-name');
-     if(person.relation.includes('autoria a confirmar'))
-      add(contactLine,'small','(contato da empresa)','iad-ri-radar-contact-muted');
-     if(person.linkedin){
-      const link=add(contactLine,'a','LinkedIn','iad-ri-radar-contact-link');
-      link.href=person.linkedin;link.target='_blank';link.rel='noopener noreferrer';
-     }
-     if(person.phone){
-      const phone=add(contactLine,'a',person.phone.label,'iad-ri-radar-contact-link');
-      phone.href=person.phone.href;
-     }
+    const name=add(contactLine,'div','','iad-ri-radar-contact-field');
+    add(name,'span','Contato','iad-ri-radar-contact-label');
+    add(name,'strong',person?.name||'A confirmar','iad-ri-radar-contact-name');
+    if(person?.relation.includes('autoria a confirmar'))
+     add(name,'small','Contato da empresa; autoria não confirmada','iad-ri-radar-contact-muted');
+    if(person?.linkedin){
+     const link=add(contactLine,'a','','iad-ri-radar-contact-field iad-ri-radar-contact-link');
+     link.href=person.linkedin;link.target='_blank';link.rel='noopener noreferrer';
+     link.setAttribute('aria-label','Abrir perfil LinkedIn de '+person.name);
+     add(link,'span','LinkedIn','iad-ri-radar-contact-label');
+     add(link,'span','Abrir perfil','iad-ri-radar-contact-value');
+    }
+    if(person?.phone){
+     const phone=add(contactLine,'a','','iad-ri-radar-contact-field iad-ri-radar-contact-link');
+     phone.href=person.phone.href;
+     phone.setAttribute('aria-label','Telefone de '+person.name+': '+person.phone.label);
+     add(phone,'span','Telefone','iad-ri-radar-contact-label');
+     add(phone,'span',person.phone.label,'iad-ri-radar-contact-value');
     }
    }
    const detail=add(card,'div','','iad-ri-radar-evidence');
@@ -203,18 +249,32 @@ export function mountAccountIntelligence({root,snapshot,scope,getScopeToken}={})
    add(detail,'p',item.evidence);
    if(selected==='pistas'&&Array.isArray(item.relatedSignals)&&item.relatedSignals.length){
     const section=add(detail,'section','','iad-ri-related-intents');
-    add(section,'strong','Outras necessidades e intenções nesta conta');
+    add(section,'strong','Outros sinais desta conta ('+item.relatedSignals.length+')');
     const list=add(section,'ul');
-    for(const signal of item.relatedSignals){
-     const li=add(list,'li');
-     add(li,'strong',signal.headline);
-     add(li,'p',signal.evidence);
-     add(li,'small','Ação: '+signal.action,'iad-ri-radar-source-label');
+    let expanded=false;
+    const showRelated=()=>{
+     list.replaceChildren();
+     for(const signal of item.relatedSignals.slice(0,expanded?item.relatedSignals.length:3)){
+      const li=add(list,'li');
+      add(li,'strong',signal.headline);
+      add(li,'p',signal.evidence);
+      add(li,'small','Ação: '+signal.action,'iad-ri-radar-source-label');
+     }
+    };
+    showRelated();
+    if(item.relatedSignals.length>3){
+     const toggle=add(section,'button','Ver todos os '+item.relatedSignals.length+' sinais','iad-ri-radar-more-related');
+     toggle.type='button';
+     toggle.addEventListener('click',()=>{
+      if(!secure())return;
+      expanded=!expanded;showRelated();
+      toggle.textContent=expanded?'Mostrar menos':'Ver todos os '+item.relatedSignals.length+' sinais';
+     });
     }
    }
    if(item.sourceLabel){
     add(detail,'small','Fonte interna: '+item.sourceLabel+
-      (item.date?' · '+item.date:''),'iad-ri-radar-source-label');
+      (item.date?' · Data da fala/registro: '+item.date:''),'iad-ri-radar-source-label');
    }
    const next=add(card,'div','','iad-ri-radar-next');
    add(next,'strong','Próxima ação recomendada');
@@ -241,9 +301,12 @@ export function mountAccountIntelligence({root,snapshot,scope,getScopeToken}={})
   btn.type='button';btn.dataset.radar=group.id;
   add(btn,'strong',group.title);
   add(btn,'small',group.desc);
-  btn.addEventListener('click',()=>{if(!secure())return;selected=group.id;renderGroup();});
+  btn.addEventListener('click',()=>{if(!secure())return;selected=group.id;visiblePistas=12;renderGroup();});
   navButtons.set(group.id,btn);
  }
+ sort.addEventListener('change',()=>{if(!secure())return;orderPistas=sort.value==='prioridade'?'prioridade':'recente';visiblePistas=12;renderGroup();});
+ today.addEventListener('click',()=>{if(!secure())return;onlyToday=!onlyToday;visiblePistas=12;renderGroup();});
+ morePistas.addEventListener('click',()=>{if(!secure())return;visiblePistas+=12;renderGroup();});
  const explorer=add(root,'section','','iad-ri-explorer');
  add(explorer,'h2','Investigar uma conta específica','iad-ri-section-title');
  add(explorer,'p','Localize uma empresa e confira o histórico registrado antes de sugerir uma oferta.','iad-ri-section-intro');

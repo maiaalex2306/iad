@@ -231,11 +231,25 @@
  letter-spacing:-.015em;
 }
 #iad-ri-root .iad-ri-radar-account{font-size:.78rem;color:var(--ci-muted);margin-top:5px;overflow-wrap:anywhere}
-#iad-ri-root .iad-ri-radar-contact{display:flex;gap:5px 12px;align-items:center;flex-wrap:wrap;margin-top:7px;font-size:.77rem;line-height:1.4;min-width:0}
-#iad-ri-root .iad-ri-radar-contact-name{font-weight:700;overflow-wrap:anywhere}
-#iad-ri-root .iad-ri-radar-contact-muted{color:var(--ci-muted);font-size:.73rem}
-#iad-ri-root .iad-ri-radar-contact-link{color:var(--acp-brand,#6816a8);text-decoration:underline;font-weight:650;overflow-wrap:anywhere}
-#iad-ri-root .iad-ri-radar-contact-link:focus-visible{outline:2px solid var(--acp-brand,#6816a8);outline-offset:3px}
+#iad-ri-root .iad-ri-radar-contact{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:start;margin-top:11px;padding-top:10px;border-top:1px solid var(--ci-line);min-width:0}
+#iad-ri-root .iad-ri-radar-contact-field{display:grid;gap:3px;min-width:0;align-content:start}
+#iad-ri-root .iad-ri-radar-contact-label{display:block;font-size:.68rem;line-height:1.2;color:var(--ci-muted);font-weight:650}
+#iad-ri-root .iad-ri-radar-contact-name{font-size:.8rem;line-height:1.45;font-weight:750;overflow-wrap:anywhere;color:var(--ci-ink)}
+#iad-ri-root .iad-ri-radar-contact-muted{color:var(--ci-muted);font-size:.69rem;max-width:22ch}
+#iad-ri-root .iad-ri-radar-contact-link{color:var(--acp-brand,#6816a8);text-decoration:none;font-weight:700;min-height:34px}
+#iad-ri-root .iad-ri-radar-contact-value{text-decoration:underline;font-size:.8rem;line-height:1.4;overflow-wrap:anywhere}
+#iad-ri-root .iad-ri-radar-contact-link:focus-visible{outline:2px solid var(--acp-brand,#6816a8);outline-offset:3px;border-radius:4px}
+#iad-ri-root .iad-ri-radar-entered{display:block;margin-top:8px;font-size:.7rem;font-weight:650;color:var(--ci-muted)}
+#iad-ri-root .iad-ri-radar-toolbar{display:flex;gap:10px 16px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-bottom:16px}
+#iad-ri-root .iad-ri-radar-toolbar[hidden]{display:none}
+#iad-ri-root .iad-ri-radar-count{font-size:.76rem;font-weight:700;color:var(--ci-muted)}
+#iad-ri-root .iad-ri-radar-today{border:1px solid var(--ci-line);padding:8px 11px;border-radius:9px;background:var(--ci-surface);color:var(--ci-ink);font-size:.75rem;font-weight:700;cursor:pointer}
+#iad-ri-root .iad-ri-radar-today.active{background:var(--acp-brand-soft,#f3ecfa);color:var(--acp-brand,#6816a8);border-color:var(--acp-brand,#6816a8)}
+#iad-ri-root .iad-ri-radar-order{display:flex;align-items:center;gap:8px;font-weight:700;font-size:.75rem;color:var(--ci-muted)}
+#iad-ri-root .iad-ri-radar-order select{max-width:160px;background:var(--ci-surface);border:1px solid var(--ci-line);border-radius:9px;padding:8px;color:var(--ci-ink)}
+#iad-ri-root .iad-ri-radar-more{display:block;margin:0 auto 12px;padding:10px 20px;border:1px solid var(--acp-brand,#6816a8);border-radius:9px;background:var(--ci-surface);color:var(--acp-brand,#6816a8);font-size:.8rem;font-weight:750;cursor:pointer}
+#iad-ri-root .iad-ri-radar-more[hidden]{display:none}
+#iad-ri-root .iad-ri-radar-more-related{margin-top:6px;padding:5px 0;border:0;background:transparent;color:var(--acp-brand,#6816a8);font-size:.76rem;font-weight:700;text-decoration:underline;cursor:pointer}
 #iad-ri-root .iad-ri-radar-evidence,
 #iad-ri-root .iad-ri-radar-next{border-left:3px solid var(--ci-line);padding-left:12px;min-width:0}
 #iad-ri-root .iad-ri-radar-next{border-left-color:var(--acp-brand,#6816a8);background:var(--acp-brand-soft,#f3ecfa);padding:11px 12px;border-radius:0 9px 9px 0}

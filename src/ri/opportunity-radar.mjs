@@ -186,13 +186,58 @@ export function buildCommercialOpportunityRadar({snapshot,scope,asOf}={}){
  /* RI-07A: pistas textuais já existentes no CRM.
     Etapa O(N), executada em memória e sem chamada de IA, banco ou internet.
     Uma pista por conta impede que o mesmo cliente ocupe todo o resultado. */
- results.pistas=discoverInternalCommercialCues({snapshot,scope,accounts,asOf}).items;
+ results.pistas=discoverInternalCommercialCues({snapshot,scope,accounts,asOf,limit:0}).items;
+ // Uma negociação recém-registrada deve ser encontrada mesmo quando a
+ // conversa original é antiga ou o texto não corresponde às regras locais.
+ // Não classificar como compra sem fala comprovada: exibir para revisão.
+ const primary=new Set(),relatedByOpportunity=new Map();
+ for(const item of results.pistas){
+  if(item.sourceOpportunityId)primary.add(JSON.stringify([item.tenantId,item.sourceOpportunityId]));
+  for(const related of item.relatedSignals||[]){
+   if(!related.sourceOpportunityId)continue;
+   const k=JSON.stringify([item.tenantId,related.sourceOpportunityId]);
+   if(!relatedByOpportunity.has(k))relatedByOpportunity.set(k,related);
+  }
+ }
+ for(const op of opIndex.values()){
+  if(closed(op))continue;
+  const entered=dateFrom(op.criadoEm);
+  if(!entered||entered>asOf||deltaDays(entered,asOf)>14)continue;
+  const idKey=JSON.stringify([op.tenantId,op.id]);
+  if(primary.has(idKey))continue;
+  const account=accounts.get(JSON.stringify([op.tenantId,op.contaId]));
+  if(!account)continue;
+  const related=relatedByOpportunity.get(idKey);
+  if(related){
+   // Pista validada que estava escondida nas necessidades secundarias:
+   // a nova negociacao ganha seu proprio cartao, sem inventar evidencias.
+   results.pistas.push(format(account,'pistas',related.headline,related.evidence,
+    related.action,{status:'hipotese',priority:related.priority||50,
+     date:related.date,enteredAt:entered,sourceOpportunityId:op.id,
+     sourceEventId:related.sourceEventId,sourceType:related.sourceType,
+     sourceLabel:related.sourceLabel,intentType:related.intentType}));
+   continue;
+  }
+  results.pistas.push(format(account,'pistas','Nova oportunidade — revisar conversa',
+   'Oportunidade cadastrada em '+entered+'. A triagem textual ainda não confirmou uma intenção explícita nesta negociação.',
+   'Abrir a negociação, conferir a fala do comprador e qualificar a próxima ação.',
+   {status:'revisao',priority:20,date:entered,enteredAt:entered,
+    sourceOpportunityId:op.id,sourceLabel:'Entrada recente no CRM',intentType:'revisao'}));
+ }
+ results.pistas.sort((a,b)=>(b.enteredAt||b.date||'').localeCompare(a.enteredAt||a.date||'')||
+  b.priority-a.priority||(b.date||'').localeCompare(a.date||'')||
+  a.accountName.localeCompare(b.accountName,'pt-BR')||a.accountId.localeCompare(b.accountId,'pt-BR'));
  const dedup=new Set();
  for(const kind of Object.keys(results)){
-  results[kind]=results[kind].sort(scoreSort).filter(x=>{
-   const k=JSON.stringify([kind,x.tenantId,x.accountId,x.product||x.headline]);
+  const ordered=kind==='pistas'?results[kind]:results[kind].sort(scoreSort);
+  results[kind]=ordered.filter(x=>{
+   // O mesmo cliente pode ter negociações distintas criadas recentemente.
+   const k=kind==='pistas'?
+    JSON.stringify([kind,x.tenantId,x.accountId,x.sourceOpportunityId,x.intentType]):
+    JSON.stringify([kind,x.tenantId,x.accountId,x.product||x.headline]);
    if(dedup.has(k))return false;dedup.add(k);return true;
-  }).slice(0,12);
+  });
+  if(kind!=='pistas')results[kind]=results[kind].slice(0,12);
  }
  return {asOf,groups:results,limits:{perGroup:12},
   transparency:'Hipóteses baseadas em registros autorizados. Sem pesquisa web, previsão de venda ou alterações no CRM.'};

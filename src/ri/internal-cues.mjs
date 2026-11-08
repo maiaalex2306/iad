@@ -47,7 +47,7 @@ export function discoverInternalCommercialCues({snapshot,scope,accounts,asOf,lim
    sourceLabel:sourceType==='linkedin'?'Mensagem do prospect no LinkedIn':
     sourceType==='ia'?'Interpretação validada de mensagem do prospect':
     sourceType==='evento'?'Evento comercial cadastrado no CRM':'Nota comercial cadastrada no CRM',
-   date,priority:signal.priority+(sourceType==='linkedin'?7:sourceType==='ia'?6:sourceType==='evento'?3:0),
+   date,enteredAt:day(op.criadoEm),priority:signal.priority+(sourceType==='linkedin'?7:sourceType==='ia'?6:sourceType==='evento'?3:0),
    intentType:signal.type,topics:signal.topics||[],modelSource:signal.source
   };
   const prior=record.signals.get(typeKey);
@@ -95,20 +95,27 @@ export function discoverInternalCommercialCues({snapshot,scope,accounts,asOf,lim
  }
  const items=[];
  for(const record of perAccount.values()){
-  const sorted=[...record.signals.values()].sort((a,b)=>b.priority-a.priority||
+  // Importações de hoje podem conter conversas de semanas anteriores.
+  // Dar precedência à entrada na carteira, sem perder a gravidade do sinal.
+  const sorted=[...record.signals.values()].sort((a,b)=>
+   (b.enteredAt||'').localeCompare(a.enteredAt||'')||
+   b.priority-a.priority||
    (b.date||'').localeCompare(a.date||'')||
    a.intentType.localeCompare(b.intentType));
   const lead=sorted[0];if(!lead)continue;
   items.push({...lead,signalCount:sorted.length,
-   relatedSignals:sorted.slice(1,4).map(s=>({
+   relatedSignals:sorted.slice(1).map(s=>({
     headline:s.headline,evidence:s.evidence,action:s.action,
-    sourceLabel:s.sourceLabel,date:s.date,sourceOpportunityId:s.sourceOpportunityId
+    sourceLabel:s.sourceLabel,date:s.date,sourceOpportunityId:s.sourceOpportunityId,
+    sourceEventId:s.sourceEventId,sourceType:s.sourceType,intentType:s.intentType,priority:s.priority
    }))});
  }
- items.sort((a,b)=>b.priority-a.priority||(b.date||'').localeCompare(a.date||'')||
+ items.sort((a,b)=>(b.enteredAt||'').localeCompare(a.enteredAt||'')||
+   b.priority-a.priority||(b.date||'').localeCompare(a.date||'')||
    a.accountName.localeCompare(b.accountName,'pt-BR')||
    a.accountId.localeCompare(b.accountId,'pt-BR'));
- return {items:items.slice(0,Math.max(1,Math.min(12,Number.isSafeInteger(limit)?limit:12))),
+ // limit=0 permite todas as pistas para paginação pela interface (DOM em lotes).
+ return {items:items.slice(0,limit===0?items.length:Math.max(1,Math.min(12,Number.isSafeInteger(limit)?limit:12))),
   inspected:scanned,candidateAccounts:items.length,
   methodology:'Triagem local e sinais de IA validados contra fala literal; hipóteses comerciais, nunca avanço automático do IAD.'};
 }
