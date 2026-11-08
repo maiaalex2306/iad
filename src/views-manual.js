@@ -193,8 +193,8 @@
      'Abre o aplicativo desktop externo ou, quando necessário, oferece o console assistido; a importação dos leads é revisada e separada da do Linked Helper.'],
     ['⚙️', 'Configuração', 'Instalação, dados, nuvem, IA e diagnóstico.',
      'Veja instalação, identidade, integrações, dados, assistência de IA e diagnóstico. Os controles variam conforme as permissões do usuário.'],
-    ['❓', 'Método', 'Por que o sistema funciona assim.',
-     'Esta tela.']
+    ['🎓', 'Treinamento de Vendas', 'Como aprender o CRM e trabalhar leads nas primeiras 24 horas.',
+     'O painel Aprenda Vendendo inicia a prática; depois vem o Manual completo do método.']
   ];
 
   function manualDasTelas() {
@@ -2540,6 +2540,8 @@
       '<p class="tiny muted">As 24 horas são contadas a partir do início escolhido, em tempo corrido. A sequência é flexível e as marcações são feitas por você, não auditadas automaticamente. ' +
       'O progresso fica apenas neste navegador e é isolado por usuário e empresa; não é sincronizado entre aparelhos.</p>' +
       '<div class="iad-treino-grid">'+grupos+'</div>' +
+      (autorizado?'<p class="small"><strong>Para gestores:</strong> <a href="#/inteligencia">Abrir Pistas da carteira</a> · ' +
+        '<a href="#/mercado">Pesquisar Mercado (consulta externa manual)</a>.</p>':'') +
       '<div class="iad-treino-final"><strong>Meta de saída: leads prontos para agendamento.</strong>' +
       '<p class="small">Referência de execução: 15–20 leads revisados, pelo menos 5 com contato confirmado, ' +
       '5–10 abordagens personalizadas e 3 convites de reunião enviados e registrados. ' +

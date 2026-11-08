@@ -23,6 +23,8 @@ O **IAD possui oito dimensões, cada uma de 0 a 4 pontos (total 0 a 32)**: Probl
 | Conversas e E-mail | Associação de comunicações a contatos e negociações | Fonte externa e vínculo precisam estar configurados e validados |
 | Método e Configuração | Manual, identidade, integrações, PWA, diagnóstico e segurança | Alguns controles dependem de perfil/ambiente |
 
+**Guia da jornada prática:** [Treinamento Aprenda Vendendo — 24 horas](docs/TREINAMENTO-VENDAS-24H-v28698.md). O antigo nome do menu era Método; a rota `#/playbook` foi preservada.
+
 ## Tecnologias e segurança
 
 O frontend utiliza HTML5, CSS responsivo, JavaScript/ES Modules e PWA com cache do **app shell estático**. O estado principal da carteira fica no **Supabase/PostgreSQL**, com Auth, RLS por empresa e sincronização; o navegador pode manter pendências e dados auxiliares de fluxo, incluindo IndexedDB. **O CRM completo não é uma base offline independente.**

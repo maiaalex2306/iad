@@ -34,6 +34,7 @@ test('TR-24: painel fica antes do Manual e tem sete etapas verificáveis',()=>{
  assert.match(html,/Peça ao gestor a lista/);
  assert.match(html,/Inteligência Comercial e Mercado são restritas a gestores/);
  assert.match(html,/Manual do IAD CRM/);
+ assert.match(html,/Treinamento de Vendas/);
 });
 test('TR-24: estado só muda após clique e não altera dados comerciais',()=>{
  const {w,db,writes}=harness();
