@@ -48,6 +48,11 @@ export function normalizeProfile(input){
     let value;
     try{value=decodeURIComponent(specialized[2]);}catch{return '';}
     if(value.length>350||!(/^[\p{L}\p{N}_,.\-]{2,350}$/u.test(value)))return '';
+    // Links Sales/Recruiter exportados pelo LinkedIn contêm três
+    // componentes separados por vírgulas. Um link cortado não identifica
+    // o mesmo perfil e NÃO pode ser promovido a perfil válido.
+    const parts=value.split(',');
+    if(parts.length<3||parts.some(part=>!part))return '';
     return 'https://www.linkedin.com/'+specialized[1].toLowerCase()+'/'+encodeURIComponent(value).replace(/%2C/gi,',');
   }
   return '';
