@@ -4,6 +4,7 @@
 import {importLinkedInCsvStream,CSV_MAX_BYTES} from './linkedin-csv-stream.mjs';
 import {openLinkedInQueue,metaOf,saveMeta,addLeadBatch,leadAt,nextPendingLead,putLead,commitLeadAndMeta,deleteCampaign,pageOf} from './linkedin-queue-db.mjs';
 import {linkedinUrl,prepareLinkedInCampaign,campaignText} from './linkedin-comment-core.mjs';
+import {exportLinkedInCampaign,prepareLinkedInCampaignRestore,PORTABLE_MAX_FILE_BYTES} from './linkedin-campaign-portable.mjs';
 
 const STATUS={
   pendente:'Aguardando',perfil_aberto:'Perfil revisado',post_localizado:'Publicação identificada',
@@ -85,7 +86,20 @@ export function mountLinkedInLeads({root,scope,getScopeToken,nuvem}={}){
   const pause=button(d,'Pausar campanha',()=>void togglePause(),true);
   actions.append(start,openProfile,skip,interacted,pause);
   const list=el(d,'div','','iad-linkedin-import-list');
-  queue.append(counts,leadName,details,actions,message,list);
+  const transfer=el(d,'details','','iad-linkedin-transfer');
+  transfer.append(el(d,'summary','Transferir campanha entre navegador e aplicativo Windows'));
+  const transferHelp=el(d,'p',
+    'O Chrome e o aplicativo Windows têm armazenamentos diferentes. Exporte a campanha no Chrome e restaure o arquivo no aplicativo. O arquivo contém dados dos leads: guarde-o em local protegido e apague-o após a transferência.',
+    'small muted');
+  const backupButton=button(d,'Exportar campanha (.json)',()=>void exportCampaign(),true);
+  const restoreLabel=el(d,'label','Restaurar campanha (.json)','small muted');
+  const restoreFile=el(d,'input');restoreFile.type='file';restoreFile.accept='.json,application/json';
+  restoreFile.setAttribute('aria-label','Restaurar campanha LinkedIN Leads');
+  restoreLabel.append(restoreFile);
+  const transferStatus=el(d,'p','','small muted');
+  transferStatus.setAttribute('role','status');transferStatus.setAttribute('aria-live','polite');
+  transfer.append(transferHelp,backupButton,restoreLabel,transferStatus);
+  queue.append(counts,leadName,details,actions,message,transfer,list);
   
   const postPanel=el(d,'details','','card');
   postPanel.append(el(d,'summary','Publicação e comentário (revisão)'));
@@ -162,6 +176,8 @@ export function mountLinkedInLeads({root,scope,getScopeToken,nuvem}={}){
     skip.disabled=!current||importBusy||loading||paused;
     interacted.disabled=!current||importBusy||loading||paused;
     pause.disabled=!meta?.campaign||importBusy||loading;
+    backupButton.disabled=!meta?.campaign||importBusy||loading;
+    restoreFile.disabled=importBusy||loading;
     openPost.disabled=!current||importBusy||loading||paused;
     liked.disabled=!current||importBusy||loading||paused;
     analyze.disabled=!current||importBusy||loading||paused;
@@ -318,6 +334,68 @@ export function mountLinkedInLeads({root,scope,getScopeToken,nuvem}={}){
     try{await persist();}
     catch(e){meta.paused=previous;showCurrent();show('Falha ao gravar pausa: '+e.message,true);}
   }
+  async function exportCampaign(){
+    if(!db||!meta?.campaign||!valid()||busy||abort)return;
+    busy=true;disabled();transferStatus.textContent='Preparando backup da campanha...';
+    try{
+      const text=await exportLinkedInCampaign({
+        scope,meta,selected:current?.perfil||'',
+        readPage:(from,size)=>pageOf(db,scope,meta.campaign,from,size)
+      });
+      if(!valid())return;
+      const blob=new d.defaultView.Blob([text],{type:'application/json;charset=utf-8'});
+      const objectUrl=d.defaultView.URL.createObjectURL(blob);
+      const anchor=d.createElement('a');
+      anchor.href=objectUrl;anchor.download='iad-linkedin-campanha-'+new Date().toISOString().slice(0,10)+'.json';
+      d.body.appendChild(anchor);anchor.click();anchor.remove();
+      d.defaultView.setTimeout(()=>d.defaultView.URL.revokeObjectURL(objectUrl),1000);
+      transferStatus.textContent='Backup gerado: '+meta.valid+
+        ' perfis. Contém dados de leads, mas não contém senhas/cookies.';
+    }catch(e){transferStatus.textContent='Falha no backup: '+String(e?.message||e).slice(0,250);}
+    finally{busy=false;disabled();}
+  }
+  async function restoreCampaign(selectedFile){
+    if(!selectedFile||!valid()||busy||abort)return;
+    if(selectedFile.size>PORTABLE_MAX_FILE_BYTES){
+      transferStatus.textContent='Backup inválido: arquivo ultrapassa 12 MiB.';return;
+    }
+    if(meta?.campaign&&!d.defaultView.confirm(
+      'Restaurar este arquivo substituirá a campanha ativa neste navegador. A campanha anterior só será excluída após a nova gravação. Continuar?'))return;
+    const oldMeta=meta,oldCurrent=current,newCampaign=campaignId();
+    busy=true;disabled();transferStatus.textContent='Validando e restaurando checkpoint local...';
+    let committed=false;
+    try{
+      const text=await selectedFile.text();
+      if(!valid())return;
+      const data=prepareLinkedInCampaignRestore(text,scope);
+      if(!db)db=await openLinkedInQueue();
+      for(let i=0;i<data.rows.length;i+=350){
+        if(!valid())throw Error('Sessão alterada: restauração interrompida');
+        const batch=data.rows.slice(i,i+350);
+        const result=await addLeadBatch(db,scope,newCampaign,batch);
+        if(result.inserted!==batch.length||result.duplicates)
+          throw Error('Falha de integridade: perfis duplicados na transferência');
+      }
+      if(!valid())throw Error('Sessão alterada: restauração interrompida');
+      const nextMeta={campaign:newCampaign,...data.counts,
+        paused:data.paused,activeLine:data.selected?.linha||0,createdAt:new Date().toISOString()};
+      await saveMeta(db,scope,nextMeta);
+      committed=true;
+      meta=nextMeta;current=data.selected;uiGeneration++;
+      showCurrent();await renderPage();
+      transferStatus.textContent='Checkpoint restaurado: '+data.rows.length+
+        ' perfis, com estados e posição da campanha.';
+      show('Campanha recuperada neste navegador. Faça login no LinkedIn para continuar.');
+      if(oldMeta?.campaign&&oldMeta.campaign!==newCampaign)
+        void deleteCampaign(db,scope,oldMeta.campaign).catch(()=>{});
+    }catch(e){
+      if(!committed){
+        if(db)await deleteCampaign(db,scope,newCampaign).catch(()=>{});
+        meta=oldMeta;current=oldCurrent;showCurrent();
+      }
+      transferStatus.textContent='Falha na restauração: '+String(e?.message||e).slice(0,250);
+    }finally{restoreFile.value='';busy=false;disabled();}
+  }
   async function renderPage(){
     if(!db||!meta?.campaign||!valid())return;
     const rows=await pageOf(db,scope,meta.campaign,0,10);
@@ -376,6 +454,7 @@ export function mountLinkedInLeads({root,scope,getScopeToken,nuvem}={}){
     }finally{if(abort===ctrl)abort=null;file.value='';cancel.hidden=true;progress.hidden=true;disabled();}
   }
   file.addEventListener('change',()=>void importSelectedFile(file.files?.[0]));
+  restoreFile.addEventListener('change',()=>void restoreCampaign(restoreFile.files?.[0]));
   paste.addEventListener('input',disabled);
   draft.addEventListener('input',()=>{if(current)current.rascunho=limit(draft.value,1300);disabled();});
   draft.addEventListener('change',()=>{if(current&&db)putLead(db,current).catch(()=>{});});
