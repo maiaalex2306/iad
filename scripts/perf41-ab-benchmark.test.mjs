@@ -24,6 +24,11 @@ function load(which,source) {
  return import(pathToFileURL(path.join(dir,'opportunity-radar.mjs')).href);
 }
 const [oldModule,newModule]=await Promise.all([load('before',before),load('after',after)]);
+// A RI-46 alterou intencionalmente o tamanho da pagina do Radar;
+// medir memoizacao do detector com a mesma amostra de 12 em ambos.
+const [oldCues,newCues]=await Promise.all(
+ ['before','after'].map(name=>import(pathToFileURL(path.join(temp,name,'internal-cues.mjs')).href))
+);
 function fixture(unique){
  const N=5000,accounts=[],ops=[];
  for(let i=0;i<N;i++){
@@ -46,11 +51,23 @@ test('PERF41: comparar motor antes/depois no mesmo runner, sem alterar resultado
  for(const unique of [false,true]){
   const snapshot=fixture(unique);
   const args={snapshot,scope,asOf:'2026-11-06'};
-  const old=oldModule.buildCommercialOpportunityRadar,
-        current=newModule.buildCommercialOpportunityRadar;
-  const expected=old(args),actual=current(args);
-  assert.equal(JSON.stringify(actual),JSON.stringify(expected),
-    'A memoização alterou os resultados comerciais');
+  const accounts=new Map(snapshot.contas.map(a=>[JSON.stringify([a.tenantId,a.id]),a]));
+  const old=()=>oldCues.discoverInternalCommercialCues({...args,accounts,limit:12}),
+        current=()=>newCues.discoverInternalCommercialCues({...args,accounts,limit:12});
+  const expected=old(),actual=current();
+  const priorShape=x=>x.items.map(({enteredAt,relatedSignals,...item})=>({
+   ...item,relatedSignals:relatedSignals.map(
+    ({sourceEventId,sourceType,intentType,priority,...signal})=>signal
+   )
+  }));
+  assert.deepEqual(priorShape(actual),expected.items,
+   'A deteccao das primeiras 12 pistas nao pode mudar o sentido da evidencia');
+  assert.equal(actual.candidateAccounts,expected.candidateAccounts);
+  const oldRadar=oldModule.buildCommercialOpportunityRadar(args);
+  const newRadar=newModule.buildCommercialOpportunityRadar(args);
+  for(const kind of ['upsell','crossSell','forgotten','news','growth'])
+   assert.deepEqual(newRadar.groups[kind],oldRadar.groups[kind],
+    'RI-46 nao pode alterar categoria comercial historica: '+kind);
   old(args);current(args); // aquecimento simétrico
   const earlier=[],later=[];
   for(let i=0;i<4;i++){
