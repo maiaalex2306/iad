@@ -105,6 +105,19 @@ test('TXT importa URLs separadas por vírgulas sem partir identificador do Sales
  assert.equal(out.summary.invalid,0);
  assert.match(out.rows[1].perfil,/sales\/profile\/251749025,sSHS,name/);
 });
+test('CSV somente com URLs, sem cabeçalho, importa inclusive a primeira linha',async()=>{
+ const input='https://www.linkedin.com/in/primeiro-lead/\r\n'+
+   'https://www.linkedin.com/in/segundo-lead/\r\n';
+ const out=await collect(fakeFile(input,'urls.csv'));
+ assert.equal(out.summary.total,2);
+ assert.equal(out.summary.valid,2);
+ assert.equal(out.rows[0].perfil,'https://www.linkedin.com/in/primeiro-lead/');
+});
+test('CSV sem cabeçalho e apenas uma URL é válido',async()=>{
+ const out=await collect(fakeFile('https://www.linkedin.com/in/unico-lead/\n','urls.csv'));
+ assert.equal(out.summary.total,1);
+ assert.equal(out.summary.valid,1);
+});
 test('TXT simples sem cabeçalho aceita perfis convencionais, Sales Navigator e Recruiter',async()=>{
  const input=[
   'https://www.linkedin.com/in/diretora-industrial/',
