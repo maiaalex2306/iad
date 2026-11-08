@@ -6,11 +6,13 @@ on:
     paths:
       - 'src/linkedin-campaign-runner.mjs'
       - 'tests/linkedin-campaign-runner.test.mjs'
+      - 'docs/LINKEDIN-LEADS-EXECUTOR-LH-ACCEPTANCE.md'
       - '.github/workflows/linkedin-campaign-runner.yml'
   pull_request:
     paths:
       - 'src/linkedin-campaign-runner.mjs'
       - 'tests/linkedin-campaign-runner.test.mjs'
+      - 'docs/LINKEDIN-LEADS-EXECUTOR-LH-ACCEPTANCE.md'
       - '.github/workflows/linkedin-campaign-runner.yml'
   workflow_dispatch:
 permissions:
