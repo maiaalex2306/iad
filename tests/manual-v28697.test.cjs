@@ -56,9 +56,9 @@ test('MAN-97: diferencia hipótese de compra, cadastro recente e pesquisa extern
   assert.ok(doc.includes(term),'Manual técnico não aborda: '+term);
  }
  assert.match(m,/importação automática da pesquisa externa está desabilitada no piloto/);
- assert.match(m,/não é chance de compra/);
+ assert.match(m,/índice de revisão 0–100 serve para ordenar/);
  assert.match(m,/não lê o DOM do LinkedIn/);
- assert.match(m,/não equivale a compra confirmada/);
+ assert.match(m,/Nenhum dos dois equivale a compra confirmada/);
 });
 test('MAN-97: README não repete arquitetura obsoleta',()=>{
  const r=read('README.md');
