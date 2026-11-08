@@ -54,7 +54,12 @@ export function mountLinkedInLeads({root,scope,getScopeToken,nuvem}={}){
   const importStatus=el(d,'p','Selecione sua planilha para criar uma campanha.','small muted');
   importStatus.setAttribute('role','status');importStatus.setAttribute('aria-live','polite');
   const cancel=button(d,'Cancelar importação',()=>{if(abort)abort.abort();},true);cancel.hidden=true;
-  imports.append(help,file,progress,importStatus,cancel);
+  const diagDetails=el(d,'details','','iad-linkedin-diagnostics');diagDetails.hidden=true;
+  const diagTitle=el(d,'summary','Diagnóstico dos perfis rejeitados');
+  const diagText=el(d,'p','','small muted');
+  const diagButton=button(d,'Baixar diagnóstico de rejeições (.csv)',()=>downloadDiagnostics(),true);
+  diagDetails.append(diagTitle,diagText,diagButton);
+  imports.append(help,file,progress,importStatus,cancel,diagDetails);
 
   const queue=el(d,'section','','card');
   queue.append(el(d,'h3','3 · Fila de campanha'));
@@ -98,6 +103,42 @@ export function mountLinkedInLeads({root,scope,getScopeToken,nuvem}={}){
   ui.append(title,intro,account,imports,queue,postPanel,warning);
   root.replaceChildren(ui);
   let db=null,meta=null,current=null,busy=false,abort=null,request=0,uiGeneration=0;
+  let lastDiagnostic=null;
+  function downloadDiagnostics(){
+    if(!valid()||!lastDiagnostic?.problems?.length)return;
+    const safe=v=>{
+      let text=String(v??'').replace(/[\x00-\x1f]/g,' ').slice(0,500);
+      if(/^[=+@-]/.test(text))text="'"+text;
+      return '"'+text.replace(/"/g,'""')+'"';
+    };
+    const rows=[['Linha','Motivo','Nome','Valor analisado'],
+      ...lastDiagnostic.problems.map(p=>[p.line,p.reason,p.name,p.url])];
+    const data='\ufeff'+rows.map(row=>row.map(safe).join(';')).join('\r\n');
+    const blob=new Blob([data],{type:'text/csv;charset=utf-8'});
+    const url=d.defaultView.URL.createObjectURL(blob);
+    const a=d.createElement('a');
+    a.href=url;a.download='diagnostico-linkedin-leads.csv';
+    d.body.appendChild(a);a.click();a.remove();
+    d.defaultView.setTimeout(()=>d.defaultView.URL.revokeObjectURL(url),1000);
+  }
+  function showDiagnostics(summary){
+    lastDiagnostic=summary;
+    const n=Number(summary?.invalid||0);
+    diagDetails.hidden=n===0;
+    if(!n)return;
+    diagTitle.textContent='Diagnóstico: '+n+' perfil(is) rejeitado(s) — consultar causas';
+    const labels={
+      sem_link:'Sem endereço de perfil',
+      formato_linkedin_nao_suportado:'URL do LinkedIn que não representa perfil reconhecido',
+      link_externo:'Endereço de outro site',
+      campo_sem_url:'Campo sem URL utilizável'
+    };
+    const cause=Object.entries(summary.invalidReasons||{})
+      .map(([key,count])=>(labels[key]||key)+': '+count).join(' · ');
+    diagText.textContent=cause+'. O relatório contém '+(summary.problems?.length||0)+
+      ' registros amostrais, com linha e valor de origem'+
+      (summary.diagnosticTruncated?' (amostra limitada a 2.000 linhas).':'.');
+  }
   const show=(messageText,err=false)=>{
     if(!valid())return;
     message.textContent=messageText;
@@ -294,6 +335,7 @@ export function mountLinkedInLeads({root,scope,getScopeToken,nuvem}={}){
     abort=new AbortController();const ctrl=abort,oldMeta=meta,temporary=campaignId();
     file.disabled=true;cancel.hidden=false;progress.hidden=false;progress.value=0;disabled();
     importStatus.textContent='Preparando importação por lotes...';
+    lastDiagnostic=null;diagDetails.hidden=true;
     try{
       if(!db)db=await openLinkedInQueue();
       const result=await importLinkedInCsvStream(selected,{
@@ -314,6 +356,7 @@ export function mountLinkedInLeads({root,scope,getScopeToken,nuvem}={}){
       await renderPage();
       importStatus.textContent='Importação concluída: '+result.summary.valid+' válidos, '+
         result.summary.duplicates+' duplicados, '+result.summary.invalid+' inválidos.';
+      showDiagnostics(result.summary);
       show('Campanha pronta. Selecione Preparar próximo perfil.');
       if(oldMeta?.campaign&&oldMeta.campaign!==temporary)
         deleteCampaign(db,scope,oldMeta.campaign).catch(()=>{});
