@@ -52,14 +52,6 @@ export function normalizeProfile(input){
   }
   return '';
 }
-export function profileFailureReason(cells,fields){
-  const positions=fields.perfilCandidatos?.length?fields.perfilCandidatos:[fields.perfil];
-  const values=positions.filter(i=>i>=0).map(i=>String(cells[i]||'').trim());
-  if(!values.some(Boolean))return 'sem_link';
-  if(values.some(v=>/linkedin\.com/i.test(v)))return 'formato_linkedin_nao_suportado';
-  if(values.some(v=>/https?:\/\/|www\./i.test(v)))return 'link_externo';
-  return 'campo_sem_url';
-}
 function chooseSeparator(header){
   const counters={',':0,';':0,'\t':0};
   let quote=false;
@@ -131,6 +123,19 @@ export function findLinkedInProfileInCells(cells,fields){
   }
   if(seen.size>1)return {profile:'',sourceIndex:-1,ambiguous:true};
   return {profile:winner||'',sourceIndex,ambiguous:false};
+}
+/** Extract confirmed profile URL patterns from arbitrary TXT/HTML/CSV text.
+ * Do not treat company pages, posts, or other domains as personal profiles. */
+export function extractLinkedInProfilesFromText(text){
+  const input=String(text||'');
+  const matches=input.match(/(?:https?:\/\/)?(?:[a-z0-9-]+\.)*linkedin\.com\/[^\s<>"'()[\]{}]+/gi)||[];
+  const result=[],seen=new Set();
+  for(let raw of matches){
+    raw=raw.replace(/[.,;:!?]+$/g,'');
+    const profile=normalizeProfile(raw);
+    if(profile&&!seen.has(profile)){result.push(profile);seen.add(profile);}
+  }
+  return result;
 }
 export function profileFailureReason(cells,fields){
   const found=findLinkedInProfileInCells(cells,fields);
