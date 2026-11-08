@@ -39,8 +39,10 @@ test('MAN-97: versões, cache e carregamento lazy são coerentes',()=>{
  const src=read('src/views-manual.js'),config=read('src/config.js'),sw=read('sw.js'),app=read('src/app.js');
  new vm.Script(src,{filename:'src/views-manual.js'});
  new vm.Script(sw,{filename:'sw.js'});
- assert.match(config,/numero:\s*'v286\.97'/);
- assert.match(sw,/const CACHE = 'iad-crm-v286\.97'/);
+ const version=config.match(/numero:\s*'(v286\.\d+)'/);
+ assert.ok(version,'Versão pública v286 deve estar declarada');
+ assert.ok(sw.includes("const CACHE = 'iad-crm-"+version[1]+"'"),
+   'Versão do PWA deve acompanhar configuração pública');
  assert.match(sw,/'\.\/src\/views-manual\.js'/);
  assert.doesNotMatch(read('index.html'),/<script[^>]*views-manual\.js/);
  assert.match(app,/carregarOpcional\('IADViewsManual', 'views-manual\.js'\)/);

@@ -1,12 +1,12 @@
 # IaD CRM — Gestão comercial orientada à decisão
 
-> **Documentação atualizada em 08/11/2026.** A versão publicada e verificada antes desta revisão é **v286.96**. A **v286.97** é a atualização do Manual, sujeita à homologação e publicação. O [Manual Completo v286.97](docs/MANUAL-COMPLETO-v28697.md) e a tela **Método** (`#/playbook`) são a documentação operacional principal. Os arquivos v286.95 e RI-46 são históricos.
+> **Documentação atualizada em 08/11/2026.** A versão publicada e verificada antes desta revisão é **v286.96**. A **v286.97** foi a atualização do Manual; a **v286.98** acrescenta o painel prático Aprenda Vendendo — 24 horas e renomeia o menu Método para Treinamento de Vendas. O [Manual Completo v286.97](docs/MANUAL-COMPLETO-v28697.md) e a tela **Método** (`#/playbook`) são a documentação operacional principal. Os arquivos v286.95 e RI-46 são históricos.
 
 **O funil organiza. A decisão fecha.** O sistema mede evidência das decisões do comprador, não apenas tarefas realizadas pelo vendedor.
 
 ## Como começar
 
-Faça login em [iadcrm.com.br](https://www.iadcrm.com.br/), entre na opção **Método** e abra o grupo **Funcionalidades atuais e solução de problemas**. Os capítulos explicam os fluxos comerciais, inteligências, Linked Helper, campanhas assistidas, IA, permissões, sincronização e diagnóstico. O grupo **Método IAD, telas e rotina comercial** preserva o guia original das oito decisões.
+Faça login em [iadcrm.com.br](https://www.iadcrm.com.br/), entre na opção **Treinamento de Vendas**. Comece pelo painel **Aprenda Vendendo — 24 horas** e depois abra o grupo **Funcionalidades atuais e solução de problemas**. Os capítulos explicam os fluxos comerciais, inteligências, Linked Helper, campanhas assistidas, IA, permissões, sincronização e diagnóstico. O grupo **Método IAD, telas e rotina comercial** preserva o guia original das oito decisões.
 
 O **IAD possui oito dimensões, cada uma de 0 a 4 pontos (total 0 a 32)**: Problema, Prioridade, Impacto, Critérios, Stakeholders, Consenso, Risco e Processo de compra. Só as evidências do cliente movem a maturidade da decisão; a IA interpreta e sugere, mas não pontua nem altera decisões automaticamente.
 
@@ -22,6 +22,8 @@ O **IAD possui oito dimensões, cada uma de 0 a 4 pontos (total 0 a 32)**: Probl
 | LinkLeads / LinkedIN Leads | Aplicativo desktop separado e console assistido com CSV/TXT de até 100 MiB, fila IndexedDB e checkpoint | Publicações e curtidas no modo assistido exigem confirmação humana |
 | Conversas e E-mail | Associação de comunicações a contatos e negociações | Fonte externa e vínculo precisam estar configurados e validados |
 | Método e Configuração | Manual, identidade, integrações, PWA, diagnóstico e segurança | Alguns controles dependem de perfil/ambiente |
+
+**Guia da jornada prática:** [Treinamento Aprenda Vendendo — 24 horas](docs/TREINAMENTO-VENDAS-24H-v28698.md). O antigo nome do menu era Método; a rota `#/playbook` foi preservada.
 
 ## Tecnologias e segurança
 

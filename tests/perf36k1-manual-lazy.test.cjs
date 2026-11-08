@@ -51,7 +51,7 @@ test('PERF-36K1: o Manual não é analisado no shell inicial', () => {
   assert.match(app, /carregarOpcional\('IADViewsManual',\s*'views-manual\.js'\)/);
   assert.match(app, /rota\.hash === '#\/playbook'/);
   assert.match(app, /location\.hash !== '#\/playbook'/);
-  assert.ok(manual.length > 225000 && manual.length < 275000, 'Manual completo e carregado apenas sob demanda');
+  assert.ok(manual.length > 235000 && manual.length < 275000, 'Manual completo e carregado apenas sob demanda');
   assert.ok(core.length < 530000);
 });
 

@@ -193,8 +193,8 @@
      'Abre o aplicativo desktop externo ou, quando necessário, oferece o console assistido; a importação dos leads é revisada e separada da do Linked Helper.'],
     ['⚙️', 'Configuração', 'Instalação, dados, nuvem, IA e diagnóstico.',
      'Veja instalação, identidade, integrações, dados, assistência de IA e diagnóstico. Os controles variam conforme as permissões do usuário.'],
-    ['❓', 'Método', 'Por que o sistema funciona assim.',
-     'Esta tela.']
+    ['🎓', 'Treinamento de Vendas', 'Como aprender o CRM e trabalhar leads nas primeiras 24 horas.',
+     'O painel Aprenda Vendendo inicia a prática; depois vem o Manual completo do método.']
   ];
 
   function manualDasTelas() {
@@ -2401,6 +2401,160 @@
       '</div>';
   }
 
+
+  /* TREINO-24: aprendizagem prática nas primeiras 24 horas.
+     Checklist de autocertificação, sem ler ou escrever dados comerciais,
+     jamais contar envio de mensagem ou reunião como concluídos automaticamente.
+     O estado local NÃO é sincronizado entre aparelhos. */
+  const ETAPAS_TREINO_24H = Object.freeze([
+    { id:'preparar',janela:'0–2h',titulo:'Entrar, configurar e entender a carteira',
+      tarefa:'Entre na empresa certa, confira a versão, abra Hoje, Cadastros, Pipeline e Tarefas. Entenda a diferença entre oportunidade, contato, tarefa e evidência.',
+      entrega:'Você consegue localizar uma empresa, um contato e a respectiva negociação.',
+      rota:'#/cadastros',acao:'Abrir Cadastros' },
+    { id:'mapear',janela:'2–5h',titulo:'Montar uma lista inicial de prospecção',
+      tarefa:'Defina o perfil ideal (segmento, região, porte e cargo). Revise 15–20 leads autorizados na carteira e destaque os mais aderentes. Se ela estiver vazia, faça cadastro/importação revisada em Cadastros ou consulte o gestor sobre a ponte Linked Helper.',
+      entrega:'Lista de pelo menos 10 empresas relevantes, sem duplicidades aparentes. Pesquisa externa de Mercado é opcional e restrita a gestores; no piloto, não importa resultados para o CRM.',
+      rota:'#/pipeline',acao:'Abrir Pipeline' },
+    { id:'identificar',janela:'5–8h',titulo:'Reconhecer oportunidades de verdade',
+      tarefa:'Na carteira, compare registros recentes, mensagens, etapas e histórico. Diferencie intenção do prospect de cortesia, recusa ou mensagem do vendedor. Consulte Pistas da carteira se tiver perfil de gestor.',
+      entrega:'Até 8 leads priorizados com motivo verificável; novo registro sem fala de compra continua em revisão, não vira oportunidade quente.',
+      rota:'#/hoje',acao:'Abrir Hoje' },
+    { id:'validar',janela:'8–12h',titulo:'Confirmar contatos e preparar conversas',
+      tarefa:'Valide nome, cargo, LinkedIn, e-mail ou telefone dos leads escolhidos. Abra negociações para conhecer as oito decisões: Problema, Prioridade, Impacto, Critérios, Stakeholders, Consenso, Risco e Processo.',
+      entrega:'Ao menos 5 leads com interlocutor e canal de contato verificados; uma hipótese operacional e pergunta de descoberta por lead.',
+      rota:'#/cadastros',acao:'Abrir Contatos e empresas' },
+    { id:'abordar',janela:'12–17h',titulo:'Fazer as primeiras abordagens personalizadas',
+      tarefa:'Use o canal permitido e o contexto verdadeiro de cada empresa. Execute manualmente de 5 a 10 abordagens objetivas, com hipótese específica, pergunta e proposta de conversa curta. Registre cada ação na negociação.',
+      entrega:'5–10 abordagens realizadas e registradas, com referência ao interlocutor e canal. Rascunho ou mensagem copiada não é envio comprovado.',
+      rota:'#/tarefas',acao:'Registrar tarefas' },
+    { id:'acompanhar',janela:'17–21h',titulo:'Responder, registrar evidências e marcar retornos',
+      tarefa:'Leia respostas recebidas em seus canais conectados. Registre somente decisões efetivas do comprador e o que ficou combinado. Para quem ainda não respondeu, programe follow-up com data sem insistência excessiva.',
+      entrega:'Próxima ação com data para cada lead trabalhado; nenhuma reunião presumida sem aceite explícito do prospect.',
+      rota:'#/tarefas',acao:'Abrir Tarefas' },
+    { id:'converter',janela:'21–24h',titulo:'Consolidar a carteira e solicitar reuniões',
+      tarefa:'Revise a lista final, priorize 5 contatos qualificados, faça pelo menos 3 convites específicos para reunião (ou valide convites já enviados) e confira o próximo passo no CRM.',
+      entrega:'5 leads com contato validado, ao menos 3 solicitações de reunião registradas e retornos agendados. Reunião marcada só após confirmação do cliente.',
+      rota:'#/pipeline',acao:'Conferir Pipeline' }
+  ]);
+  const TREINO_MEMORIA = new Map();
+  function contextoDoTreino() {
+    const c=Store.contexto && Store.contexto(),u=c && c.usuario;
+    if(!u || !u.id) return null;
+    const tenant=c.admin ? ((c.filtros && c.filtros.tenant) || 'todas') : c.tenantId;
+    return {chave:'iad:treino24:v1:'+encodeURIComponent(String(u.id))+':'+encodeURIComponent(String(tenant||'')),
+      bloqueado:!tenant||tenant==='todas'};
+  }
+  function lerTreino() {
+    const escopo=contextoDoTreino();
+    const vazio={inicio:'',concluidas:[],somenteSessao:false};
+    if(!escopo || escopo.bloqueado)return {...vazio,bloqueado:true};
+    try {
+      const texto=global.localStorage.getItem(escopo.chave);
+      if(!texto)return {...vazio,bloqueado:false};
+      const parsed=JSON.parse(texto);
+      const inicio=typeof parsed?.inicio==='string' && Number.isFinite(Date.parse(parsed.inicio))
+        ? parsed.inicio : '';
+      const ids=new Set(ETAPAS_TREINO_24H.map(e=>e.id));
+      const concluidas=Array.isArray(parsed?.concluidas)
+        ? [...new Set(parsed.concluidas.filter(id=>ids.has(id)))]:[];
+      return {inicio,concluidas,somenteSessao:false,bloqueado:false};
+    }catch(_){
+      const mem=TREINO_MEMORIA.get(escopo.chave)||vazio;
+      return {...mem,somenteSessao:true,bloqueado:false};
+    }
+  }
+  function salvarTreino(estado) {
+    const escopo=contextoDoTreino();
+    if(!escopo||escopo.bloqueado)return false;
+    const payload={inicio:estado.inicio,concluidas:estado.concluidas};
+    try{global.localStorage.setItem(escopo.chave,JSON.stringify(payload));TREINO_MEMORIA.delete(escopo.chave);return true;}
+    catch(_){TREINO_MEMORIA.set(escopo.chave,payload);return false;}
+  }
+  function atualizarPainelTreino(foco) {
+    /* A presença do próprio painel é a guarda; a rota pode estar sendo montada
+       por um render assíncrono sem que o hash tenha sido atualizado ainda. */
+    const antigo=global.document?.getElementById('iad-treino-24h');
+    if(!antigo)return;
+    antigo.outerHTML=manualDoTreinamento24h();
+    if(foco) {
+      const input=global.document.getElementById('iad-treino-'+foco);
+      if(input)input.focus({preventScroll:true});
+    }
+  }
+  function iniciarTreinamento() {
+    const atual=lerTreino();
+    if(atual.bloqueado||atual.inicio)return;
+    salvarTreino({inicio:new Date().toISOString(),concluidas:[]});
+    atualizarPainelTreino();
+  }
+  function marcarTreinamento(etapa,concluido) {
+    if(!ETAPAS_TREINO_24H.some(e=>e.id===etapa))return;
+    const atual=lerTreino();
+    if(!atual.inicio||atual.bloqueado)return;
+    const set=new Set(atual.concluidas);
+    if(concluido)set.add(etapa);else set.delete(etapa);
+    salvarTreino({inicio:atual.inicio,concluidas:[...set]});
+    atualizarPainelTreino(etapa);
+  }
+  function reiniciarTreinamento() {
+    const atual=lerTreino();
+    if(!atual.inicio||atual.bloqueado)return;
+    if(typeof global.confirm==='function'&&!global.confirm('Reiniciar a jornada? Apenas as marcações de treinamento deste usuário e empresa serão apagadas.'))return;
+    salvarTreino({inicio:'',concluidas:[]});
+    atualizarPainelTreino();
+  }
+  function manualDoTreinamento24h() {
+    const estado=lerTreino();
+    const autorizado=!!(Store.contexto && Store.contexto()?.gestor);
+    const feitos=estado.concluidas.length,total=ETAPAS_TREINO_24H.length,porcentagem=Math.round(feitos*100/total);
+    const horas=estado.inicio?Math.max(0,Math.floor((Date.now()-Date.parse(estado.inicio))/3600000)):0;
+    const tituloSituacao=estado.bloqueado?'Selecione uma empresa no filtro administrativo para começar.'
+      :!estado.inicio?'Jornada ainda não iniciada'
+      :horas>=24?'As primeiras 24 horas terminaram. Você pode completar as etapas pendentes.'
+      :'Jornada iniciada · '+horas+'h desde o início';
+    const grupos=ETAPAS_TREINO_24H.map(function(etapa,i){
+      const feito=estado.concluidas.includes(etapa.id);
+      return '<section class="iad-treino-etapa'+(feito?' concluida':'')+'">' +
+        '<div class="iad-treino-linha"><span class="iad-treino-hora">'+esc(etapa.janela)+'</span>' +
+        '<h3>'+esc((i+1)+'. '+etapa.titulo)+'</h3></div>' +
+        '<p class="small">'+esc(etapa.tarefa)+'</p>' +
+        '<p class="small"><strong>Entrega verificável:</strong> '+esc(etapa.entrega)+'</p>' +
+        '<div class="iad-treino-acoes"><a class="btn ghost mini" href="'+etapa.rota+'">'+esc(etapa.acao)+'</a>' +
+        '<label for="iad-treino-'+etapa.id+'"><input id="iad-treino-'+etapa.id+'" type="checkbox" ' +
+        'onchange="IADViewsManual.marcarTreinamento(\''+etapa.id+'\',this.checked)" '+
+        (feito?'checked ':'')+(!estado.inicio||estado.bloqueado?'disabled ':'')+'/> Etapa realizada</label></div></section>';
+    }).join('');
+    return '<section class="card iad-treino" id="iad-treino-24h" aria-labelledby="iad-treino-titulo">' +
+      '<div class="iad-treino-cabecalho"><div><span class="tiny muted">PAINEL DE APRENDIZADO PRÁTICO</span>' +
+      '<h1 id="iad-treino-titulo">Painel — Aprenda Vendendo</h1>' +
+      '<p class="small"><strong>Jornada prática de 24 horas</strong></p>' +
+      '<p class="small">Aprenda as operações essenciais do IaD CRM trabalhando com leads reais e autorizados. ' +
+      'A meta é terminar o primeiro ciclo com contatos qualificados e pedidos de reunião realizados.</p></div>' +
+      '<div class="iad-treino-contador"><strong>'+feitos+'/'+total+'</strong><span>etapas realizadas</span></div></div>' +
+      '<div class="iad-treino-progresso" aria-live="polite"><progress max="'+total+'" value="'+feitos+'" aria-label="Progresso manual do treinamento"></progress>' +
+      '<span>'+porcentagem+'% · '+esc(tituloSituacao)+'</span></div>' +
+      (estado.bloqueado?'<p class="small">O administrador precisa selecionar uma empresa específica antes de salvar o treinamento.</p>':
+        !estado.inicio?'<button class="btn" type="button" onclick="IADViewsManual.iniciarTreinamento()">Iniciar minha jornada de 24 horas</button>':
+        '<button class="btn ghost mini" type="button" onclick="IADViewsManual.reiniciarTreinamento()">Reiniciar jornada</button>') +
+      (estado.somenteSessao?'<p class="tiny muted">Armazenamento local indisponível: marcações preservadas apenas nesta sessão.</p>':'') +
+      '<p class="tiny muted">As 24 horas são contadas a partir do início escolhido, em tempo corrido. A sequência é flexível e as marcações são feitas por você, não auditadas automaticamente. ' +
+      'O progresso fica apenas neste navegador e é isolado por usuário e empresa; não é sincronizado entre aparelhos.</p>' +
+      '<div class="iad-treino-grid">'+grupos+'</div>' +
+      (autorizado?'<p class="small"><strong>Para gestores:</strong> <a href="#/inteligencia">Abrir Pistas da carteira</a> · ' +
+        '<a href="#/mercado">Pesquisar Mercado (consulta externa manual)</a>.</p>':'') +
+      '<div class="iad-treino-final"><strong>Meta de saída: leads prontos para agendamento.</strong>' +
+      '<p class="small">Referência de execução: 15–20 leads revisados, pelo menos 5 com contato confirmado, ' +
+      '5–10 abordagens personalizadas e 3 convites de reunião enviados e registrados. ' +
+      'Resposta e confirmação dependem do comprador; solicitar reunião não significa agendá-la.</p>' +
+      '<p class="small"><strong>Sem carteira inicial?</strong> Use Cadastros e importação revisada autorizada ou o processo existente do Linked Helper. ' +
+      (autorizado?'Gestores podem investigar empresas no Mercado, mas o piloto não importa automaticamente.':'Peça ao gestor a lista e o ICP autorizado; Inteligência Comercial e Mercado são restritas a gestores.')+'</p>' +
+      '<p class="small"><strong>Modelo de abordagem:</strong> “Vi que sua empresa atua em [contexto verificável]. ' +
+      'Trabalhamos com [problema específico que conseguimos resolver]. Faz sentido uma conversa de 15 minutos para verificar se isso é prioridade?” ' +
+      'Personalize e confira a informação antes de enviar.</p>' +
+      '<a href="#/playbook" onclick="App.irNoManual(\'m-regra\');return false;">Continuar para o Manual do IAD CRM</a>' +
+      '</div></section>';
+  }
+
   function playbook() {
     const dims = P.DIMENSOES.map(function (d) {
       const canais = P.CANAIS.map(function (c) {
@@ -2432,7 +2586,8 @@
        mão, não a três cliques. */
     const v = global.IADVersao || {};
 
-    return '<div class="row" style="align-items:flex-start">' +
+    return manualDoTreinamento24h() +
+      '<div class="row" style="align-items:flex-start">' +
       '<div><h1 style="margin:0">Manual do IAD CRM</h1>' +
       /* Dizia "funciona offline: está tudo guardado no aparelho" — verdade até a
          v180 e mentira desde então. O aparelho não guarda mais carteira: o
@@ -2549,5 +2704,8 @@
       '<div class="sec-titulo" id="m-cadencia"><h2>As 8 decisões e a cadência multicanal</h2></div>' + dims;
   }
 
-  global.IADViewsManual = Object.freeze({ playbook: playbook });
+  global.IADViewsManual = Object.freeze({ playbook: playbook,
+    iniciarTreinamento: iniciarTreinamento,
+    marcarTreinamento: marcarTreinamento,
+    reiniciarTreinamento: reiniciarTreinamento });
 })(window);

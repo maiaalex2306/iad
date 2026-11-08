@@ -48,7 +48,7 @@
       const destino = document.getElementById('conteudo');
       if (!destino || !destino.querySelector('#iad-manual-loading')) return;
       destino.innerHTML = '<section class="card" role="alert">' +
-        '<h2>Método indisponível</h2>' +
+        '<h2>Treinamento de Vendas indisponível</h2>' +
         '<p>O conteúdo do Manual não pôde ser carregado. As outras telas continuam disponíveis.</p>' +
         '<button type="button" class="btn alt" onclick="location.reload()">Tentar novamente</button>' +
         '</section>';
@@ -130,8 +130,8 @@
     { hash: '#/contas', ico: '🏢', nome: 'Contas', render: V.contas, foraDasAbas: true },
     /* Deixou de ser tela escondida: é a teoria que o vendedor precisa antes de
        marcar a próxima reunião, e teoria fora do menu é teoria que ninguém lê. */
-    { hash: '#/playbook', ico: '❓', nome: 'Método', render: V.playbook,
-      ajuda: 'A teoria inteira: como uma tarefa vira avanço, o que conta como evidência em cada uma das oito decisões e o que fazer em cada canal.' },
+    { hash: '#/playbook', ico: '🎓', nome: 'Treinamento de Vendas', render: V.playbook,
+      ajuda: 'Aprenda Vendendo: roteiro prático das primeiras 24 horas, geração de leads qualificados e Manual completo do IAD CRM.' },
     /* Logo abaixo do Método, que é o fim do menu: o caderninho não é uma
        etapa do trabalho, é o que sobra dele. Fica onde a mão alcança sem
        disputar lugar com as telas que movem a carteira. */
