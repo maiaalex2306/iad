@@ -74,6 +74,36 @@ const server = http.createServer((req, res) => {
     assert.equal(loaded.title, true);
     assert.equal(loaded.htmlOk, true, 'HTML real do Manual');
     assert.equal(loaded.manualResources, 1, 'Importação única do módulo');
+    const guides=await page.evaluate(()=>{
+      const selectors=['m-guia-v28697','m-radar-28697','m-mercado-operacional',
+        'm-maquina-prospeccao','m-linkedin-operacao','m-nuvem-integridade',
+        'm-papeis-empresas','m-ia-servicos','m-operacao-rapida','m-tecnologia-perf'];
+      const sections=selectors.map(id=>document.querySelector('#'+id));
+      const summaries=[...document.querySelectorAll('.indice-manual summary')].map(e=>e.textContent);
+      const links=[...document.querySelectorAll('.indice-manual a')];
+      return {
+       allPresent:sections.every(Boolean),
+       unique:selectors.every(id=>document.querySelectorAll('#'+id).length===1),
+       tocComplete:selectors.every(id=>links.some(a=>a.getAttribute('onclick')?.includes(id))),
+       summaryCount:summaries.length,
+       oldSection:!!document.querySelector('#m-regra')&&!!document.querySelector('#m-oito'),
+       text:document.querySelector('#m-radar-28697')?.textContent?.slice(0,200)
+      };
+    });
+    assert.equal(guides.allPresent,true,'Dez guias atuais visíveis no Manual');
+    assert.equal(guides.unique,true,'IDs dos guias não podem duplicar');
+    assert.equal(guides.tocComplete,true,'Índice precisa conter links para todos os guias');
+    assert.equal(guides.summaryCount,2,'Navegação agrupada para não sobrecarregar o índice');
+    assert.equal(guides.oldSection,true,'Método anterior permanece preservado');
+    await page.setViewportSize({width:375,height:750});
+    const mobile=await page.evaluate(()=>({
+      viewport:innerWidth,
+      overflow:document.documentElement.scrollWidth>innerWidth+2,
+      details:document.querySelectorAll('.indice-manual details').length
+    }));
+    assert.equal(mobile.overflow,false,'Manual não pode transbordar da viewport de 375px');
+    assert.equal(mobile.details,2);
+    await page.setViewportSize({width:1280,height:720});
 
     await page.waitForFunction(() => !!navigator.serviceWorker.controller, null,
       {timeout:30000});
@@ -96,7 +126,8 @@ const server = http.createServer((req, res) => {
     console.log('PERF36K1_MANUAL_CHROMIUM_PASS ' + JSON.stringify({
       scope:'chromium-local-anonymous-synthetic', bootScripts:boot.scriptCount,
       removedFromStartup:true, importedOnce:true, htmlParity:true,
-      offlinePrecache:true, bytesOfManual:loaded.contentLength
+      offlinePrecache:true, bytesOfManual:loaded.contentLength,
+      updatedGuides:10, responsive375:true, groupedIndex:true
     }));
     await context.close();
   } finally {

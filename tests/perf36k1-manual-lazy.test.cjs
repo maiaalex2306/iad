@@ -51,7 +51,7 @@ test('PERF-36K1: o Manual não é analisado no shell inicial', () => {
   assert.match(app, /carregarOpcional\('IADViewsManual',\s*'views-manual\.js'\)/);
   assert.match(app, /rota\.hash === '#\/playbook'/);
   assert.match(app, /location\.hash !== '#\/playbook'/);
-  assert.ok(manual.length > 170000 && manual.length < 210000);
+  assert.ok(manual.length > 225000 && manual.length < 275000, 'Manual completo e carregado apenas sob demanda');
   assert.ok(core.length < 530000);
 });
 
@@ -73,6 +73,20 @@ test('PERF-36K1: capitulos anteriores preservados e novidades documentadas sem d
     assert.ok(actual.includes('id="'+name+'"'),'capitulo novo ausente: '+name);
     assert.equal(actual.split('id="'+name+'"').length-1,1,'capitulo repetido: '+name);
   }
+  for(const name of ['m-guia-v28697','m-radar-28697','m-mercado-operacional',
+    'm-maquina-prospeccao','m-linkedin-operacao','m-nuvem-integridade',
+    'm-papeis-empresas','m-ia-servicos','m-operacao-rapida','m-tecnologia-perf']) {
+    assert.ok(actual.includes('id="'+name+'"'),'guia atualizado ausente: '+name);
+    assert.equal(actual.split('id="'+name+'"').length-1,1,'guia duplicado: '+name);
+  }
+  assert.match(actual,/Funcionalidades atuais e solução de problemas/);
+  assert.match(actual,/Método IAD, telas e rotina comercial/);
+  assert.match(actual,/Entradas de hoje/);
+  assert.match(actual,/100 MiB/);
+  assert.match(actual,/NOVO REGISTRO · REVISAR/);
+  assert.match(actual,/importação automática da pesquisa externa está desabilitada no piloto/);
+  assert.match(actual,/não limpe cookies\/localStorage\/IndexedDB/);
+  assert.match(actual,/0 a 32/);
   assert.match(actual,/Inteligência Comercial/);
   assert.match(actual,/Supabase/);
   assert.match(actual,/Contato a confirmar/);

@@ -10,6 +10,7 @@ on:
       - 'sw.js'
       - 'scripts/perf36k1-manual-chromium.cjs'
       - 'tests/perf36k1-manual-lazy.test.cjs'
+      - 'tests/manual-v28697.test.cjs'
       - '.github/workflows/perf-36k1-manual-lazy.yml'
   workflow_dispatch:
 permissions:
@@ -25,13 +26,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Verificar sintaxe e paridade exata da tela Método contra v286.74
+      - name: Verificar Manual atualizado, capítulos preservados e PWA
         run: |
           node --check src/views.js
           node --check src/views-manual.js
           node --check src/app.js
           node --check sw.js
-          node --test tests/perf36k1-manual-lazy.test.cjs
+          node --test tests/perf36k1-manual-lazy.test.cjs tests/manual-v28697.test.cjs
   manual-chromium:
     runs-on: ubuntu-latest
     timeout-minutes: 15

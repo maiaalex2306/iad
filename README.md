@@ -1,148 +1,50 @@
-# IAD CRM — Gestão comercial orientada à decisão
+# IaD CRM — Gestão comercial orientada à decisão
 
-> **Documentação atual — 08/11/2026:** a série v286 usa Supabase/PostgreSQL e sincronização com o servidor. Os parágrafos históricos abaixo descrevem a origem do produto e NÃO devem ser lidos como o estado operacional atual. O manual técnico e funcional atualizado está em [docs/MANUAL-COMPLETO-v28695.md](docs/MANUAL-COMPLETO-v28695.md) e os novos capítulos estão na tela **Método**. Baseline pública verificada: **v286.94**; **v286.95** foi publicada com contatos no radar e atualização documental. A correção **v286.96** acrescenta rótulos, paginação e visibilidade das entradas recentes, sujeita a testes e publicação.
+> **Documentação atualizada em 08/11/2026.** A versão publicada e verificada antes desta revisão é **v286.96**. A **v286.97** é a atualização do Manual, sujeita à homologação e publicação. O [Manual Completo v286.97](docs/MANUAL-COMPLETO-v28697.md) e a tela **Método** (`#/playbook`) são a documentação operacional principal. Os arquivos v286.95 e RI-46 são históricos.
 
-> O funil organiza. A decisão fecha.
+**O funil organiza. A decisão fecha.** O sistema mede evidência das decisões do comprador, não apenas tarefas realizadas pelo vendedor.
 
-CRM que não mede o que o vendedor fez, e sim **o que mudou na decisão do comprador**.
-Roda no navegador, instala no desktop (Windows/macOS/Linux) e vira aplicativo no
-Android e no iPhone — com **um único código**.
+## Como começar
 
-## Por que PWA primeiro
+Faça login em [iadcrm.com.br](https://www.iadcrm.com.br/), entre na opção **Método** e abra o grupo **Funcionalidades atuais e solução de problemas**. Os capítulos explicam os fluxos comerciais, inteligências, Linked Helper, campanhas assistidas, IA, permissões, sincronização e diagnóstico. O grupo **Método IAD, telas e rotina comercial** preserva o guia original das oito decisões.
 
-Quatro aplicativos separados (web, Windows, Android, iOS) custam quatro vezes mais
-e validam a metodologia quatro vezes mais devagar. Um PWA entrega desde já:
+O **IAD possui oito dimensões, cada uma de 0 a 4 pontos (total 0 a 32)**: Problema, Prioridade, Impacto, Critérios, Stakeholders, Consenso, Risco e Processo de compra. Só as evidências do cliente movem a maturidade da decisão; a IA interpreta e sugere, mas não pontua nem altera decisões automaticamente.
 
-| Plataforma | Como instalar |
-|---|---|
-| Desktop (Chrome/Edge) | ícone de instalar na barra de endereço |
-| Android | menu ⋮ → “Instalar aplicativo” |
-| iPhone/iPad (Safari) | Compartilhar → “Adicionar à Tela de Início” |
-| Navegador | funciona sem instalar nada |
+## Áreas do produto
 
-Funciona **offline**: os dados ficam no dispositivo e o app abre sem rede.
-Quando o produto estiver validado, o mesmo código é empacotado com
-**Tauri** (Windows/macOS) e **Capacitor** (App Store / Play Store) — sem reescrever a interface.
+| Área | Capacidade principal | Restrição |
+|---|---|---|
+| Hoje, Painel, Pipeline, Cockpit e Tarefas | Fila, execução, evidências, maturidade e gestão de negócios | A carteira autorizada pelo servidor é a fonte |
+| Cadastros, Nutrição, Notas e Revisão | Qualidade de dados, fluxo comercial e rotinas do vendedor | Edição explícita, conforme permissões |
+| Inteligência Comercial | Pistas, upsell/cross-sell, contas esquecidas, sinais internos e crescimento das vendas cadastradas | **Somente leitura interna; sem consulta web** |
+| Inteligência de Mercado | Pesquisa externa por território, DDD, segmento, ICP e IA, com investigação adicional | **Busca por clique; importação bloqueada no piloto** |
+| Linked Helper | Importação revisada de leads/conversas por ponte e empresa | SDR não é prospect; não presumir compra |
+| LinkLeads / LinkedIN Leads | Aplicativo desktop separado e console assistido com CSV/TXT de até 100 MiB, fila IndexedDB e checkpoint | Publicações e curtidas no modo assistido exigem confirmação humana |
+| Conversas e E-mail | Associação de comunicações a contatos e negociações | Fonte externa e vínculo precisam estar configurados e validados |
+| Método e Configuração | Manual, identidade, integrações, PWA, diagnóstico e segurança | Alguns controles dependem de perfil/ambiente |
 
-## O que já está implementado
+## Tecnologias e segurança
 
-Os quatro componentes que sustentam a metodologia:
+O frontend utiliza HTML5, CSS responsivo, JavaScript/ES Modules e PWA com cache do **app shell estático**. O estado principal da carteira fica no **Supabase/PostgreSQL**, com Auth, RLS por empresa e sincronização; o navegador pode manter pendências e dados auxiliares de fluxo, incluindo IndexedDB. **O CRM completo não é uma base offline independente.**
 
-1. **Decision Engine — as 8 decisões e o IAD.** Problema, Prioridade, Impacto,
-   Critérios, Stakeholders, Consenso, Risco e Processo de compra, pontuados
-   0 (desconhecido) / 1 (parcial) / 2 (comprovado pelo cliente) → IAD de 0 a 16.
-2. **Evidence Engine.** A linha do tempo separa `Decision Event` (o cliente se moveu)
-   de `Activity` (nós nos movemos). Só evidência do cliente zera o **Evidence Age**;
-   proposta enviada e follow-up feito não contam como avanço, por definição do modelo.
-3. **Buying Group Map.** Papéis, posição (favorável/neutro/resistente/não acessado)
-   e **Stakeholder Coverage** sobre os papéis críticos, com alerta de venda
-   single-threaded e de proposta sem decisor econômico.
-4. **Next Best Decision.** Regra que aponta qual decisão precisa ocorrer *dentro do
-   cliente* agora — e como provocá-la em LinkedIn, LinkedHelper, e-mail e WhatsApp.
+As Edge Functions usam TypeScript/Deno e segredos de servidor. O assistente oferece provedores OpenAI, Anthropic e Groq conforme configuração; Inteligência de Mercado usa pesquisa externa com OpenAI e/ou Anthropic. Os resultados exigem conferência. A plataforma integra pontes de Linked Helper/LinkLeads, e-mail e WhatsApp, cada qual sujeita à implantação e permissões próprias.
 
-**Força da evidência** (relato / confirmado / documentado) governa a pontuação:
-uma dimensão só chega a 2 com evidência confirmada ou documentada. Cada evidência
-aponta **quem a produziu** e pode carregar **o que ficou combinado e para quando** —
-o compromisso que vira o relógio de atraso.
+**Nunca coloque service_role, tokens de usuários, chaves privadas, senhas ou cookies de LinkedIn no frontend, no Manual ou em relatórios.**
 
-Em volta disso: contas, contatos (com influência e hierarquia), oportunidades,
-**tarefas** com decisão-alvo e **arquivos** categorizados pela decisão que destravam;
-**Proposal Gate** com prontidão em % e liberação manual registrada; **Decision
-Velocity**; **desfecho** (ganho, perdido para concorrente, perdido por inação, adiado)
-que congela a foto da decisão e alimenta a seção de **aprendizado da carteira**;
-**painel executivo** que separa pipeline saudável, em risco e zumbi e mostra qual
-decisão está travando cada faixa de receita; tela **Hoje** com o que precisa de
-atenção agora; **revisão semanal**; **curva do IAD** e delta da semana; histórico
-unificado; playbook; **importação por CSV** e export/import JSON.
+## Versionamento, testes e publicação
 
-Quatro relógios de atraso, todos calculados: Evidence Age, compromisso vencido,
-tempo na etapa e contador de adiamentos da data de fechamento.
+- `src/config.js` apresenta `window.IADVersao`; `sw.js` apresenta a versão do cache. Devem coincidir na mesma release.
+- `src/views-manual.js` contém o Manual, carregado sob demanda pelo `src/app.js`.
+- Testes: Node.js, GitHub Actions e Chromium/Playwright, além de checagens de acesso, tenant e RLS.
+- O deploy de um arquivo estático não prova funcionamento de IA autenticada, sincronização com dados reais ou ausência de conflito. Homologar serviços e dados separadamente.
+- Em caso de edições pendentes, **não limpe dados do navegador**, não use descarte e não sobrescreva a carteira antes de conciliar e preservar cópia.
 
-Classificação automática da carteira: *Negócio real*, *Oculto promissor*,
-*Em construção*, *Falso avançado* e *Zumbi*.
+## Documentos
 
-## Como rodar
+- [Manual Completo v286.97](docs/MANUAL-COMPLETO-v28697.md) — referência atual, passos por tela e tecnologias.
+- [Manual de base v286.95](docs/MANUAL-COMPLETO-v28695.md) — histórico técnico.
+- [RI-46 — Pistas recentes](docs/RI46-PISTAS-RECENTES-20261108.md) — filtros, contato/telefone e paginação.
+- [PERF-40 — Auditoria de sincronização](docs/PERF40-AUDITORIA-SINCRONIZACAO-20261107.md) — medições e limites.
+- [RI-08 — Intenção comercial](docs/RI08-LINKEDHELPER-INTENCOES-HOMOLOGACAO.md) e [LinkLeads v286.94](docs/LINKLEADS-INTEGRACAO-v28694.md) — verificações específicas.
 
-Basta um servidor estático (o service worker exige `http://` ou `https://`):
-
-```bash
-npx http-server -p 8099 -c-1 .
-# abra http://127.0.0.1:8099
-```
-
-Sem instalação, publique a pasta em qualquer hospedagem estática
-(GitHub Pages, Netlify, Vercel, Cloudflare Pages) e o app já é instalável.
-Na primeira tela, **Carregar demonstração** monta uma carteira fictícia com os
-cinco grupos de pipeline para treinar a leitura do modelo.
-
-## Estrutura
-
-```
-index.html              shell do app
-manifest.webmanifest    identidade PWA (instalação)
-sw.js                   service worker (offline, cache do app shell)
-assets/styles.css       mobile-first; o mesmo CSS serve celular e desktop
-src/playbook.js         ontologia da decisão: 8 dimensões, evidências, gates, canais
-src/store.js            persistência (localStorage) — trocar aqui para IndexedDB ou API
-src/engine.js           IAD, Evidence Age, Velocity, Coverage, Gates, NBD, carteira
-src/arquivos.js         anexos em IndexedDB (não cabem no localStorage)
-src/csv.js              importação por planilha, com prévia e detecção de duplicados
-src/graficos.js         gráficos em SVG puro, sem biblioteca
-src/integracoes.js      ponte com o Linked Helper: busca as respostas e converte
-src/auth.js             empresas do sistema, usuários, sessão e papéis
-ponte/                  o coletor que recebe o webhook (Cloudflare Worker)
-src/views.js            telas
-src/ui.js               formatação e diálogos
-src/app.js              rotas e ações
-src/seed.js             carteira de demonstração
-```
-
-O núcleo conceitual está isolado em `playbook.js` + `engine.js`: são eles que viram
-serviço no backend quando o produto sair do modo local.
-
-### Os guias de operação, em `nuvem/`
-
-| Arquivo | Para quê |
-| --- | --- |
-| `nuvem/PASSO-A-PASSO.md` | Subir o banco do zero |
-| `nuvem/conferir.sql` | Perguntar ao banco o que falta — não muda nada |
-| `nuvem/IA.md` | Publicar e manter a função do assistente |
-| `nuvem/EMAIL.md` e `CAIXA-DE-EMAIL.md` | A caixa de e-mail |
-| `nuvem/WHATSAPP.md` | O WhatsApp, e o que falta na Meta |
-| `nuvem/DOMINIO.md` | **Pôr a aplicação em www.iadcrm.com.br** |
-
-## Roadmap para produto
-
-**Fase 1 — validação (este repositório).** PWA local, um vendedor ou um time pequeno,
-dados no dispositivo com export/import. Objetivo: provar que IAD, Evidence Age e
-Coverage explicam ganho e perda melhor que a etapa do CRM.
-
-### Aviso sobre o login desta fase
-
-O app já tem tela de login, usuários, empresas e isolamento por empresa — mas
-sem servidor isso **organiza** o acesso, não o protege: a senha é conferida
-dentro do próprio navegador, e quem abrir as ferramentas do desenvolvedor
-contorna. O envio do código de confirmação também é local (aparece na tela),
-porque um site sozinho não tem servidor de e-mail. As telas e os papéis já
-estão no formato final; o que muda na Fase 2 é onde a verificação acontece.
-
-**Fase 2 — multiusuário.** Backend (FastAPI ou NestJS) + PostgreSQL, autenticação,
-tenants, sincronização e histórico imutável de snapshots — cada alteração de pontuação
-já é registrada em `snapshots`, o que permite aprender depois quais sequências de
-decisão precedem vendas.
-
-**Fase 3 — empacotamento.** Tauri para Windows/macOS, Capacitor para App Store e
-Play Store, notas de voz no celular e notificações de Evidence Age.
-
-**Fase 4 — IA.** Leitura de e-mail, WhatsApp e transcrições sugerindo evidências,
-sempre com confirmação humana antes de alterar o IAD — a integridade do forecast
-depende disso.
-
-**Fase 5 — Decision Layer.** Modo em que o produto não substitui o CRM da empresa:
-conecta a Salesforce, HubSpot ou Pipedrive e adiciona por cima IAD, Evidence Engine,
-Buying Group e Next Best Decision.
-
-## Nota
-
-Automação de LinkedIn (inclusive LinkedHelper) deve ser avaliada frente às políticas
-da plataforma; o app trata os canais como registro de decisão, não como disparo em massa.
+**Critério de resultado:** medir P50/P95 em sessão real e a conversão de pistas em abordagens, reuniões, propostas e ganhos, sem inventar percentuais.
