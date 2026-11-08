@@ -1,0 +1,24 @@
+name: PERF-42 — Radar Comercial segment-index regression
+on:
+  pull_request:
+    paths:
+      - 'src/ri/opportunity-radar.mjs'
+      - 'scripts/ri04-opportunity-radar.test.cjs'
+      - '.github/workflows/perf42-radar-segment.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  radar-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax and internal radar regression
+        run: |
+          node --check src/ri/opportunity-radar.mjs
+          node --check scripts/ri04-opportunity-radar.test.cjs
+          node --test scripts/ri04-opportunity-radar.test.cjs tests/ri08-conversation-intent.test.mjs scripts/ri07a-internal-cues.test.cjs

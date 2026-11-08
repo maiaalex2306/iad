@@ -39,8 +39,18 @@ export function buildCommercialOpportunityRadar({snapshot,scope,asOf}={}){
     !scope||!id(scope.userId)||!['gestor','admin'].includes(scope.role)||
     (scope.role==='admin'&&scope.admin!==true)||!validDay(asOf))
   throw Error('Escopo, carteira e data de referência válidos são obrigatórios');
- const accounts=new Map();
- for(const a of snapshot.contas)if(allowed(a,scope))accounts.set(itemKey(a),a);
+ const accounts=new Map(),segmentRepresentative=new Map();
+ for(const a of snapshot.contas){
+  if(!allowed(a,scope))continue;
+  accounts.set(itemKey(a),a);
+  // PERF-42: indexar a primeira conta autorizada por segmento uma vez.
+  // Preservar ordem e escopo tenant do antigo .find() por grupo.
+  const seg=norm(a.segmento);
+  if(seg){
+   const sk=JSON.stringify([a.tenantId,seg]);
+   if(!segmentRepresentative.has(sk))segmentRepresentative.set(sk,a);
+  }
+ }
  const opByAccount=new Map(),opIndex=new Map(),wonProducts=new Map(),segmentProducts=new Map(),lastTouch=new Map(),upcoming=new Set();
  const catalog=new Map();
  for(const p of snapshot.produtos||[]){
@@ -176,7 +186,7 @@ export function buildCommercialOpportunityRadar({snapshot,scope,asOf}={}){
   if(v.previous.size<3||v.recent.size<5||v.accounts.size<3||
      v.recent.size<Math.ceil(v.previous.size*1.25))continue;
   // Crescimento de negócios ganhos no CRM, NÃO crescimento do setor externo.
-  const a=[...accounts.values()].find(x=>x.tenantId===v.tenantId&&norm(x.segmento)===norm(v.segment));
+  const a=segmentRepresentative.get(JSON.stringify([v.tenantId,norm(v.segment)]));
   if(!a)continue;
   results.growth.push(format(a,'growth','Mais vendas ganhas registradas em '+v.segment,
    'Na carteira do CRM, as vendas ganhas datadas nos últimos 180 dias superam em pelo menos 25% os 180 dias anteriores, com amostra mínima. Isso não comprova crescimento do mercado.',

@@ -107,6 +107,28 @@ test('RI-04: crescimento qualifica apenas o CRM, com amostra e data suficientes'
  const b=await run(s);
  assert.equal(b.groups.growth.length,0,'histórico insuficiente bloqueia alegação');
 });
+test('PERF-42: índice de segmentos preserva primeira conta, limites e isolamento de tenant',async()=>{
+ const s={contas:[],oportunidades:[],tarefas:[],sinais:[],produtos:[]};
+ const recent=['2026-11-01','2026-10-19','2026-09-10','2026-08-05','2026-07-02','2026-06-21'];
+ const older=['2026-04-10','2026-03-03','2026-02-14'];
+ for(let g=0;g<36;g++){
+  const segment='Segmento '+String(g).padStart(2,'0');
+  for(let a=0;a<3;a++)s.contas.push(ac('s'+g+'a'+a,segment));
+  for(let j=0;j<9;j++){
+   const day=(j<6?recent[j]:older[j-6]);
+   s.oportunidades.push(won('s'+g+'w'+j,'s'+g+'a'+j%3,'Produto '+g,day));
+  }
+ }
+ // Simular carteira grande de contas sem negócios ganhos, sem alterar conclusões.
+ for(let i=0;i<1400;i++)s.contas.push(ac('extra'+i,'Outro '+i));
+ s.contas.unshift(ac('restrita','Segmento 00','tb'));
+ const before=JSON.stringify(s),v=await run(s);
+ assert.equal(v.groups.growth.length,12,'limite de cards preservado');
+ assert.ok(v.groups.growth.every(x=>x.tenantId==='ta'&&x.accountId===null));
+ assert.ok(v.groups.growth.some(x=>x.accountName==='Segmento 00'));
+ assert.doesNotMatch(JSON.stringify(v),/Empresa restrita/);
+ assert.equal(JSON.stringify(s),before,'o índice não altera dados do Store');
+});
 test('RI-04: admin respeita tenant/owner, sem nomes privados na recomendação',async()=>{
  const s=empty();
  s.contas.push({id:'other',tenantId:'ta',donoId:'u2',nome:'Conta Restrita',segmento:'Químico'});
