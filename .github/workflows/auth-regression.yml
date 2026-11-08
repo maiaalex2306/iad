@@ -27,3 +27,5 @@ jobs:
           node --check sw.js
       - name: Run recovery and invite routing regression
         run: bun nuvem/testes/recuperacao-senha.test.ts
+      - name: Verify SECURITY-P0 ACL manifest and RPC compatibility
+        run: node --test scripts/security-anon-admin-rpc.test.cjs
