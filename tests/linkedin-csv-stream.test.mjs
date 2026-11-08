@@ -63,6 +63,36 @@ test('Motivos de rejeição identificam linha, valor e identidade',async()=>{
  assert.equal(out.summary.problems[1].name,'Empresa');
  assert.match(out.summary.problems[1].url,/company/);
 });
+test('Importa 821 leads mesmo com cabeçalho LinkedIn desconhecido e URLs em coluna alternativa',async()=>{
+  const rows=['Nome;Website oficial;Rede social do decisor;Observação'];
+  for(let i=1;i<=821;i++){
+    const id='pessoa-industrial-'+i;
+    const profile=i%3===0?'https://www.linkedin.com/sales/profile/'+i+',sSHS,name':
+      'https://www.linkedin.com/in/'+id+'/';
+    rows.push('Lead '+i+';https://empresa'+i+'.com.br;'+profile+';contato de teste');
+  }
+  const out=await collect(fakeFile(rows.join('\n')+'\n'),{batchSize:350});
+  assert.equal(out.summary.total,821);
+  assert.equal(out.summary.valid,821);
+  assert.equal(out.summary.invalid,0);
+  assert.equal(out.summary.duplicates,0);
+  assert.equal(out.rows.length,821);
+});
+test('Perfil em segunda coluna não identificada também é encontrado',async()=>{
+ const s='Contato;Link da carreira;Observações\n'+
+ 'Diretor;https://www.linkedin.com/in/diretor-teste/;Ativo\n';
+ const out=await collect(fakeFile(s));
+ assert.equal(out.summary.valid,1);
+ assert.equal(out.rows[0].lead,'Diretor');
+});
+test('Mais de um perfil distinto sem coluna específica não importa pessoa ambígua',async()=>{
+ const s='Contato;Pessoa A;Pessoa B\n'+
+ 'Ambiguo;https://www.linkedin.com/in/primeiro/;https://www.linkedin.com/in/segundo/\n';
+ const out=await collect(fakeFile(s));
+ assert.equal(out.summary.valid,0);
+ assert.equal(out.summary.invalid,1);
+ assert.equal(out.summary.invalidReasons.perfil_ambiguo,1);
+});
 test('Cabeçalhos UTF-8 e linhas multipartidas são processadas',async()=>{
   const input='Nome;LinkedIn;Empresa;Resumo Perfil\r\n'+
    '"Maria; da Silva";"https://www.linkedin.com/in/maria-silva/";"Bio";"Texto com quebra\r\nde linha"\r\n'+
@@ -119,7 +149,9 @@ test('Windows-1252 com cabeçalho ASCII e acento após 64 KiB não corrompe a im
 test('Arquivo acima de 100 MiB, cabeçalhos inválidos e CSV sem dados são recusados',async()=>{
   const tooBig={name:'huge.csv',size:CSV_MAX_BYTES+1,stream:()=>{throw Error('Não deveria ler')}};
   await assert.rejects(()=>importLinkedInCsvStream(tooBig,{onBatch:async()=>({})}),/100/);
-  await assert.rejects(()=>collect(fakeFile('a;b\n1;2\n')),/coluna de perfil/i);
+  const unspecified=await collect(fakeFile('a;b\n1;2\n'));
+  assert.equal(unspecified.summary.valid,0);
+  assert.equal(unspecified.summary.invalidReasons.campo_sem_url,1);
   await assert.rejects(()=>collect(fakeFile('Nome;LinkedIn\n')),/sem linhas/i);
 });
 test('Cancelamento via AbortSignal não deixa importação em andamento',async()=>{
