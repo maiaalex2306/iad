@@ -231,6 +231,11 @@
  letter-spacing:-.015em;
 }
 #iad-ri-root .iad-ri-radar-account{font-size:.78rem;color:var(--ci-muted);margin-top:5px;overflow-wrap:anywhere}
+#iad-ri-root .iad-ri-radar-contact{display:flex;gap:5px 12px;align-items:center;flex-wrap:wrap;margin-top:7px;font-size:.77rem;line-height:1.4;min-width:0}
+#iad-ri-root .iad-ri-radar-contact-name{font-weight:700;overflow-wrap:anywhere}
+#iad-ri-root .iad-ri-radar-contact-muted{color:var(--ci-muted);font-size:.73rem}
+#iad-ri-root .iad-ri-radar-contact-link{color:var(--acp-brand,#6816a8);text-decoration:underline;font-weight:650;overflow-wrap:anywhere}
+#iad-ri-root .iad-ri-radar-contact-link:focus-visible{outline:2px solid var(--acp-brand,#6816a8);outline-offset:3px}
 #iad-ri-root .iad-ri-radar-evidence,
 #iad-ri-root .iad-ri-radar-next{border-left:3px solid var(--ci-line);padding-left:12px;min-width:0}
 #iad-ri-root .iad-ri-radar-next{border-left-color:var(--acp-brand,#6816a8);background:var(--acp-brand-soft,#f3ecfa);padding:11px 12px;border-radius:0 9px 9px 0}
