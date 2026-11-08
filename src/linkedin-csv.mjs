@@ -135,6 +135,10 @@ export function findLinkedInProfileInCells(cells,fields){
 export function profileFailureReason(cells,fields){
   const found=findLinkedInProfileInCells(cells,fields);
   if(found.ambiguous)return 'perfil_ambiguo';
+  const preferred=fields.perfilCandidatos||[];
+  if(preferred.length&&preferred.every(i=>!String(cells[i]||'').trim())&&
+    !cells.some(v=>/linkedin\.com|https?:\/\/|www\./i.test(String(v||''))))
+    return 'sem_link';
   const values=cells.map(v=>String(v||'').trim());
   if(!values.some(Boolean))return 'sem_link';
   const urls=values.filter(v=>/linkedin\.com|https?:\/\/|www\./i.test(v));
