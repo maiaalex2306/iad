@@ -1,7 +1,7 @@
 /* Importação progressiva de CSV até 100 MiB.
    Sem file.arrayBuffer() integral, sem construir um array gigante de perfis.
    Cada lote pode ser persistido em IndexedDB. Não faz requisições ao LinkedIn. */
-import {columnsFromCsvHeader,csvLeadFromCells,profileFailureReason} from './linkedin-csv.mjs';
+import {columnsFromCsvHeader,csvLeadFromCells,profileFailureReason,extractLinkedInProfilesFromText} from './linkedin-csv.mjs';
 
 export const CSV_MAX_BYTES=100*1024*1024;
 export const CSV_BATCH_SIZE=350;
@@ -66,14 +66,105 @@ async function detectCsvEncoding(file,signal){
     reader.releaseLock();
   }
 }
+/** TXT de perfis (inclusive links misturados em texto). Processamento sem cabeçalho,
+ * sem carregar arquivo em RAM, com as mesmas regras de lote e cancelamento do CSV. */
+async function importLinkedInTxtStream(file,{onBatch,onProgress,signal,batchSize}){
+  const encoding=await detectCsvEncoding(file,signal);
+  if(signal?.aborted)throw errAbort();
+  const reader=file.stream().getReader();
+  const maxBatch=Math.max(50,Math.min(1000,Math.trunc(batchSize)||CSV_BATCH_SIZE));
+  const fields={perfil:0,perfilCandidatos:[0],nome:-1,cargo:-1,empresa:-1,
+    resumoPerfil:-1,postUrl:-1,post:-1,comentarioLead:-1};
+  let decoder=null,first=true,prevCR=false,line='',lineNumber=0,recordIndex=0,
+    bytesRead=0,valid=0,invalid=0,duplicates=0,percentSeen=-1;
+  const problems=[],invalidReasons=Object.create(null);
+  let batch=[];
+  async function flush(){
+    if(!batch.length)return;
+    if(signal?.aborted)throw errAbort();
+    const pending=batch;batch=[];
+    const result=await onBatch(pending);
+    valid+=Number(result?.inserted??pending.length);
+    duplicates+=Number(result?.duplicates??0);
+  }
+  async function endLine(){
+    lineNumber++;
+    const row=line.trim();
+    line='';
+    if(!row)return;
+    const profiles=extractLinkedInProfilesFromText(row);
+    if(!profiles.length){
+      invalid++;recordIndex++;
+      const reason=/linkedin\.com/i.test(row)?'formato_linkedin_nao_suportado':
+        /https?:\/\/|www\./i.test(row)?'link_externo':'campo_sem_url';
+      invalidReasons[reason]=(invalidReasons[reason]||0)+1;
+      if(problems.length<2000)problems.push({
+        line:lineNumber,reason,name:'',url:row.slice(0,350)
+      });
+      return;
+    }
+    for(const profile of profiles){
+      recordIndex++;
+      const lead=csvLeadFromCells([profile],fields,recordIndex);
+      if(lead){lead.sourceLine=lineNumber;batch.push(lead);}
+      if(batch.length>=maxBatch)await flush();
+    }
+  }
+  async function consume(text){
+    for(const ch of text){
+      if(signal?.aborted)throw errAbort();
+      if(ch==='\n'){
+        if(prevCR){prevCR=false;continue;}
+        await endLine();continue;
+      }
+      if(ch==='\r'){await endLine();prevCR=true;continue;}
+      prevCR=false;
+      line+=ch;
+      if(line.length>20000)throw new Error('Linha TXT maior que 20 mil caracteres.');
+    }
+  }
+  try{
+    while(true){
+      if(signal?.aborted)throw errAbort();
+      const {done,value}=await reader.read();
+      if(done)break;
+      const bytes=value instanceof Uint8Array?value:new Uint8Array(value);
+      bytesRead+=bytes.byteLength;
+      if(first){
+        first=false;
+        const selected=decoderFromFirstChunk(bytes,encoding);
+        decoder=selected.decoder;
+        await consume(decoder.decode(bytes.subarray(selected.skip),{stream:true}));
+      }else await consume(decoder.decode(bytes,{stream:true}));
+      const percent=Math.min(100,Math.floor(bytesRead/file.size*100));
+      if(percent!==percentSeen){
+        percentSeen=percent;
+        onProgress({percent,bytesRead,totalBytes:file.size,valid,invalid,duplicates});
+      }
+    }
+    if(!decoder)throw new Error('TXT sem dados.');
+    await consume(decoder.decode());
+    if(line.trim())await endLine();
+    await flush();
+    if(!recordIndex)throw new Error('TXT não contém perfis ou linhas utilizáveis.');
+    onProgress({percent:100,bytesRead,totalBytes:file.size,valid,invalid,duplicates});
+    return {summary:{total:recordIndex,valid,invalid,duplicates,separator:'TXT',
+      problems,invalidReasons,diagnosticTruncated:invalid>problems.length}};
+  }catch(e){
+    try{await reader.cancel();}catch{}
+    throw e;
+  }finally{reader.releaseLock();}
+}
+
 export async function importLinkedInCsvStream(file,{
   onBatch,onProgress=()=>{},signal,batchSize=CSV_BATCH_SIZE
 }={}){
   if(!file||typeof file.stream!=='function'||typeof onBatch!=='function')
     throw new Error('Arquivo CSV e persistência por lotes obrigatórios.');
-  if(!/\.csv$/i.test(file.name||''))throw new Error('Selecione um arquivo .csv.');
+  if(!/\.(csv|txt)$/i.test(file.name||''))throw new Error('Selecione um arquivo .csv ou .txt.');
   if(file.size>CSV_MAX_BYTES)throw new Error('Arquivo maior que 100 MB. O limite é 100 MiB.');
-  if(file.size===0)throw new Error('Arquivo CSV vazio.');
+  if(file.size===0)throw new Error('Arquivo CSV/TXT vazio.');
+  if(/\.txt$/i.test(file.name))return importLinkedInTxtStream(file,{onBatch,onProgress,signal,batchSize});
   const maxBatch=Math.max(50,Math.min(1000,Math.trunc(batchSize)||CSV_BATCH_SIZE));
   const encoding=await detectCsvEncoding(file,signal);
   if(signal?.aborted)throw errAbort();
