@@ -47,14 +47,28 @@ export function mountLinkedInLeads({root,scope,getScopeToken,nuvem}={}){
 
   const imports=el(d,'section','','card');
   imports.append(el(d,'h3','2 · Importar perfis (até 100 MB)'));
-  const help=el(d,'p','CSV com uma coluna LinkedIn ou profile_url. Nome, cargo e empresa são opcionais. A lista fica neste navegador, separada dos dados do CRM.','small muted');
-  const file=el(d,'input');file.type='file';file.accept='.csv,text/csv';
-  file.setAttribute('aria-label','Importar CSV de perfis do LinkedIn');
+  const help=el(d,'p','Aceita CSV com qualquer cabeçalho ou TXT com um perfil por linha; também reconhece links no meio do texto. Não precisa converter o arquivo nem informar nome ou empresa.','small muted');
+  const file=el(d,'input');file.type='file';file.accept='.csv,.txt,text/csv,text/plain';
+  file.setAttribute('aria-label','Importar CSV ou TXT com perfis do LinkedIn');
   const progress=el(d,'progress');progress.max=100;progress.value=0;progress.hidden=true;progress.style.width='100%';
   const importStatus=el(d,'p','Selecione sua planilha para criar uma campanha.','small muted');
   importStatus.setAttribute('role','status');importStatus.setAttribute('aria-live','polite');
   const cancel=button(d,'Cancelar importação',()=>{if(abort)abort.abort();},true);cancel.hidden=true;
-  imports.append(help,file,progress,importStatus,cancel);
+  const diagDetails=el(d,'details','','iad-linkedin-diagnostics');diagDetails.hidden=true;
+  const diagTitle=el(d,'summary','Diagnóstico dos perfis rejeitados');
+  const diagText=el(d,'p','','small muted');
+  const diagButton=button(d,'Baixar diagnóstico de rejeições (.csv)',()=>downloadDiagnostics(),true);
+  diagDetails.append(diagTitle,diagText,diagButton);
+  const pastePanel=el(d,'details','','iad-linkedin-paste');
+  pastePanel.append(el(d,'summary','Ou colar lista de perfis'));
+  const paste=el(d,'textarea');
+  paste.rows=4;paste.maxLength=200000;
+  paste.placeholder='https://www.linkedin.com/in/perfil-1/\nhttps://www.linkedin.com/sales/people/...';
+  paste.setAttribute('aria-label','Lista de URLs de perfis do LinkedIn');
+  const pasteButton=button(d,'Importar links colados',()=>void importSelectedFile(
+    new d.defaultView.File([paste.value],'perfis-colados.txt',{type:'text/plain'})),true);
+  pastePanel.append(paste,pasteButton);
+  imports.append(help,file,pastePanel,progress,importStatus,cancel,diagDetails);
 
   const queue=el(d,'section','','card');
   queue.append(el(d,'h3','3 · Fila de campanha'));
@@ -98,6 +112,42 @@ export function mountLinkedInLeads({root,scope,getScopeToken,nuvem}={}){
   ui.append(title,intro,account,imports,queue,postPanel,warning);
   root.replaceChildren(ui);
   let db=null,meta=null,current=null,busy=false,abort=null,request=0,uiGeneration=0;
+  let lastDiagnostic=null;
+  function downloadDiagnostics(){
+    if(!valid()||!lastDiagnostic?.problems?.length)return;
+    const safe=v=>{
+      let text=String(v??'').replace(/[\x00-\x1f]/g,' ').slice(0,500);
+      if(/^[=+@-]/.test(text))text="'"+text;
+      return '"'+text.replace(/"/g,'""')+'"';
+    };
+    const rows=[['Linha','Motivo','Nome','Valor analisado'],
+      ...lastDiagnostic.problems.map(p=>[p.line,p.reason,p.name,p.url])];
+    const data='\ufeff'+rows.map(row=>row.map(safe).join(';')).join('\r\n');
+    const blob=new Blob([data],{type:'text/csv;charset=utf-8'});
+    const url=d.defaultView.URL.createObjectURL(blob);
+    const a=d.createElement('a');
+    a.href=url;a.download='diagnostico-linkedin-leads.csv';
+    d.body.appendChild(a);a.click();a.remove();
+    d.defaultView.setTimeout(()=>d.defaultView.URL.revokeObjectURL(url),1000);
+  }
+  function showDiagnostics(summary){
+    lastDiagnostic=summary;
+    const n=Number(summary?.invalid||0);
+    diagDetails.hidden=n===0;
+    if(!n)return;
+    diagTitle.textContent='Diagnóstico: '+n+' perfil(is) rejeitado(s) — consultar causas';
+    const labels={
+      sem_link:'Sem endereço de perfil',
+      formato_linkedin_nao_suportado:'URL do LinkedIn que não representa perfil reconhecido',
+      link_externo:'Endereço de outro site',
+      campo_sem_url:'Campo sem URL utilizável'
+    };
+    const cause=Object.entries(summary.invalidReasons||{})
+      .map(([key,count])=>(labels[key]||key)+': '+count).join(' · ');
+    diagText.textContent=cause+'. O relatório contém '+(summary.problems?.length||0)+
+      ' registros amostrais, com linha e valor de origem'+
+      (summary.diagnosticTruncated?' (amostra limitada a 2.000 linhas).':'.');
+  }
   const show=(messageText,err=false)=>{
     if(!valid())return;
     message.textContent=messageText;
@@ -106,6 +156,7 @@ export function mountLinkedInLeads({root,scope,getScopeToken,nuvem}={}){
   function disabled(){
     const importBusy=!!abort,loading=busy,paused=!!meta?.paused;
     file.disabled=importBusy||loading;
+    pasteButton.disabled=importBusy||loading||!paste.value.trim();
     start.disabled=!meta?.campaign||importBusy||loading||paused;
     openProfile.disabled=!current||importBusy||loading||paused;
     skip.disabled=!current||importBusy||loading||paused;
@@ -287,13 +338,13 @@ export function mountLinkedInLeads({root,scope,getScopeToken,nuvem}={}){
     try{const row=await leadAt(db,scope,meta.campaign,line);if(valid())await select(row);}
     catch(e){show('Falha ao abrir lead: '+e.message,true);}
   }
-  file.addEventListener('change',async()=>{
-    const selected=file.files?.[0];
+  async function importSelectedFile(selected){
     if(!selected||!valid()||abort)return;
     if(selected.size>CSV_MAX_BYTES){importStatus.textContent='Arquivo ultrapassa 100 MiB.';return;}
     abort=new AbortController();const ctrl=abort,oldMeta=meta,temporary=campaignId();
     file.disabled=true;cancel.hidden=false;progress.hidden=false;progress.value=0;disabled();
     importStatus.textContent='Preparando importação por lotes...';
+    lastDiagnostic=null;diagDetails.hidden=true;
     try{
       if(!db)db=await openLinkedInQueue();
       const result=await importLinkedInCsvStream(selected,{
@@ -314,6 +365,7 @@ export function mountLinkedInLeads({root,scope,getScopeToken,nuvem}={}){
       await renderPage();
       importStatus.textContent='Importação concluída: '+result.summary.valid+' válidos, '+
         result.summary.duplicates+' duplicados, '+result.summary.invalid+' inválidos.';
+      showDiagnostics(result.summary);
       show('Campanha pronta. Selecione Preparar próximo perfil.');
       if(oldMeta?.campaign&&oldMeta.campaign!==temporary)
         deleteCampaign(db,scope,oldMeta.campaign).catch(()=>{});
@@ -322,7 +374,9 @@ export function mountLinkedInLeads({root,scope,getScopeToken,nuvem}={}){
       meta=oldMeta;showCurrent();
       importStatus.textContent='Importação cancelada ou falhou: '+String(e.message||e).slice(0,200);
     }finally{if(abort===ctrl)abort=null;file.value='';cancel.hidden=true;progress.hidden=true;disabled();}
-  });
+  }
+  file.addEventListener('change',()=>void importSelectedFile(file.files?.[0]));
+  paste.addEventListener('input',disabled);
   draft.addEventListener('input',()=>{if(current)current.rascunho=limit(draft.value,1300);disabled();});
   draft.addEventListener('change',()=>{if(current&&db)putLead(db,current).catch(()=>{});});
   async function init(){

@@ -87,7 +87,7 @@ const server=http.createServer((req,res)=>{
   await page.getByRole('button',{name:'Sem post → próximo lead'}).click();
   await page.waitForFunction(()=>document.querySelector('#iad-linkedin-root')?.textContent?.includes('Sem post: 1'),null,{timeout:10000});
   assert.equal(await page.locator('#iad-linkedin-root h3').allTextContents().then(a=>a.includes('Lead Com Post')),true);
-  await page.locator('#iad-linkedin-root details summary').click();
+  await page.locator('#iad-linkedin-root details summary').filter({hasText:'Publicação e comentário'}).click();
   await page.locator('#iad-linkedin-root input[placeholder="https://www.linkedin.com/posts/..."]').fill('https://www.linkedin.com/posts/lead-com-post-agua-industria-123');
   await page.locator('#iad-linkedin-root textarea[placeholder^="Cole o texto do post"]').fill('A indústria pode melhorar os resultados de sua produção com monitoramento contínuo, disciplina operacional e dados confiáveis sobre o consumo de água.');
   await page.getByRole('button',{name:'Confirmei curtida'}).click();
@@ -130,6 +130,24 @@ const server=http.createServer((req,res)=>{
   await page.evaluate(()=>window.App.ir('#/linkedin-leads'));
   await page.waitForFunction(()=>document.querySelector('#iad-linkedin-root')?.textContent?.includes('Campanha restaurada'),null,{timeout:15000});
   assert.match(await page.locator('#iad-linkedin-root').textContent(),/Sem post: 2/);
+  // Importação TXT de 821 URLs sem cabeçalho, sem manipular Store/CAS.
+  const txt821=Array.from({length:821},(_,i)=>
+    'https://www.linkedin.com/in/lead-texto-'+(i+1)+'/').join('\n');
+  await page.locator('#iad-linkedin-root input[type=file]').setInputFiles({
+    name:'821-perfis.txt',mimeType:'text/plain',buffer:Buffer.from(txt821)
+  });
+  await page.waitForFunction(()=>document.querySelector('#iad-linkedin-root')?.textContent
+    ?.includes('Importação concluída: 821 válidos'),null,{timeout:15000});
+  assert.match(await page.locator('#iad-linkedin-root').textContent(),/Perfis válidos: 821/);
+  // O operador também pode colar links sem abrir arquivo nem informar colunas.
+  await page.locator('#iad-linkedin-root details summary')
+    .filter({hasText:'Ou colar lista de perfis'}).click();
+  await page.locator('#iad-linkedin-root textarea[aria-label="Lista de URLs de perfis do LinkedIn"]')
+    .fill('https://www.linkedin.com/in/perfil-colado-1/\nhttps://www.linkedin.com/in/perfil-colado-2/');
+  await page.getByRole('button',{name:'Importar links colados'}).click();
+  await page.waitForFunction(()=>document.querySelector('#iad-linkedin-root')?.textContent
+    ?.includes('Importação concluída: 2 válidos'),null,{timeout:15000});
+  assert.match(await page.locator('#iad-linkedin-root').textContent(),/Perfis válidos: 2/);
   // A recarga restaura dados sintéticos pelo cache local; verificamos que a campanha não criou registros no Store/CAS.
   assert.equal(await page.evaluate(()=> (window.IADStore.obter().contatos||[]).some(c=>c.nome==='Lead Com Post')),false,'Campanha não pode importar automaticamente no CRM');
   assert.equal(requestsOutside.length,0,'campanha não pode acessar LinkedIn/externos durante teste local: '+requestsOutside);
@@ -147,7 +165,7 @@ const server=http.createServer((req,res)=>{
   assert.equal(await page.locator('#iad-linkedin-root').count(),0);
   assert.deepEqual(errors,[],'Erros JS inesperados: '+errors.join(' | '));
   console.log('LINKEDIN_LEADS_BROWSER_PASS '+JSON.stringify({
-    csv100MBStreamer:true,queuePersisted:true,skipWithoutPost:true,generatedComment:true,manualLike:true,
+    csv100MBStreamer:true,txt821:true,pasteLinks:true,queuePersisted:true,skipWithoutPost:true,generatedComment:true,manualLike:true,
     pause:true,tenantIsolation:true,sellerDenied:true,noExternalRequests:true,
     noStoreWrites:true,firstPaintMs:firstPaint
   }));
