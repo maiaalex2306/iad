@@ -87,7 +87,7 @@ const server=http.createServer((req,res)=>{
   await page.getByRole('button',{name:'Sem post → próximo lead'}).click();
   await page.waitForFunction(()=>document.querySelector('#iad-linkedin-root')?.textContent?.includes('Sem post: 1'),null,{timeout:10000});
   assert.equal(await page.locator('#iad-linkedin-root h3').allTextContents().then(a=>a.includes('Lead Com Post')),true);
-  await page.locator('#iad-linkedin-root details summary').click();
+  await page.locator('#iad-linkedin-root details summary').filter({hasText:'Publicação e comentário'}).click();
   await page.locator('#iad-linkedin-root input[placeholder="https://www.linkedin.com/posts/..."]').fill('https://www.linkedin.com/posts/lead-com-post-agua-industria-123');
   await page.locator('#iad-linkedin-root textarea[placeholder^="Cole o texto do post"]').fill('A indústria pode melhorar os resultados de sua produção com monitoramento contínuo, disciplina operacional e dados confiáveis sobre o consumo de água.');
   await page.getByRole('button',{name:'Confirmei curtida'}).click();
