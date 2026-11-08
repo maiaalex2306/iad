@@ -93,6 +93,18 @@ test('Mais de um perfil distinto sem coluna específica não importa pessoa amb�
  assert.equal(out.summary.invalid,1);
  assert.equal(out.summary.invalidReasons.perfil_ambiguo,1);
 });
+test('IDs Sales Navigator/Recruiter truncados são rejeitados, nunca transformados em outro perfil',()=>{
+  assert.equal(normalizeProfile('https://www.linkedin.com/sales/people/ACwAAA8BYqEBlKc364xhzvygIeuJJ3rATiwe2NE'),'');
+  assert.equal(normalizeProfile('https://www.linkedin.com/recruiter/profile/251749025,sSHS'),'');
+  assert.match(normalizeProfile('https://www.linkedin.com/sales/people/ACwAAA8BYqEBlKc364xhzvygIeuJJ3rATiwe2NE,name,sSHS'),/name,sSHS$/);
+});
+test('TXT importa URLs separadas por vírgulas sem partir identificador do Sales Navigator',async()=>{
+ const txt='https://www.linkedin.com/in/diretor-comercial/,https://www.linkedin.com/sales/profile/251749025,sSHS,name\n';
+ const out=await collect(fakeFile(txt,'perfils-lista.txt'));
+ assert.equal(out.summary.valid,2);
+ assert.equal(out.summary.invalid,0);
+ assert.match(out.rows[1].perfil,/sales\/profile\/251749025,sSHS,name/);
+});
 test('TXT simples sem cabeçalho aceita perfis convencionais, Sales Navigator e Recruiter',async()=>{
  const input=[
   'https://www.linkedin.com/in/diretora-industrial/',
