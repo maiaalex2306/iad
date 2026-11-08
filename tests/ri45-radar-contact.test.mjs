@@ -30,6 +30,25 @@ test('RI-45: transcricao relaciona citacao ao evento de decisao e contato',()=>{
  const get=buildRadarContactIndex({snapshot:base(),scope});
  assert.equal(get({...item,sourceEventId:'sys'}).name,'Ana Santos');
 });
+test('RI-45: autoria da transcricao prevalece sobre frase identica de outro contato',()=>{
+ const s=base();
+ s.oportunidades[0].eventos.find(e=>e.id==='sys').detalhe=
+  '08/11/2026 · Bruno Costa: Podemos marcar uma conversa.';
+ const get=buildRadarContactIndex({snapshot:s,scope});
+ assert.equal(get({...item,sourceEventId:'sys'}).name,'Bruno Costa');
+ s.oportunidades[0].eventos.find(e=>e.id==='sys').detalhe=
+  'Pessoa Nao Cadastrada: Podemos marcar uma conversa.';
+ assert.equal(buildRadarContactIndex({snapshot:s,scope})({...item,sourceEventId:'sys'}),null,
+  'fala atribuida a outra pessoa nao permite usar contato de outro evento');
+});
+test('RI-45: indice de contatos filtrado somente pelas pistas exibidas',()=>{
+ const s=base();
+ const get=buildRadarContactIndex({snapshot:s,scope,items:[item]});
+ assert.equal(get(item).name,'Ana Santos');
+ assert.equal(get({...item,sourceOpportunityId:'o2'}),null);
+ assert.equal(get({...item,accountId:'outro'}),null);
+ assert.equal(get({...item,tenantId:'tb'}),null);
+});
 test('RI-45: com contatos multiplos e sem evidencia de autoria, nao inventa pessoa',()=>{
  const s=base();s.oportunidades[0].eventos=[];const get=buildRadarContactIndex({snapshot:s,scope});
  assert.equal(get({...item,evidence:'Outra fala'}),null);

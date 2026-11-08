@@ -10,6 +10,7 @@ on:
       - 'src/config.js'
       - 'sw.js'
       - 'tests/ri45-radar-contact.test.mjs'
+      - 'scripts/ri45-radar-contact-browser.cjs'
       - '.github/workflows/ri45-radar-manual.yml'
   workflow_dispatch:
 permissions:
@@ -46,3 +47,18 @@ jobs:
             if(!fs.existsSync(f)||!sw.includes("'./"+f+"'"))throw Error('Arquivo nao precacheado: '+f);
           }
           NODE
+
+  browser:
+    needs: tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: RI-45 — card, contatos, responsivo e isolamento
+        run: timeout 140s node scripts/ri45-radar-contact-browser.cjs

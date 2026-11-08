@@ -32,15 +32,23 @@ export function safeTelephone(raw){
  if(digits.length<8||digits.length>15)return null;
  return {label:number,href:'tel:'+(number.startsWith('+')?'+':'')+digits};
 }
-export function buildRadarContactIndex({snapshot,scope}={}){
+export function buildRadarContactIndex({snapshot,scope,items}={}){
  if(!Array.isArray(snapshot?.contas)||!Array.isArray(snapshot?.contatos)||
     !Array.isArray(snapshot?.oportunidades)||!scope||!id(scope.userId)||
     !['gestor','admin'].includes(scope.role)||
     (scope.role==='admin'&&scope.admin!==true))
   throw Error('Carteira e sessao autorizada obrigatorias');
+ // O radar exibe ate 12 pistas: apenas essas contas/negocios entram nos indices.
+ // Sem items, mantemos o contrato da funcao para chamadas e testes legados.
+ const targeted=Array.isArray(items);
+ const wantedAccounts=targeted?new Set(items.filter(x=>x?.tenantId&&x?.accountId)
+   .map(x=>key(x.tenantId,x.accountId))):null;
+ const wantedOps=targeted?new Set(items.filter(x=>x?.tenantId&&x?.sourceOpportunityId)
+   .map(x=>key(x.tenantId,x.sourceOpportunityId))):null;
  const accounts=new Set(),contactsByAccount=new Map(),contactsById=new Map(),opportunities=new Map();
  for(const account of snapshot.contas)
-  if(permitted(account,scope))accounts.add(key(account.tenantId,account.id));
+  if((!targeted||wantedAccounts.has(key(account.tenantId,account.id)))&&
+      permitted(account,scope))accounts.add(key(account.tenantId,account.id));
  for(const c of snapshot.contatos){
   if(!permitted(c,scope)||!accounts.has(key(c.tenantId,c.contaId)))continue;
   const k=key(c.tenantId,c.contaId);
@@ -49,7 +57,8 @@ export function buildRadarContactIndex({snapshot,scope}={}){
   contactsById.set(key(c.tenantId,c.id),c);
  }
  for(const op of snapshot.oportunidades){
-  if(!permitted(op,scope)||!accounts.has(key(op.tenantId,op.contaId)))continue;
+  if(!permitted(op,scope)||!accounts.has(key(op.tenantId,op.contaId))||
+      (targeted&&!wantedOps.has(key(op.tenantId,op.id))))continue;
   opportunities.set(key(op.tenantId,op.id),op);
  }
  const present=(c,relation)=>c?{
@@ -73,6 +82,28 @@ export function buildRadarContactIndex({snapshot,scope}={}){
   const direct=get(ev?.contatoId);
   if(direct)return present(direct,'contato vinculado ao registro');
   const quote=fold(item.evidence).slice(0,130);
+  // Transcricao com autoria explicita prevalece sobre eventos paralelos
+  // que usam as mesmas frases de cortesia/reuniao na mesma empresa.
+  if(ev?.tipo==='sistema'&&typeof ev.detalhe==='string'&&quote.length>=16){
+   const authors=new Set();
+   for(const line of ev.detalhe.split(/\r?\n/).slice(0,120)){
+    const m=/^(?:(?:\d{2}\/\d{2}\/\d{4}|\d{4}-\d{2}-\d{2})(?:\s+\d{2}:\d{2})?\s*·\s*)?([^:]{2,140}):\s*(.*)$/.exec(line.trim());
+    if(!m)continue;
+    const utterance=fold(m[2]);
+    if(utterance&&(utterance.includes(quote)||quote.includes(utterance)))
+     authors.add(fold(m[1]));
+   }
+   if(authors.size){
+    const matches=all.filter(c=>[...authors].some(a=>{
+     const name=fold(c.nome);
+     return name===a||(a.length>=3&&name.startsWith(a+' '));
+    }));
+    if(authors.size===1&&matches.length===1)
+     return present(matches[0],'autor identificado na transcricao');
+    // Se a fala tem autor nao confirmado, nunca associa outro so pela frase.
+    return null;
+   }
+  }
   if(quote.length>=16&&Array.isArray(op.eventos)){
    const matched=new Set();
    for(const e of op.eventos){

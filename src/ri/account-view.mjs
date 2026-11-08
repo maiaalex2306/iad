@@ -66,7 +66,7 @@ export function mountAccountIntelligence({root,snapshot,scope,getScopeToken}={})
   throw Error('Destino, sessão e carteira autorizada são obrigatórios');
  const doc=root.ownerDocument;
  const radar=buildCachedCommercialRadar({snapshot,scope,asOf:localBusinessDate()});
- const contactForRadar=buildRadarContactIndex({snapshot,scope});
+ const contactForRadar=buildRadarContactIndex({snapshot,scope,items:radar.groups.pistas});
  let active=true,selected='pistas',searchLimit=8;
  const valid=()=>{
   if(!active||!root.isConnected)return false;
