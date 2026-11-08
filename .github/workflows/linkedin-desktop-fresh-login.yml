@@ -1,0 +1,47 @@
+name: LinkedIN Leads — fresh-login desktop (Windows)
+on:
+  pull_request:
+    paths:
+      - 'desktop/linkedin-leads/**'
+      - '.github/workflows/linkedin-desktop-fresh-login.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  login-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Check source syntax
+        run: |
+          node --check desktop/linkedin-leads/main.cjs
+          node --check desktop/linkedin-leads/security.cjs
+          node --check desktop/linkedin-leads/test/security.test.cjs
+      - name: Verify fresh-login and browser security
+        run: node --test desktop/linkedin-leads/test/security.test.cjs
+  windows-portable:
+    needs: login-security
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Install Electron and run security tests
+        working-directory: desktop/linkedin-leads
+        run: |
+          npm install --no-audit --no-fund --no-package-lock
+          npm test
+      - name: Build unsigned Windows portable preview
+        working-directory: desktop/linkedin-leads
+        run: npm run package:win
+      - name: Attach Windows preview (not production release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: IaDCRM-LinkedIN-Leads-Fresh-Login-Windows-PREVIEW
+          path: desktop/linkedin-leads/dist/*.exe
+          if-no-files-found: error
+          retention-days: 7
