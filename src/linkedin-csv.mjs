@@ -101,27 +101,52 @@ export function parseCsvTable(text,{maxRows=10000}={}){
 export function columnsFromCsvHeader(header) {
   const headers=header.map(normalizeHeader);
   const fields={};
-  for(const [field,aliases] of Object.entries(ALIASES)){
+  for(const [field,aliases] of Object.entries(ALIASES))
     fields[field]=headers.findIndex(h=>aliases.includes(h));
-  }
-  const profileLike=headers.map((header,i)=>({header,i}))
-    .filter(x=>ALIASES.perfil.includes(x.header));
-  const explicit=profileLike.filter(x=>x.header!=='url');
-  const generic=profileLike.filter(x=>x.header==='url');
-  // Priority: LinkedIn-specific column first, generic "URL" last.
-  fields.perfilCandidatos=[...explicit,...generic].map(x=>x.i);
+  const candidates=headers.map((h,i)=>({h,i})).filter(({h})=>
+    ALIASES.perfil.includes(h)||
+    (/linkedin|salesnav|recruiter|profileurl|urlprofile|urlperfil|perfilurl|linkperfil|profilelink/i.test(h)&&
+     !/post|publica|coment|company|empresa|organization|organizacao/i.test(h)));
+  const prioritized=candidates.filter(x=>x.h!=='url').concat(candidates.filter(x=>x.h==='url'));
+  fields.perfilCandidatos=prioritized.map(x=>x.i);
   fields.perfil=fields.perfilCandidatos[0]??-1;
-  if(fields.perfil<0)throw new Error('CSV sem coluna de perfil. Use "LinkedIn", "Perfil LinkedIn" ou "profile_url".');
+  // Some LH and Sales Navigator CSVs have column names unknown to our CRM.
+  // Their profile URLs can still be detected in the individual records.
+  fields.headerCount=headers.length;
   return fields;
+}
+export function findLinkedInProfileInCells(cells,fields){
+  const preferred=fields.perfilCandidatos||[];
+  const indices=[...preferred,...cells.map((_,i)=>i).filter(i=>!preferred.includes(i))];
+  let winner=null,sourceIndex=-1,sourceGroup=-1;
+  const seen=new Set();
+  for(const index of indices){
+    const normalized=normalizeProfile(cells[index]);
+    if(!normalized)continue;
+    const group=preferred.includes(index)?0:1;
+    if(group<sourceGroup)continue;
+    if(!winner){winner=normalized;sourceIndex=index;sourceGroup=group;seen.add(normalized);continue;}
+    if(group>sourceGroup)break;
+    seen.add(normalized);
+  }
+  if(seen.size>1)return {profile:'',sourceIndex:-1,ambiguous:true};
+  return {profile:winner||'',sourceIndex,ambiguous:false};
+}
+export function profileFailureReason(cells,fields){
+  const found=findLinkedInProfileInCells(cells,fields);
+  if(found.ambiguous)return 'perfil_ambiguo';
+  const values=cells.map(v=>String(v||'').trim());
+  if(!values.some(Boolean))return 'sem_link';
+  const urls=values.filter(v=>/linkedin\.com|https?:\/\/|www\./i.test(v));
+  if(!urls.length)return 'campo_sem_url';
+  if(urls.some(v=>/linkedin\.com/i.test(v)))return 'formato_linkedin_nao_suportado';
+  return 'link_externo';
 }
 export function csvLeadFromCells(cells,fields,line){
   const raw=(key,limit)=>fields[key]<0?'':String(cells[fields[key]]||'').trim().slice(0,limit);
-  let profile='';
-  for(const index of fields.perfilCandidatos||[fields.perfil]){
-    profile=normalizeProfile(cells[index]);
-    if(profile)break;
-  }
-  if(!profile)return null;
+  const match=findLinkedInProfileInCells(cells,fields);
+  if(!match.profile||match.ambiguous)return null;
+  const profile=match.profile;
   const item={linha:line,perfil:profile,
     lead:raw('nome',120),cargo:raw('cargo',140),empresa:raw('empresa',160),
     resumoPerfil:raw('resumoPerfil',1200),postUrl:raw('postUrl',600),
