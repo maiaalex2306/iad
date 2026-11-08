@@ -87,7 +87,9 @@ test('TR-24: menu visível muda nome sem mudar rota e PWA mantém versão',()=>{
  const app=read('src/app.js'),sw=read('sw.js'),config=read('src/config.js');
  assert.match(app,/hash: '#\/playbook', ico: '🎓', nome: 'Treinamento de Vendas'/);
  assert.match(app,/render: V\.playbook/);
- assert.match(sw,/iad-crm-v286\.98/);
- assert.match(config,/numero: 'v286\.98'/);
+ const version=config.match(/numero:\s*'(v286\.\d+)'/);
+ assert.ok(version,'A versão pública v286 precisa estar definida');
+ assert.ok(sw.includes("const CACHE = 'iad-crm-"+version[1]+"'"),
+  'O cache PWA deve coincidir com a versão pública');
  assert.match(read('README.md'),/Treinamento de Vendas/);
 });
