@@ -10,6 +10,7 @@ on:
       - 'src/config.js'
       - 'sw.js'
       - 'tests/ri45-radar-contact.test.mjs'
+      - 'tests/ri46-recent-cues.test.mjs'
       - 'scripts/ri45-radar-contact-browser.cjs'
       - '.github/workflows/ri45-radar-manual.yml'
   workflow_dispatch:
@@ -32,6 +33,7 @@ jobs:
       - name: Segurança, relacionamento e regressao RI-08
         run: |
           node --test tests/ri45-radar-contact.test.mjs
+          node --test tests/ri46-recent-cues.test.mjs
           node --test tests/ri08-conversation-intent.test.mjs
           node --test scripts/ri-account-view.test.cjs
           node --test scripts/ri07a-internal-cues.test.cjs
