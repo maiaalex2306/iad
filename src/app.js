@@ -95,12 +95,21 @@
     { hash: '#/conversas', ico: V.iconeWhatsapp(17), nome: 'Conversas', render: V.conversas,
       ajuda: 'As conversas de WhatsApp, por pessoa. Mensagem não é evidência: você lê, e quando alguma coisa valeu a pena, registra o que aconteceu — e aí a IA lê e as oito decisões andam.' },
     ...(global.IAD_LINKEDIN_LEADS_ENABLED === true ? [{
-      hash: '#/linkedin-leads', ico: '🔗', nome: 'LinkedIN Leads',
+      hash: '#/linkedin-leads', ico: '🔗', nome: 'LinkLeads',
+      /* O LinkLeads é o app desktop de prospecção: roda no computador do
+         vendedor, com a sessão do LinkedIn dele. Entrar aqui abre o app pelo
+         link linkleads:// — o navegador pede confirmação na primeira vez.
+         O modo assistido no navegador continua logo abaixo, para quem ainda
+         não instalou o app e para a fila que já existe neste computador. */
       render: function () {
-        return '<section class="card"><h1>LinkedIN Leads</h1>' +
-          '<div id="iad-linkedin-root" aria-live="polite">Preparando a campanha...</div></section>';
+        return '<section class="card"><h1>LinkLeads</h1>' +
+          '<div id="iad-linkleads-launcher" aria-live="polite"></div></section>' +
+          '<section class="card"><details id="iad-linkedin-assistido">' +
+          '<summary><strong>Modo assistido no navegador</strong> <span class="tiny muted">— sem o app: fila do CSV e comentários com IA, você executa no LinkedIn</span></summary>' +
+          '<div id="iad-linkedin-root" aria-live="polite" style="margin-top:10px">Preparando a campanha...</div>' +
+          '</details></section>';
       },
-      ajuda: 'Campanha LinkedIn com importação CSV até 100 MB, fila persistente e análise de publicações com IA. As interações externas permanecem supervisionadas.'
+      ajuda: 'Abre o LinkLeads, o app desktop de prospecção (convites, sequências, comentários com IA e comitê de compra). As respostas voltam para o Pipeline pelo botão LinkLeads.'
     }] : []),
     { hash: '#/revisao', ico: '🔄', nome: 'Revisão', render: V.revisao,
       ajuda: 'A reunião semanal numa tela: o que mudou na decisão de cada cliente nos últimos 7 dias.' },
@@ -630,9 +639,77 @@
      Não coleta credenciais nem executa curtidas/publicações externamente. */
   let moduloLinkedin = null;
   let geracaoLinkedin = 0;
+
+  /* ---------- abrir o app LinkLeads ----------
+     Uma página da web não abre programa do computador; o que ela pode é
+     chamar um link de protocolo, e o LinkLeads se registra como dono de
+     linkleads:// ao ser instalado. O link leva só a empresa escolhida (o
+     mesmo e= da ponte), para o app saber de quem é o balde — nunca dados de
+     clientes, nunca comando de campanha.
+
+     Abre uma vez por ENTRADA na tela: esta rota redesenha quando os dados
+     mudam, e reabrir o app a cada sincronização seria um app que pula na
+     frente sozinho. Quem já está aqui usa o botão. */
+  let linkleadsAbertoNestaVisita = false;
+  window.addEventListener('hashchange', function () {
+    if (location.hash !== '#/linkedin-leads') linkleadsAbertoNestaVisita = false;
+  });
+
+  function linkDoLinkLeads() {
+    const I = global.IADIntegracoes;
+    const empresa = I ? I.empresaAtual() : '';
+    const nome = I ? I.nomeDaEmpresaAtual() : '';
+    return 'linkleads://abrir?origem=iadcrm' +
+      (empresa ? '&empresa=' + encodeURIComponent(empresa) : '') +
+      (nome ? '&empresaNome=' + encodeURIComponent(nome) : '');
+  }
+
+  function pintarLauncherLinkLeads(estado) {
+    const alvo = document.getElementById('iad-linkleads-launcher');
+    if (!alvo) return;
+    const textos = {
+      abrindo: '<p>Abrindo o LinkLeads… Se o navegador perguntar, clique em <strong>Abrir LinkLeads</strong> (marque "sempre permitir" para não perguntar de novo).</p>',
+      aberto: '<p>O LinkLeads foi aberto no seu computador. As respostas das campanhas voltam para o <a href="#/pipeline">Pipeline</a> pelo botão <strong>LinkLeads</strong>.</p>',
+      naoAbriu: '<div class="aviso"><p><strong>O LinkLeads não abriu.</strong> Ele precisa estar instalado neste computador (Windows ou Mac) e ter sido aberto ao menos uma vez — é nessa hora que ele se registra para os links linkleads://.</p>' +
+        '<p class="tiny">Ainda não tem? Peça o instalador ao administrador. Enquanto isso, use o modo assistido abaixo.</p></div>',
+      parado: '<p>O LinkLeads roda no seu computador, com a sua sessão do LinkedIn. Use o botão para abri-lo.</p>'
+    };
+    alvo.innerHTML = (textos[estado] || textos.parado) +
+      '<div class="row" style="gap:8px;margin-top:8px">' +
+      '<button class="btn mini" onclick="App.abrirLinkLeads()">Abrir o LinkLeads</button>' +
+      '<a class="btn ghost mini" href="#/pipeline">Ir para o Pipeline</a></div>';
+  }
+
+  /* manual=true: clique no botão (sempre abre). false: entrada na tela (uma vez). */
+  function abrirAppLinkLeads(manual) {
+    if (!manual && linkleadsAbertoNestaVisita) { pintarLauncherLinkLeads('parado'); return; }
+    linkleadsAbertoNestaVisita = true;
+    pintarLauncherLinkLeads('abrindo');
+    /* Sem API para saber se o protocolo existe: o sinal é a página perder o
+       foco (o sistema mostrou a confirmação ou trouxe o app para a frente). */
+    let saiu = false;
+    const marcar = function () { saiu = true; };
+    window.addEventListener('blur', marcar);
+    document.addEventListener('visibilitychange', marcar);
+    try {
+      /* IADAbrirProtocolo existe só nos testes de navegador: o Chromium entrega
+         linkleads:// ao sistema operacional, fora do alcance do teste. */
+      (global.IADAbrirProtocolo || function (u) { window.location.assign(u); })(linkDoLinkLeads());
+    } catch (_) { /* protocolo bloqueado */ }
+    setTimeout(function () {
+      window.removeEventListener('blur', marcar);
+      document.removeEventListener('visibilitychange', marcar);
+      if (location.hash !== '#/linkedin-leads') return;
+      pintarLauncherLinkLeads(saiu ? 'aberto' : 'naoAbriu');
+      /* Sem o app, o trabalho continua no modo assistido: abre a seção. */
+      const assistido = document.getElementById('iad-linkedin-assistido');
+      if (!saiu && assistido) assistido.open = true;
+    }, 2500);
+  }
   function iniciarLinkedInLeads() {
     const root = document.getElementById('iad-linkedin-root');
     if (!root || global.IAD_LINKEDIN_LEADS_ENABLED !== true) return;
+    abrirAppLinkLeads(false);
     const token = ++geracaoLinkedin;
     const assinatura = assinaturaInteligencia(), usuario = A.atual(), nuvem = global.IADNuvem;
     if (!usuario || !A.ehGestor() || !assinatura || !nuvem) {
@@ -658,7 +735,7 @@
     }).catch(function () {
       if (token === geracaoLinkedin && root.isConnected &&
           location.hash === '#/linkedin-leads' && assinatura === assinaturaInteligencia())
-        root.textContent = 'Não foi possível carregar LinkedIN Leads. Nenhum dado foi alterado.';
+        root.textContent = 'Não foi possível carregar o modo assistido. Nenhum dado foi alterado.';
     });
   }
 
@@ -2048,6 +2125,11 @@
        uma por conta própria. */
     const listaCrua = juntarLeadsRepetidos(listaCruaComRepetidos);
 
+    /* LinkLeads: o papel no grupo comprador já vem do app desktop, na
+       taxonomia deste playbook. Entra como sugestão; se o vendedor o
+       confirmou lá, a classificação da IA abaixo não o substitui. */
+    listaCrua.forEach(function (l) { if (l.papelLinkLeads) l.papelSugerido = l.papelLinkLeads; });
+
     /* Os descartados saem antes de tudo — antes até de a IA ler, que com
        centenas de leads é dinheiro e minutos jogados fora numa lista que a
        pessoa já disse para não mostrar mais. */
@@ -2136,7 +2218,7 @@
           l.confiancaSegmento = achado.confianca || '';
           l.porqueSegmento = achado.porque || '';
           l.maisProximoSegmento = achado.maisProximo || '';
-          if (achado.papel) l.papelSugerido = achado.papel;
+          if (achado.papel && !l.papelConfirmado) l.papelSugerido = achado.papel;
           /* A conta que a IA reconheceu como sendo a mesma empresa. Vem
              como id, já conferido contra a carteira do lado do servidor. */
           l.contaSugerida = achado.contaExistente || '';
@@ -6737,9 +6819,15 @@
 
     /* Importação em lote: busca, confere e traz de uma vez. É o mesmo caminho
        do converterLead, sem a janela por lead — o que muda é a escala. */
-    importarLeads: function () {
+    /* origem: 'lh' (botão "Importar LH") ou 'linkleads' (botão "LinkLeads").
+       O caminho é o mesmo — conferir, classificar, importar e dar baixa —;
+       muda só de quem são as respostas que entram. */
+    abrirLinkLeads: function () { abrirAppLinkLeads(true); },
+
+    importarLeads: function (origem) {
+      const doLinkLeads = origem === 'linkleads';
       const espera = janelaDeEspera();
-      global.IADIntegracoes.buscar().then(function (lista) {
+      global.IADIntegracoes.buscar(doLinkLeads ? 'linkleads' : 'lh').then(function (lista) {
         leads = lista;
         if (!lista.length) {
           espera.close(); espera.remove();
@@ -6747,10 +6835,14 @@
              resposta nova" some com a única pergunta útil: será que o Linked
              Helper está postando no endereço desta empresa? */
           const quem = global.IADIntegracoes.nomeDaEmpresaAtual();
-          alert('Nenhuma resposta nova na ponte' + (quem ? ' de ' + quem : '') + '.\n\n' +
-            'Se você esperava leads aqui, confira o endereço que está no Linked Helper: ' +
-            'o identificador no fim dele (e=) tem de ser o desta empresa. ' +
-            'Cada empresa tem o próprio balde, e o que chega pelo endereço de uma não aparece na outra.');
+          alert(doLinkLeads
+            ? 'Nenhuma resposta nova do LinkLeads na ponte' + (quem ? ' de ' + quem : '') + '.\n\n' +
+              'No LinkLeads: Configurações → Integrações → Webhook, formato "Linked Helper", com o MESMO ' +
+              'endereço de entrada da ponte (chave de escrita e o e= desta empresa) e o evento "Resposta recebida" ligado.'
+            : 'Nenhuma resposta nova na ponte' + (quem ? ' de ' + quem : '') + '.\n\n' +
+              'Se você esperava leads aqui, confira o endereço que está no Linked Helper: ' +
+              'o identificador no fim dele (e=) tem de ser o desta empresa. ' +
+              'Cada empresa tem o próprio balde, e o que chega pelo endereço de uma não aparece na outra.');
           return;
         }
 
@@ -6927,7 +7019,7 @@
 
         const op = Store.criarOportunidade({
           contaId: contaId, titulo: d.titulo, etapa: d.etapa,
-          origem: 'Linked Helper', fonteId: fonteDoLinkedHelper(), campanha: lead.campanha || '',
+          origem: rotuloDaOrigem(lead), fonteId: fonteDaOrigem(lead), campanha: lead.campanha || '',
           sdr: lead.operador || '', sdrEmail: lead.operadorEmail || '',
           notas: notasDoLead(lead)
         });
@@ -8065,13 +8157,13 @@
          seria etapa mais atrasada que a realidade, e o IAD compara as duas. */
       op = Store.criarOportunidade({
         contaId: conta.id,
-        titulo: (lead.empresa ? lead.empresa : (lead.nome || 'LinkedIn')) + ' — origem LH',
+        titulo: (lead.empresa ? lead.empresa : (lead.nome || 'LinkedIn')) + ' — origem ' + rotuloDaOrigem(lead, true),
         etapa: lead.resposta ? 'Conexão' : 'Prospecção',
         /* Com várias SDRs mandando prospect, saber de quem veio e de qual
            campanha é o que permite ler o resultado depois, por pessoa e por
            campanha. Fica em campo próprio, não perdido dentro das notas. */
-        origem: 'Linked Helper',
-        fonteId: fonteDoLinkedHelper(),
+        origem: rotuloDaOrigem(lead),
+        fonteId: fonteDaOrigem(lead),
         campanha: lead.campanha || '',
         sdr: lead.operador || '',
         sdrEmail: lead.operadorEmail || '',
@@ -8245,15 +8337,21 @@
   /* O que não cabe em campo próprio, mas quem abre a conta amanhã precisa ler. */
   function notasDoLead(lead) {
     const rede = [
-      lead.grau === 'DISTANCE_1' ? '1º grau' : '',
+      (lead.grau === 'DISTANCE_1' || lead.grau === '1') ? '1º grau' : '',
       lead.mutuos ? lead.mutuos + (Number(lead.mutuos) === 1 ? ' conexão em comum' : ' conexões em comum') : '',
       lead.conectadoEm ? 'conectados desde ' + lead.conectadoEm : ''
     ].filter(Boolean).join(' · ');
 
-    return ['ORIGEM LH' + (lead.campanha ? ' · campanha: ' + lead.campanha : '') +
+    return ['ORIGEM ' + rotuloDaOrigem(lead, true).toUpperCase() + (lead.campanha ? ' · campanha: ' + lead.campanha : '') +
       (lead.operador ? ' · prospecção de ' + lead.operador : ''),
       lead.linkedin, lead.headline, rede,
-      lead.oQueFazLa ? 'Faz lá: ' + lead.oQueFazLa : ''
+      lead.oQueFazLa ? 'Faz lá: ' + lead.oQueFazLa : '',
+      /* O que o LinkLeads já sabia: papel no grupo comprador (e se o vendedor
+         confirmou), a leitura da resposta pela IA e o comitê mapeado lá. É
+         contexto para quem abre o negócio — não é evidência. */
+      lead.papelLinkLeads ? 'Papel no LinkLeads: ' + lead.papelLinkLeads + (lead.papelConfirmado ? ' (confirmado pelo vendedor)' : ' (sugestão)') : '',
+      lead.rotuloLinkLeads ? 'Leitura da resposta (IA do LinkLeads): ' + lead.rotuloLinkLeads + (lead.resumoLinkLeads ? ' — ' + lead.resumoLinkLeads : '') : '',
+      lead.comiteLinkLeads ? 'Comitê no LinkLeads: ' + lead.comiteLinkLeads : ''
     ].filter(Boolean).join('\n');
   }
 
@@ -11789,6 +11887,22 @@
   function fonteDoLinkedHelper() {
     const f = Store.criarNoCatalogo('fontes', { nome: 'Linked Helper', categoria: 'saida' });
     return f ? f.id : '';
+  }
+
+  /* Origem do lead: o painel por fonte e por campanha precisa separar o que
+     veio do Linked Helper do que veio do LinkLeads — são ferramentas, custos e
+     ritmos diferentes, e misturar os dois apaga a comparação. */
+  function rotuloDaOrigem(lead, curto) {
+    if (lead && lead.origem === 'linkleads') return 'LinkLeads';
+    return curto ? 'LH' : 'Linked Helper';
+  }
+
+  function fonteDaOrigem(lead) {
+    if (lead && lead.origem === 'linkleads') {
+      const f = Store.criarNoCatalogo('fontes', { nome: 'LinkLeads', categoria: 'saida' });
+      return f ? f.id : '';
+    }
+    return fonteDoLinkedHelper();
   }
 
   /* O produto só se escolhe ao criar o item. Trocar o produto de uma linha que

@@ -245,6 +245,21 @@
     return '';
   }
 
+  /* LinkLeads ou Linked Helper. O item do LinkLeads traz linkleads_origem (ou,
+     nas primeiras versões, só linkleads_event). Na dúvida é Linked Helper —
+     que é o que esta ponte sempre recebeu. */
+  function origemDoItem(d) {
+    if (!d || typeof d !== 'object') return 'lh';
+    const o = String(d.linkleads_origem || '').toLowerCase();
+    return (o === 'linkleads' || d.linkleads_event) ? 'linkleads' : 'lh';
+  }
+
+  function papelValido(texto) {
+    const P = global.IADPlaybook;
+    const t = String(texto || '').trim();
+    return (P && Array.isArray(P.PAPEIS) && P.PAPEIS.indexOf(t) !== -1) ? t : '';
+  }
+
   /* Aceita o objeto achatado (opção "flat objects", igual ao CSV) e o aninhado. */
   function normalizar(bruto) {
     const d = bruto && bruto.dados ? bruto.dados : (bruto || {});
@@ -311,6 +326,20 @@
       mutuos: primeiro(plano, ['mutual_count']),
       conexoes: primeiro(plano, ['connections_count']),
       conectadoEm: String(primeiro(plano, ['connected_at_iso'])).slice(0, 10),
+
+      /* De onde veio. O LinkLeads (app desktop de prospecção) entrega no MESMO
+         balde da ponte, no formato do Linked Helper, com a marca
+         linkleads_origem — é ela que separa o botão "LinkLeads" do "Importar LH"
+         sem mudar o Worker nem criar outro balde. */
+      origem: origemDoItem(d),
+      /* O papel no grupo comprador que o vendedor CONFIRMOU no LinkLeads, já na
+         taxonomia deste app. Só vale se for um dos papéis do playbook: um texto
+         estranho vira campo vazio, nunca papel inventado. */
+      papelLinkLeads: papelValido(primeiro(plano, ['linkleads_papel'])),
+      papelConfirmado: String(primeiro(plano, ['linkleads_papel_confirmado'])) === '1',
+      rotuloLinkLeads: primeiro(plano, ['linkleads_reply_label']),
+      resumoLinkLeads: primeiro(plano, ['linkleads_reply_summary']),
+      comiteLinkLeads: primeiro(plano, ['linkleads_committee']),
 
       /* operação */
       campanha: primeiro(plano, ['campaign', 'campaign_name', 'list', 'list_name']),
@@ -598,10 +627,16 @@
     });
   }
 
-  function buscar() {
+  /* origem: 'lh' (padrão, o botão "Importar LH") ou 'linkleads' (o botão
+     "LinkLeads"). Os dois leem o mesmo balde e cada um leva só o que é seu:
+     o que é do outro fica na ponte, intocado, até o outro botão buscar. */
+  function buscar(origem) {
+    const quero = origem === 'linkleads' ? 'linkleads' : 'lh';
     return requisitar('GET').then(function (corpo) {
       const lista = Array.isArray(corpo) ? corpo : (corpo.itens || corpo.items || corpo.data || []);
-      return lista.map(normalizar).filter(function (i) { return i.nome || i.empresa || i.linkedin; });
+      return lista.map(normalizar)
+        .filter(function (i) { return i.origem === quero; })
+        .filter(function (i) { return i.nome || i.empresa || i.linkedin; });
     });
   }
 
@@ -863,7 +898,7 @@
 
   global.IADIntegracoes = { config, salvarConfig, configurada, porQueSemPonte, buscar, marcarProcessados, testarPonte,
     emitirLink, aberturas, marcarAberturas, colherAberturas, diagnosticoDasAberturas,
-    normalizar, empresaAtual, nomeDaEmpresaAtual, enderecoDeEntrada,
+    normalizar, origemDoItem, empresaAtual, nomeDaEmpresaAtual, enderecoDeEntrada,
     buscarNoBalde, marcarNoBalde,
     perfilDoLinkedin, porQueNaoServe, opcoesDaLista, listaParaCampanha,
     csvDaCampanha, txtDaCampanha, COLUNAS_DA_CAMPANHA: COLUNAS };

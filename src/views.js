@@ -2580,7 +2580,17 @@
       : '<button class="btn ghost mini" onclick="App.porQueSemPonteLH()"' +
         ' data-ajuda-titulo="Importar do Linked Helper" data-ajuda="A ponte não está disponível agora. Clique para saber por quê.">Importar LH</button>';
 
-    return '<div class="row"><h1>Pipeline</h1><span class="espaco"></span>' + alternar + importar +
+    /* LinkLeads: o app desktop de prospecção entrega na mesma ponte, com marca
+       de origem. Mesmo fluxo do Importar LH (conferir, classificar, importar),
+       mas só com o que veio do LinkLeads — e o papel confirmado lá vem junto. */
+    const linkleads = global.IADIntegracoes.configurada()
+      ? '<button class="btn mini" onclick="App.importarLeads(\'linkleads\')"' +
+        ' data-ajuda-titulo="Importar do LinkLeads" data-ajuda="Traz quem respondeu às campanhas do LinkLeads.' +
+        ' Você confere a lista e importa de uma vez: empresa, contato com o papel no grupo comprador, oportunidade e a resposta como evidência.">LinkLeads</button>'
+      : '<button class="btn ghost mini" onclick="App.porQueSemPonteLH()"' +
+        ' data-ajuda-titulo="Importar do LinkLeads" data-ajuda="A ponte não está disponível agora. Clique para saber por quê.">LinkLeads</button>';
+
+    return '<div class="row"><h1>Pipeline</h1><span class="espaco"></span>' + alternar + importar + linkleads +
       '<button class="btn alt mini" onclick="App.novaOportunidade()" data-ajuda-titulo="Nova oportunidade" data-ajuda="Cria o negócio. Se a empresa ainda não existir, escolha &quot;+ Cadastrar nova empresa&quot; no próprio campo: você cadastra e volta para cá, sem perder o que digitou.">+ Oportunidade</button></div>' +
       '<div class="row filtros-pipeline" style="margin:8px 0 14px">' + filtros + '</div>';
   }
@@ -8285,7 +8295,7 @@
           motivoDoSegmento(l, i) + '</label>' +
           /* O papel é o que a cobertura do grupo comprador conta. Sugerido pelo
              cargo, conferido aqui: o cargo diz muito e não diz tudo. */
-          '<label class="campo mini"><span>Papel na compra' + (l.papelSugerido ? ' \u00b7 sugerido' : '') + '</span>' +
+          '<label class="campo mini"><span>Papel na compra' + (l.papelSugerido ? (l.papelConfirmado ? ' \u00b7 confirmado no LinkLeads' : ' \u00b7 sugerido') : '') + '</span>' +
           '<select data-papel="' + i + '">' + opcoesPapel(l.papelSugerido) + '</select></label>' +
         '</div>' +
         (!l.empresa ? camposRecebidos(l) : '') +
@@ -8343,11 +8353,15 @@
     }).join('');
 
 
+    /* O lote vem de um botão só, então de uma origem só: o título diz qual. */
+    const doLinkLeads = leads.length > 0 && leads.every(function (l) { return l.origem === 'linkleads'; });
+    const nomeOrigem = doLinkLeads ? 'LinkLeads' : 'Linked Helper';
     return '<form method="dialog"><div class="corpo">' +
-      '<h2>Importar do Linked Helper</h2>' +
+      '<h2>Importar do ' + nomeOrigem + '</h2>' +
       '<p class="small muted">Cada marcado vira empresa, contato e oportunidade em ' +
       '<strong>Prospec\u00e7\u00e3o</strong> \u2014 ou <strong>Conex\u00e3o</strong>, se a pessoa j\u00e1 respondeu \u2014 ' +
-      'com origem Linked Helper. A resposta entra como evid\u00eancia de for\u00e7a relato, na data em que ela aconteceu.</p>' +
+      'com origem ' + nomeOrigem + '. A resposta entra como evid\u00eancia de for\u00e7a relato, na data em que ela aconteceu.' +
+      (doLinkLeads ? ' O papel no grupo comprador confirmado no LinkLeads j\u00e1 vem preenchido.' : '') + '</p>' +
       /* O aviso de "N vieram desmarcados" saiu daqui: agora é o cabeçalho do
          próprio grupo que diz isso, no lugar onde eles estão. Dizer duas
          vezes a mesma coisa em telas diferentes é como se aprende a não ler

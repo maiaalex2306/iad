@@ -1,0 +1,48 @@
+name: LinkLeads × IaD CRM — v286.94 integração
+on:
+  push:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - 'src/integracoes.js'
+      - 'src/app.js'
+      - 'src/views.js'
+      - 'tests/linkleads-integracao.test.mjs'
+      - 'scripts/linkleads-integracao-browser.cjs'
+      - '.github/workflows/linkleads-integracao-v28694.yml'
+  pull_request:
+    paths:
+      - 'src/integracoes.js'
+      - 'src/app.js'
+      - 'src/views.js'
+      - 'tests/linkleads-integracao.test.mjs'
+      - 'scripts/linkleads-integracao-browser.cjs'
+      - '.github/workflows/linkleads-integracao-v28694.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contrato:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: node --check src/integracoes.js && node --check src/app.js && node --check src/views.js
+      - run: node --test tests/linkleads-integracao.test.mjs
+  navegador:
+    needs: contrato
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Playwright Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Menu LinkLeads, botão LinkLeads e Importar LH intacto
+        run: timeout 160s node scripts/linkleads-integracao-browser.cjs
+      - name: Modo assistido (regressão do LinkedIN Leads)
+        run: timeout 160s node scripts/linkedin-leads-browser.cjs
