@@ -231,8 +231,17 @@ export function mountLinkedInLeads({root,scope,getScopeToken,nuvem}={}){
   async function togglePause(){
     if(!meta||busy)return;
     meta.paused=!meta.paused;request++;
-    try{await persist();showCurrent();show(meta.paused?'Campanha pausada.':'Campanha retomada.');}
-    catch(e){show('Falha ao gravar pausa: '+e.message,true);}
+    // Bloquear ações imediatamente; não esperar pelo IndexedDB para aplicar a pausa.
+    showCurrent();
+    try{
+      await persist();
+      if(valid())show(meta.paused?'Campanha pausada.':'Campanha retomada.');
+    }catch(e){
+      // Falha de gravação: manter a fila pausada, inclusive após tentativa de retomada.
+      meta.paused=true;request++;
+      showCurrent();
+      show('Falha ao gravar pausa; campanha permanece bloqueada: '+e.message,true);
+    }
   }
   async function renderPage(){
     if(!db||!meta?.campaign||!valid())return;
