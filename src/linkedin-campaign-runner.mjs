@@ -61,6 +61,8 @@ export function createLinkedInCampaignExecutor({
   const locked=await store.claim(key);
   if(!locked)return {state:'EM_EXECUCAO',key};
   let state=await store.get(key)||{state:CAMPAIGN_STATES.PENDING,key,lead:lead.perfil};
+  const resume={...state};
+  let externalAttempt=false;
   async function transition(next,detail={}){
    state={...state,...detail,key,lead:lead.perfil,state:next,updatedAt:new Date(clock()).toISOString()};
    await store.put(key,state);
@@ -82,8 +84,8 @@ export function createLinkedInCampaignExecutor({
    const posts=orderRecentPosts(await linkedin.listPosts(profile,{maxAgeDays}),profile.id,{maxAgeDays,now:clock()});
    if(!posts.length)return await transition(CAMPAIGN_STATES.NO_POST,{reason:'Sem publicações recentes acessíveis'});
    let selected=null,interaction=null;
-   if(state.postId&&[CAMPAIGN_STATES.LIKED,CAMPAIGN_STATES.DRAFT].includes(state.state)){
-     selected=posts.find(p=>p.id===state.postId);
+   if(resume.postId&&[CAMPAIGN_STATES.LIKED,CAMPAIGN_STATES.DRAFT,CAMPAIGN_STATES.WAITING_PERMISSION].includes(resume.state)){
+     selected=posts.find(p=>p.id===resume.postId);
      if(!selected)return await transition(CAMPAIGN_STATES.REVIEW,{reason:'Post anterior não pode ser revalidado'});
      interaction=await linkedin.getMyInteraction(selected);
    }else{
@@ -99,7 +101,7 @@ export function createLinkedInCampaignExecutor({
    if(interaction?.commented===true)return await transition(CAMPAIGN_STATES.REVIEW,{reason:'Comentário existente não atribuível com segurança ao executor',postId:selected.id});
    if(interaction?.liked!==true&&interaction?.liked!==false)
     return await transition(CAMPAIGN_STATES.REVIEW,{reason:'Estado da curtida desconhecido',postId:selected.id});
-   let draft=state.postId===selected.id?state.draft:null;
+   let draft=resume.postId===selected.id?resume.draft:null;
    if(!draft){
      await transition(CAMPAIGN_STATES.ANALYZE,{postId:selected.id,postUrl:selected.url});
      if(!selected.text?.trim()&&!selected.media?.length)
@@ -123,15 +125,20 @@ export function createLinkedInCampaignExecutor({
     return await transition(CAMPAIGN_STATES.REVIEW,{reason:'Comentário detectado antes da publicação'});
    if(current?.liked!==true&&current?.liked!==false)
     return await transition(CAMPAIGN_STATES.REVIEW,{reason:'Curtida atual não verificável'});
+   if(current.liked===true&&!resume.ownedLikeConfirmed)
+     return await transition(CAMPAIGN_STATES.REVIEW,{reason:'Curtida externa detectada antes de iniciar a ação'});
    if(current.liked!==true){
+     externalAttempt=true;
      const liked=await linkedin.like(selected);
      if(liked?.status!=='confirmed'){
        return await transition(CAMPAIGN_STATES.REVIEW,{reason:'Resultado da curtida incerto'});
      }
      const confirmed=await linkedin.getMyInteraction(selected);
      if(confirmed?.liked!==true)return await transition(CAMPAIGN_STATES.REVIEW,{reason:'Curtida não comprovada'});
-     await transition(CAMPAIGN_STATES.LIKED,{draft,postId:selected.id,likedAt:new Date(clock()).toISOString()});
+     await transition(CAMPAIGN_STATES.LIKED,{draft,postId:selected.id,
+       ownedLikeConfirmed:true,likedAt:new Date(clock()).toISOString()});
    }
+   externalAttempt=true;
    const sent=await linkedin.comment(selected,draft);
    if(sent?.status!=='confirmed')
      return await transition(CAMPAIGN_STATES.REVIEW,{reason:'Resultado da publicação incerto — proibir repetição automática'});
@@ -141,7 +148,8 @@ export function createLinkedInCampaignExecutor({
    return await transition(CAMPAIGN_STATES.CONFIRMED,{draft,postId:selected.id,
      commentId:sent.commentId||null,commentedAt:new Date(clock()).toISOString()});
   }catch(error){
-   return await transition(CAMPAIGN_STATES.ERROR,{reason:String(error?.message||error).slice(0,500)});
+   return await transition(externalAttempt?CAMPAIGN_STATES.REVIEW:CAMPAIGN_STATES.ERROR,
+     {reason:String(error?.message||error).slice(0,500)});
   }finally{
    await store.release(key);
   }
