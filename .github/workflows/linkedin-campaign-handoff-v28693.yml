@@ -51,14 +51,26 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: {node-version: '22'}
-      - name: Verify v286.93 cache + entrypoint
+      - name: Verify cache version coherence + entrypoint
         run: |
           node - <<'NODE'
+          // A versao e LIDA dos dois arquivos e comparada entre si, nao com um
+          // literal. Fixada em 'v286.93', esta checagem passou a falhar na
+          // v286.94 dizendo "Config/SW version mismatch" — com os dois arquivos
+          // em perfeito acordo. A mensagem mandava procurar uma deriva que nao
+          // existia, enquanto o problema era o literal daqui estar velho.
+          // Sexta vez que o padrao aparece: teste que fixa a versao fica verde
+          // por coincidencia e vermelho para sempre depois do bump seguinte.
           const fs=require('node:fs');
           const c=fs.readFileSync('src/config.js','utf8');
           const sw=fs.readFileSync('sw.js','utf8');
-          if(!c.includes("numero: 'v286.93'")||!sw.includes("const CACHE = 'iad-crm-v286.93'"))
-            throw Error('Config/SW version mismatch');
+          const noConfig=/numero:\s*'(v\d+(?:\.\d+)*)'/.exec(c);
+          const noSW=/const CACHE\s*=\s*'iad-crm-(v\d+(?:\.\d+)*)'/.exec(sw);
+          if(!noConfig)throw Error('Nao li a versao em src/config.js');
+          if(!noSW)throw Error('Nao li a versao em sw.js');
+          if(noConfig[1]!==noSW[1])
+            throw Error('Config/SW version mismatch: src/config.js diz '+noConfig[1]+
+              ' e sw.js diz '+noSW[1]+' — troque os dois no mesmo commit');
           if(!sw.includes("./src/linkedin-campaign-portable.mjs"))
             throw Error('Portable helper absent from precache');
           if(!fs.existsSync('src/linkedin-campaign-portable.mjs'))throw Error('Module missing');
