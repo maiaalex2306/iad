@@ -130,3 +130,34 @@ test('RI-04: limites e segurança estática da interface',async()=>{
  assert.doesNotMatch(engine,/fetch\s*\(|localStorage|document\.|supabase\./);
  assert.match(sw,/\.\/src\/ri\/opportunity-radar\.mjs/);
 });
+
+test('PERF-43: indice de segmentos preserva isolamento e limites em carteira extensa',async()=>{
+ const s={contas:[],oportunidades:[],tarefas:[],sinais:[],produtos:[]};
+ const recent=['2026-11-01','2026-10-19','2026-09-10','2026-08-05','2026-07-02','2026-06-21'];
+ const older=['2026-04-10','2026-03-03','2026-02-14'];
+ for(let g=0;g<36;g++){
+  const seg='Segmento '+String(g).padStart(2,'0');
+  for(let j=0;j<3;j++)s.contas.push(ac('seg'+g+'-'+j,seg));
+  for(let j=0;j<9;j++)s.oportunidades.push(won('w'+g+'-'+j,'seg'+g+'-'+(j%3),'Produto',j<6?recent[j]:older[j-6]));
+ }
+ for(let i=0;i<1400;i++)s.contas.push(ac('extra-'+i,'Outro '+i));
+ s.contas.unshift(ac('seg0-0','Segmento 00','tb'));
+ s.oportunidades.push(won('private','seg0-0','Produto privado','2026-11-01','tb'));
+ const before=JSON.stringify(s);
+ const out=await run(s);
+ assert.equal(out.groups.growth.length,12,'limite de 12 por categoria anterior permanece');
+ assert.ok(out.groups.growth.every(x=>x.tenantId==='ta'&&x.accountId===null));
+ assert.ok(out.groups.growth.some(x=>x.accountName==='Segmento 00'));
+ assert.doesNotMatch(JSON.stringify(out),/Produto privado/);
+ assert.equal(JSON.stringify(s),before,'nenhuma escrita da carteira');
+});
+test('PERF-43: IDs de conta repetidos preservam ultima versao e ordem de insercao',async()=>{
+ const s={contas:[ac('a','Antigo'),ac('a','Atual'),ac('b','Atual'),ac('c','Atual')],
+ oportunidades:[],tarefas:[],sinais:[],produtos:[]};
+ const ds=['2026-11-01','2026-10-19','2026-09-10','2026-08-05','2026-07-02','2026-06-21','2026-04-10','2026-03-03','2026-02-14'];
+ for(let j=0;j<9;j++)s.oportunidades.push(won('w'+j,['a','b','c'][j%3],'Produto',ds[j]));
+ const out=await run(s);
+ assert.equal(out.groups.growth.length,1);
+ assert.equal(out.groups.growth[0].accountName,'Atual');
+ assert.doesNotMatch(JSON.stringify(out.groups.growth),/Antigo/);
+});

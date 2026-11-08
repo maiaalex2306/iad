@@ -1,6 +1,6 @@
 # IaD CRM — Gestão comercial orientada à decisão
 
-> **Documentação atualizada em 08/11/2026.** A versão publicada e verificada antes desta revisão é **v286.96**. A **v286.97** foi a atualização do Manual; a **v286.98** acrescenta o painel prático Aprenda Vendendo — 24 horas e renomeia o menu Método para Treinamento de Vendas. O [Manual Completo v286.97](docs/MANUAL-COMPLETO-v28697.md) e a tela **Método** (`#/playbook`) são a documentação operacional principal. Os arquivos v286.95 e RI-46 são históricos.
+> **Documentação atualizada em 08/11/2026.** A versão publicada e verificada antes desta revisão é **v286.96**. A **v286.97** foi a atualização do Manual; a **v286.98** acrescentou o painel Aprenda Vendendo — 24 horas e o menu Treinamento de Vendas. A **v286.99** corrige o gate RI-M23 e indexa referências por segmento no Radar, sem mudar regras de negócios. O [Manual Completo v286.97](docs/MANUAL-COMPLETO-v28697.md) e a tela **Treinamento de Vendas** (`#/playbook`) são a documentação operacional principal. Os arquivos v286.95 e RI-46 são históricos.
 
 **O funil organiza. A decisão fecha.** O sistema mede evidência das decisões do comprador, não apenas tarefas realizadas pelo vendedor.
 

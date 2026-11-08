@@ -1,4 +1,4 @@
-name: RI-M23 — Inteligência de Mercado: subsegmentos e ampla descoberta
+name: "RI-M23 — Inteligência de Mercado: subsegmentos e ampla descoberta"
 on:
   pull_request:
     paths:
@@ -9,6 +9,7 @@ on:
       - 'tests/market-contract.test.mjs'
       - 'scripts/ri-m23-market-canary-smoke.cjs'
       - 'scripts/ri-m21-market-quality.test.cjs'
+      - 'scripts/perf43-workflow-yaml.test.cjs'
       - 'src/config.js'
       - 'sw.js'
       - '.github/workflows/ri-m23-market-segment-breadth.yml'
@@ -38,7 +39,7 @@ jobs:
           node --check src/ri/market-contract.mjs
       - name: Market discovery, RLS mock, sources and import protection
         run: |
-          node --test tests/market-edge.test.mjs tests/market-contract.test.mjs tests/market-prospect-agents.test.mjs scripts/ri-m21-market-quality.test.cjs
+          node --test tests/market-edge.test.mjs tests/market-contract.test.mjs tests/market-prospect-agents.test.mjs scripts/ri-m21-market-quality.test.cjs scripts/perf43-workflow-yaml.test.cjs
   canary-auth:
     runs-on: ubuntu-latest
     timeout-minutes: 3
