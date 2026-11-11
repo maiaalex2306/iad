@@ -52,3 +52,12 @@ test('ATA-P0: versão do shell e do cache idênticas',()=>{
  assert.ok(sw.includes("const CACHE = 'iad-crm-"+versao[1]+"'"));
  assert.equal(versao[1],'v286.100');
 });
+
+test('ATA-P0: recupera anexo legado Outro quando único; recusa vários não vinculados',()=>{
+ const a=read('src/app.js');
+ assert.match(a,/x\.categoria==='Outro'/);
+ assert.match(a,/semVinculo\.length>1/);
+ assert.match(a,/Não posso escolher a ata correta automaticamente/);
+ assert.match(a,/Origem da tarefa não comprovada/);
+ assert.match(a,/tarefaId:null, tipoTarefa:'Documento antigo'/);
+});

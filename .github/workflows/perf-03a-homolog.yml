@@ -67,9 +67,15 @@ jobs:
           supabase start -x studio,imgproxy,realtime,storage-api,edge-runtime,postgres-meta,mailpit,logflare,vector,supavisor
       - name: Aplicar esquema apenas no Postgres local
         run: |
-          sudo apt-get -qq update
-          sudo apt-get -qq install -y postgresql-client
-          psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -X -v ON_ERROR_STOP=1 -f nuvem/schema.sql
+          set -euo pipefail
+          # Supabase CLI inicia o Postgres em um container Docker que já inclui psql.
+          # Executá-lo ali evita downloads apt e falhas de DNS de mirrors externos.
+          DB_CONTAINER="$(docker ps --filter 'name=supabase_db_' --format '{{.Names}}' | head -n 1)"
+          if [ -z "$DB_CONTAINER" ]; then
+            echo "::error::Postgres local da Supabase não encontrado."
+            exit 1
+          fi
+          docker exec -i "$DB_CONTAINER" psql -U postgres -d postgres -X -v ON_ERROR_STOP=1 < nuvem/schema.sql
       - name: Auth RLS isolamento e paginacao PostgREST
         run: |
           set -a

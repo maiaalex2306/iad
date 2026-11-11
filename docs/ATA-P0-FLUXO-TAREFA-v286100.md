@@ -46,3 +46,10 @@ A captura fornecida não contém os bytes do arquivo. Não foi possível determi
 **Gate de liberação:** CI dos módulos afetados aprovada, Chromium aprovado, sem regressões de Auth/RLS/CAS/Manual; publicação GitHub Pages concluída; confirmação pública de versão e cache. A IA de staging RI-08 historicamente 503 é um gate independente e **não pode ser declarado resolvido** com esta alteração de frontend.
 
 **Rollback frontend:** voltar ao commit `6158106d2b1dd0fb769390c94999b9036b679119` mantendo DB, volumes, IndexedDB e pendências.
+
+
+## Compatibilidade com a ata anexada antes da correção
+
+O formulário antigo de **Editar tarefa** gravava documentos sem `tarefaId` e com categoria **Outro**. A recuperação aceita um anexo único dessa categoria, da mesma oportunidade e data da conclusão, após confirmação manual explícita, mas **não atribui sua autoria a uma tarefa sem prova técnica**. Se houver mais de um arquivo antigo elegível na mesma data, o fluxo exige selecionar/reanexar o arquivo correto no formulário, para evitar analisar uma ata de outra reunião.
+
+A CI PERF-03A foi ajustada para usar `psql` dentro do container PostgreSQL iniciado pela própria Supabase CLI, evitando dependência de mirrors Ubuntu e a falha de DNS constatada no runner.

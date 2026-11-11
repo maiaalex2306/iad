@@ -5343,10 +5343,12 @@
       });
     },
 
-    /* Leitura voluntária de uma ATA já anexada. Documentos antigos podem ter
-       sido guardados sem tarefaId; nesse caso só oferecemos os da oportunidade
-       classificados como Ata na mesma data de conclusão. O usuário vê os
-       nomes e confirma, sem varrer anexos de outras negociações/tenants. */
+    /* Leitura voluntária de ATA já anexada. O formulário antigo de Editar
+       tarefa gravava com categoria "Outro", sem tarefaId. Assim, o caso que
+       motivou a correção ficaria invisível se só buscássemos "Ata de reunião".
+       A recuperação legada é limitada a mesma oportunidade e data e exige
+       confirmação; documentos "Outro" ambíguos devem ser reenviados para
+       gerar vínculo seguro, nunca atribuídos à tarefa por suposição. */
     reanalisarAtaTarefa: function (id) {
       const tarefa=Store.tarefa(id);
       const op=tarefa && tarefa.oportunidadeId ? Store.oportunidade(tarefa.oportunidadeId) : null;
@@ -5363,8 +5365,15 @@
         return;
       }
       const origem= function (vinculado) {
+        if (!vinculado) {
+          /* Sem vínculo técnico, não atribuir a fala ao contato ou tarefa. */
+          return { tarefaId:null, tipoTarefa:'Documento antigo',
+            titulo:'Anexo antigo sem tarefa de origem confirmada',
+            descricao:'Origem da tarefa não comprovada', decisaoAlvo:'',
+            contato:'', quando:tarefa.concluidaEm || Store.hoje() };
+        }
         const p=tarefa.contatoId ? Store.contato(tarefa.contatoId) : null;
-        return { tarefaId:vinculado ? id : null,tipoTarefa:tarefa.tipo || '',
+        return { tarefaId:id,tipoTarefa:tarefa.tipo || '',
           titulo:tarefa.titulo || '',descricao:tarefa.descricao || '',
           decisaoAlvo:tarefa.decisaoAlvo || '',
           contato:p ? p.nome : '',
@@ -5372,11 +5381,26 @@
       };
       Arq.listar({ oportunidadeId:op.id }).then(function (metas) {
         const ligados=metas.filter(function (x) { return x.tarefaId===id; });
+        const dia=tarefa.concluidaEm || Store.hoje();
         const legados=metas.filter(function (x) {
-          return !x.tarefaId && x.categoria==='Ata de reunião' &&
-            x.data===(tarefa.concluidaEm || Store.hoje());
+          return !x.tarefaId && x.categoria==='Ata de reunião' && x.data===dia;
         });
-        const selecionados=ligados.length ? ligados : legados;
+        /* Fluxo antigo de Editar tarefa gravava a ata com categoria "Outro".
+           Só oferece esse candidato se for o ÚNICO documento "Outro" do dia
+           na mesma oportunidade; mais de um significa vínculo ambíguo. */
+        const semVinculo=metas.filter(function (x) {
+          return !x.tarefaId && (x.categoria==='Outro' || !x.categoria) &&
+            x.data===dia && /\.(pdf|docx|txt|md|rtf)$/i.test(x.nome || '');
+        });
+        if (!ligados.length && !legados.length && semVinculo.length>1) {
+          alert('Foram encontrados vários anexos antigos sem vínculo com esta tarefa:\n\n• '+
+            semVinculo.map(function (x) { return x.nome; }).join('\n• ')+
+            '\n\nNão posso escolher a ata correta automaticamente. Abra Editar tarefa '+
+            'e anexe novamente somente o documento desta reunião.');
+          return;
+        }
+        const selecionados=ligados.length ? ligados :
+          (legados.length ? legados : semVinculo.slice(0,1));
         if (!selecionados.length) {
           alert('Não há ata desta tarefa disponível neste navegador.\n\n' +
             'Os anexos antigos ficam no IndexedDB local, não são sincronizados com o servidor. ' +
