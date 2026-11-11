@@ -45,6 +45,8 @@ jobs:
       - name: Instalar Chromium isolado
         run: |
           npm install --no-save --no-package-lock playwright@1.56.1
-          npx playwright install --with-deps chromium
+          # Ubuntu runners normally include browser libraries; avoid network-dependent apt on every run.
+          # Missing runtime libraries still fail the browser test rather than being ignored.
+          npx playwright install chromium
       - name: Exercitar arquivo local, formulário e leitura vinculada
         run: timeout 165s node scripts/task-ata-analysis-chromium.cjs

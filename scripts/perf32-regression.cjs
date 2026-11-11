@@ -109,7 +109,7 @@ test('PERF-32: HTML de tarefas permanece igual em 1,389,1000 e 5000 tarefas',()=
       concluídas. Removemos SOMENTE esse botão para preservar a comparação
       exata do restante do HTML do PERF-32 contra o baseline histórico. */
    const htmlSemBotao = b.output.replace(
-     /<button class="btn ghost mini" onclick="App\.reanalisarAtaTarefa\('[^']+'\')" data-ajuda-titulo="Analisar ata da tarefa" data-ajuda="[^"]*">Analisar ata<\/button>/g,
+     /<button[^>]+onclick="App\.reanalisarAtaTarefa\('[^']+'\)"[^>]*>Analisar ata<\/button>/g,
      '');
    assert.equal(htmlSemBotao,a.output,'paridade tarefas '+n+' alvo='+alvo);
    if(n>0)assert.ok(b.output.includes('App.reanalisarAtaTarefa('),'botão da ata presente em tarefa concluída');
