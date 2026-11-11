@@ -105,7 +105,14 @@ test('PERF-32: HTML de tarefas permanece igual em 1,389,1000 e 5000 tarefas',()=
  for(const n of [1,389,1000,5000]){
   for(const alvo of [true,false]){
    const a=renderTarefas(antigo,n,alvo),b=renderTarefas(novo,n,alvo);
-   assert.equal(b.output,a.output,'paridade tarefas '+n+' alvo='+alvo);
+   /* ATA-P0 adiciona um único controle deliberado de releitura em tarefas
+      concluídas. Removemos SOMENTE esse botão para preservar a comparação
+      exata do restante do HTML do PERF-32 contra o baseline histórico. */
+   const htmlSemBotao = b.output.replace(
+     /<button class="btn ghost mini" onclick="App\.reanalisarAtaTarefa\('[^']+'\')" data-ajuda-titulo="Analisar ata da tarefa" data-ajuda="[^"]*">Analisar ata<\/button>/g,
+     '');
+   assert.equal(htmlSemBotao,a.output,'paridade tarefas '+n+' alvo='+alvo);
+   if(n>0)assert.ok(b.output.includes('App.reanalisarAtaTarefa('),'botão da ata presente em tarefa concluída');
    assert.equal(b.contextCalls,1,'contexto so uma vez');
    assert.ok(a.contextCalls>=3,'baseline devia recalcular contexto');
    assert.ok(b.lacunaCalls<=a.lacunaCalls,'lacunas nao podem aumentar');
