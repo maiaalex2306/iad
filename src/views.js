@@ -507,7 +507,7 @@
 
     const linha = function (g, classe, rotulo, texto, chave) {
       return '<button type="button" class="hoje-acao-item ' + classe +
-        '" onclick="App.filtrarHoje(\\'' + chave + '\\')" aria-label="Filtrar ' + esc(rotulo) + '">' +
+        '" onclick="App.filtrarHoje(' + chave + ')" aria-label="Filtrar ' + esc(rotulo) + '">' +
         '<span class="hoje-acao-rotulo">' + esc(rotulo) + '</span>' +
         '<strong>' + U.numero(g.qtd, 0) + ' negócio(s)</strong>' +
         '<span>' + U.compacto(g.valor) + '</span>' +
