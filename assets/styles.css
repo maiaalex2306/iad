@@ -2157,3 +2157,23 @@ table.cenarios th .tiny { display: block; font-weight: 400; }
  .iad-treino-progresso { grid-template-columns: 1fr; }
  .iad-treino-linha { flex-wrap: wrap; }
 }
+
+
+/* HOJE — substitui a barra de composição isolada por decisões operáveis. */
+.hoje-acao { margin: 12px 0; padding: 16px 18px; }
+.hoje-acao h2 { margin: 0 0 4px; font-size: 1.1rem; }
+.hoje-acao-cabecalho { align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.hoje-acao-cabecalho p { margin: 0; }
+.hoje-acao-resumo { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 14px; margin: 14px 0 12px; }
+.hoje-acao-resumo strong { font-size: 1.55rem; line-height: 1.2; color: var(--text); }
+.hoje-acao-opcoes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.hoje-acao-item { appearance: none; min-width: 0; text-align: left; display: flex; flex-direction: column; gap: 3px;
+  border: 1px solid var(--border); border-left: 4px solid; background: var(--bg); border-radius: 10px; padding: 12px 14px;
+  color: var(--text); cursor: pointer; font: inherit; }
+.hoje-acao-item.urgente { border-left-color: var(--dead); }
+.hoje-acao-item.prioridade { border-left-color: var(--risk); }
+.hoje-acao-item:hover, .hoje-acao-item:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; }
+.hoje-acao-rotulo { font-weight: 800; }
+.hoje-acao-item strong { font-size: 1.15rem; }
+.hoje-acao-link { font-weight: 700; margin-top: 7px; text-decoration: underline; }
+@media (max-width: 560px) { .hoje-acao-opcoes { grid-template-columns: 1fr; } .hoje-acao { padding: 14px; } }
