@@ -1,0 +1,50 @@
+name: "ATA-P0 — Leitura e análise de atas em tarefas"
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - 'src/app.js'
+      - 'src/ui.js'
+      - 'src/arquivos.js'
+      - 'src/views.js'
+      - 'src/documentos.js'
+      - 'src/config.js'
+      - 'sw.js'
+      - 'tests/task-ata-analysis.test.cjs'
+      - 'scripts/task-ata-analysis-chromium.cjs'
+      - '.github/workflows/task-ata-analysis.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ata-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Sintaxe e contratos da leitura de ata
+        run: |
+          node --check src/app.js
+          node --check src/ui.js
+          node --check src/arquivos.js
+          node --check src/views.js
+          node --check src/documentos.js
+          node --check scripts/task-ata-analysis-chromium.cjs
+          node --test tests/task-ata-analysis.test.cjs
+  ata-chromium:
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar Chromium isolado
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Exercitar arquivo local, formulário e leitura vinculada
+        run: timeout 165s node scripts/task-ata-analysis-chromium.cjs

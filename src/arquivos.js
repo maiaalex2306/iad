@@ -88,6 +88,27 @@
     });
   }
 
+  /* A análise de uma ata já anexada precisa dos bytes, não apenas do nome.
+     Meta e blob são buscados no mesmo IndexedDB. Quem chama deve conferir
+     tarefaId e oportunidadeId contra o Store autorizado antes de processar. */
+  function obter(id) {
+    return abrir().then(function (db) {
+      const tx = transacao(db, [META, DADOS], 'readonly');
+      return Promise.all([
+        promessa(tx.objectStore(META).get(id)),
+        promessa(tx.objectStore(DADOS).get(id))
+      ]);
+    }).then(function (par) {
+      const meta = par[0], registro = par[1];
+      if (!meta || !registro || !registro.blob)
+        throw new Error('Anexo não encontrado neste navegador.');
+      const arquivo = new File([registro.blob], meta.nome, {
+        type: meta.mime || registro.blob.type || 'application/octet-stream'
+      });
+      return { meta: meta, arquivo: arquivo };
+    });
+  }
+
   function abrirArquivo(id) {
     return abrir().then(function (db) {
       const loja = transacao(db, [DADOS], 'readonly').objectStore(DADOS);
@@ -148,5 +169,5 @@
 
   function disponivel() { return !!global.indexedDB; }
 
-  global.IADArquivos = { salvar, listar, abrir: abrirArquivo, excluir, repontar, uso, disponivel, LIMITE_BYTES };
+  global.IADArquivos = { salvar, listar, obter, abrir: abrirArquivo, excluir, repontar, uso, disponivel, LIMITE_BYTES };
 })(window);

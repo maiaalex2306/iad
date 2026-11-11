@@ -216,6 +216,15 @@
       '<button class="btn" value="ok" type="submit">Salvar</button></div></form>';
 
     document.body.appendChild(dlg);
+    /* Impede Enter/Salvar de fechar o diálogo enquanto o PDF/Word ainda é
+       extraído. O usuário não pode perder a ata por uma corrida assíncrona. */
+    dlg.addEventListener('submit', function (ev) {
+      if (dlg.documentosPendentes) {
+        ev.preventDefault();
+        const aviso = dlg.querySelector('[data-status-leitura]');
+        if (aviso) aviso.textContent = 'A leitura do arquivo ainda está em andamento. Aguarde o resultado antes de salvar.';
+      }
+    });
 
     /* O valor se acerta ao sair do campo. Digitar "35000" e ver "35000" na
        tela deixa a dúvida de sempre — são trinta e cinco mil ou trezentos e
@@ -531,7 +540,10 @@
 
     const estado = document.createElement('small');
     estado.className = 'origem';
+    estado.setAttribute('data-status-leitura','');
+    estado.setAttribute('role','status');
     if (entrada.parentNode) entrada.parentNode.appendChild(estado);
+    const salvar = dlg.querySelector('button[value="ok"]');
 
     /* "1 documento lido" não diz qual. Quem anexa três precisa ver os três
        nomes para saber que anexou o certo — e poder tirar o errado sem
@@ -564,8 +576,12 @@
     });
 
     entrada.addEventListener('change', function () {
+      if (dlg.documentosPendentes) return;
       const escolhidos = Array.prototype.slice.call(entrada.files || []);
       if (!escolhidos.length) return;
+      dlg.documentosPendentes = true;
+      entrada.disabled = true;
+      if (salvar) salvar.disabled = true;
       estado.textContent = 'Lendo ' + escolhidos.length + ' arquivo' + (escolhidos.length > 1 ? 's' : '') + '…';
 
       lerDocumentos(escolhidos).then(function (lidos) {
@@ -602,6 +618,10 @@
         estado.textContent = 'Não consegui ler os arquivos: ' +
           ((e && e.message) || 'tente de novo') + '.';
         entrada.value = '';
+      }).finally(function () {
+        dlg.documentosPendentes = false;
+        entrada.disabled = false;
+        if (salvar) salvar.disabled = false;
       });
     });
   }
