@@ -485,13 +485,50 @@
         '<span class="qtd">' + foco.itens.length + '</span><span class="rot">Todos</span>' +
         '<span class="val">' + U.compacto(foco.itens.reduce(function (s, i) { return s + (i.resumo.op.valor || 0); }, 0)) + '</span></button>' +
       '</div>' +
-      '<div class="card" style="padding:14px 16px">' +
-        G.composicao(grupos.filter(function (g) { return g.valor > 0; }).map(function (g) {
-          return { rotulo: g.rotulo, valor: g.valor, cor: g.cor };
-        })) + '</div>' +
+      painelDeAcaoHoje(grupos) +
       barraDePaginas(visiveis.length, pagina, paginas, comeco, naPagina.length) +
       '<div class="lista-foco">' + itens + '</div>' +
       (paginas > 1 ? barraDePaginas(visiveis.length, pagina, paginas, comeco, naPagina.length, true) : '');
+  }
+
+  /* HOJE: um gráfico de percentuais não define trabalho. Este painel usa os
+     MESMOS grupos calculados pela fila, sem leitura de dados, IA nem escrita.
+     Só urgente e prioridade pedem ação agora; "aguardando" e "em dia" não
+     podem inflar os valores de intervenção. Os valores são nominais do CRM,
+     nunca receita em risco comprovada ou previsão de fechamento. */
+  function painelDeAcaoHoje(grupos) {
+    const urgente = grupos.find(function (g) { return g.chave === 3; }) || { qtd: 0, valor: 0 };
+    const prioridade = grupos.find(function (g) { return g.chave === 2; }) || { qtd: 0, valor: 0 };
+    const qtd = urgente.qtd + prioridade.qtd;
+    const valorUrg = Math.max(0, Number(urgente.valor) || 0);
+    const valorPri = Math.max(0, Number(prioridade.valor) || 0);
+    const valor = valorUrg + valorPri;
+    const parte = valor > 0 ? Math.round(valorUrg / valor * 100) : 0;
+
+    const linha = function (g, classe, rotulo, texto, chave) {
+      return '<button type="button" class="hoje-acao-item ' + classe +
+        '" onclick="App.filtrarHoje(' + chave + ')" aria-label="Filtrar ' + esc(rotulo) + '">' +
+        '<span class="hoje-acao-rotulo">' + esc(rotulo) + '</span>' +
+        '<strong>' + U.numero(g.qtd, 0) + ' negócio(s)</strong>' +
+        '<span>' + U.compacto(g.valor) + '</span>' +
+        '<span class="hoje-acao-link">' + texto + ' →</span></button>';
+    };
+    if (!qtd) {
+      return '<section class="card hoje-acao"><h2>Nenhuma intervenção urgente na fila</h2>' +
+        '<p class="small muted">As oportunidades abertas classificadas como Em dia ou Aguardando ' +
+        'não exigem uma cobrança imediata por este critério. Confira os próximos compromissos nos cartões.</p></section>';
+    }
+    return '<section class="card hoje-acao" aria-label="Plano de ação comercial de hoje">' +
+      '<div class="row hoje-acao-cabecalho"><div><h2>Onde agir primeiro</h2>' +
+      '<p class="small muted">Oportunidades que precisam de intervenção — não é previsão de receita.</p></div>' +
+      '<span class="pill">' + U.numero(qtd, 0) + ' negócio(s) para agir</span></div>' +
+      '<div class="hoje-acao-resumo"><strong>' + U.compacto(valor) + '</strong>' +
+      '<span class="small">' + (valor > 0 ? parte + '% do valor que pede ação está urgente' :
+        'Sem valor monetário cadastrado nas oportunidades que pedem ação') + '</span></div>' +
+      '<div class="hoje-acao-opcoes">' +
+      linha(urgente, 'urgente', 'Urgente', 'Atacar primeiro', '3') +
+      linha(prioridade, 'prioridade', 'Prioridade', 'Planejar sequência', '2') +
+      '</div></section>';
   }
 
   /* A barra de páginas. Diz primeiro O QUE está na tela — "11 a 20 de 37" — e

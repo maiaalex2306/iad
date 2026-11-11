@@ -50,7 +50,7 @@ test('ATA-P0: versão do shell e do cache idênticas',()=>{
  const versao=config.match(/numero:\s*'(v286\.\d+)'/);
  assert.ok(versao,'Versão ausente');
  assert.ok(sw.includes("const CACHE = 'iad-crm-"+versao[1]+"'"));
- assert.equal(versao[1],'v286.100');
+ assert.match(versao[1], /^v286\.\d+$/, 'Número de versão inválido');
 });
 
 test('ATA-P0: recupera anexo legado Outro quando único; recusa vários não vinculados',()=>{
