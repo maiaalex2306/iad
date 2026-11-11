@@ -95,17 +95,44 @@ const server=http.createServer((req,res)=>{
       A.reanalisarAtaTarefa('test-task');
       await new Promise(r=>setTimeout(r,80));
       invalidCalls=calls;
-      return {calls,valid:last?.id==='test-opp'&&last?.text.includes('cliente confirmou prioridade')&&last?.docs===0,invalidCalls,warning:msgs.some(x=>x.includes('não pertence'))};
+      const warning=msgs.some(x=>x.includes('não pertence'));
+      // Formato REAL do fluxo antigo Editar tarefa: categoria "Outro", sem tarefaId.
+      Arq.listar=()=>Promise.resolve([{
+        id:'legacy-a',nome:'ata-antiga.pdf',oportunidadeId:'test-opp',
+        tarefaId:null,categoria:'Outro',data:'2026-11-11'
+      }]);
+      Arq.obter=()=>Promise.resolve({
+        meta:{id:'legacy-a',oportunidadeId:'test-opp',tarefaId:null},arquivo:file
+      });
+      A.reanalisarAtaTarefa('test-task');
+      await new Promise(r=>setTimeout(r,90));
+      const legacyRecovered=calls===2&&last?.id==='test-opp'&&
+        last?.text.includes('cliente confirmou prioridade');
+      // Dois arquivos "Outro" na mesma oportunidade/data: nunca escolher por palpite.
+      Arq.listar=()=>Promise.resolve([
+        {id:'legacy-a',nome:'ata-um.pdf',oportunidadeId:'test-opp',
+          tarefaId:null,categoria:'Outro',data:'2026-11-11'},
+        {id:'legacy-b',nome:'ata-dois.docx',oportunidadeId:'test-opp',
+          tarefaId:null,categoria:'Outro',data:'2026-11-11'}
+      ]);
+      A.reanalisarAtaTarefa('test-task');
+      await new Promise(r=>setTimeout(r,90));
+      const ambiguousBlocked=calls===2&&
+        msgs.some(x=>x.includes('Não posso escolher a ata correta automaticamente'));
+      return {calls,valid:last?.id==='test-opp'&&last?.text.includes('cliente confirmou prioridade')&&
+        last?.docs===0,invalidCalls,warning,legacyRecovered,ambiguousBlocked};
     } finally {
       S.tarefa=saved.tarefa;S.oportunidade=saved.oportunidade;Arq.listar=saved.listar;
       Arq.obter=saved.obter;D.lerVarios=saved.ler;UI.confirmar=saved.confirmar;
       IA.disponivel=saved.disponivel;A.processarReuniao=saved.process;window.alert=saved.alert;
     }
   });
-  assert.equal(replay.calls,1,'Uma análise para arquivo autorizado');
+  assert.equal(replay.calls,2,'Uma análise para arquivo vinculado e uma para legado único');
   assert.equal(replay.valid,true,'Análise recebe só texto da ata da oportunidade certa');
   assert.equal(replay.invalidCalls,1,'Arquivo fora do escopo rejeitado');
   assert.equal(replay.warning,true,'Erro explícito de escopo');
+  assert.equal(replay.legacyRecovered,true,'Ata legada da categoria Outro é recuperável');
+  assert.equal(replay.ambiguousBlocked,true,'Documentos sem vínculo ambíguos não são analisados');
   assert.deepEqual(errors,[],'sem erros JavaScript não tratados');
   console.log('ATA_P0_CHROMIUM_PASS '+JSON.stringify({disk,gate,replay,version:'v286.100'}));
  } finally {if(browser)await browser.close();await new Promise(ok=>server.close(ok));}
