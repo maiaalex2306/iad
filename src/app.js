@@ -4329,6 +4329,7 @@
          Station: ler é momento, anexar é memória. Sem isto, quem carregou o
          .docx da reunião ficava só com as evidências e perdia o documento. */
       anexarAoRegistro(docs, { oportunidadeId: opId, contaId: op.contaId,
+        tarefaId: tarefaEmCurso ? tarefaEmCurso.tarefaId : null,
         categoria: 'Ata de reunião' });
       const aviso = document.createElement('dialog');
       aviso.innerHTML = '<div class="corpo"><h2>Lendo a reunião…</h2>' +
@@ -4347,19 +4348,27 @@
            demais, e mandava procurar rede quando o problema era outro. A
            tarefa e os anexos já estão gravados: só a leitura falhou. */
         if (!r || r.erro) {
-          alert('A tarefa e os documentos foram gravados. O que falhou foi a leitura:\n\n' +
+          alert('A análise não produziu evidências. Os dados já registrados não foram alterados.\n\n' +
             ((r && r.erro) || 'O servidor respondeu vazio.'));
           render();
-          if (depois) depois();
+          if (depois) depois(false);
           return;
         }
         if (!r.evidencias.length) {
           alert('Li o texto e não encontrei nada que o CLIENTE tenha feito. Atividade nossa não conta como evidência.');
           render();
-          if (depois) depois();
+          if (depois) depois(false);
           return;
         }
-        App.aplicarLeituraDaIA(opId, r, relerNotas ? texto : null, depois);
+        App.aplicarLeituraDaIA(opId, r, relerNotas ? texto : null, function () {
+          if (depois) depois(true);
+        });
+      }).catch(function (e) {
+        if (aviso.open) aviso.close();
+        aviso.remove();
+        alert('A análise da ata encontrou um erro. Confira o histórico antes de repetir para evitar duplicidade.\n\n' +
+          ((e && e.message) || 'Erro inesperado do assistente.'));
+        if (depois) depois(false);
       });
     },
 
@@ -5271,10 +5280,40 @@
            seguinte, e anexar nas duas gravaria o mesmo arquivo duas vezes. */
         const quer = d.situacao === 'feita';
         if (aberta && quer) { concluirDaEdicao(alvo, id, d, docs); return; }
+        /* Antes: anexar uma ATA a uma tarefa já concluída só guardava o blob.
+           Não havia leitura porque a situação continuava "feita"; a tela
+           mostrava "com relato" mas nenhuma evidência nova aparecia. */
+        const materialNovo = textoDosDocumentos(docs);
+        const errosDeLeitura = (docs || []).filter(function (x) { return x.erro; });
         anexarAoRegistro(docs, { oportunidadeId: alvo.id, contaId: alvo.contaId,
-          tarefaId: id, categoria: 'Outro' }, function () { render(); });
-        if (!aberta && !quer) { App.reabrirTarefa(id); return; }
-        render();
+          tarefaId: id, categoria: 'Ata de reunião' }, function (gravacao) {
+          if (!aberta && !quer) { App.reabrirTarefa(id); return; }
+          render();
+          if (errosDeLeitura.length) {
+            alert('Documento anexado, mas a extração de conteúdo falhou em:\n\n' +
+              errosDeLeitura.map(function (x) { return x.nome + ': ' + x.erro; }).join('\n') +
+              '\n\nA tarefa não foi usada como evidência. Corrija o arquivo e tente novamente.');
+          }
+          if (!quer || !docs || !docs.length || !(materialNovo.trim().length >= 60)) return;
+          if (!gravacao || !gravacao.ok || errosDeLeitura.length) return;
+          if (tarefaEmCurso) {
+            alert('Outra leitura de tarefa ainda está em andamento. Use "Analisar ata" nesta tarefa para repetir depois.');
+            return;
+          }
+          const tAtual=Store.tarefa(id);
+          const contato=tAtual && tAtual.contatoId ? Store.contato(tAtual.contatoId) : null;
+          tarefaEmCurso={
+            tarefaId:id,tipoTarefa:tAtual ? tAtual.tipo : '',
+            titulo:tAtual ? tAtual.titulo : '',
+            descricao:tAtual ? (tAtual.descricao || '') : '',
+            decisaoAlvo:tAtual ? (tAtual.decisaoAlvo || '') : '',
+            contato:contato ? contato.nome : '',
+            quando:tAtual ? (tAtual.concluidaEm || Store.hoje()) : Store.hoje()
+          };
+          App.processarReuniao(alvo.id,materialNovo,true,[],function () {
+            tarefaEmCurso=null;
+          });
+        });
       }, function (dlg) {
         U.ligarDocumentos(dlg, 'arquivo');
         pintarAnexosDaTarefa(dlg, id);
@@ -5301,6 +5340,125 @@
          Situação, que é onde a conclusão mora, e Excluir ao lado de Salvar
          convidava ao clique errado. As duas ações são da lista de tarefas,
          onde já estavam. */
+      });
+    },
+
+    /* Leitura voluntária de ATA já anexada. O formulário antigo de Editar
+       tarefa gravava com categoria "Outro", sem tarefaId. Assim, o caso que
+       motivou a correção ficaria invisível se só buscássemos "Ata de reunião".
+       A recuperação legada é limitada a mesma oportunidade e data e exige
+       confirmação; documentos "Outro" ambíguos devem ser reenviados para
+       gerar vínculo seguro, nunca atribuídos à tarefa por suposição. */
+    reanalisarAtaTarefa: function (id) {
+      const tarefa=Store.tarefa(id);
+      const op=tarefa && tarefa.oportunidadeId ? Store.oportunidade(tarefa.oportunidadeId) : null;
+      if (!tarefa || !op) {
+        alert('Não encontrei a tarefa e sua negociação na carteira autorizada.');
+        return;
+      }
+      if (tarefaEmCurso) {
+        alert('Já existe uma análise de tarefa em andamento.');
+        return;
+      }
+      if (!Arq.disponivel() || !Arq.obter) {
+        alert('Os anexos locais não podem ser acessados neste navegador.');
+        return;
+      }
+      const origem= function (vinculado) {
+        if (!vinculado) {
+          /* Sem vínculo técnico, não atribuir a fala ao contato ou tarefa. */
+          return { tarefaId:null, tipoTarefa:'Documento antigo',
+            titulo:'Anexo antigo sem tarefa de origem confirmada',
+            descricao:'Origem da tarefa não comprovada', decisaoAlvo:'',
+            contato:'', quando:tarefa.concluidaEm || Store.hoje() };
+        }
+        const p=tarefa.contatoId ? Store.contato(tarefa.contatoId) : null;
+        return { tarefaId:id,tipoTarefa:tarefa.tipo || '',
+          titulo:tarefa.titulo || '',descricao:tarefa.descricao || '',
+          decisaoAlvo:tarefa.decisaoAlvo || '',
+          contato:p ? p.nome : '',
+          quando:tarefa.concluidaEm || Store.hoje() };
+      };
+      Arq.listar({ oportunidadeId:op.id }).then(function (metas) {
+        const ligados=metas.filter(function (x) { return x.tarefaId===id; });
+        const dia=tarefa.concluidaEm || Store.hoje();
+        const legados=metas.filter(function (x) {
+          return !x.tarefaId && x.categoria==='Ata de reunião' && x.data===dia;
+        });
+        /* Fluxo antigo de Editar tarefa gravava a ata com categoria "Outro".
+           Só oferece esse candidato se for o ÚNICO documento "Outro" do dia
+           na mesma oportunidade; mais de um significa vínculo ambíguo. */
+        const semVinculo=metas.filter(function (x) {
+          return !x.tarefaId && (x.categoria==='Outro' || !x.categoria) &&
+            x.data===dia && /\.(pdf|docx|txt|md|rtf)$/i.test(x.nome || '');
+        });
+        if (!ligados.length && !legados.length && semVinculo.length>1) {
+          alert('Foram encontrados vários anexos antigos sem vínculo com esta tarefa:\n\n• '+
+            semVinculo.map(function (x) { return x.nome; }).join('\n• ')+
+            '\n\nNão posso escolher a ata correta automaticamente. Abra Editar tarefa '+
+            'e anexe novamente somente o documento desta reunião.');
+          return;
+        }
+        const selecionados=ligados.length ? ligados :
+          (legados.length ? legados : semVinculo.slice(0,1));
+        if (!selecionados.length) {
+          alert('Não há ata desta tarefa disponível neste navegador.\n\n' +
+            'Os anexos antigos ficam no IndexedDB local, não são sincronizados com o servidor. ' +
+            'Se o documento estiver em outro aparelho, abra Editar tarefa e anexe a ata novamente.');
+          return;
+        }
+        const nomes=selecionados.map(function (x) { return x.nome; }).join('\n• ');
+        const historico=Array.isArray(op.eventos) && op.eventos.some(function (x) {
+          return x.tipo==='decision' && x.tarefaId===id;
+        });
+        const avisoLegado=ligados.length ? '' :
+          '\n\nATENÇÃO: esses anexos antigos não possuem vínculo técnico com a tarefa. '+
+          'Foram encontrados pela oportunidade, categoria e data. '+
+          'Confira se pertencem a esta reunião; não serão atribuídos como prova da tarefa.';
+        const avisoDuplicado=historico ?
+          '\n\nEsta tarefa JÁ possui evidências no histórico. Reanalisar pode duplicá-las.' : '';
+        if (!U.confirmar('Ler estes anexos e analisar as evidências?\n\n• '+
+          nomes+avisoLegado+avisoDuplicado+
+          '\n\nA análise nunca apaga as evidências anteriores. Confirma?')) return;
+        return Promise.all(selecionados.map(function (m) {
+          return Arq.obter(m.id).then(function (r) {
+            if (r.meta.oportunidadeId!==op.id ||
+                (r.meta.tarefaId && r.meta.tarefaId!==id))
+              throw new Error('O arquivo não pertence à negociação/tarefa selecionada.');
+            return r.arquivo;
+          });
+        })).then(function (arquivos) {
+          return carregarOpcional('IADDocumentos','documentos.js').then(function (D) {
+            return D.lerVarios(arquivos);
+          });
+        }).then(function (lidos) {
+          const falhas=lidos.filter(function (d) { return d.erro; });
+          const texto=textoDosDocumentos(lidos);
+          if (falhas.length) {
+            alert('Não foi possível extrair todos os anexos:\n\n'+
+              falhas.map(function (d) {return d.nome+': '+d.erro;}).join('\n')+
+              '\n\nNenhum conteúdo parcial foi enviado à IA.');
+            return;
+          }
+          if (texto.trim().length < 60) {
+            alert('Não foi possível extrair texto suficiente da ata. ' +
+              'Para PDFs digitalizados é necessário OCR; uma ata em Word ou texto selecionável pode ser usada.');
+            return;
+          }
+          if (!IA.disponivel()) {
+            alert('A ata foi lida localmente, mas o assistente de IA não está disponível. '+
+              'Confira Configuração → Assistente de IA. Nenhuma evidência foi alterada.');
+            return;
+          }
+          tarefaEmCurso=origem(ligados.length>0);
+          App.processarReuniao(op.id,texto,true,[],function () {
+            tarefaEmCurso=null;
+          });
+        });
+      }).catch(function (e) {
+        tarefaEmCurso=null;
+        alert('Falha ao recuperar ou ler a ata desta tarefa:\n\n'+
+          ((e && e.message) || 'Erro desconhecido.'));
       });
     },
 
@@ -10862,6 +11020,7 @@
       });
     }
     anexarAoRegistro(docs, { oportunidadeId: op.id, contaId: op.contaId,
+      tarefaId: tarefaEmCurso ? tarefaEmCurso.tarefaId : null,
       categoria: 'Ata de reunião' });
   }
 
@@ -11277,7 +11436,7 @@
 
   function anexarAoRegistro(docs, alvo, aoTerminar) {
     if (!docs || !docs.length || !Arq.disponivel()) {
-      if (aoTerminar) aoTerminar();
+      if (aoTerminar) aoTerminar({ok:!docs || !docs.length, falhas:[]});
       return;
     }
     /* O `.catch(function () {})` que estava aqui engolia a falha inteira: sem
@@ -11294,7 +11453,7 @@
         alert('Não consegui guardar ' + falhas.length + ' anexo(s) neste aparelho:\n\n' +
           falhas.join('\n') + '\n\nO resto foi salvo. Tente de novo, ou guarde o arquivo fora do app.');
       }
-      if (aoTerminar) aoTerminar();
+      if (aoTerminar) aoTerminar({ok:falhas.length===0, falhas:falhas});
     });
   }
 

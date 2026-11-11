@@ -41,6 +41,10 @@ As Edge Functions usam TypeScript/Deno e segredos de servidor. O assistente ofer
 - O deploy de um arquivo estático não prova funcionamento de IA autenticada, sincronização com dados reais ou ausência de conflito. Homologar serviços e dados separadamente.
 - Em caso de edições pendentes, **não limpe dados do navegador**, não use descarte e não sobrescreva a carteira antes de conciliar e preservar cópia.
 
+## Leitura de atas das tarefas
+
+A partir da v286.100, uma tarefa concluída pode reanalisar a ata já anexada no navegador pelo botão **Analisar ata**. Anexar um novo documento a tarefa concluída também o encaminha à leitura após salvar. Arquivos permanecem locais no IndexedDB; documentos de outro aparelho precisam ser selecionados novamente. [Fluxo, limitações e testes](docs/ATA-P0-FLUXO-TAREFA-v286100.md).
+
 ## Documentos
 
 - [Manual Completo v286.97](docs/MANUAL-COMPLETO-v28697.md) — referência atual, passos por tela e tecnologias.

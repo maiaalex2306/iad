@@ -4977,7 +4977,7 @@
         (t.tipo ? '<span class="pill tiny">' + esc(t.tipo) + '</span> ' : '') + esc(t.titulo) +
         (d ? ' <span class="tiny muted">\u2192 ' + esc(d.nome) + '</span>' : '') +
         (feita && t.origem === 'registrada' ? ' <span class="tiny muted" title="Anotada depois de acontecer">· registrada</span>' : '') +
-        (feita && t.comRelato ? ' <span class="tiny muted" title="Teve ata lida pelo assistente">· com ata</span>' : '') +
+        (feita && t.comRelato ? ' <span class="tiny muted" title="Tarefa com relato informado; isto não comprova que a IA analisou a ata">· com relato</span>' : '') +
         (feita && t.semRegistro ? ' <span class="tiny atrasado" title="Fechada sem contar o que aconteceu: não moveu nenhuma das oito decisões">· sem relato</span>' : '') + '</span>' +
         '<span class="espaco"></span>' +
         '<span class="tiny ' + (atrasada ? 'atrasado' : 'muted') + '">' +
@@ -4999,6 +4999,8 @@
             ' data-ajuda-titulo="Concluir com o que aconteceu" data-ajuda="Cole ou anexe o que aconteceu. O assistente separa as evidências, relê as oito decisões e registra o próximo passo — tudo no mesmo gesto de concluir a tarefa.">Concluir</button>' +
             '<button class="btn ghost mini" onclick="App.adiarUmaTarefa(\'' + t.id + '\')"' +
             ' data-ajuda-titulo="Adiar" data-ajuda="Nova data e o motivo. O número de adiamentos fica na linha: negócio adiado três vezes é um dado sobre o negócio.">Adiar</button>') +
+        (feita ? '<button class="btn ghost mini" onclick="App.reanalisarAtaTarefa(\'' + t.id + '\')"' +
+          ' data-ajuda-titulo="Analisar ata anexada" data-ajuda="Recupera os arquivos desta tarefa no navegador, lê o conteúdo e envia à IA. Não altera a conclusão nem inventa evidências.">Analisar ata</button>' : '') +
         '<button class="btn ghost mini" onclick="App.verTarefa(\'' + t.id + '\')"' +
         ' data-ajuda-titulo="Visualizar" data-ajuda="A tarefa inteira só para ler: a conversa que veio do Linked Helper sem recorte, os anexos, e o telefone e o e-mail de quem é. Nada aqui altera nada.">Visualizar</button>' +
         '<button class="btn ghost mini" onclick="App.editarTarefa(\'' + t.id + '\')"' +
@@ -5479,6 +5481,10 @@
       (t.status === 'aberta' && op
         ? '<button class="btn mini" onclick="App.concluirComRelato(\'' + op.id + '\',\'' + t.id + '\')"' +
           ' data-ajuda-titulo="Concluir contando o que aconteceu" data-ajuda="É aqui que a conta anda: o assistente lê o que você escrever e anexar, separa o que o CLIENTE fez e relê as oito decisões.">Concluir</button>'
+        : '') +
+      (t.status !== 'aberta' && op
+        ? '<button class="btn ghost mini" onclick="App.reanalisarAtaTarefa(\'' + t.id + '\')"' +
+          ' data-ajuda-titulo="Analisar ata da tarefa" data-ajuda="Relê anexos da tarefa já concluída e registra somente evidências identificadas no documento.">Analisar ata</button>'
         : '') +
       '<button class="btn ghost mini" onclick="App.verTarefa(\'' + t.id + '\')"' +
       ' data-ajuda-titulo="Visualizar" data-ajuda="Só para ler: a descrição inteira, os anexos e o contato com telefone e e-mail. Nada aqui altera nada.">Ver</button>' +
