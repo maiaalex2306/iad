@@ -114,3 +114,24 @@ test('cadastro de Fontes agrega registros equivalentes e soma indicadores sem al
  assert.equal(fontes.length,3);
  assert.equal(op[1].fonteId,'2');
 });
+
+
+test('anexos com texto rigorosamente idêntico são analisados uma vez, sem excluir anexos',()=>{
+ const a=ui.indexOf('        const textosVistos = new Set();');
+ const b=ui.indexOf('        if (texto.length < 12)',a);
+ assert.ok(a>=0&&b>a);
+ const docs=[
+  {nome:'resumo.pdf',texto:'IDENTICO '.repeat(5000)},
+  {nome:'resumo (1).pdf',texto:'IDENTICO '.repeat(5000)},
+  {nome:'dossie.pdf',texto:'NOVO '.repeat(5000)}
+ ];
+ const ctx={docs,c:{extrair:'oportunidade'},digitado:'',Set,Array,Math,String};
+ vm.createContext(ctx);
+ vm.runInContext(ui.slice(a,b)+'globalThis.output={texto,avisoCorte,duplicadosIgnorados};',ctx);
+ assert.equal(ctx.output.duplicadosIgnorados,1);
+ assert.ok(ctx.output.texto.includes('=== resumo.pdf ==='));
+ assert.ok(!ctx.output.texto.includes('=== resumo (1).pdf ==='));
+ assert.ok(ctx.output.texto.includes('=== dossie.pdf ==='));
+ assert.equal(docs.length,3);
+ assert.match(ctx.output.avisoCorte,/texto idêntico/);
+});
