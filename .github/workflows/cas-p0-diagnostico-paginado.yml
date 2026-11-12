@@ -1,0 +1,28 @@
+name: "CAS P0 — Diagnóstico paginado seguro"
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - 'src/nuvem.js'
+      - 'src/app.js'
+      - 'tests/cas-p0-diagnostico-paginado.test.cjs'
+      - '.github/workflows/cas-p0-diagnostico-paginado.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  read-only-inspection:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax of CAS application and tests
+        run: |
+          node --check src/nuvem.js
+          node --check src/app.js
+          node --check tests/cas-p0-diagnostico-paginado.test.cjs
+      - name: Regression safe pagination with 142 pending operations
+        run: node --test tests/cas-p0-diagnostico-paginado.test.cjs
