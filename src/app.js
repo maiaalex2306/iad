@@ -12199,13 +12199,43 @@
     };
   }
 
+  /* Fonte é identidade do negócio; esconder rótulos repetidos no select
+     não altera os IDs persistidos nem vínculos antigos. Dedupe por nome
+     normalizado E empresa: nunca apontar negócio para fonte de outro tenant.
+     Quando editamos uma oportunidade, seu ID atual vence dentro do grupo. */
+  function fontesParaSelecao(fontes, atual, tenant) {
+    const normalizar = function (v) {
+      return String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+        .toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+    };
+    const porNome = new Map();
+    (fontes || []).forEach(function (f) {
+      if (!f || !f.id || !normalizar(f.nome)) return;
+      if (tenant && f.tenantId && String(f.tenantId) !== String(tenant) &&
+          String(f.id) !== String(atual)) return;
+      const key=String(f.tenantId || tenant || '')+'|'+normalizar(f.nome);
+      const anterior=porNome.get(key);
+      if (!anterior || String(f.id) === String(atual))
+        porNome.set(key, f);
+    });
+    return Array.from(porNome.values()).map(function (f) {
+      return { valor:f.id, rotulo:String(f.nome).trim() };
+    }).sort(function (a,b) { return a.rotulo.localeCompare(b.rotulo,'pt-BR'); });
+  }
+
   function campoDeFonte(padrao) {
-    const fontes = Store.catalogoAtivos('fontes');
+    const fontes=Store.catalogoAtivos('fontes');
+    const selecionada=padrao||'';
+    const tenant=Store.tenantDeTrabalho && Store.tenantDeTrabalho();
+    const opcoes=fontesParaSelecao(fontes,selecionada,tenant);
+    if(selecionada&&!opcoes.some(function(o){return String(o.valor)===String(selecionada);})){
+      const atual=Store.fonte(selecionada);
+      if(atual) opcoes.push({valor:atual.id,rotulo:String(atual.nome).trim()});
+    }
     return {
-      id: 'fonteId', rotulo: 'Fonte', tipo: 'select', padrao: padrao || '',
-      dica: 'Como este negócio chegou até você. A lista se edita em Cadastros → Fontes.',
-      opcoes: [{ valor: '', rotulo: '— não informada —' }].concat(
-        fontes.map(function (f) { return { valor: f.id, rotulo: f.nome }; }))
+      id:'fonteId',rotulo:'Fonte',tipo:'select',padrao:selecionada,
+      dica:'Uma opção por origem e empresa. Registros antigos mantêm seus vínculos; duplicidades do banco não foram excluídas.',
+      opcoes:[{valor:'',rotulo:'— não informada —'}].concat(opcoes)
     };
   }
 
