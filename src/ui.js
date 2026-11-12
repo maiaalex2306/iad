@@ -701,9 +701,9 @@
         const limite = (c.extrair === 'oportunidade' || c.extrair === 'conta') ? 38000 : 15000;
         const espaco= Math.max(0, limite - digitado.length - (digitado?2:0));
         const comCabecalho = comTexto.map(function(d){
-          return {d:d, header:'=== '+d.nome+' ===\\n'};
+          return {d:d, header:'=== '+d.nome+' ===\n'};
         });
-        const custoCabecalhos = comCabecalho.reduce(function(n,x){return n+x.header.length+2;},0);
+        const custoCabecalhos = comCabecalho.reduce(function(n,x){return n+x.header.length+4;},0);
         const disponivel = Math.max(0,espaco-custoCabecalhos);
         const cota = comTexto.length ? Math.floor(disponivel/comTexto.length) : 0;
         let cortados=0;
@@ -714,7 +714,7 @@
             cortados++;
             /* O final preserva conclusões e próximos passos, com indicação
                explícita da lacuna; não fingir leitura integral. */
-            const marca='\\n[... trecho intermediário omitido por limite de análise ...]\\n';
+            const marca='\n[... trecho intermediário omitido por limite de análise ...]\n';
             if(cota>marca.length+100) {
               const frente=Math.ceil((cota-marca.length)*0.72);
               const tras=Math.max(0,cota-marca.length-frente);
@@ -722,8 +722,8 @@
             } else t=d.texto.slice(0,Math.max(0,cota));
           }
           return item.header+t;
-        }).join('\\n\\n');
-        const texto = [digitado,doArquivo].filter(Boolean).join('\\n\\n').slice(0,limite);
+        }).join('\n\n');
+        const texto = [digitado,doArquivo].filter(Boolean).join('\n\n').slice(0,limite);
         const avisoCorte = cortados
           ? cortados+' de '+comTexto.length+' documento(s) tiveram trechos omitidos; confirme os campos sugeridos.'
           : '';
