@@ -526,13 +526,17 @@
       tenants=tenantsComFilaCAS();
     } catch(e){return Promise.reject(e);}
     const usuario=String(identidade.user.id);
+    const tenantInicial=String(identidade.perfil&&identidade.perfil.tenant_id||'');
+    const papelInicial=String(identidade.perfil&&identidade.perfil.papel||'');
     const maximo=500;
     const resultado={verificadas:0,reconhecidas:0,recibosConciliados:0,
       restantes:0,motivo:''};
     const checarSessao=function(){
       const atual=sessao();
-      if(!atual||!atual.user||String(atual.user.id)!==usuario)
-        throw Error('Sessão mudou: operação interrompida e fila preservada.');
+      if(!atual||!atual.user||String(atual.user.id)!==usuario||
+        String(atual.perfil&&atual.perfil.tenant_id||'')!==tenantInicial||
+        String(atual.perfil&&atual.perfil.papel||'')!==papelInicial)
+        throw Error('Sessão ou empresa mudou: operação interrompida e fila preservada.');
     };
     const ler=function(op){
       checarSessao();
