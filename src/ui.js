@@ -693,17 +693,41 @@
            esperava que os quatro contassem. Assim cada um entra com o começo,
            que é onde ficam cabeçalho, cliente e escopo. */
         const comTexto = docs.filter(function (d) { return d.texto; });
-        /* 15000 e não 22000: a função corta em 16000, e mandar mais fazia o
-           corte cair no meio do último documento, às cegas. Assim quem decide
-           o que sobra é a cota por documento, que reparte, e não uma tesoura
-           no fim do texto. */
-        const sobra = Math.max(2000, 15000 - digitado.length);
-        const cota = comTexto.length ? Math.floor(sobra / comTexto.length) : 0;
-        const doArquivo = comTexto.map(function (d) {
-          const t = d.texto.length > cota ? d.texto.slice(0, cota) + '\n[…]' : d.texto;
-          return '=== ' + d.nome + ' ===\n' + t;
-        }).join('\n\n');
-        const texto = [digitado, doArquivo].filter(Boolean).join('\n\n');
+        /* A Edge Function aceita até 40 mil caracteres para oportunidade,
+           empresa e reunião. A tela enviava só 15 mil mesmo com três PDFs,
+           perdendo parte do material antes da extração. Deixar margem para
+           cabeçalhos e reservar amostra final de cada arquivo; pedidos gerais
+           continuam no teto anterior. */
+        const limite = (c.extrair === 'oportunidade' || c.extrair === 'conta') ? 38000 : 15000;
+        const espaco= Math.max(0, limite - digitado.length - (digitado?2:0));
+        const comCabecalho = comTexto.map(function(d){
+          return {d:d, header:'=== '+d.nome+' ===\\n'};
+        });
+        const custoCabecalhos = comCabecalho.reduce(function(n,x){return n+x.header.length+2;},0);
+        const disponivel = Math.max(0,espaco-custoCabecalhos);
+        const cota = comTexto.length ? Math.floor(disponivel/comTexto.length) : 0;
+        let cortados=0;
+        const doArquivo = comCabecalho.map(function (item) {
+          const d=item.d, total=d.texto.length;
+          let t=d.texto;
+          if(total>cota) {
+            cortados++;
+            /* O final preserva conclusões e próximos passos, com indicação
+               explícita da lacuna; não fingir leitura integral. */
+            const marca='\\n[... trecho intermediário omitido por limite de análise ...]\\n';
+            if(cota>marca.length+100) {
+              const frente=Math.ceil((cota-marca.length)*0.72);
+              const tras=Math.max(0,cota-marca.length-frente);
+              t=d.texto.slice(0,frente)+marca+(tras?d.texto.slice(-tras):'');
+            } else t=d.texto.slice(0,Math.max(0,cota));
+          }
+          return item.header+t;
+        }).join('\\n\\n');
+        const texto = [digitado,doArquivo].filter(Boolean).join('\\n\\n').slice(0,limite);
+        const avisoCorte = cortados
+          ? cortados+' de '+comTexto.length+' documento(s) tiveram trechos omitidos; confirme os campos sugeridos.'
+          : '';
+
 
         if (texto.length < 12) {
           estado.textContent = docs.length
@@ -712,7 +736,8 @@
           return;
         }
         botao.disabled = true;
-        estado.textContent = 'Analisando…';
+        estado.textContent = 'Analisando ' + comTexto.length +
+          ' documento(s). ' + (avisoCorte || 'Material preparado para leitura.');
         /* O material fica guardado no diálogo. A extração preenche campos —
            título, empresa, pessoas — e joga o resto fora, que é pouco quando
            o que foi colado é uma ata de uma hora. Quem salva o formulário
@@ -735,7 +760,8 @@
           if (r.erro) { estado.textContent = r.erro; return; }
           const n = aplicarSugestoes(dlg, campos, r, c.nunca);
           const quantos = pintarContatos(dlg, c.id, r.contatos || []);
-          const corte = r.cortado ? ' Li só o começo do material — era muito.' : '';
+          const corte = (r.cortado ? ' A IA recebeu apenas parte do material.' : '') +
+            (avisoCorte ? ' '+avisoCorte : '');
           const gente = quantos
             ? ' E ' + (quantos === 1 ? 'uma pessoa' : quantos + ' pessoas') + ' — marque quem entra.'
             : '';
