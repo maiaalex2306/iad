@@ -1713,7 +1713,12 @@
     const item = Object.assign({ id: uid(CATALOGOS[nome] || 'cat'), nome: '', ativo: true, criadoEm: hoje() }, carimbo(false), dados);
     if (!item.nome) return null;
     const existente = catalogo(nome).find(function (i) {
-      return i.nome.trim().toLowerCase() === item.nome.trim().toLowerCase();
+      /* Fontes históricas incluem acentos, espaços e pontuação distintos.
+         Nunca criar mais um ID para a mesma origem dentro da mesma empresa. */
+      return nome === 'fontes'
+        ? String(i.tenantId || '') === String(item.tenantId || '') &&
+          achatar(i.nome) === achatar(item.nome)
+        : i.nome.trim().toLowerCase() === item.nome.trim().toLowerCase();
     });
     if (existente) return existente;
     estado[nome].push(item);

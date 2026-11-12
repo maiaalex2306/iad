@@ -6444,23 +6444,51 @@
       return c ? c.rotulo : '—';
     };
 
-    const linhas = Store.catalogo('fontes').filter(function (f) {
-      return combina(f.nome) || combina(nomeDaCategoria(f.categoria));
-    }).map(function (f) {
-      const resumo = porFonte[f.id] || { total: 0, ganhas: 0, valor: 0 };
+    const normalizar=function(v){
+      return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+        .toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+    };
+    const catalogo=Store.catalogo('fontes'),porNome=new Map();
+    catalogo.forEach(function(f){
+      const chave=String(f.tenantId||'')+'|'+normalizar(f.nome);
+      const grupo=porNome.get(chave)||[];
+      grupo.push(f);porNome.set(chave,grupo);
+    });
+    const duplicados=Array.from(porNome.values()).reduce(function(n,g){
+      return n+Math.max(0,g.length-1);
+    },0);
+    const linhas=catalogo.filter(function(f){
+      const g=porNome.get(String(f.tenantId||'')+'|'+normalizar(f.nome));
+      return g&&g[0]===f&&(combina(f.nome)||combina(nomeDaCategoria(f.categoria)));
+    }).map(function(f){
+      const grupo=porNome.get(String(f.tenantId||'')+'|'+normalizar(f.nome))||[f];
+      const resumo=grupo.reduce(function(total,item){
+        const r=porFonte[item.id]||{total:0,ganhas:0,valor:0};
+        total.total+=r.total;total.ganhas+=r.ganhas;total.valor+=r.valor;
+        return total;
+      },{total:0,ganhas:0,valor:0});
+      const nota=grupo.length>1
+        ? '<span class="tiny muted"> · '+grupo.length+' cadastros equivalentes, IDs preservados</span>'
+        : '';
       const valor = resumo.valor;
-      return '<tr><td><strong>' + esc(f.nome) + '</strong></td>' +
+      return '<tr><td><strong>' + esc(f.nome) + '</strong>' + nota + '</td>' +
         '<td>' + esc(nomeDaCategoria(f.categoria)) + '</td>' +
         '<td>' + (f.ativo === false ? '<span class="pill">inativo</span>' : '<span class="pill ok">ativo</span>') + '</td>' +
         '<td class="right">' + resumo.total + '</td>' +
         '<td class="right">' + resumo.ganhas + '</td>' +
         '<td class="right">' + (valor ? U.compacto(valor) : '—') + '</td>' +
         '<td class="right" style="white-space:nowrap">' +
-        '<button class="btn ghost mini" onclick="App.editarItemCatalogo(\'fontes\',\'' + f.id + '\')">Editar</button> ' +
-        '<button class="btn ghost mini" onclick="App.excluirItemCatalogo(\'fontes\',\'' + f.id + '\')">Excluir</button></td></tr>';
+        (grupo.length>1
+          ? '<span class="tiny muted">IDs vinculados — revisão necessária</span>'
+          : '<button class="btn ghost mini" onclick="App.editarItemCatalogo(\'fontes\',\'' + f.id + '\')">Editar</button> ' +
+            '<button class="btn ghost mini" onclick="App.excluirItemCatalogo(\'fontes\',\'' + f.id + '\')">Excluir</button>') +
+        '</td></tr>';
     }).join('');
 
-    return tabela(['Fonte', 'Categoria', 'Situação', 'Negócios', 'Ganhos', 'Em aberto', ''],
+    const aviso=duplicados
+      ? '<p class="tiny muted">'+duplicados+' registro(s) repetido(s) agrupado(s) na visualização; IDs e vínculos preservados.</p>'
+      : '';
+    return aviso+tabela(['Fonte', 'Categoria', 'Situação', 'Negócios', 'Ganhos', 'Em aberto', ''],
       linhas, 'Nenhuma fonte cadastrada ainda.');
   }
 
