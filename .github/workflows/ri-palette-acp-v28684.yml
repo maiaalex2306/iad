@@ -1,0 +1,46 @@
+name: RI-09 — Paleta ACP nas Inteligências (claro e escuro)
+on:
+  pull_request:
+    paths:
+      - 'assets/ri-commercial.css'
+      - 'assets/paleta-acp.css'
+      - 'assets/styles.css'
+      - 'src/config.js'
+      - 'sw.js'
+      - 'scripts/ri-palette-*.cjs'
+      - '.github/workflows/ri-palette-acp-v28684.yml'
+  push:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - 'assets/ri-commercial.css'
+      - 'assets/paleta-acp.css'
+      - 'assets/styles.css'
+      - 'src/config.js'
+      - 'sw.js'
+      - 'scripts/ri-palette-*.cjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  design-tokens:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Verify static ACP tokens, responsive layout and PWA parity
+        run: node --test scripts/ri-palette-contract.test.cjs
+  chromium-light-dark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Install browser
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Computed CSS parity and WCAG contrast — both intelligence screens
+        run: node scripts/ri-palette-browser.cjs

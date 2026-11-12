@@ -1,0 +1,31 @@
+name: RI-M12 — Filtros de Mercado layout e catalogo
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - 'src/ri/market-view.mjs'
+      - 'assets/paleta-acp.css'
+      - 'scripts/ri-m12-market-layout-browser.cjs'
+      - '.github/workflows/ri-m12-market-layout.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  market-layout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Checar sintaxe sem executar pesquisa paga
+        run: |
+          node --check src/ri/market-view.mjs
+          node --check scripts/ri-m12-market-layout-browser.cjs
+      - name: Preparar Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Validar tres larguras e catalogo tenant isolado
+        run: timeout 120s node scripts/ri-m12-market-layout-browser.cjs

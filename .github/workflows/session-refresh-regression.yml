@@ -1,0 +1,22 @@
+name: Session refresh recovery regression
+on:
+  pull_request:
+    branches:
+      - claude/decisoes-estagios-vendas-eckjo0
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  invalid-refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate JavaScript syntax
+        run: |
+          node --check src/nuvem.js
+          node --check src/app.js
+          node --check src/config.js
+          node --check sw.js
+      - name: Test session renewal, recovery, concurrency and data preservation
+        run: node --test nuvem/testes/sessao-refresh-invalido.test.cjs

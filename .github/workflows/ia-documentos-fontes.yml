@@ -1,0 +1,29 @@
+name: "IA documentos e Fontes — qualidade e regressão"
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - 'src/app.js'
+      - 'src/store.js'
+      - 'src/ui.js'
+      - 'tests/ia-documentos-fontes.test.cjs'
+      - '.github/workflows/ia-documentos-fontes.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: JavaScript syntax
+        run: |
+          node --check src/app.js
+          node --check src/store.js
+          node --check src/ui.js
+      - name: Duplicate sources and document-analysis regression
+        run: node --test tests/ia-documentos-fontes.test.cjs

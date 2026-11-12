@@ -1,0 +1,21 @@
+name: PERF-13D — Decision Engine parity and benchmark
+on:
+  push:
+    branches: ['performance/perf-13d-shared-engine-features-v2868']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check src/engine.js
+      - run: node --test nuvem/testes/perf-13d-engine-parity-benchmark.test.cjs
+      - run: node --test nuvem/testes/*.test.cjs

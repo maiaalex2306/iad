@@ -1,0 +1,39 @@
+name: PERF-02 — Decision Engine, índices e cache
+on:
+  pull_request:
+    branches:
+      - claude/decisoes-estagios-vendas-eckjo0
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  perf-02:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # comparação real com SHA da v268
+      - name: Sintaxe dos componentes alterados
+        run: |
+          node --check src/store.js
+          node --check src/engine.js
+          node --check src/perf-02.js
+          node --check src/views.js
+          node --check src/app.js
+          node --check src/config.js
+          node --check sw.js
+          node --check scripts/build-homologacao.cjs
+      - name: Regressões PERF-02 com 243 oportunidades
+        run: |
+          node --test nuvem/testes/perf-02-cache.test.cjs
+          node --test nuvem/testes/perf-02-engine.test.cjs
+      - name: Preservar correções da PERF-01 e build isolado
+        run: |
+          node --test nuvem/testes/perf-hoje-01.test.cjs
+          node --test nuvem/testes/build-homologacao.test.cjs
+      - name: Preservar segurança, login e filtros
+        run: |
+          node --test nuvem/testes/recuperacao-isolada.test.cjs
+          node --test nuvem/testes/sessao-refresh-invalido.test.cjs
+          node --test nuvem/testes/pipeline-localidades.test.cjs

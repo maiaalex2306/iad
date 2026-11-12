@@ -1,0 +1,38 @@
+name: "PERF-39 — Kanban indexado e paridade visual"
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - 'src/views.js'
+      - 'src/config.js'
+      - 'sw.js'
+      - 'scripts/perf39-kanban-index.test.cjs'
+      - '.github/workflows/perf39-kanban-index.yml'
+  push:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - 'src/views.js'
+      - 'src/config.js'
+      - 'sw.js'
+      - 'scripts/perf39-kanban-index.test.cjs'
+      - '.github/workflows/perf39-kanban-index.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Sintaxe e HTML Kanban com 0 a 10 mil negócios, benchmark
+        run: |
+          node --check src/views.js
+          node --check src/config.js
+          node --check sw.js
+          node --test scripts/perf39-kanban-index.test.cjs

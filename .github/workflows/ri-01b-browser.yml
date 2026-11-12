@@ -1,0 +1,42 @@
+name: RI-01B — Inteligencia Comercial lazy (Chromium)
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - 'src/app.js'
+      - 'src/ri/**'
+      - 'scripts/ri01b-browser.cjs'
+      - 'scripts/ri03-command-center-browser.cjs'
+      - 'scripts/ri03-command-center.test.cjs'
+      - 'assets/ri-commercial.css'
+      - '.github/workflows/ri-01b-browser.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax and previous account briefing regression
+        run: |
+          node --check src/app.js
+          node --check src/ri/account-view.mjs
+          node --test scripts/ri-account-view.test.cjs
+          node --test scripts/ri-account-briefing.test.cjs
+          node --test scripts/ri-portfolio-analytics.test.cjs
+          node --test scripts/ri03-command-center.test.cjs
+          node --check scripts/ri03-command-center-browser.cjs
+          node --check scripts/ri01b-browser.cjs
+      - name: Install isolated Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Real local Chromium — tenant, XSS, no-write, flag, logout
+        run: |
+          timeout 150s node scripts/ri01b-browser.cjs
+          timeout 150s node scripts/ri03-command-center-browser.cjs

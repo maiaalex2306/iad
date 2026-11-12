@@ -1,0 +1,77 @@
+name: LinkedIN Leads — v286.93 campaign handoff
+on:
+  pull_request:
+    paths:
+      - 'src/linkedin-campaign-portable.mjs'
+      - 'src/linkedin-leads-console.mjs'
+      - 'src/linkedin-checkpoint.mjs'
+      - 'scripts/linkedin-leads-browser.cjs'
+      - 'tests/linkedin-campaign-portable.test.mjs'
+      - 'sw.js'
+      - 'src/config.js'
+      - '.github/workflows/linkedin-campaign-handoff-v28693.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contract-and-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check JavaScript syntax
+        run: |
+          node --check src/linkedin-campaign-portable.mjs
+          node --check src/linkedin-leads-console.mjs
+          node --check scripts/linkedin-leads-browser.cjs
+      - name: Contract, legacy checkpoint and authorization
+        run: node --test tests/linkedin-campaign-portable.test.mjs tests/linkedin-leads-v1.test.mjs
+  browser:
+    needs: contract-and-security
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Playwright Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: E2E backup 821 profiles → replace → restore and reject cross-tenant
+        run: timeout 160s node scripts/linkedin-leads-browser.cjs
+  release-coherence:
+    needs: contract-and-security
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Verify cache version coherence + entrypoint
+        run: |
+          node - <<'NODE'
+          // A versao e LIDA dos dois arquivos e comparada entre si, nao com um
+          // literal. Fixada em 'v286.93', esta checagem passou a falhar na
+          // v286.94 dizendo "Config/SW version mismatch" — com os dois arquivos
+          // em perfeito acordo. A mensagem mandava procurar uma deriva que nao
+          // existia, enquanto o problema era o literal daqui estar velho.
+          // Sexta vez que o padrao aparece: teste que fixa a versao fica verde
+          // por coincidencia e vermelho para sempre depois do bump seguinte.
+          const fs=require('node:fs');
+          const c=fs.readFileSync('src/config.js','utf8');
+          const sw=fs.readFileSync('sw.js','utf8');
+          const noConfig=/numero:\s*'(v\d+(?:\.\d+)*)'/.exec(c);
+          const noSW=/const CACHE\s*=\s*'iad-crm-(v\d+(?:\.\d+)*)'/.exec(sw);
+          if(!noConfig)throw Error('Nao li a versao em src/config.js');
+          if(!noSW)throw Error('Nao li a versao em sw.js');
+          if(noConfig[1]!==noSW[1])
+            throw Error('Config/SW version mismatch: src/config.js diz '+noConfig[1]+
+              ' e sw.js diz '+noSW[1]+' — troque os dois no mesmo commit');
+          if(!sw.includes("./src/linkedin-campaign-portable.mjs"))
+            throw Error('Portable helper absent from precache');
+          if(!fs.existsSync('src/linkedin-campaign-portable.mjs'))throw Error('Module missing');
+          NODE

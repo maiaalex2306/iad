@@ -1,0 +1,42 @@
+name: PERF-24 — Painel de diagnóstico P50/P95 no CRM
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  perf24:
+    name: PERF-24 controles, privacidade e layout Chromium
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verificar sintaxe
+        run: |
+          node --check src/views.js
+          node --check src/app.js
+          node --check src/performance.js
+          node --check nuvem/testes/perf-24-inapp-diagnostics.test.cjs
+      - name: Testar métricas, botões e exportação sem dados comerciais
+        run: node --test nuvem/testes/perf-24-inapp-diagnostics.test.cjs
+      - name: Verificar PERF-38 privacidade, interrupção e métricas por jornada
+        run: node --test scripts/perf38-navigation.test.cjs
+      - name: Instalar Chromium Playwright
+        run: |
+          python -m pip install playwright==1.56.0
+          python -m playwright install --with-deps chromium
+      - name: Validar interface real em cinco viewports
+        run: python nuvem/testes/perf-24-inapp-layout.py
+      - name: Regressões de percentis, jornada e login
+        run: |
+          node --test nuvem/testes/perf-23-network-sync-diagnostics.test.cjs
+          node --test nuvem/testes/perf-17-journey-adoption.test.cjs
+          node --test nuvem/testes/perf-10-percentis.test.cjs
+          node --test nuvem/testes/perf-10-cockpit.test.cjs

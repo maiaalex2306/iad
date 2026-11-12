@@ -1,0 +1,60 @@
+name: RI-M01 — contratos, segurança e busca manual
+on:
+  pull_request:
+    paths:
+      - "src/ri/market-*.mjs"
+      - "src/ri/prospect-agents.mjs"
+      - "nuvem/funcoes/market-search/**"
+      - "tests/market-*.test.mjs"
+      - "nuvem/sql/ri-m01-*.sql"
+      - "nuvem/sql/ri-m11-*.sql"
+      - "scripts/ri-m01-staging-e2e.mjs"
+      - ".github/workflows/ri-m01-live-e2e.yml"
+      - ".github/workflows/ri-m01.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node --test tests/market-prospect-agents.test.mjs tests/market-contract.test.mjs tests/market-edge.test.mjs tests/market-sql.test.mjs tests/market-import-gate.test.mjs tests/market-staging-e2e.test.mjs tests/market-audit.test.mjs
+      - run: node --check src/ri/market-contract.mjs
+      - run: node --check src/ri/market-view.mjs
+      - run: node --check src/ri/market-investigation.mjs
+      - run: node --check src/ri/market-signals.mjs
+      - run: node --check src/ri/market-enricher.mjs
+      - run: node --check src/ri/market-audit.mjs
+      - run: node --check src/ri/prospect-agents.mjs
+      - run: node --check scripts/ri-m01-staging-e2e.mjs
+      # Live perimeter smoke against homologation only. No API keys or paid AI calls.
+      - name: Smoke homologation market-search (unauthenticated)
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://bvlfzeblpewlqhssprpv.supabase.co/functions/v1/market-search"
+          status="$(curl -sS --max-time 20 -o /tmp/market_get -w '%{http_code}' "$URL")"
+          test "$status" = "405" || { echo "GET expected 405, received $status"; exit 1; }
+          status="$(curl -sS --max-time 20 -o /tmp/market_auth -w '%{http_code}' -X POST "$URL" -H 'Origin: https://www.iadcrm.com.br' -H 'Content-Type: application/json' --data '{"action":"search","filters":{"uf":"SP"}}')"
+          test "$status" = "401" || { echo "Unauthenticated POST expected 401, received $status"; exit 1; }
+          # RI-M08: investigação individual continua protegida na Edge real
+          # mesmo com CNPJ válido. Sem JWT, nenhuma pesquisa paga ocorre.
+          status="$(curl -sS --max-time 20 -o /tmp/market_investigate_auth -w '%{http_code}' -X POST "$URL" -H 'Origin: https://www.iadcrm.com.br' -H 'Content-Type: application/json' --data '{"action":"investigate","target":{"cnpj":"11222333000181","nome":"Empresa Exemplo"},"filters":{"uf":"SP","cidade":"Jacarei","segmento":"Quimico"}}')"
+          test "$status" = "401" || { echo "Unauthenticated investigate expected 401, received $status"; exit 1; }
+          # RI-M09: busca de sinais não autenticada falha antes da quota e IA
+          status="$(curl -sS --max-time 20 -o /tmp/market_signals_auth -w '%{http_code}' -X POST "$URL" -H 'Origin: https://www.iadcrm.com.br' -H 'Content-Type: application/json' --data '{"action":"signals","target":{"cnpj":"11222333000181","nome":"Empresa Exemplo"},"filters":{"uf":"SP","cidade":"Jacarei","segmento":"Quimico"}}')"
+          test "$status" = "401" || { echo "Unauthenticated signals expected 401, received $status"; exit 1; }
+          # RI-M10: enriquecimento sem JWT bloqueado antes de cota e web_search
+          status="$(curl -sS --max-time 20 -o /tmp/market_enrich_auth -w '%{http_code}' -X POST "$URL" -H 'Origin: https://www.iadcrm.com.br' -H 'Content-Type: application/json' --data '{"action":"enrich","target":{"cnpj":"11222333000181","nome":"Empresa Exemplo"},"filters":{"uf":"SP","cidade":"Jacarei","segmento":"Quimico"}}')"
+          test "$status" = "401" || { echo "Unauthenticated enrich expected 401, received $status"; exit 1; }
+          status="$(curl -sS --max-time 20 -o /tmp/market_options -w '%{http_code}' -X OPTIONS "$URL" -H 'Origin: https://www.iadcrm.com.br')"
+          test "$status" = "204" || { echo "OPTIONS expected 204, received $status"; exit 1; }
+          status="$(curl -sS --max-time 20 -o /tmp/market_bad_origin -w '%{http_code}' -X POST "$URL" -H 'Origin: https://attacker.example' -H 'Content-Type: application/json' --data '{"action":"search","filters":{"uf":"SP"}}')"
+          test "$status" = "403" || { echo "Forbidden origin expected 403, received $status"; exit 1; }
+          status="$(python3 -c 'print("X" * 12100)' | curl -sS --max-time 20 -o /tmp/market_oversize -w '%{http_code}' -X POST "$URL" -H 'Origin: https://www.iadcrm.com.br' -H 'Content-Type: text/plain' --data-binary @-)"
+          test "$status" = "413" || { echo "Oversized payload expected 413, received $status"; exit 1; }

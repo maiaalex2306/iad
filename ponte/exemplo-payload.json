@@ -1,0 +1,30 @@
+{
+  "itens": [
+    {
+      "id": "exemplo-1",
+      "recebidoEm": "2026-09-05T18:20:00.000Z",
+      "dados": {
+        "first_name": "Marina",
+        "last_name": "Alves",
+        "position": "Diretora Industrial",
+        "company_name": "Fazenda Modelo Agroindustrial",
+        "profile_url": "https://www.linkedin.com/in/exemplo-marina",
+        "location": "Rio Verde, GO",
+        "email": "",
+        "campaign": "Agro — diretoria industrial",
+        "reply": "Interessante. A gente perde muito na secagem mesmo. Manda mais detalhes que eu levo pro nosso CFO."
+      }
+    },
+    {
+      "id": "exemplo-2",
+      "recebidoEm": "2026-09-05T18:41:00.000Z",
+      "dados": {
+        "full_name": "Rodrigo Pinheiro",
+        "headline": "Gerente de Suprimentos",
+        "organization": "Cooperativa Campo Novo",
+        "linkedin_url": "https://www.linkedin.com/in/exemplo-rodrigo",
+        "reply": "Obrigado, mas já temos fornecedor para isso."
+      }
+    }
+  ]
+}
