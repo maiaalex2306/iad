@@ -513,6 +513,93 @@
       });
     });
   }
+  /* P0 37 operações: recuperação SOMENTE do que está provadamente aplicado.
+     Não executa flush/RPC de escrita, não decide conflitos e não atravessa
+     operações com revisão divergente. Os ACKs são duráveis antes da retirada.
+     O modo é voluntário; preservar backup exportado antes de acioná-lo. */
+  function conciliarCASJaAplicadasSomenteLeitura() {
+    let tenants,identidade;
+    try {
+      identidade=sessao();
+      if(!identidade||!identidade.user||!identidade.user.id)
+        throw Error('Sessão autenticada necessária.');
+      tenants=tenantsComFilaCAS();
+    } catch(e){return Promise.reject(e);}
+    const usuario=String(identidade.user.id);
+    const maximo=500;
+    const resultado={verificadas:0,reconhecidas:0,recibosConciliados:0,
+      restantes:0,motivo:''};
+    const checarSessao=function(){
+      const atual=sessao();
+      if(!atual||!atual.user||String(atual.user.id)!==usuario)
+        throw Error('Sessão mudou: operação interrompida e fila preservada.');
+    };
+    const ler=function(op){
+      checarSessao();
+      return chamar('/rest/v1/oportunidades?select=*&id=eq.'+
+        encodeURIComponent(op.recordId)+'&tenant_id=eq.'+
+        encodeURIComponent(op.tenantId)+'&limit=1').then(function(rows){
+        checarSessao();
+        if(!Array.isArray(rows)||rows.length!==1)
+          throw Error('Oportunidade indisponível para prova. Nada descartado.');
+        return rows[0];
+      });
+    };
+    function conciliarTenant(tenant) {
+      const fila=filaCASDaSessao(tenant);
+      function conciliarRecibos() {
+        const receipts=fila.pendingAcks?fila.pendingAcks():[];
+        return receipts.reduce(function(prior,recibo) {
+          return prior.then(function() {
+            if(resultado.verificadas>=maximo)return;
+            const op=recibo&&recibo.operation;
+            if(!op)throw Error('Recibo incompleto: não confirmar.');
+            resultado.verificadas++;
+            return ler(op).then(function(remote){
+              if(!fila.satisfazRemoto(op,remote))
+                throw Error('ACK sem prova integral dos campos: preservado.');
+              if(!Number.isSafeInteger(Number(recibo.revisaoAtual))||
+                 Number(remote.revisao)<Number(recibo.revisaoAtual))
+                throw Error('Revisão remota anterior ao ACK: preservado.');
+              fila.confirmAck(op.operationId);
+              resultado.recibosConciliados++;
+            });
+          });
+        },Promise.resolve());
+      }
+      function reconhecerCabeca(){
+        if(resultado.verificadas>=maximo)return Promise.resolve();
+        const pendentes=fila.pending();
+        if(!pendentes.length)return Promise.resolve();
+        const op=pendentes[0];resultado.verificadas++;
+        return ler(op).then(function(remote){
+          if(!fila.satisfazRemoto(op,remote)) {
+            resultado.motivo='Primeira edição não comprovada no servidor; conflito ou revisão pendente.';
+            return;
+          }
+          fila.reconhecerAplicada(op.operationId,remote);
+          resultado.reconhecidas++;
+          /* O recibo permanece durável e só é confirmado após prova remota. */
+          return conciliarRecibos().then(reconhecerCabeca);
+        });
+      }
+      return conciliarRecibos().then(reconhecerCabeca);
+    }
+    return tenants.reduce(function(p,tenant){
+      return p.then(function(){
+        if(resultado.motivo)return;
+        return conciliarTenant(tenant);
+      });
+    },Promise.resolve()).then(function(){
+      checarSessao();
+      const d=diagnosticoPendenciasCAS();
+      resultado.restantes=d.disponivel?d.quantidade:null;
+      if(resultado.verificadas>=maximo)
+        resultado.motivo='Limite de verificações atingido; demais edições preservadas.';
+      return resultado;
+    });
+  }
+
   /* P0 CAS: comparar em memoria do navegador; nenhum patch/valor
      comercial e transmitido para analiticos ou retornado no diagnostico
      agregado. So a primeira operacao pendente pode ser resolvida. */
@@ -2557,6 +2644,7 @@
     atualizarOportunidadeCAS, consultarCarteiraCASProtegida,
     enfileirarEdicaoCAS, retomarFilaCAS: retomarFilaCASSeguro,
     exportarPendenciasCAS, diagnosticoPendenciasCAS, inspecionarPendenciasCAS,
+conciliarCASJaAplicadasSomenteLeitura,
     reconhecerEdicaoCASJaAplicada, lerConflitoCAS, resolverConflitoCASManterServidor,
     empresaParecida, achatarNome, porFormato, explicarFalhas,
     adotarTokens,
