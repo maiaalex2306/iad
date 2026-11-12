@@ -55,7 +55,7 @@ test('3 PDFs longos: cada arquivo entra com início e conclusão, respeitando 38
  const docs=['Dossie.pdf','Resumo1.pdf','Resumo2.pdf'].map((nome,i)=>({
    nome,texto:'INICIO_'+i+' '+('A'.repeat(18000))+' FIM_'+i
  }));
- const context={c:{extrair:'oportunidade'},digitado:'',comTexto:docs,Math,String,Array};
+ const context={c:{extrair:'oportunidade'},digitado:'',comTexto:docs,duplicadosIgnorados:0,Math,String,Array};
  vm.createContext(context);
  vm.runInContext(trecho+'globalThis.resultadoIA={texto,avisoCorte,cortados};',context);
  const r=context.resultadoIA;
@@ -71,7 +71,7 @@ test('3 PDFs longos: cada arquivo entra com início e conclusão, respeitando 38
 test('um só texto digitado nunca estoura limite do envio',()=>{
  const a=ui.indexOf('        /* A Edge Function aceita até 40 mil');
  const b=ui.indexOf('        if (texto.length < 12)',a);
- const context={c:{extrair:'oportunidade'},digitado:'Z'.repeat(60000),comTexto:[],Math,String,Array};
+ const context={c:{extrair:'oportunidade'},digitado:'Z'.repeat(60000),comTexto:[],duplicadosIgnorados:0,Math,String,Array};
  vm.createContext(context);
  vm.runInContext(ui.slice(a,b)+'globalThis.preparo=texto;',context);
  assert.equal(context.preparo.length,38000);
