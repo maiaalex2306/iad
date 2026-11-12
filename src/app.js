@@ -6607,7 +6607,23 @@
     diagnosticarPendenciasCAS: function () {
       const n=global.IADNuvem;
       if(!n || !n.inspecionarPendenciasCAS) return;
-      n.inspecionarPendenciasCAS().then(function(d) {
+      const resumo=n.diagnosticoPendenciasCAS?n.diagnosticoPendenciasCAS():null;
+      if(!resumo||!resumo.disponivel) {
+        alert('Diagnóstico indisponível. Preserve a cópia local.');return;
+      }
+      const paginas=Math.max(1,Math.ceil(resumo.quantidade/30));
+      let pagina=1;
+      if(paginas>1) {
+        const escolha=prompt('Há '+resumo.quantidade+' edições protegidas em '+paginas+
+          ' páginas de até 30. Qual página deseja INSPECIONAR (1 a '+paginas+
+          ')? Esta consulta não altera as edições.', '1');
+        if(escolha===null)return;
+        pagina=Number(escolha);
+        if(!Number.isSafeInteger(pagina)||pagina<1||pagina>paginas) {
+          alert('Página inválida. Nenhuma edição foi modificada.');return;
+        }
+      }
+      n.inspecionarPendenciasCAS(pagina).then(function(d) {
         if(!d.disponivel){ alert('Diagnóstico indisponível. Preserve a cópia local.');return; }
         const mensagens={
           conflito_de_revisao:'Conflito de revisão: requer resolução',
@@ -6619,11 +6635,20 @@
           consulta_indisponivel:'Falha de consulta',
           ja_aplicada:'Edição já refletida no servidor; pode reconhecer sem sobrescrever'
         };
-        const linhas=d.itens.map(function(x) {
+        const contagem={};
+        d.itens.forEach(function(x){contagem[x.estado]=(contagem[x.estado]||0)+1;});
+        const resumoEstados=Object.keys(contagem).map(function(estado){
+          return contagem[estado]+' × '+(mensagens[estado]||'Não identificado');
+        });
+        const linhas=d.itens.map(function(x){
           return x.numero+'. '+(mensagens[x.estado]||'Não identificado');
         });
-        alert('Diagnóstico CAS: '+d.verificados+' de '+d.total+' pendências.\n\n'+
-          linhas.join('\n')+'\n\nNenhuma edição foi alterada.');
+        alert('Diagnóstico CAS — página '+d.pagina+' de '+d.paginas+
+          ' ('+d.verificados+' de '+d.total+' operações nesta consulta).\n\n'+
+          resumoEstados.join('\n')+'\n\n'+linhas.join('\n')+
+          '\n\nNenhuma edição foi alterada. Para resolver ou reconhecer, '+
+          'comece pela primeira edição pendente da fila; os botões de resolução '+
+          'atuam apenas nas primeiras 30 operações.');
       }).catch(function() {
         alert('Diagnóstico indisponível. As edições foram preservadas.');
       });
