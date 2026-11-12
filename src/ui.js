@@ -692,7 +692,17 @@
            no fim descarta os últimos arquivos inteiros, e quem carregou quatro
            esperava que os quatro contassem. Assim cada um entra com o começo,
            que é onde ficam cabeçalho, cliente e escopo. */
-        const comTexto = docs.filter(function (d) { return d.texto; });
+        const textosVistos = new Set();
+        let duplicadosIgnorados = 0;
+        const comTexto = docs.filter(function (d) {
+          if (!d.texto) return false;
+          /* Só texto idêntico: mesmo tamanho ou nome semelhante não prova
+             que dois relatórios sejam iguais. Os anexos NÃO são removidos. */
+          const textoExtraido = String(d.texto).trim();
+          if (textosVistos.has(textoExtraido)) { duplicadosIgnorados++; return false; }
+          textosVistos.add(textoExtraido);
+          return true;
+        });
         /* A Edge Function aceita até 40 mil caracteres para oportunidade,
            empresa e reunião. A tela enviava só 15 mil mesmo com três PDFs,
            perdendo parte do material antes da extração. Deixar margem para
@@ -724,9 +734,10 @@
           return item.header+t;
         }).join('\n\n');
         const texto = [digitado,doArquivo].filter(Boolean).join('\n\n').slice(0,limite);
-        const avisoCorte = cortados
-          ? cortados+' de '+comTexto.length+' documento(s) tiveram trechos omitidos; confirme os campos sugeridos.'
-          : '';
+        const avisoCorte = [
+          cortados ? cortados+' de '+comTexto.length+' documento(s) tiveram trechos omitidos; confirme os campos sugeridos.' : '',
+          duplicadosIgnorados ? duplicadosIgnorados+' anexo(s) com texto idêntico não foram enviados duas vezes.' : ''
+        ].filter(Boolean).join(' ');
 
 
         if (texto.length < 12) {
