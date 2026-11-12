@@ -6429,61 +6429,67 @@
      cadastro; com a contagem de negócios e o valor em aberto ela vira a
      resposta para "de onde vem o que fecha" — que é a razão de ela existir. */
   function listaFontes(est) {
-    /* Grupos por empresa+nome. Dados e IDs originais permanecem intocados;
-       negócios vinculados a IDs históricos contam no grupo correto. */
-    const porFonte=Object.create(null);
-    est.oportunidades.forEach(function(o){
-      const id=o.fonteId,v=porFonte[id]||(porFonte[id]={total:0,ganhas:0,valor:0});
+    /* PERF-32: projetar as estatisticas em uma unica passagem. */
+    const porFonte = Object.create(null);
+    est.oportunidades.forEach(function (o) {
+      const id = o.fonteId;
+      const v = porFonte[id] || (porFonte[id] = { total: 0, ganhas: 0, valor: 0 });
       v.total++;
-      if(o.desfecho&&o.desfecho.tipo==='ganho')v.ganhas++;
-      if(!o.desfecho)v.valor+=(o.valor||0);
+      if (o.desfecho && o.desfecho.tipo === 'ganho') v.ganhas++;
+      if (!o.desfecho) v.valor += (o.valor || 0);
     });
-    const cats=P.CATEGORIAS_FONTE||[];
-    const nomeDaCategoria=function(id){
-      const c=cats.find(function(x){return x.id===id;});return c?c.rotulo:'—';
+    const cats = P.CATEGORIAS_FONTE || [];
+    const nomeDaCategoria = function (id) {
+      const c = cats.find(function (x) { return x.id === id; });
+      return c ? c.rotulo : '—';
     };
+
     const normalizar=function(v){
       return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
         .toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
     };
-    const grupos=new Map();
-    Store.catalogo('fontes').forEach(function(f){
-      if(!f||!normalizar(f.nome))return;
+    const catalogo=Store.catalogo('fontes'),porNome=new Map();
+    catalogo.forEach(function(f){
       const chave=String(f.tenantId||'')+'|'+normalizar(f.nome);
-      let g=grupos.get(chave);
-      if(!g){g={principal:f,ids:[],total:0,ganhas:0,valor:0};grupos.set(chave,g);}
-      g.ids.push(f);
-      const v=porFonte[f.id]||{total:0,ganhas:0,valor:0};
-      g.total+=v.total;g.ganhas+=v.ganhas;g.valor+=v.valor;
+      const grupo=porNome.get(chave)||[];
+      grupo.push(f);porNome.set(chave,grupo);
     });
-    let repetidos=0;
-    const linhas=Array.from(grupos.values()).filter(function(g){
-      return combina(g.principal.nome)||combina(nomeDaCategoria(g.principal.categoria));
-    }).sort(function(a,b){return a.principal.nome.localeCompare(b.principal.nome,'pt-BR');}).map(function(g){
-      const f=g.principal,n=g.ids.length;
-      if(n>1)repetidos+=n-1;
-      const nota=n>1
-        ? '<span class="tiny muted"> · '+n+' cadastros equivalentes, IDs preservados</span>':'';
-      const situacao=g.ids.some(function(x){return x.ativo!==false;})
-        ? '<span class="pill ok">ativo</span>':'<span class="pill">inativo</span>';
-      const acoes=n===1
-        ? '<button class="btn ghost mini" onclick="App.editarItemCatalogo(&#39;fontes&#39;,&#39;'+esc(f.id)+'&#39;)">Editar</button> '+
-          '<button class="btn ghost mini" onclick="App.excluirItemCatalogo(&#39;fontes&#39;,&#39;'+esc(f.id)+'&#39;)">Excluir</button>'
-        : '<span class="tiny muted">IDs vinculados — revisão necessária</span>';
-      return '<tr><td><strong>'+esc(f.nome)+'</strong>'+nota+'</td>'+
-        '<td>'+esc(nomeDaCategoria(f.categoria))+'</td>'+
-        '<td>'+situacao+'</td>'+
-        '<td class="right">'+g.total+'</td>'+
-        '<td class="right">'+g.ganhas+'</td>'+
-        '<td class="right">'+(g.valor?U.compacto(g.valor):'—')+'</td>'+
-        '<td class="right">'+acoes+'</td></tr>';
+    const duplicados=Array.from(porNome.values()).reduce(function(n,g){
+      return n+Math.max(0,g.length-1);
+    },0);
+    const linhas=catalogo.filter(function(f){
+      const g=porNome.get(String(f.tenantId||'')+'|'+normalizar(f.nome));
+      return g&&g[0]===f&&(combina(f.nome)||combina(nomeDaCategoria(f.categoria)));
+    }).map(function(f){
+      const grupo=porNome.get(String(f.tenantId||'')+'|'+normalizar(f.nome))||[f];
+      const resumo=grupo.reduce(function(total,item){
+        const r=porFonte[item.id]||{total:0,ganhas:0,valor:0};
+        total.total+=r.total;total.ganhas+=r.ganhas;total.valor+=r.valor;
+        return total;
+      },{total:0,ganhas:0,valor:0});
+      const nota=grupo.length>1
+        ? '<span class="tiny muted"> · '+grupo.length+' cadastros equivalentes, IDs preservados</span>'
+        : '';
+      const valor = resumo.valor;
+      return '<tr><td><strong>' + esc(f.nome) + '</strong>' + nota + '</td>' +
+        '<td>' + esc(nomeDaCategoria(f.categoria)) + '</td>' +
+        '<td>' + (f.ativo === false ? '<span class="pill">inativo</span>' : '<span class="pill ok">ativo</span>') + '</td>' +
+        '<td class="right">' + resumo.total + '</td>' +
+        '<td class="right">' + resumo.ganhas + '</td>' +
+        '<td class="right">' + (valor ? U.compacto(valor) : '—') + '</td>' +
+        '<td class="right" style="white-space:nowrap">' +
+        (grupo.length>1
+          ? '<span class="tiny muted">IDs vinculados — revisão necessária</span>'
+          : '<button class="btn ghost mini" onclick="App.editarItemCatalogo(\'fontes\',\'' + f.id + '\')">Editar</button> ' +
+            '<button class="btn ghost mini" onclick="App.excluirItemCatalogo(\'fontes\',\'' + f.id + '\')">Excluir</button>') +
+        '</td></tr>';
     }).join('');
-    const aviso=repetidos
-      ? '<p class="tiny muted">'+repetidos+' registro(s) repetido(s) agrupado(s) visualmente. '+
-        'Nenhuma fonte nem vínculo foi apagado. A regularização no banco exige conciliação segura.</p>'
+
+    const aviso=duplicados
+      ? '<p class="tiny muted">'+duplicados+' registro(s) repetido(s) agrupado(s) na visualização; IDs e vínculos preservados.</p>'
       : '';
-    return aviso+tabela(['Fonte','Categoria','Situação','Negócios','Ganhos','Em aberto',''],
-      linhas,'Nenhuma fonte cadastrada ainda.');
+    return aviso+tabela(['Fonte', 'Categoria', 'Situação', 'Negócios', 'Ganhos', 'Em aberto', ''],
+      linhas, 'Nenhuma fonte cadastrada ainda.');
   }
 
   function listaProdutos(est) {
