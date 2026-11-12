@@ -6429,39 +6429,61 @@
      cadastro; com a contagem de negócios e o valor em aberto ela vira a
      resposta para "de onde vem o que fecha" — que é a razão de ela existir. */
   function listaFontes(est) {
-    /* PERF-32: projetar as estatisticas em uma unica passagem. */
-    const porFonte = Object.create(null);
-    est.oportunidades.forEach(function (o) {
-      const id = o.fonteId;
-      const v = porFonte[id] || (porFonte[id] = { total: 0, ganhas: 0, valor: 0 });
+    /* Grupos por empresa+nome. Dados e IDs originais permanecem intocados;
+       negócios vinculados a IDs históricos contam no grupo correto. */
+    const porFonte=Object.create(null);
+    est.oportunidades.forEach(function(o){
+      const id=o.fonteId,v=porFonte[id]||(porFonte[id]={total:0,ganhas:0,valor:0});
       v.total++;
-      if (o.desfecho && o.desfecho.tipo === 'ganho') v.ganhas++;
-      if (!o.desfecho) v.valor += (o.valor || 0);
+      if(o.desfecho&&o.desfecho.tipo==='ganho')v.ganhas++;
+      if(!o.desfecho)v.valor+=(o.valor||0);
     });
-    const cats = P.CATEGORIAS_FONTE || [];
-    const nomeDaCategoria = function (id) {
-      const c = cats.find(function (x) { return x.id === id; });
-      return c ? c.rotulo : '—';
+    const cats=P.CATEGORIAS_FONTE||[];
+    const nomeDaCategoria=function(id){
+      const c=cats.find(function(x){return x.id===id;});return c?c.rotulo:'—';
     };
-
-    const linhas = Store.catalogo('fontes').filter(function (f) {
-      return combina(f.nome) || combina(nomeDaCategoria(f.categoria));
-    }).map(function (f) {
-      const resumo = porFonte[f.id] || { total: 0, ganhas: 0, valor: 0 };
-      const valor = resumo.valor;
-      return '<tr><td><strong>' + esc(f.nome) + '</strong></td>' +
-        '<td>' + esc(nomeDaCategoria(f.categoria)) + '</td>' +
-        '<td>' + (f.ativo === false ? '<span class="pill">inativo</span>' : '<span class="pill ok">ativo</span>') + '</td>' +
-        '<td class="right">' + resumo.total + '</td>' +
-        '<td class="right">' + resumo.ganhas + '</td>' +
-        '<td class="right">' + (valor ? U.compacto(valor) : '—') + '</td>' +
-        '<td class="right" style="white-space:nowrap">' +
-        '<button class="btn ghost mini" onclick="App.editarItemCatalogo(\'fontes\',\'' + f.id + '\')">Editar</button> ' +
-        '<button class="btn ghost mini" onclick="App.excluirItemCatalogo(\'fontes\',\'' + f.id + '\')">Excluir</button></td></tr>';
+    const normalizar=function(v){
+      return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+        .toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+    };
+    const grupos=new Map();
+    Store.catalogo('fontes').forEach(function(f){
+      if(!f||!normalizar(f.nome))return;
+      const chave=String(f.tenantId||'')+'|'+normalizar(f.nome);
+      let g=grupos.get(chave);
+      if(!g){g={principal:f,ids:[],total:0,ganhas:0,valor:0};grupos.set(chave,g);}
+      g.ids.push(f);
+      const v=porFonte[f.id]||{total:0,ganhas:0,valor:0};
+      g.total+=v.total;g.ganhas+=v.ganhas;g.valor+=v.valor;
+    });
+    let repetidos=0;
+    const linhas=Array.from(grupos.values()).filter(function(g){
+      return combina(g.principal.nome)||combina(nomeDaCategoria(g.principal.categoria));
+    }).sort(function(a,b){return a.principal.nome.localeCompare(b.principal.nome,'pt-BR');}).map(function(g){
+      const f=g.principal,n=g.ids.length;
+      if(n>1)repetidos+=n-1;
+      const nota=n>1
+        ? '<span class="tiny muted"> · '+n+' cadastros equivalentes, IDs preservados</span>':'';
+      const situacao=g.ids.some(function(x){return x.ativo!==false;})
+        ? '<span class="pill ok">ativo</span>':'<span class="pill">inativo</span>';
+      const acoes=n===1
+        ? '<button class="btn ghost mini" onclick="App.editarItemCatalogo(&#39;fontes&#39;,&#39;'+esc(f.id)+'&#39;)">Editar</button> '+
+          '<button class="btn ghost mini" onclick="App.excluirItemCatalogo(&#39;fontes&#39;,&#39;'+esc(f.id)+'&#39;)">Excluir</button>'
+        : '<span class="tiny muted">IDs vinculados — revisão necessária</span>';
+      return '<tr><td><strong>'+esc(f.nome)+'</strong>'+nota+'</td>'+
+        '<td>'+esc(nomeDaCategoria(f.categoria))+'</td>'+
+        '<td>'+situacao+'</td>'+
+        '<td class="right">'+g.total+'</td>'+
+        '<td class="right">'+g.ganhas+'</td>'+
+        '<td class="right">'+(g.valor?U.compacto(g.valor):'—')+'</td>'+
+        '<td class="right">'+acoes+'</td></tr>';
     }).join('');
-
-    return tabela(['Fonte', 'Categoria', 'Situação', 'Negócios', 'Ganhos', 'Em aberto', ''],
-      linhas, 'Nenhuma fonte cadastrada ainda.');
+    const aviso=repetidos
+      ? '<p class="tiny muted">'+repetidos+' registro(s) repetido(s) agrupado(s) visualmente. '+
+        'Nenhuma fonte nem vínculo foi apagado. A regularização no banco exige conciliação segura.</p>'
+      : '';
+    return aviso+tabela(['Fonte','Categoria','Situação','Negócios','Ganhos','Em aberto',''],
+      linhas,'Nenhuma fonte cadastrada ainda.');
   }
 
   function listaProdutos(est) {
