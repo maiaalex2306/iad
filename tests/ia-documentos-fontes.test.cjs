@@ -46,3 +46,33 @@ test('IA de oportunidade usa teto maior e amostra o início e o fim dos PDFs',()
  assert.match(trecho,/avisoCorte/);
  assert.match(ui,/documento\(s\) tiveram trechos omitidos/);
 });
+
+
+test('3 PDFs longos: cada arquivo entra com início e conclusão, respeitando 38 mil',()=>{
+ const a=ui.indexOf('        /* A Edge Function aceita até 40 mil');
+ const b=ui.indexOf('        if (texto.length < 12)',a);
+ const trecho=ui.slice(a,b);
+ const docs=['Dossie.pdf','Resumo1.pdf','Resumo2.pdf'].map((nome,i)=>({
+   nome,texto:'INICIO_'+i+' '+('A'.repeat(18000))+' FIM_'+i
+ }));
+ const context={c:{extrair:'oportunidade'},digitado:'',comTexto:docs,Math,String,Array};
+ vm.createContext(context);
+ vm.runInContext(trecho+'globalThis.resultadoIA={texto,avisoCorte,cortados};',context);
+ const r=context.resultadoIA;
+ assert.ok(r.texto.length<=38000);
+ assert.equal(r.cortados,3);
+ for(let i=0;i<3;i++){
+   assert.ok(r.texto.includes('=== '+docs[i].nome+' ==='));
+   assert.ok(r.texto.includes('INICIO_'+i));
+   assert.ok(r.texto.includes('FIM_'+i));
+ }
+ assert.match(r.avisoCorte,/3 de 3/);
+});
+test('um só texto digitado nunca estoura limite do envio',()=>{
+ const a=ui.indexOf('        /* A Edge Function aceita até 40 mil');
+ const b=ui.indexOf('        if (texto.length < 12)',a);
+ const context={c:{extrair:'oportunidade'},digitado:'Z'.repeat(60000),comTexto:[],Math,String,Array};
+ vm.createContext(context);
+ vm.runInContext(ui.slice(a,b)+'globalThis.preparo=texto;',context);
+ assert.equal(context.preparo.length,38000);
+});
