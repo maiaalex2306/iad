@@ -394,7 +394,8 @@
      A consulta é GET, não cria ACK, não reenvia nem retira operações.
      Quatro leituras em paralelo evitam trinta RTTs sequenciais sem criar
      rajada desnecessária no PostgREST. Os estados não revelam payload. */
-  function inspecionarPendenciasCAS(pagina) {
+  function inspecionarPendenciasCAS() {
+    const pagina=arguments[0]; /* compatível com testes e chamadas legadas sem argumento */
     let filas;
     try {
       filas=tenantsComFilaCAS().map(function(tenant) {
