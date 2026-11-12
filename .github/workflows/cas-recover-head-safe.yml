@@ -1,0 +1,31 @@
+name: "CAS P0 — Safe 37-operation recovery"
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - 'src/nuvem.js'
+      - 'src/app.js'
+      - 'tests/cas-recover-head-safe.test.cjs'
+      - '.github/workflows/cas-recover-head-safe.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verified-recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax
+        run: |
+          node --check src/nuvem.js
+          node --check src/app.js
+          node --check tests/cas-recover-head-safe.test.cjs
+      - name: Test durable CAS queue and read-only recovery
+        run: |
+          node --test tests/cas-recover-head-safe.test.cjs
+          node --test scripts/p0-cas-proven-satisfied.test.cjs
+          node --test scripts/p0-cas-inspector.test.cjs

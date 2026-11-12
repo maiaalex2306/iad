@@ -374,6 +374,15 @@
         }
         caixaDoAviso = null;
         const card=conteudo.querySelector('.card');
+        if(card && !conteudo.querySelector('#conciliar-cas-comprovadas')) {
+          const recuperar=document.createElement('button');
+          recuperar.id='conciliar-cas-comprovadas';
+          recuperar.className='btn';
+          recuperar.type='button';
+          recuperar.textContent='Reconhecer automaticamente edições já confirmadas';
+          recuperar.onclick=function(){ global.App.conciliarCASComprovadas(); };
+          card.appendChild(recuperar);
+        }
         if(card && !conteudo.querySelector('#diagnosticar-cas')) {
           const botao=document.createElement('button');
           botao.id='diagnosticar-cas';
@@ -6602,6 +6611,30 @@
     recuperarPendenciasCAS: function () {
       if (baixando) return;
       baixarDoServidor();
+    },
+
+    /* Ação explícita após backup: só reconhece edições comprovadas por GET.
+       Nenhum conflito é descartado e nenhuma atualização é enviada ao backend. */
+    conciliarCASComprovadas: function () {
+      const N=global.IADNuvem;
+      if(!N||!N.conciliarCASJaAplicadasSomenteLeitura)return;
+      if(!confirm('Antes de continuar, você salvou a cópia das edições pendentes?\\n\\n'+
+        'Esta operação reconhecerá SOMENTE as edições comprovadamente aplicadas no servidor. '+
+        'Não envia alterações nem descarta conflitos.'))return;
+      const botao=document.getElementById('conciliar-cas-comprovadas');
+      if(botao)botao.disabled=true;
+      N.conciliarCASJaAplicadasSomenteLeitura().then(function(r){
+        alert('Conciliação comprovada: '+r.reconhecidas+
+          ' edições já aplicadas reconhecidas; '+r.recibosConciliados+
+          ' recibos confirmados. Restam '+r.restantes+
+          ' pendências. '+(r.motivo||'Nenhum conflito foi descartado.'));
+        if(r.restantes===0)baixarDoServidor();
+        else render();
+      }).catch(function(e){
+        alert('A recuperação parou com segurança: '+(e&&e.message||'falha não identificada')+
+          '. As demais edições continuam protegidas.');
+        render();
+      });
     },
 
     diagnosticarPendenciasCAS: function () {
