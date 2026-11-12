@@ -22,6 +22,7 @@ function setup(quantidade, scenario='aplicada'){
     diagnosticoPendenciasCAS:()=>({disponivel:true,quantidade:fila.pending().length+fila.pendingAcks().length}),
     chamar:async(path,opcoes)=>{
       gets++;if(opcoes&&opcoes.metodo&&opcoes.metodo!=='GET')posts++;
+      if(scenario==='troca'&&gets===1)session.perfil.tenant_id='t2';
       const id=decodeURIComponent(path.match(/id=eq\.([^&]+)/)[1]);
       return [{id,tenant_id:'t1',revisao:2,etapa:scenario==='conflito'?'perdida':'proposta'}];
     }
@@ -51,8 +52,7 @@ test('CAS: primeira operação conflitante mantém todas as 37 edições',async(
  assert.equal(h.posts(),0);
 });
 test('CAS: alteração de sessão/empresa interrompe sem apagar fila',async()=>{
- const h=setup(2);
- h.session.perfil.tenant_id='t2';
+ const h=setup(2,'troca');
  await assert.rejects(h.ctx.conciliarCASJaAplicadasSomenteLeitura(),/Sessão ou empresa mudou/);
  assert.equal(h.fila.pending().length,2);
 });
