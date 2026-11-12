@@ -390,7 +390,12 @@
   /* P0: inspeção exclusivamente de leitura das operações CAS.
      Não publica IDs/patches em UI, não altera fila, não reenvia RPC.
      Limite protege a rede de grandes históricos não sincronizados. */
+  /* Incidente P0: diagnosticar filas maiores que trinta em páginas de 30.
+     A consulta é GET, não cria ACK, não reenvia nem retira operações.
+     Quatro leituras em paralelo evitam trinta RTTs sequenciais sem criar
+     rajada desnecessária no PostgREST. Os estados não revelam payload. */
   function inspecionarPendenciasCAS() {
+    const pagina=arguments[0]; /* compatível com testes e chamadas legadas sem argumento */
     let filas;
     try {
       filas=tenantsComFilaCAS().map(function(tenant) {
@@ -404,40 +409,72 @@
     } catch(e) {
       return Promise.resolve({disponivel:false,total:null,verificados:0,itens:[]});
     }
-    const total=filas.length,limite=30,itens=[];
-    return filas.slice(0,limite).reduce(function(anterior,registro,indice) {
-      return anterior.then(function() {
-        const op=registro.op;
-        if(!op||!op.recordId||!op.tenantId) {
-          itens.push({numero:indice+1,estado:'dados_locais_incompletos'});
-          return;
-        }
-        return chamar('/rest/v1/oportunidades?select=*&'+
-          'id=eq.'+encodeURIComponent(op.recordId)+
-          '&tenant_id=eq.'+encodeURIComponent(op.tenantId)+'&limit=1')
-          .then(function(rows) {
-            let estado='registro_indisponivel';
-            if(Array.isArray(rows)&&rows.length===1) {
-              const revisao=Number(rows[0].revisao);
-              const base=Number(op.expectedRevision);
-              const validos=rows[0].revisao!==null&&rows[0].revisao!==undefined&&
-                op.expectedRevision!==null&&op.expectedRevision!==undefined&&
-                Number.isSafeInteger(revisao)&&Number.isSafeInteger(base);
-              const fila=filaCASDaSessao(op.tenantId);
-              estado=registro.tipo==='ack'?'ack_aguardando_conciliacao':
-                !validos?'revisao_indefinida':
-                fila.satisfazRemoto&&fila.satisfazRemoto(op,rows[0])?
-                  'ja_aplicada':
-                revisao===base?'revisao_compativel':
-                  'conflito_de_revisao';
-            }
-            itens.push({numero:indice+1,estado:estado});
-          }).catch(function() {
-            itens.push({numero:indice+1,estado:'consulta_indisponivel'});
-          });
+    const total=filas.length,limite=30;
+    const paginas=Math.max(1,Math.ceil(total/limite));
+    const numeroPagina=pagina===undefined?1:Number(pagina);
+    if(!Number.isSafeInteger(numeroPagina)||numeroPagina<1||numeroPagina>paginas)
+      return Promise.reject(Error('Página do diagnóstico CAS inválida.'));
+    const inicio=(numeroPagina-1)*limite;
+    const selecionadas=filas.slice(inicio,inicio+limite);
+    const itens=new Array(selecionadas.length);
+    /* No app real, validar troca de sessão. O inspector também é executado
+       isoladamente nos testes legados, cuja dependência 'sessao' não existe. */
+    const checarSessao=typeof sessao==='function';
+    const assinatura=checarSessao?sessao():null;
+    const usuario=String(assinatura&&assinatura.user&&assinatura.user.id||'');
+    const validaSessao=function(){
+      if(!checarSessao) return; /* apenas harness isolado sem autenticação */
+      const atual=sessao();
+      if(!usuario||!atual||!atual.user||String(atual.user.id)!==usuario)
+        throw Error('Sessão alterada durante a inspeção; fila preservada.');
+    };
+    /* Até 4 GETs por lote, sem POST nem mutação de storage. */
+    const grupos=[];
+    for(let i=0;i<selecionadas.length;i+=4) {
+      const posicao=i;
+      grupos.push(function(){
+        validaSessao();
+        return Promise.all(selecionadas.slice(posicao,posicao+4).map(function(registro,k){
+          const indice=posicao+k,op=registro.op;
+          if(!op||!op.recordId||!op.tenantId) {
+            itens[indice]={numero:inicio+indice+1,estado:'dados_locais_incompletos'};
+            return Promise.resolve();
+          }
+          return chamar('/rest/v1/oportunidades?select=*&'+
+            'id=eq.'+encodeURIComponent(op.recordId)+
+            '&tenant_id=eq.'+encodeURIComponent(op.tenantId)+'&limit=1')
+            .then(function(rows) {
+              validaSessao();
+              let estado='registro_indisponivel';
+              if(Array.isArray(rows)&&rows.length===1) {
+                const revisao=Number(rows[0].revisao);
+                const base=Number(op.expectedRevision);
+                const validos=rows[0].revisao!==null&&rows[0].revisao!==undefined&&
+                  op.expectedRevision!==null&&op.expectedRevision!==undefined&&
+                  Number.isSafeInteger(revisao)&&Number.isSafeInteger(base);
+                const fila=filaCASDaSessao(op.tenantId);
+                estado=registro.tipo==='ack'?'ack_aguardando_conciliacao':
+                  !validos?'revisao_indefinida':
+                  fila.satisfazRemoto&&fila.satisfazRemoto(op,rows[0])?
+                    'ja_aplicada':
+                  revisao===base?'revisao_compativel':
+                    'conflito_de_revisao';
+              }
+              itens[indice]={numero:inicio+indice+1,estado:estado};
+            }).catch(function(e) {
+              /* Mudança de sessão não pode ser mascarada por "falha de consulta". */
+              validaSessao();
+              itens[indice]={numero:inicio+indice+1,estado:'consulta_indisponivel'};
+            });
+        }));
       });
-    },Promise.resolve()).then(function() {
-      return {disponivel:true,total:total,verificados:itens.length,itens:itens};
+    }
+    return grupos.reduce(function(anterior,grupo){
+      return anterior.then(grupo);
+    },Promise.resolve()).then(function(){
+      validaSessao();
+      return {disponivel:true,total:total,verificados:itens.length,
+        pagina:numeroPagina,paginas:paginas,itens:itens};
     });
   }
   /* Recuperação solicitada explicitamente: sem POST/PUT/PATCH.
