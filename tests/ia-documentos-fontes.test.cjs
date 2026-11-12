@@ -76,3 +76,41 @@ test('um só texto digitado nunca estoura limite do envio',()=>{
  vm.runInContext(ui.slice(a,b)+'globalThis.preparo=texto;',context);
  assert.equal(context.preparo.length,38000);
 });
+
+
+test('cadastro de Fontes agrega registros equivalentes e soma indicadores sem alterar IDs',()=>{
+ const views=fs.readFileSync('src/views.js','utf8');
+ const a=views.indexOf('  function listaFontes(est) {');
+ const b=views.indexOf('  function listaProdutos(est) {',a);
+ assert.ok(a>=0&&b>a);
+ const fontes=[
+  {id:'1',nome:'LinkedIn',tenantId:'t1',categoria:'digital',ativo:true},
+  {id:'2',nome:' LÍNKEDIN ',tenantId:'t1',categoria:'digital',ativo:true},
+  {id:'3',nome:'Indicação',tenantId:'t1',categoria:'outra',ativo:true}
+ ];
+ const op=[
+  {fonteId:'1',valor:100},
+  {fonteId:'2',valor:300,desfecho:{tipo:'ganho'}},
+  {fonteId:'3',valor:50}
+ ];
+ const ctx={
+  Store:{catalogo:()=>fontes},
+  P:{CATEGORIAS_FONTE:[{id:'digital',rotulo:'Digital'},{id:'outra',rotulo:'Outra'}]},
+  U:{compacto:x=>'R$'+x},
+  combina:()=>true,
+  esc:x=>String(x),
+  tabela:(cols,rows)=>rows,
+  Map,Array,String,Object
+ };
+ vm.createContext(ctx);
+ vm.runInContext(views.slice(a,b),ctx);
+ const rendered=ctx.listaFontes({oportunidades:op});
+ assert.equal((rendered.match(/<tr>/g)||[]).length,2);
+ assert.match(rendered,/2 cadastros equivalentes/);
+ assert.match(rendered,/IDs vinculados/);
+ assert.match(rendered,/R\$100/);
+ assert.match(rendered,/>2<\/td>/);
+ assert.match(rendered,/>1<\/td>/);
+ assert.equal(fontes.length,3);
+ assert.equal(op[1].fonteId,'2');
+});
