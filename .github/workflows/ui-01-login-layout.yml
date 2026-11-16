@@ -8,7 +8,7 @@ permissions:
 jobs:
   chromium-login-layout:
     name: UI-01 Chromium real, 8 tamanhos e acessibilidade do conteúdo
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
