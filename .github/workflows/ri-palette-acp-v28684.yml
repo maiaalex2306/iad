@@ -23,7 +23,7 @@ permissions:
   contents: read
 jobs:
   design-tokens:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 4
     steps:
       - uses: actions/checkout@v4
@@ -32,7 +32,7 @@ jobs:
       - name: Verify static ACP tokens, responsive layout and PWA parity
         run: node --test scripts/ri-palette-contract.test.cjs
   chromium-light-dark:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
