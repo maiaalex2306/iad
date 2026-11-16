@@ -346,7 +346,14 @@
               resumo.sent+=Number(r&&r.sent||0);
               if(r && (r.blocked||r.busy)) {
                 const motivo=String(r.reason||'').toLowerCase();
-                const detalhe=motivo==='conflito' ? 'Conflito de revisão no servidor.' :
+                /* A RPC de produção retorna 'conflito_ou_inacessivel'
+                   tanto para revisão obsoleta quanto para RLS. O antigo
+                   teste só reconhecia 'conflito' e deixava um patch JÁ
+                   aplicado eternamente pendente. Esta classificação apenas
+                   dispara GET e prova exata de todos os campos, nunca
+                   autoriza descarte ou sobrescrita se RLS negar acesso. */
+                const detalhe=(motivo==='conflito'||motivo==='conflito_ou_inacessivel') ?
+                  'Conflito de revisão no servidor.' :
                   r.busy ? 'Fila CAS em processamento.' :
                   'Operação CAS ainda sem confirmação do servidor.';
                 throw new Error(detalhe+' Edições pendentes preservadas; não limpe os dados do navegador.');
