@@ -124,6 +124,26 @@
         remote.revisao!==expectedRemoteRevision||
         satisfazRemoto(op,remote))
         throw Error('Revisao remota mudou ou edicao sem conflito: fila preservada.');
+      /* Nutrição é um estado, não um campo descartável. Antes de substituir
+         o motivo vigente, anexar a versão que ESTÁ no servidor com autoria
+         e data de retorno preservadas. O mesmo CAS escreve o novo motivo
+         E o histórico numa transação, sob a mesma revisão do servidor.
+         Idempotência: a nova operação tem um único ID/patch congelado. */
+      if(Object.prototype.hasOwnProperty.call(patch,'nutricao')){
+        if(!Array.isArray(remote.historico_nutricao))
+          throw Error('Histórico remoto indisponível ou inválido; edição preservada.');
+        if(remote.nutricao!==null){
+          if(!remote.nutricao||typeof remote.nutricao!=='object'||Array.isArray(remote.nutricao))
+            throw Error('Nutrição remota inválida; edição preservada.');
+          const anteriorNutricao=JSON.parse(JSON.stringify(remote.nutricao));
+          anteriorNutricao.tipoMovimento='conciliacao_cas';
+          anteriorNutricao.porque='Motivo anterior preservado antes de aplicar edição local validada';
+          anteriorNutricao.revisaoAnterior=remote.revisao;
+          anteriorNutricao.operacaoCasOriginal=op.operationId;
+          patch.historico_nutricao=JSON.parse(JSON.stringify(remote.historico_nutricao))
+            .concat([anteriorNutricao]);
+        }
+      }
       const history=archived();
       const anterior=history.find(function(x){
         return x.operation.operationId===operationId;
@@ -171,13 +191,23 @@
         campos.some(x=>typeof x!=='string'||!Object.prototype.hasOwnProperty.call(op.patch,x))||
         new Set(campos).size!==campos.length)
         throw Error('Seleção de campos inválida; edição preservada.');
-      const bloqueados=['id','tenant_id','tenantId','dono_id','revisao','criado_em','atualizado_em'];
+      const bloqueados=['id','tenant_id','tenantId','dono_id','revisao','criado_em','atualizado_em',
+        'historico_nutricao'];
+      /* O histórico não é uma edição livre: jamais aceitar que um snapshot
+         local antigo substitua a linha do tempo atual do servidor. */
       if(campos.some(x=>!/^[a-z][a-z0-9_]*$/.test(x)||bloqueados.includes(x)))
-        throw Error('Campo reservado no CAS; edição preservada.');
+        throw Error('Campo reservado ou histórico protegido no CAS; edição preservada.');
       const patch={};
       const iguais=function(a,b) {
         if(Object.is(a,b))return true;
-        try{return JSON.stringify(a)===JSON.stringify(b);}catch(e){return false;}
+        if(!a||!b||typeof a!=='object'||typeof b!=='object'||
+          Array.isArray(a)!==Array.isArray(b))return false;
+        if(Array.isArray(a))return a.length===b.length&&
+          a.every(function(v,i){return iguais(v,b[i]);});
+        const ka=Object.keys(a),kb=Object.keys(b);
+        return ka.length===kb.length&&ka.every(function(k){
+          return Object.prototype.hasOwnProperty.call(b,k)&&iguais(a[k],b[k]);
+        });
       };
       for(const campo of campos){
         if(!Object.prototype.hasOwnProperty.call(remote,campo))
