@@ -22,7 +22,7 @@ permissions:
   contents: read
 jobs:
   identity-contract:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 7
     steps:
       - uses: actions/checkout@v4
@@ -36,7 +36,7 @@ jobs:
         run: |
           node --test tests/market-edge.test.mjs tests/market-investigation-identity.test.mjs tests/market-contract.test.mjs tests/market-prospect-agents.test.mjs
   staging-canary-auth:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
@@ -45,7 +45,7 @@ jobs:
       - name: Test canary and current production Auth/CORS without credentials
         run: node scripts/ri-m22-canary-smoke.cjs
   browser-multitheme:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 9
     steps:
       - uses: actions/checkout@v4
