@@ -8,7 +8,7 @@ permissions:
 jobs:
   perf24:
     name: PERF-24 controles, privacidade e layout Chromium
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 18
     steps:
       - uses: actions/checkout@v4
