@@ -1,0 +1,29 @@
+name: "CAS — recuperação automática comprovada"
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - 'src/nuvem.js'
+      - 'tests/cas-auto-proven-retry.test.cjs'
+      - '.github/workflows/cas-auto-proven-retry.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  cas-auto-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax
+        run: |
+          node --check src/nuvem.js
+          node --check tests/cas-auto-proven-retry.test.cjs
+      - name: Safe CAS proof + existing recovery
+        run: |
+          node --test tests/cas-auto-proven-retry.test.cjs
+          node --test tests/cas-recover-head-safe.test.cjs
+          node --test scripts/p0-cas-proven-satisfied.test.cjs
