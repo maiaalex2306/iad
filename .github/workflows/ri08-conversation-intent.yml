@@ -19,7 +19,7 @@ on:
   workflow_dispatch:
 jobs:
   intents-and-scope:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 6
     steps:
       - uses: actions/checkout@v4
@@ -40,7 +40,7 @@ jobs:
         run: node --test tests/ri08-performance.test.mjs
 
   browser-integration:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -54,7 +54,7 @@ jobs:
       - name: Replay import preview in real browser
         run: timeout 150s node scripts/ri08-linkedhelper-browser.cjs
   staging-readiness:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
       - uses: actions/checkout@v4
