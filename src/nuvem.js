@@ -656,10 +656,12 @@
       const itens=Object.keys(op.patch||{}).slice(0,30).map(function(field) {
         const formatar=function(value){
           const raw=value===undefined?'(ausente)':JSON.stringify(value);
-          return String(raw===undefined?'(indefinido)':raw).slice(0,220);
+          return String(raw===undefined?'(indefinido)':raw).slice(0,10000);
         };
+        const localRaw=JSON.stringify(op.patch[field]),remotoRaw=JSON.stringify(remote[field]);
         return {campo:field,local:formatar(op.patch[field]),
-          servidor:formatar(remote[field])};
+          servidor:formatar(remote[field]),
+          truncado:String(localRaw||'').length>10000||String(remotoRaw||'').length>10000};
       });
       if(!itens.length||Object.keys(op.patch).length>itens.length)
         throw Error('A edicao possui campos demais para comparacao segura; fila preservada.');
@@ -687,6 +689,49 @@
       if(!restante.disponivel)
         return {arquivada:true,outrasPendencias:true};
       return {arquivada:true,outrasPendencias:restante.quantidade>0};
+    });
+  }
+  /* P0: a opção SIMÉTRICA à escolha do servidor: usuário confirma os
+     campos locais, o registro remoto é lido novamente com RLS, e a revisão
+     assinada pela comparação é validada ANTES da troca da fila.
+     A fila original é arquivada em storage durável; somente depois
+     criamos outra operação CAS, com novo ID idempotente. */
+  function resolverConflitoCASReaplicarLocal(numero,revisaoVista,campos){
+    if(!Number.isSafeInteger(revisaoVista))
+      return Promise.reject(Error('Revisão de comparação inválida.'));
+    if(!Array.isArray(campos)||!campos.length||campos.length>30||
+       campos.some(x=>typeof x!=='string'))
+      return Promise.reject(Error('Selecione ao menos um campo local válido.'));
+    let entry;
+    try {entry=conflitoCASPrimeiraOperacao(numero);}
+    catch(e){return Promise.reject(e);}
+    const op=entry.op;
+    const identidade=sessao&&sessao();
+    const usuario=String(identidade&&identidade.user&&identidade.user.id||'');
+    const empresa=String(identidade&&identidade.perfil&&identidade.perfil.tenant_id||'');
+    return chamar('/rest/v1/oportunidades?select=*&id=eq.'+
+      encodeURIComponent(op.recordId)+'&tenant_id=eq.'+
+      encodeURIComponent(op.tenantId)+'&limit=1').then(function(rows){
+      const atual=sessao&&sessao();
+      if(!usuario||!atual||String(atual.user&&atual.user.id||'')!==usuario||
+        String(atual.perfil&&atual.perfil.tenant_id||'')!==empresa)
+        throw Error('Sessão mudou; edição local preservada.');
+      if(!Array.isArray(rows)||rows.length!==1)
+        throw Error('Registro remoto indisponível; edição preservada.');
+      if(!global.crypto||typeof global.crypto.randomUUID!=='function')
+        throw Error('Identificador criptográfico indisponível; edição preservada.');
+      const resultado=entry.fila.reaplicarLocal(op.operationId,rows[0],
+        revisaoVista,campos,global.crypto.randomUUID());
+      /* Pode haver outra operação na fila; se a transmissão falhar, a nova
+         edição permanecerá protegida com recibo idempotente e será retomada. */
+      if(!resultado.enfileirada)
+        return {arquivada:true,confirmada:true,restantes:diagnosticoPendenciasCAS().quantidade};
+      return retomarFilaCASSeguro().then(function(){
+        return {arquivada:true,confirmada:true,restantes:diagnosticoPendenciasCAS().quantidade};
+      },function(e){
+        return {arquivada:true,confirmada:false,restantes:diagnosticoPendenciasCAS().quantidade,
+          motivo:String(e&&e.message||'Sem confirmação do servidor')};
+      });
     });
   }
   /* Cópia local explícita. Nunca limpa fila e nunca envia operações.
@@ -2663,6 +2708,7 @@
     exportarPendenciasCAS, diagnosticoPendenciasCAS, inspecionarPendenciasCAS,
 conciliarCASJaAplicadasSomenteLeitura,
     reconhecerEdicaoCASJaAplicada, lerConflitoCAS, resolverConflitoCASManterServidor,
+    resolverConflitoCASReaplicarLocal,
     empresaParecida, achatarNome, porFormato, explicarFalhas,
     adotarTokens,
     trocarMinhaSenha,
