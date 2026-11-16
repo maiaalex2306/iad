@@ -26,7 +26,7 @@ permissions:
   contents: read
 jobs:
   contracts:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
@@ -38,7 +38,7 @@ jobs:
           node --check src/ri/market-view.mjs
           node --test scripts/ri-m21-market-quality.test.cjs tests/market-progress.test.mjs tests/market-prospect-agents.test.mjs
   chromium:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -51,7 +51,7 @@ jobs:
       - name: Orange animated progress in light, dark and reduced-motion
         run: node scripts/ri-m21-progress-browser.cjs
   canary-auth-boundary:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4

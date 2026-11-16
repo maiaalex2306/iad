@@ -33,7 +33,7 @@ permissions:
   contents: read
 jobs:
   contracts:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -54,7 +54,7 @@ jobs:
           node --test scripts/ri-account-view.test.cjs
           node --test scripts/ri-account-briefing.test.cjs
   browser:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 16
     steps:
       - uses: actions/checkout@v4

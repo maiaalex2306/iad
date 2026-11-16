@@ -368,7 +368,20 @@
     let tentativa;
     try { tentativa = retomarFilaCAS(); }
     catch(e) { return Promise.reject(e); }
-    retomadaCASEmCurso = Promise.resolve(tentativa).finally(function() { retomadaCASEmCurso = null; });
+    /* Somente após falha CAS, verificar se o servidor JÁ contém o patch
+       inteiro. A prova é read-only; reconhecimento local tem recibo durável.
+       Conflito verdadeiro permanece protegido, sem rebase ou sobrescrita.
+       Uma única tentativa de recuperação por execução evita loops. */
+    retomadaCASEmCurso = Promise.resolve(tentativa).catch(function(erro) {
+      const mensagem=String(erro&&erro.message||'');
+      if(!/Conflito de revisão no servidor/i.test(mensagem))throw erro;
+      return conciliarCASJaAplicadasSomenteLeitura().then(function(resultado) {
+        if(!resultado.reconhecidas&&!resultado.recibosConciliados)throw erro;
+        /* Se restarem operações, elas serão tratadas normalmente pelo CAS,
+           com a revisão original intacta e sem contornar o servidor. */
+        return retomarFilaCAS();
+      });
+    }).finally(function() { retomadaCASEmCurso = null; });
     return retomadaCASEmCurso;
   }
   /* Diagnóstico P0 somente quantitativo: nenhuma operação, patch, ID,

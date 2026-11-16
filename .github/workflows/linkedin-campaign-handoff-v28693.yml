@@ -15,7 +15,7 @@ permissions:
   contents: read
 jobs:
   contract-and-security:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 6
     steps:
       - uses: actions/checkout@v4
@@ -31,7 +31,7 @@ jobs:
         run: node --test tests/linkedin-campaign-portable.test.mjs tests/linkedin-leads-v1.test.mjs
   browser:
     needs: contract-and-security
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
@@ -45,7 +45,7 @@ jobs:
         run: timeout 160s node scripts/linkedin-leads-browser.cjs
   release-coherence:
     needs: contract-and-security
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4

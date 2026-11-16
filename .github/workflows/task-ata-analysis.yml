@@ -18,7 +18,7 @@ permissions:
   contents: read
 jobs:
   ata-contract:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
@@ -35,7 +35,7 @@ jobs:
           node --check scripts/task-ata-analysis-chromium.cjs
           node --test tests/task-ata-analysis.test.cjs
   ata-chromium:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 17
     steps:
       - uses: actions/checkout@v4

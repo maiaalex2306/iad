@@ -11,7 +11,7 @@ permissions:
   contents: read
 jobs:
   integration:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
@@ -34,7 +34,7 @@ jobs:
           node --test scripts/perf41-ab-benchmark.test.mjs
 
   offline-browser:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4

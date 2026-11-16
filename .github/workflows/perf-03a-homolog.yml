@@ -9,7 +9,7 @@ permissions:
 jobs:
   scale-differential:
     name: 243 1000 5000 e paridade v269
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -29,7 +29,7 @@ jobs:
 
   browser-isolated:
     name: Chromium real com dados sinteticos
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -53,7 +53,7 @@ jobs:
 
   supabase-local:
     name: Supabase local Postgres Auth RLS
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4

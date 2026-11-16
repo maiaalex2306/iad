@@ -18,7 +18,7 @@ permissions:
   contents: read
 jobs:
   manual-parity:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -35,7 +35,7 @@ jobs:
           node --check sw.js
           node --test tests/perf36k1-manual-lazy.test.cjs tests/manual-v28697.test.cjs tests/treinamento24h.test.cjs
   manual-chromium:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
