@@ -2054,13 +2054,25 @@
   function colocarEmNutricao(id, dados) {
     const op = oportunidade(id);
     if (!op) return null;
-    op.nutricao = {
+    const nova = {
       desde: hoje(),
       motivo: dados.motivo || '',
       motivoTexto: dados.motivoTexto || '',
       revisarEm: dados.revisarEm || '',
       porQuem: (contexto().usuario || {}).id || null
     };
+    /* Uma nova justificativa NÃO pode destruir o estado anterior.
+       Conservar a autoria real e a data da entrada anterior; só registrar
+       substituição quando algum campo de fato mudou, evitando duplicatas
+       em cliques repetidos. Não fingir que a conta saiu da nutrição. */
+    if(op.nutricao && JSON.stringify(op.nutricao)!==JSON.stringify(nova)) {
+      op.historicoNutricao = (op.historicoNutricao || []).concat([
+        Object.assign({}, op.nutricao, {corrigidaEm:hoje(),
+          tipoMovimento:'alteracao_nutricao',
+          porque:'Justificativa substituída por nova informação comercial'})
+      ]);
+    }
+    op.nutricao = nova;
     op.proximoCompromisso = null;
     salvar();
     return op;
