@@ -410,6 +410,15 @@
           resolver.onclick=function(){global.App.resolverConflitoCASManterServidor();};
           card.appendChild(resolver);
         }
+        if(card && !conteudo.querySelector('#reaplicar-local-cas')) {
+          const reaplicar=document.createElement('button');
+          reaplicar.id='reaplicar-local-cas';
+          reaplicar.className='btn';
+          reaplicar.type='button';
+          reaplicar.textContent='Recuperar minha edição (comparar campo a campo)';
+          reaplicar.onclick=function(){global.App.resolverConflitoCASReaplicarLocal();};
+          card.appendChild(reaplicar);
+        }
         if(card && !conteudo.querySelector('#abrir-carteira-cas-leitura')) {
           const leitura=document.createElement('button');
           leitura.id='abrir-carteira-cas-leitura';
@@ -6736,16 +6745,99 @@
         const decisao=prompt('Para confirmar a escolha do servidor e arquivar sua edição, digite SERVIDOR:');
         if(decisao!=='SERVIDOR')return;
         N.resolverConflitoCASManterServidor(numero,d.revisaoServidor).then(function(r) {
-          alert(r.outrasPendencias?
-            'Edição arquivada com segurança. Ainda existem outras pendências.':
-            'Edição arquivada e conciliação concluída. A carteira será atualizada.');
-          if(r.outrasPendencias)render();
-          else baixarDoServidor();
+          if(r.outrasPendencias) {
+            alert('Edição arquivada com segurança. Ainda existem outras pendências.');
+            render();
+          } else {
+            baixarDoServidor().then(function(){
+              const d=N.diagnosticoPendenciasCAS&&N.diagnosticoPendenciasCAS();
+              alert(semServidor||!d||!d.disponivel||d.quantidade!==0?
+                'A edição foi arquivada, mas a carteira ainda tem pendências preservadas. Não limpe os dados do navegador.':
+                'Conciliação confirmada, fila CAS vazia e carteira carregada do servidor.');
+            });
+          }
         }).catch(function(e) {
           alert('Edição preservada. Resolução não concluída: '+(e&&e.message||'erro desconhecido'));
         });
       }).catch(function(e) {
         alert('Não foi possível comparar esta edição. Nenhum dado foi alterado: '+(e&&e.message||'erro desconhecido'));
+      });
+    },
+
+    /* P0 v286.106: recuperar dados locais preservados sem regravar um
+       registro inteiro, sem "forçar" uma revisão obsoleta e sem
+       assumir que a escolha do servidor é a única alternativa. */
+    resolverConflitoCASReaplicarLocal: function () {
+      const N=global.IADNuvem;
+      if(!N||!N.lerConflitoCAS||!N.resolverConflitoCASReaplicarLocal)return;
+      const bruto=prompt('Qual o número da edição em conflito (1 a 30)?','1');
+      if(bruto===null)return;
+      const numero=Number(bruto);
+      if(!Number.isSafeInteger(numero)||numero<1||numero>30){
+        alert('Informe um número válido de 1 a 30. Nenhum dado foi alterado.');return;
+      }
+      N.lerConflitoCAS(numero).then(function(d) {
+        if(d.camposOmitidos){
+          alert('Esta edição tem muitos campos para conferência segura. Cópia e fila preservadas.');
+          return;
+        }
+        const escolhidos=[];
+        for(const c of d.campos){
+          if(c.truncado) {
+            alert('O campo '+c.campo+' ultrapassa o limite de comparação. A edição permanece protegida.');
+            return;
+          }
+          const pergunta='OPERAÇÃO '+numero+' — CAMPO '+c.campo+'\n\n'+
+            'SUA EDIÇÃO:\n'+c.local+'\n\nSERVIDOR:\n'+c.servidor+
+            '\n\nOK = reaplicar somente este campo local.\n'+
+            'Cancelar = manter este campo como está no servidor.';
+          if(confirm(pergunta))escolhidos.push(c.campo);
+        }
+        if(!escolhidos.length){
+          alert('Nenhum campo local selecionado. Nada foi alterado. Para manter o servidor, use Comparar e resolver conflito.');
+          return;
+        }
+        if(!confirm('Você selecionou '+escolhidos.length+' campo(s): '+
+          escolhidos.join(', ')+'.\n\n'+
+          'Salvou uma cópia das edições? Confirmar cria uma NOVA operação CAS com esses campos, '+
+          'preserva a edição original em histórico e não modifica os demais campos do servidor.')){
+          return;
+        }
+        const palavra=prompt('Digite APLICAR para confirmar o reenvio dos campos selecionados:');
+        if(palavra!=='APLICAR')return;
+        const botao=document.getElementById('reaplicar-local-cas');
+        if(botao)botao.disabled=true;
+        N.resolverConflitoCASReaplicarLocal(numero,d.revisaoServidor,escolhidos).then(function(r){
+          if(!r.confirmada) {
+            alert('Seus campos foram protegidos numa nova edição CAS, mas ainda não houve confirmação remota. '+
+              'Use Conciliar e tentar novamente. Motivo: '+(r.motivo||'pendente'));
+            render();return;
+          }
+          if(r.restantes>0){
+            alert('Campos enviados com confirmação, mas ainda restam '+r.restantes+
+              ' operações protegidas. Nenhuma foi descartada.');
+            render();return;
+          }
+          /* Um ACK de uma operação não é prova de que a carteira abriu:
+             a cópia offline anterior pode ainda conter outras alterações.
+             Só anunciar desbloqueio depois da reidratação E da fila zero. */
+          baixarDoServidor().then(function() {
+            const d=N.diagnosticoPendenciasCAS&&N.diagnosticoPendenciasCAS();
+            if(semServidor||!d||!d.disponivel||d.quantidade!==0) {
+              alert('A edição escolhida foi confirmada, mas ainda há uma pendência na recuperação da carteira. '+
+                'Os dados permanecem protegidos. Não limpe o navegador; consulte o diagnóstico CAS.');
+              return;
+            }
+            alert('Conferência concluída: nenhuma edição CAS pendente e carteira carregada do servidor.');
+          });
+        }).catch(function(e){
+          alert('Não foi possível iniciar a reaplicação: '+(e&&e.message||'erro desconhecido')+
+            '. A edição permanece protegida; não limpe os dados do navegador.');
+          render();
+        });
+      }).catch(function(e){
+        alert('Comparação indisponível: '+(e&&e.message||'erro desconhecido')+
+          '. Nenhum dado foi modificado.');
       });
     },
 
