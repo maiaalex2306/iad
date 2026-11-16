@@ -6797,8 +6797,12 @@
           alert('Nenhum campo local selecionado. Nada foi alterado. Para manter o servidor, use Comparar e resolver conflito.');
           return;
         }
+        const incluiNutricao=escolhidos.includes('nutricao');
         if(!confirm('Você selecionou '+escolhidos.length+' campo(s): '+
           escolhidos.join(', ')+'.\n\n'+
+          (incluiNutricao?
+            'A justificativa ATUAL do servidor, inclusive autoria, será acrescentada a historico_nutricao '+
+            'na MESMA operação CAS que aplica seu novo motivo.\n\n':'')+
           'Salvou uma cópia das edições? Confirmar cria uma NOVA operação CAS com esses campos, '+
           'preserva a edição original em histórico e não modifica os demais campos do servidor.')){
           return;
