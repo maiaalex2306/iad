@@ -8,7 +8,7 @@ permissions:
 jobs:
   perf17-unit:
     name: PERF-17 contrato P95, isolamento e revisao
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
@@ -24,7 +24,7 @@ jobs:
       - run: node --test nuvem/testes/perf-15-contacts-index.test.cjs nuvem/testes/perf-10-percentis.test.cjs
   perf17-browser:
     name: PERF-17 Chromium clique-dois-frames
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
