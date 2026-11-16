@@ -12,7 +12,7 @@ permissions:
 jobs:
   node:
     name: Regressões JavaScript, paridade 243/1k/5k/10k
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -44,7 +44,7 @@ jobs:
           node --test nuvem/testes/sessao-refresh-invalido.test.cjs
   chromium:
     name: Chromium real Pipeline > Oportunidade > Tarefas
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -65,7 +65,7 @@ jobs:
           if-no-files-found: ignore
   postgres:
     name: GoTrue + PostgREST real (5 usuários, 2 empresas, RLS)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
