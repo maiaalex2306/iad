@@ -6745,11 +6745,17 @@
         const decisao=prompt('Para confirmar a escolha do servidor e arquivar sua edição, digite SERVIDOR:');
         if(decisao!=='SERVIDOR')return;
         N.resolverConflitoCASManterServidor(numero,d.revisaoServidor).then(function(r) {
-          alert(r.outrasPendencias?
-            'Edição arquivada com segurança. Ainda existem outras pendências.':
-            'Edição arquivada e conciliação concluída. A carteira será atualizada.');
-          if(r.outrasPendencias)render();
-          else baixarDoServidor();
+          if(r.outrasPendencias) {
+            alert('Edição arquivada com segurança. Ainda existem outras pendências.');
+            render();
+          } else {
+            baixarDoServidor().then(function(){
+              const d=N.diagnosticoPendenciasCAS&&N.diagnosticoPendenciasCAS();
+              alert(semServidor||!d||!d.disponivel||d.quantidade!==0?
+                'A edição foi arquivada, mas a carteira ainda tem pendências preservadas. Não limpe os dados do navegador.':
+                'Conciliação confirmada, fila CAS vazia e carteira carregada do servidor.');
+            });
+          }
         }).catch(function(e) {
           alert('Edição preservada. Resolução não concluída: '+(e&&e.message||'erro desconhecido'));
         });
@@ -6812,8 +6818,18 @@
               ' operações protegidas. Nenhuma foi descartada.');
             render();return;
           }
-          alert('Edição conciliada e confirmada pelo servidor. A carteira será atualizada.');
-          baixarDoServidor();
+          /* Um ACK de uma operação não é prova de que a carteira abriu:
+             a cópia offline anterior pode ainda conter outras alterações.
+             Só anunciar desbloqueio depois da reidratação E da fila zero. */
+          baixarDoServidor().then(function() {
+            const d=N.diagnosticoPendenciasCAS&&N.diagnosticoPendenciasCAS();
+            if(semServidor||!d||!d.disponivel||d.quantidade!==0) {
+              alert('A edição escolhida foi confirmada, mas ainda há uma pendência na recuperação da carteira. '+
+                'Os dados permanecem protegidos. Não limpe o navegador; consulte o diagnóstico CAS.');
+              return;
+            }
+            alert('Conferência concluída: nenhuma edição CAS pendente e carteira carregada do servidor.');
+          });
         }).catch(function(e){
           alert('Não foi possível iniciar a reaplicação: '+(e&&e.message||'erro desconhecido')+
             '. A edição permanece protegida; não limpe os dados do navegador.');
