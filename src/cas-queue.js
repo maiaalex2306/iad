@@ -148,6 +148,80 @@
       save(current);
       return {arquivada:true};
     }
+    /* CAS P0: escolha EXPLICITA de reaplicar somente campos selecionados.
+       Guarda a operação antiga no histórico ANTES de substituí-la por uma
+       operação nova com revisão atual. Sem GET comprovando identidade/revisão,
+       sem palavra de confirmação da interface e sem sucesso do CAS remoto
+       não há confirmação de gravação. A revisão pode mudar novamente; a RPC
+       então conserva a nova operação pendente, nunca faz força bruta. */
+    function reaplicarLocal(operationId,remote,revisaoVista,campos,novoId) {
+      if(voos().has(key))throw Error('Fila CAS ocupada: tente novamente.');
+      const q=load(),op=q[0];
+      if(!op||op.operationId!==operationId)
+        throw Error('A edição mudou: somente a primeira pendência pode ser resolvida.');
+      if(!remote||String(remote.id)!==String(op.recordId)||
+        String(remote.tenant_id)!==tenant||
+        !Number.isSafeInteger(remote.revisao)||
+        !Number.isSafeInteger(op.expectedRevision)||
+        remote.revisao<=op.expectedRevision||
+        remote.revisao!==revisaoVista||
+        satisfazRemoto(op,remote))
+        throw Error('A revisão ou identidade mudou; edição local preservada.');
+      if(!Array.isArray(campos)||!campos.length||
+        campos.some(x=>typeof x!=='string'||!Object.prototype.hasOwnProperty.call(op.patch,x))||
+        new Set(campos).size!==campos.length)
+        throw Error('Seleção de campos inválida; edição preservada.');
+      const bloqueados=['id','tenant_id','tenantId','dono_id','revisao','criado_em','atualizado_em'];
+      if(campos.some(x=>!/^[a-z][a-z0-9_]*$/.test(x)||bloqueados.includes(x)))
+        throw Error('Campo reservado no CAS; edição preservada.');
+      const patch={};
+      const iguais=function(a,b) {
+        if(Object.is(a,b))return true;
+        try{return JSON.stringify(a)===JSON.stringify(b);}catch(e){return false;}
+      };
+      for(const campo of campos){
+        if(!Object.prototype.hasOwnProperty.call(remote,campo))
+          throw Error('O campo selecionado não veio do servidor; edição preservada.');
+        if(!iguais(op.patch[campo],remote[campo]))
+          patch[campo]=JSON.parse(JSON.stringify(op.patch[campo]));
+      }
+      const history=archived();
+      const anterior=history.find(x=>x.operation.operationId===operationId);
+      if(anterior) {
+        if(JSON.stringify(anterior.operation)!==JSON.stringify(op)||
+          anterior.revisaoRemota!==remote.revisao||
+          anterior.motivo!=='usuario_reaplicou_local'||
+          JSON.stringify(anterior.camposSelecionados)!==JSON.stringify(campos))
+          throw Error('Recuperação previamente preparada é diferente; edição preservada.');
+        novoId=anterior.novaOperacaoId;
+      } else {
+        if(Object.keys(patch).length&&
+          (typeof novoId!=='string'||novoId.length<8||novoId.length>180||
+           novoId===operationId||
+           q.some(x=>x.operationId===novoId)||
+           receipts().some(x=>x.operation.operationId===novoId)||
+           history.some(x=>x.operation.operationId===novoId)))
+          throw Error('Novo identificador de operação inválido; edição preservada.');
+        if(!Object.keys(patch).length)novoId='';
+        history.push({operation:JSON.parse(JSON.stringify(op)),
+          revisaoRemota:remote.revisao,motivo:'usuario_reaplicou_local',
+          novaOperacaoId:novoId,camposSelecionados:campos.slice(),
+          arquivadaEm:new Date().toISOString()});
+        storage.setItem(archiveKey,JSON.stringify(history));
+      }
+      const atual=load();
+      if(!atual.length||atual[0].operationId!==operationId)
+        throw Error('Fila mudou durante a recuperação: preservada.');
+      if(Object.keys(patch).length){
+        if(!novoId)throw Error('Operação nova ausente no histórico; fila preservada.');
+        atual[0]=Object.assign({},op,{
+          operationId:novoId,expectedRevision:remote.revisao,patch:patch
+        });
+      } else atual.shift();
+      save(atual);
+      return {arquivada:true,enfileirada:!!Object.keys(patch).length,
+        camposReaplicados:Object.keys(patch).length};
+    }
     function voos() {
       let mapa=voosPorStorage.get(storage);
       if(!mapa){mapa=new Map();voosPorStorage.set(storage,mapa);}
@@ -201,6 +275,7 @@
       satisfazRemoto:satisfazRemoto,
       reconhecerAplicada:reconhecerAplicada,
       manterServidor:manterServidor,
+      reaplicarLocal:reaplicarLocal,
       archived:()=>archived().map(function(x){return JSON.parse(JSON.stringify(x));})});
   }
   return Object.freeze({create});
