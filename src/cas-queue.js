@@ -124,26 +124,6 @@
         remote.revisao!==expectedRemoteRevision||
         satisfazRemoto(op,remote))
         throw Error('Revisao remota mudou ou edicao sem conflito: fila preservada.');
-      /* Nutrição é um estado, não um campo descartável. Antes de substituir
-         o motivo vigente, anexar a versão que ESTÁ no servidor com autoria
-         e data de retorno preservadas. O mesmo CAS escreve o novo motivo
-         E o histórico numa transação, sob a mesma revisão do servidor.
-         Idempotência: a nova operação tem um único ID/patch congelado. */
-      if(Object.prototype.hasOwnProperty.call(patch,'nutricao')){
-        if(!Array.isArray(remote.historico_nutricao))
-          throw Error('Histórico remoto indisponível ou inválido; edição preservada.');
-        if(remote.nutricao!==null){
-          if(!remote.nutricao||typeof remote.nutricao!=='object'||Array.isArray(remote.nutricao))
-            throw Error('Nutrição remota inválida; edição preservada.');
-          const anteriorNutricao=JSON.parse(JSON.stringify(remote.nutricao));
-          anteriorNutricao.tipoMovimento='conciliacao_cas';
-          anteriorNutricao.porque='Motivo anterior preservado antes de aplicar edição local validada';
-          anteriorNutricao.revisaoAnterior=remote.revisao;
-          anteriorNutricao.operacaoCasOriginal=op.operationId;
-          patch.historico_nutricao=JSON.parse(JSON.stringify(remote.historico_nutricao))
-            .concat([anteriorNutricao]);
-        }
-      }
       const history=archived();
       const anterior=history.find(function(x){
         return x.operation.operationId===operationId;
@@ -214,6 +194,26 @@
           throw Error('O campo selecionado não veio do servidor; edição preservada.');
         if(!iguais(op.patch[campo],remote[campo]))
           patch[campo]=JSON.parse(JSON.stringify(op.patch[campo]));
+      }
+      /* Nutrição é um estado, não um campo descartável. Antes de substituir
+         o motivo vigente, anexar a versão que ESTÁ no servidor com autoria
+         e data de retorno preservadas. O mesmo CAS escreve o novo motivo
+         E o histórico numa transação, sob a mesma revisão do servidor.
+         Idempotência: a nova operação tem um único ID/patch congelado. */
+      if(Object.prototype.hasOwnProperty.call(patch,'nutricao')){
+        if(!Array.isArray(remote.historico_nutricao))
+          throw Error('Histórico remoto indisponível ou inválido; edição preservada.');
+        if(remote.nutricao!==null){
+          if(!remote.nutricao||typeof remote.nutricao!=='object'||Array.isArray(remote.nutricao))
+            throw Error('Nutrição remota inválida; edição preservada.');
+          const anteriorNutricao=JSON.parse(JSON.stringify(remote.nutricao));
+          anteriorNutricao.tipoMovimento='conciliacao_cas';
+          anteriorNutricao.porque='Motivo anterior preservado antes de aplicar edição local validada';
+          anteriorNutricao.revisaoAnterior=remote.revisao;
+          anteriorNutricao.operacaoCasOriginal=op.operationId;
+          patch.historico_nutricao=JSON.parse(JSON.stringify(remote.historico_nutricao))
+            .concat([anteriorNutricao]);
+        }
       }
       const history=archived();
       const anterior=history.find(x=>x.operation.operationId===operationId);
