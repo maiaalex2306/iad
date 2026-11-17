@@ -374,7 +374,10 @@
        Uma única tentativa de recuperação por execução evita loops. */
     retomadaCASEmCurso = Promise.resolve(tentativa).catch(function(erro) {
       const mensagem=String(erro&&erro.message||'');
-      if(!/Conflito de revisão no servidor/i.test(mensagem))throw erro;
+      /* Um ACK perdido também pode aparecer como sem_confirmação, apesar de
+         o patch já estar integralmente aplicado. A conciliação continua
+         exclusivamente por GET + prova de todos os campos; nunca faz rebase. */
+      if(!/Conflito de revisão no servidor|Operação CAS ainda sem confirmação do servidor/i.test(mensagem))throw erro;
       return conciliarCASJaAplicadasSomenteLeitura().then(function(resultado) {
         if(!resultado.reconhecidas&&!resultado.recibosConciliados)throw erro;
         /* Se restarem operações, elas serão tratadas normalmente pelo CAS,
