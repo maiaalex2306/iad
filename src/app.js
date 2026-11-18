@@ -12050,6 +12050,7 @@
         placeholder: 'Cole aqui um e-mail, um trecho do site, o perfil do LinkedIn — ou carregue a proposta, a planilha de consumo, o edital. A IA lê tudo junto.',
         /* Prospect, cliente ou ex-cliente é fato comercial nosso — não sai de texto. */
         nunca: ['relacaoAtual'],
+        somenteVazios: true, /* IA não reescreve informação cadastral conferida */
         contexto: function () { return IA.contextoDaConta(null); } }
     ];
 
