@@ -8487,7 +8487,7 @@
       complemento:String(lead.empresaComplemento||'').trim().slice(0,140),
       bairro:String(lead.empresaBairro||'').trim().slice(0,140),
       uf:/^[A-Z]{2}$/.test(uf)?uf:'',
-      codigoIbge:String(lead.empresaCodigoIbge||'').replace(/\\D/g,'').slice(0,7),
+      codigoIbge:String(lead.empresaCodigoIbge||'').replace(/\D/g,'').slice(0,7),
       telefone:E?.telefoneBrasil(lead.empresaTelefone)||''
     };
   }
