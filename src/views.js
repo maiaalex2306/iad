@@ -6334,7 +6334,7 @@
             : esc(c.telefone)) + '</span>' : '') + '</td>' +
         '<td>' + esc(c.segmento || '—') + '</td>' +
         '<td>' + esc([c.cidade, c.uf].filter(Boolean).join('/') || '—') +
-        (endereco ? '<span class="tiny muted">' + esc(endereco.slice(0,100)) + '</span>' : '') + '</td>' +
+        (endereco ? '<span class="tiny muted" title="' + esc(endereco) + '">' + esc(endereco.slice(0,100)) + '</span>' : '') + '</td>' +
         '<td>' + esc(c.relacaoAtual || '—') + '</td>' +
         '<td class="right">' + Store.contatosDaConta(c.id).length + '</td>' +
         '<td class="right">' + ops.length + (valor ? '<span class="tiny muted">' + U.compacto(valor) + '</span>' : '') + '</td>' +
