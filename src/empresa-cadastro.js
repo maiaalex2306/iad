@@ -117,6 +117,15 @@
       .then(d=>aplicarProposta(dlg,cepParaCampos(d),{nome:'ViaCEP',url:'https://viacep.com.br/ws/'+cep+'/json/'}))
       .catch(e=>{if(dlg.isConnected)global.alert('Consulta CEP: '+e.message);});
      return false;
+   }},
+   {rotulo:'Origens dos dados',classe:'ghost',acao:dlg=>{
+     const registro=dlg.empresaFontes||{};
+     const linhas=Object.entries(registro).filter(([campo,v])=>v&&typeof v==='object')
+       .map(([campo,v])=>campo+': '+short(v.provedor||'Fonte não identificada',80)+
+        ' · '+short(v.status||'a conferir',60)+
+        (v.consultadoEm?' · '+String(v.consultadoEm).slice(0,10):''));
+     global.alert(linhas.length?linhas.join('\\n'):'Esta conta ainda não possui fontes rastreadas nos campos cadastrais.');
+     return false;
    }}
   ];
  }
@@ -147,6 +156,9 @@
   return true;
  }
  function ligarAoFormulario(dlg,contas,idAtual=''){
+  const anterior=(contas||[]).find(c=>c&&c.id===idAtual);
+  if(anterior?.fontesCadastro&&typeof anterior.fontesCadastro==='object')
+    dlg.empresaFontes=Object.assign({},anterior.fontesCadastro);
   dlg.addEventListener('submit',e=>{
    if(e.submitter?.value!=='ok')return;
    try{validarDialogo(dlg,contas,idAtual);}
