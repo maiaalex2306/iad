@@ -8297,11 +8297,23 @@
      uma conta só, e o vendedor só perceberia meses depois. */
   function contaCandidata(lead) {
     const contas = Store.dados().contas;
+    const cnpj=global.IADEmpresaCadastro?.validarCnpj(lead.empresaCnpj)||'';
+    if(cnpj){
+      const exatas=contas.filter(function(c){
+        return global.IADEmpresaCadastro?.validarCnpj(c.cnpj)===cnpj;
+      });
+      if(exatas.length===1)return {conta:exatas[0],porque:'CNPJ exato'};
+      if(exatas.length>1)return null; // duplicidade jurídica requer revisão humana
+    }
 
     const dominio = dominioDe(lead.empresaDominio || lead.empresaSite);
     if (dominio) {
       const porSite = contas.filter(function (c) { return dominioDe(c.site) === dominio; })[0];
-      if (porSite) return { conta: porSite, porque: 'mesmo site: ' + dominio };
+      if (porSite) {
+        const outro=global.IADEmpresaCadastro?.validarCnpj(porSite.cnpj)||'';
+        if(!cnpj||!outro||cnpj===outro)
+          return { conta: porSite, porque: 'mesmo site: ' + dominio };
+      }
     }
 
     /* Lead sem empresa: a conta nasce com o nome da pessoa. Sem isto, a
@@ -8320,7 +8332,8 @@
     const alvo = achatarNome(lead.empresa);
     if (!alvo) return null;
     const porNome = contas.filter(function (c) {
-      return mesmoNomeDeEmpresa(alvo, achatarNome(c.nome));
+      const outro=global.IADEmpresaCadastro?.validarCnpj(c.cnpj)||'';
+      return (!cnpj||!outro||cnpj===outro)&&mesmoNomeDeEmpresa(alvo, achatarNome(c.nome));
     });
     /* Duas contas com nome compatível é ambiguidade, não achado. Escolher a
        primeira seria escolher pela ordem de cadastro, que não quer dizer
@@ -8461,6 +8474,33 @@
      quando não é. Sem janela e sem digitação: o que não veio do LinkedIn fica
      em branco para o vendedor completar depois — melhor um campo vazio do que
      um palpite virando fato no painel. */
+  /* RI-47: somente chaves explicitamente corporativas do LH/LinkLeads.
+     Telefone e localização da PESSOA não viram dados da EMPRESA. */
+  function corporativosDoLead(lead) {
+    const E=global.IADEmpresaCadastro;
+    const uf=String(lead.empresaUF||'').trim().toUpperCase();
+    return {
+      cnpj:E?.validarCnpj(lead.empresaCnpj)||'',
+      cep:E?.validarCep(lead.empresaCep)||'',
+      logradouro:String(lead.empresaLogradouro||'').trim().slice(0,200),
+      numero:String(lead.empresaNumero||'').trim().slice(0,40),
+      complemento:String(lead.empresaComplemento||'').trim().slice(0,140),
+      bairro:String(lead.empresaBairro||'').trim().slice(0,140),
+      uf:/^[A-Z]{2}$/.test(uf)?uf:'',
+      codigoIbge:String(lead.empresaCodigoIbge||'').replace(/\\D/g,'').slice(0,7),
+      telefone:E?.telefoneBrasil(lead.empresaTelefone)||''
+    };
+  }
+  function fontesCorporativas(fonte,campos,anteriores) {
+    const out=Object.assign({},anteriores||{});
+    for(const key of Object.keys(campos)){
+      if(!campos[key]||out[key])continue;
+      out[key]={provedor:fonte,consultadoEm:new Date().toISOString(),
+        status:'declarado_nao_verificado'};
+    }
+    return out;
+  }
+
   function importarUmLead(lead, segmento) {
     /* Sem empresa, a conta ainda precisa de um nome — e o que ela NÃO pode é
        ter cara de empresa. "Contato Fabio Alves" parecia razão social num
@@ -8470,17 +8510,19 @@
     if (segmento) Store.criarNoCatalogo('segmentos', { nome: segmento });
 
     /* ---------- a empresa ---------- */
+    const corporativos=corporativosDoLead(lead);
+    const fonteCorp=lead.origem==='linkleads'?'LinkLeads':'Linked Helper';
     let conta = contaJaExistente(lead);
     const ehContaNova = !conta;
     if (!conta) {
-      conta = Store.criarConta({
+      conta = Store.criarConta(Object.assign({
         nome: nome, segmento: segmento || '',
         site: lead.empresaSite || '', cidade: lead.empresaCidade || '',
-        /* A descrição do LinkedIn é a matéria-prima do segmento e do insight.
-           Descartá-la obrigava a IA a reclassificar a empresa do zero mais
-           tarde, sem nada além do nome. */
+        /* O texto do LinkedIn serve para contexto, não para atribuir CNPJ. */
         descricao: lead.empresaDescricao || ''
-      });
+      },corporativos,{
+        fontesCadastro:fontesCorporativas(fonteCorp,corporativos)
+      }));
     } else {
       /* Só o que está vazio. O vendedor que corrigiu o nome da empresa ou
          escolheu outro segmento não pode ver a próxima leitura desfazer
@@ -8489,6 +8531,15 @@
       if (!conta.site && lead.empresaSite) conta.site = lead.empresaSite;
       if (!conta.cidade && lead.empresaCidade) conta.cidade = lead.empresaCidade;
       if (!conta.descricao && lead.empresaDescricao) conta.descricao = lead.empresaDescricao;
+      const antesCorp={};
+      Object.keys(corporativos).forEach(function(k){antesCorp[k]=conta[k];});
+      if(completarEmBranco(conta,corporativos)){
+        const novos={};
+        Object.keys(corporativos).forEach(function(k){
+          if(!antesCorp[k]&&conta[k])novos[k]=conta[k];
+        });
+        conta.fontesCadastro=fontesCorporativas(fonteCorp,novos,conta.fontesCadastro);
+      }
     }
 
     /* ---------- o contato ---------- */
