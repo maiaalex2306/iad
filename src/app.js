@@ -3129,6 +3129,7 @@
         if (depois) depois(nova);
       }, function(dlg) {
         dialogoEmpresa=dlg;
+        dlg.classList.add('iad-empresa-dialog');
         global.IADEmpresaCadastro?.ligarAoFormulario(dlg,Store.dados().contas);
       }, function () { if (depois) depois(null); },
       global.IADEmpresaCadastro?.extras()||[]);
@@ -3148,6 +3149,7 @@
         render();
       },function(dlg) {
         dialogoEmpresa=dlg;
+        dlg.classList.add('iad-empresa-dialog');
         global.IADEmpresaCadastro?.ligarAoFormulario(dlg,Store.dados().contas,id);
       },null,global.IADEmpresaCadastro?.extras()||[]);
     },
