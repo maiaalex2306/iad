@@ -6317,15 +6317,24 @@
   function listaEmpresas(est) {
     const abertasPorConta = oportunidadesAbertasPorConta(est.oportunidades);
     const linhas = est.contas.filter(function (c) {
-      return combina(c.nome) || combina(c.razaoSocial) || combina(c.cnpj) || combina(c.segmento) || combina(c.cidade);
+      return [c.nome,c.razaoSocial,c.cnpj,c.segmento,c.cidade,c.uf,
+        c.cep,c.logradouro,c.bairro,c.telefone].some(combina);
     }).map(function (c) {
       const ops = abertasPorConta.get(c.id) || [];
       const valor = ops.reduce(function (s, o) { return s + (o.valor || 0); }, 0);
+      const rua = [c.logradouro,c.numero].filter(Boolean).join(', ');
+      const endereco = [rua,c.bairro,c.cep ? 'CEP '+c.cep : ''].filter(Boolean).join(' · ');
+      const contato = String(c.telefone||'').replace(/\\D/g,'');
       return '<tr><td><strong>' + esc(c.nome) + '</strong>' +
         (c.razaoSocial ? '<span class="tiny muted">' + esc(c.razaoSocial) + '</span>' : '') +
-        (c.cnpj ? '<span class="tiny muted">' + esc(c.cnpj) + '</span>' : '') + '</td>' +
+        (c.cnpj ? '<span class="tiny muted">CNPJ: ' + esc(c.cnpj) + '</span>' : '') +
+        (c.telefone ? '<span class="tiny muted">Telefone: ' +
+          (contato.length>=10 && contato.length<=13
+            ? '<a href="tel:+' + esc(contato.startsWith('55')?contato:'55'+contato) + '">' + esc(c.telefone) + '</a>'
+            : esc(c.telefone)) + '</span>' : '') + '</td>' +
         '<td>' + esc(c.segmento || '—') + '</td>' +
-        '<td>' + esc([c.cidade, c.uf].filter(Boolean).join('/') || '—') + '</td>' +
+        '<td>' + esc([c.cidade, c.uf].filter(Boolean).join('/') || '—') +
+        (endereco ? '<span class="tiny muted">' + esc(endereco.slice(0,100)) + '</span>' : '') + '</td>' +
         '<td>' + esc(c.relacaoAtual || '—') + '</td>' +
         '<td class="right">' + Store.contatosDaConta(c.id).length + '</td>' +
         '<td class="right">' + ops.length + (valor ? '<span class="tiny muted">' + U.compacto(valor) + '</span>' : '') + '</td>' +
