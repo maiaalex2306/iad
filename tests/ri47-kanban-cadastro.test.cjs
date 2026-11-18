@@ -23,24 +23,24 @@ const etapaCodigo=source.slice(start,end);
 const P={ETAPAS:['Prospecção','Conexão','Diagnóstico','Benefícios','Proposta','Validação','Fechamento','Venda']};
 const compact=n=>String(n);
 const montar=new Function('P','U','esc','tiraDecisao','estaLendo','tarjaDeAtraso','tarjaDeConversas','obterLimites',
- 'const TAMANHO_LOTE_KANBAN=8;let limitesKanban=obterLimites();\n'+etapaCodigo+
+  'const TAMANHO_LOTE_KANBAN='+Number(source.match(/const TAMANHO_LOTE_KANBAN = (\d+);/)?.[1])+';let limitesKanban=obterLimites();\n'+etapaCodigo+
  '\nreturn (r,t)=>{limitesKanban=obterLimites();return kanban(r,t);};');
 const kanban=montar(P,{compacto:compact},String,()=>'',()=>false,()=>'',()=>'',()=>limitePorEtapa);
 test('Kanban não esconde a Frimesa por causa de centenas de cartões em Conexão',()=>{
  const todos=[...Array.from({length:312},(_,i)=>row('Conexão',i)),...Array.from({length:8},(_,i)=>row('Diagnóstico',i))];
  const html=kanban(todos,todos);
  assert.match(html,/Frimesa — origem LH/);
- assert.match(html,/Exibindo 8 de 8/);
- assert.match(html,/Exibindo 8 de 312/);
+ assert.match(html,/Mostrando 8 de 8/);
+ assert.match(html,/Mostrando 12 de 312/);
  assert.match(html,/pipelineMaisKanban\('Conexão'\)/);
 });
 test('Expansão de uma coluna não expande as outras',()=>{
  limitePorEtapa=Object.create(null);
  const rows=[...Array.from({length:20},(_,i)=>row('Conexão',i)),...Array.from({length:17},(_,i)=>row('Diagnóstico',i))];
- const first=kanban(rows,rows);assert.match(first,/Exibindo 8 de 17/);
+ const first=kanban(rows,rows);assert.match(first,/Mostrando 12 de 17/);
  limitePorEtapa['Diagnóstico']=16;
  const next=kanban(rows,rows);
- assert.match(next,/Exibindo 16 de 17/);assert.match(next,/Exibindo 8 de 20/);
+ assert.match(next,/Mostrando 16 de 17/);assert.match(next,/Mostrando 12 de 20/);
 });
 test('Busca por uma empresa preserva resultado da etapa',()=>{
  const rows=[row('Diagnóstico',0)];
@@ -79,9 +79,11 @@ test('Duplicidade de CNPJ interrompe Salvar sem perder o diálogo',()=>{
 test('Arquivos do shell e banco possuem os novos campos',()=>{
  const index=read('index.html'),worker=read('sw.js'),config=read('src/config.js');
  assert.match(index,/src\/empresa-cadastro\.js/);
- assert.match(worker,/iad-crm-v286\.108/);
+ const numero=config.match(/numero:\s*'(v286\.\d+)'/)?.[1];
+ assert.ok(numero,'versão do aplicativo declarada');
+ assert.ok(worker.includes('iad-crm-'+numero),'Service Worker com versão divergente');
  assert.match(worker,/src\/empresa-cadastro\.js/);
- assert.match(config,/v286\.108/);
+ assert.ok(Number(numero.split('.').at(-1))>=108,'cadastro exige release >=v286.108');
  const sql=read('nuvem/ri47-cadastro-endereco.sql');
  for(const col of ['cep','logradouro','numero','complemento','bairro','codigo_ibge','fontes_cadastro'])
   assert.ok(sql.includes('ADD COLUMN IF NOT EXISTS '+col));
