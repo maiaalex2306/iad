@@ -124,7 +124,7 @@
        .map(([campo,v])=>campo+': '+short(v.provedor||'Fonte não identificada',80)+
         ' · '+short(v.status||'a conferir',60)+
         (v.consultadoEm?' · '+String(v.consultadoEm).slice(0,10):''));
-     global.alert(linhas.length?linhas.join('\\n'):'Esta conta ainda não possui fontes rastreadas nos campos cadastrais.');
+     global.alert(linhas.length?linhas.join('\n'):'Esta conta ainda não possui fontes rastreadas nos campos cadastrais.');
      return false;
    }}
   ];
