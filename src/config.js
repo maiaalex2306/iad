@@ -35,7 +35,7 @@ window.IADConfig = {
    do cache, que é o que está GUARDADO no aparelho; aqui é o que está RODANDO.
    Quando os dois discordam, o navegador está no meio de uma troca, e saber
    disso vale mais do que a coincidência dos dois números. */
-/* RI-01C: ativar somente a análise de contas existentes, sem envios ou gravações. */
+/* RI-46: inteligência da base interna, com triagem explícita auditada por oportunidade. */
 window.IAD_RI_ENABLED = true;
 /* RI-M01: pesquisa externa manual, cota no servidor e importação confirmada pelo vendedor. */
 window.IAD_MARKET_ENABLED = true;
@@ -43,4 +43,4 @@ window.IAD_MARKET_ENABLED = true;
 window.IAD_MARKET_IMPORT_ENABLED = false;
 /* LinkLeads: o menu abre o app desktop (linkleads://); o modo assistido no navegador continua disponível. */
 window.IAD_LINKEDIN_LEADS_ENABLED = true;
-window.IADVersao = { numero: 'v286.106', data: '2026-11-16' };
+window.IADVersao = { numero: 'v286.107', data: '2026-11-18' };

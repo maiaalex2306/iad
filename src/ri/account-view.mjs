@@ -1,12 +1,14 @@
-/* IaD CRM RI-01B — lazy, read-only Inteligência Comercial.
- * Snapshot MUST come from Store.dados() (already authorized).
- * No writes, no remote providers, no automatic action, no decision scoring.
- * DOM strings are displayed with textContent only.
+/* IaD CRM RI-46 — Inteligência Comercial lazy sobre carteira autorizada.
+ * Radar e dossiê são somente leitura; a triagem é uma ação MANUAL explícita
+ * registrada no histórico da oportunidade por App.marcarPistaComercial.
+ * Sem fornecedores externos, movimentação automática ou mudança de IAD.
+ * Textos de dados comerciais entram no DOM apenas via textContent.
  */
 import {buildAccountBriefing} from './account-briefing.mjs';
 import {localBusinessDate} from './portfolio-analytics.mjs';
 import {buildCommercialOpportunityRadar} from './opportunity-radar.mjs';
 import {buildRadarContactIndex} from './radar-contact.mjs';
+import {radarTriageState} from './triage-state.mjs';
 
 // Cache limitado ao snapshot e ao token de sessão/permissão/revisão do Store.
  // Um logout, mudança de gestor/filtro ou escrita altera o token e invalida.
@@ -67,7 +69,7 @@ export function mountAccountIntelligence({root,snapshot,scope,getScopeToken}={})
  const doc=root.ownerDocument;
  const radar=buildCachedCommercialRadar({snapshot,scope,asOf:localBusinessDate()});
  let contactForRadar=()=>null,contactIndexSignature='';
- let active=true,selected='pistas',searchLimit=8,visiblePistas=12,orderPistas='recente',onlyToday=false;
+ let active=true,selected='pistas',searchLimit=8,visiblePistas=12,orderPistas='recente',onlyToday=false,onlyTreated=false;
  const valid=()=>{
   if(!active||!root.isConnected)return false;
   try{return getScopeToken()===scope.token;}catch{return false;}
@@ -132,6 +134,8 @@ export function mountAccountIntelligence({root,snapshot,scope,getScopeToken}={})
  const count=add(tools,'span','','iad-ri-radar-count');
  const today=add(tools,'button','','iad-ri-radar-today');
  today.type='button';today.setAttribute('aria-pressed','false');
+ const treatedToggle=add(tools,'button','Ver tratadas','iad-ri-radar-today');
+ treatedToggle.type='button';treatedToggle.setAttribute('aria-pressed','false');
  const sortLabel=add(tools,'label','Ordenar: ','iad-ri-radar-order');
  const sort=add(sortLabel,'select');
  for(const opt of [{value:'recente',name:'Mais recentes'},{value:'prioridade',name:'Maior prioridade'}]){
@@ -142,6 +146,33 @@ export function mountAccountIntelligence({root,snapshot,scope,getScopeToken}={})
  const morePistas=add(spotlight,'button','Ver mais pistas','iad-ri-radar-more');
  morePistas.type='button';
  const info=add(spotlight,'p','Hipóteses de trabalho — cada indicação exige validação pelo responsável antes de contato ou proposta.','iad-ri-note');
+ /* Uma pista concluída permanece no histórico da oportunidade, não em uma
+    lista local: assim a conclusão sincroniza e pode ser revertida. */
+ const treatedRecords=[];
+ const allowedAccounts=new Map();
+ for(const a of snapshot.contas||[]){
+  if(allowedAccount(a,scope))allowedAccounts.set(JSON.stringify([a.tenantId,a.id]),a);
+ }
+ for(const op of snapshot.oportunidades||[]){
+  if(!op||!id(op.id)||!id(op.contaId)||!scopedOp(op))continue;
+  const state=radarTriageState(op);
+  if(!state.treated)continue;
+  const account=allowedAccounts.get(JSON.stringify([op.tenantId,op.contaId]));
+  if(!account)continue;
+  treatedRecords.push({
+   kind:'pistas',tenantId:op.tenantId,accountId:op.contaId,
+   accountName:str(account.nome||account.razaoSocial,'Conta sem nome'),
+   segment:str(account.segmento),headline:str(op.titulo,'Oportunidade trabalhada'),
+   evidence:'Triagem registrada em '+(state.at?state.at.slice(0,10):'data não informada')+
+    '. O histórico comercial original permanece na oportunidade.',
+   action:'Etapa atual no Pipeline: '+str(op.etapa,'não informada')+
+    '. Reabra a pista aqui se uma nova análise for necessária.',
+   status:'tratada',treated:true,priority:0,
+   enteredAt:state.at?state.at.slice(0,10):'',
+   date:state.at?state.at.slice(0,10):'',
+   sourceOpportunityId:op.id
+  });
+ }
  const sortByRecency=(a,b)=>
   (b.enteredAt||b.date||'').localeCompare(a.enteredAt||a.date||'')||
   b.priority-a.priority||(b.date||'').localeCompare(a.date||'')||
@@ -173,15 +204,16 @@ export function mountAccountIntelligence({root,snapshot,scope,getScopeToken}={})
   htitle.textContent=g.title;
   hdesc.textContent=g.desc;
   info.textContent=selected==='pistas'
-   ?'Data de entrada no CRM e data da fala são diferentes. Registros novos sem sinal explícito aparecem como “REVISAR”, não como intenção de compra comprovada. Só as falas validadas são hipóteses comerciais.'
+   ?(onlyTreated?'Pistas retiradas manualmente da fila, com histórico preservado. Reabra uma pista para devolvê-la à análise.':'Data de entrada no CRM e data da fala são diferentes. Registros novos sem sinal explícito aparecem como “REVISAR”, não como intenção de compra comprovada. Só as falas validadas são hipóteses comerciais.')
    :'Hipóteses de trabalho — cada indicação exige validação pelo responsável antes de contato ou proposta.';
   const all=radar.groups[selected];
-  const ordered=selected==='pistas'?[...all].sort(orderPistas==='recente'?sortByRecency:
+  const fonte=selected==='pistas'&&onlyTreated?treatedRecords:all;
+  const ordered=selected==='pistas'?[...fonte].sort(orderPistas==='recente'?sortByRecency:
    (a,b)=>b.priority-a.priority||sortByRecency(a,b)):all;
-  const items=selected==='pistas'&&onlyToday?
+  const items=selected==='pistas'&&onlyToday&&!onlyTreated?
    ordered.filter(x=>x.enteredAt===radar.asOf):ordered;
   const displayed=selected==='pistas'?items.slice(0,visiblePistas):items;
-  if(selected==='pistas'){
+  if(selected==='pistas'&&!onlyTreated){
    // Indexar apenas cartões efetivamente visíveis, mesmo com milhares de pistas.
    const signature=displayed.map(item=>JSON.stringify([item.tenantId,item.sourceOpportunityId]))
     .sort().join('|');
@@ -193,18 +225,22 @@ export function mountAccountIntelligence({root,snapshot,scope,getScopeToken}={})
   tools.hidden=selected!=='pistas';
   if(selected==='pistas'){
    const todayCount=all.filter(x=>x.enteredAt===radar.asOf).length;
+   today.hidden=onlyTreated;
+   treatedToggle.textContent=onlyTreated?'Voltar à fila ativa ('+all.length+')':'Ver tratadas ('+treatedRecords.length+')';
+   treatedToggle.setAttribute('aria-pressed',String(onlyTreated));
+   treatedToggle.classList.toggle('active',onlyTreated);
    today.textContent='Entradas de hoje ('+todayCount+')';
    today.setAttribute('aria-pressed',String(onlyToday));
    today.classList.toggle('active',onlyToday);
-   count.textContent='Exibindo '+displayed.length+' de '+items.length+' registros';
+   count.textContent='Exibindo '+displayed.length+' de '+items.length+(onlyTreated?' tratadas':' registros');
   }
   morePistas.hidden=selected!=='pistas'||displayed.length>=items.length;
   if(!morePistas.hidden)morePistas.textContent='Ver mais '+Math.min(12,items.length-displayed.length)+' registros';
   const fragment=doc.createDocumentFragment();
   if(!items.length){
    const empty=add(fragment,'div','','iad-ri-radar-empty');
-   add(empty,'strong','Nenhuma oportunidade comprovável com os registros atuais');
-   add(empty,'p',g.empty);
+   add(empty,'strong',onlyTreated?'Nenhuma pista marcada como trabalhada':'Nenhuma oportunidade comprovável com os registros atuais');
+   add(empty,'p',onlyTreated?'Quando uma pista for tratada, ela ficará arquivada aqui e poderá ser reaberta.':g.empty);
    if(selected==='news'||selected==='growth'){
     const link=add(empty,'button','Ir para Inteligência de Mercado','iad-ri-primary-small');
     link.type='button';link.addEventListener('click',()=>{
@@ -216,10 +252,10 @@ export function mountAccountIntelligence({root,snapshot,scope,getScopeToken}={})
    const card=add(fragment,'article','','iad-ri-radar-card');
    const top=add(card,'div','','iad-ri-radar-card-head');
    const copy=add(top,'div','','iad-ri-radar-card-copy');
-   add(copy,'span',item.status==='verificar_fonte'?'FONTE A CONFERIR':item.status==='revisao'?'NOVO REGISTRO · REVISAR':'HIPÓTESE COMERCIAL','iad-ri-radar-status');
+   add(copy,'span',item.treated?'TRABALHADA · FORA DA FILA':item.status==='verificar_fonte'?'FONTE A CONFERIR':item.status==='revisao'?'NOVO REGISTRO · REVISAR':'HIPÓTESE COMERCIAL','iad-ri-radar-status');
    add(copy,'h3',item.headline,'iad-ri-radar-card-title');
    add(copy,'p',item.accountName+(item.segment?' · '+item.segment:''),'iad-ri-radar-account');
-   if(selected==='pistas'){
+   if(selected==='pistas'&&!item.treated){
     if(item.enteredAt)
      add(copy,'small','Entrada no CRM: '+item.enteredAt,'iad-ri-radar-entered');
     const person=contactForRadar(item);
@@ -245,7 +281,7 @@ export function mountAccountIntelligence({root,snapshot,scope,getScopeToken}={})
     }
    }
    const detail=add(card,'div','','iad-ri-radar-evidence');
-   add(detail,'strong','Por que apareceu');
+   add(detail,'strong',item.treated?'Registro da triagem':'Por que apareceu');
    add(detail,'p',item.evidence);
    if(selected==='pistas'&&Array.isArray(item.relatedSignals)&&item.relatedSignals.length){
     const section=add(detail,'section','','iad-ri-related-intents');
@@ -277,7 +313,7 @@ export function mountAccountIntelligence({root,snapshot,scope,getScopeToken}={})
       (item.date?' · Data da fala/registro: '+item.date:''),'iad-ri-radar-source-label');
    }
    const next=add(card,'div','','iad-ri-radar-next');
-   add(next,'strong','Próxima ação recomendada');
+   add(next,'strong',item.treated?'Situação no Pipeline':'Próxima ação recomendada');
    add(next,'p',item.action);
    const actions=add(card,'div','','iad-ri-radar-actions');
    if(item.accountId){
@@ -287,6 +323,16 @@ export function mountAccountIntelligence({root,snapshot,scope,getScopeToken}={})
      const deal=add(actions,'button',selected==='pistas'?'Abrir registro':'Abrir relacionamento','iad-ri-link');
      deal.type='button';deal.addEventListener('click',()=>openOpportunity(item));
     }
+   }
+   if(selected==='pistas'&&item.sourceOpportunityId){
+    const mark=add(actions,'button',item.treated?'Reabrir na fila':'Marcar como trabalhada','iad-ri-link');
+    mark.type='button';
+    mark.addEventListener('click',()=>{
+     if(!secure())return;
+     const app=doc.defaultView?.App;
+     if(typeof app?.marcarPistaComercial!=='function')return;
+     app.marcarPistaComercial(item.tenantId,item.accountId,item.sourceOpportunityId,!item.treated);
+    });
    }
    if(item.sourceUrl){
     const link=add(actions,'a','Conferir notícia original','iad-ri-radar-source');
@@ -301,11 +347,12 @@ export function mountAccountIntelligence({root,snapshot,scope,getScopeToken}={})
   btn.type='button';btn.dataset.radar=group.id;
   add(btn,'strong',group.title);
   add(btn,'small',group.desc);
-  btn.addEventListener('click',()=>{if(!secure())return;selected=group.id;visiblePistas=12;renderGroup();});
+  btn.addEventListener('click',()=>{if(!secure())return;selected=group.id;visiblePistas=12;onlyTreated=false;renderGroup();});
   navButtons.set(group.id,btn);
  }
  sort.addEventListener('change',()=>{if(!secure())return;orderPistas=sort.value==='prioridade'?'prioridade':'recente';visiblePistas=12;renderGroup();});
  today.addEventListener('click',()=>{if(!secure())return;onlyToday=!onlyToday;visiblePistas=12;renderGroup();});
+ treatedToggle.addEventListener('click',()=>{if(!secure())return;onlyTreated=!onlyTreated;onlyToday=false;visiblePistas=12;renderGroup();});
  morePistas.addEventListener('click',()=>{if(!secure())return;visiblePistas+=12;renderGroup();});
  const explorer=add(root,'section','','iad-ri-explorer');
  add(explorer,'h2','Investigar uma conta específica','iad-ri-section-title');

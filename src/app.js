@@ -67,10 +67,10 @@
       hash: '#/inteligencia', ico: '🧠', nome: 'Inteligência Comercial',
       render: function () {
         return '<section class="card"><h1>Inteligência Comercial</h1>' +
-          '<p class="small muted">Análise de contas existentes — somente leitura, com dados já autorizados.</p>' +
+          '<p class="small muted">Análise de contas existentes, com triagem manual das pistas e histórico preservado.</p>' +
           '<div id="iad-ri-root" aria-live="polite">Preparando a visualização...</div></section>';
       },
-      ajuda: 'Consulta sob demanda da carteira, com perguntas para reuniões e lacunas de informação; não envia mensagens nem altera negócios.'
+      ajuda: 'Consulta das contas com pistas e ações recomendadas. Permite marcar uma pista como trabalhada sem excluir ou mover negócios automaticamente.'
     }] : []),
     ...(global.IAD_MARKET_ENABLED === true ? [{
       hash: '#/mercado', ico: '🌐', nome: 'Inteligência de Mercado',
@@ -2366,6 +2366,50 @@
     filtrarHistorico: function (tipo) { V.definirFiltroHistorico(tipo); render(); },
     filtrarHoje: function (chave) { V.definirFiltroHoje(chave); render(); },
     porPaginaHoje: function (n) { V.definirPorPaginaHoje(n); render(); },
+
+    /* RI-46: concluir a triagem não significa excluir nem avançar a etapa.
+       O evento de sistema usa o JSONB existente da oportunidade, que segue
+       o CAS normal; não há coluna ou fila paralela para se perder entre PCs. */
+    marcarPistaComercial: function (tenantId, contaId, oportunidadeId, tratar) {
+      if(location.hash!=='#/inteligencia'||!A.ehGestor()||
+        typeof tenantId!=='string'||typeof contaId!=='string'||
+        typeof oportunidadeId!=='string'||typeof tratar!=='boolean')
+        return false;
+      const usuario=A.atual();
+      if(!usuario)return false;
+      const visiveis=Store.dados(),op=(visiveis.oportunidades||[]).find(function(o){
+        return o&&o.id===oportunidadeId&&o.tenantId===tenantId&&o.contaId===contaId;
+      });
+      const conta=(visiveis.contas||[]).find(function(c){
+        return c&&c.id===contaId&&c.tenantId===tenantId;
+      });
+      if(!op||!conta) {
+        alert('Oportunidade não encontrada ou fora do seu escopo. Nada foi alterado.');
+        return false;
+      }
+      let aplicado=false;
+      for(const evento of Array.isArray(op.eventos)?op.eventos:[]){
+        if(!evento||evento.tipo!=='sistema')continue;
+        if(evento.codigo==='iad_ri_pista_trabalhada'){aplicado=true;break;}
+        if(evento.codigo==='iad_ri_pista_reaberta'){aplicado=false;break;}
+      }
+      if(aplicado===tratar)return false;
+      const texto=tratar
+        ? 'Marcar esta pista como trabalhada?\\n\\nEla sairá da lista ativa da Inteligência Comercial, mas a oportunidade continuará no Pipeline (etapa: '+(op.etapa||'não informada')+'). O histórico será preservado.'
+        : 'Reabrir esta pista na lista ativa da Inteligência Comercial? A oportunidade e sua etapa atual não serão alteradas.';
+      if(!window.confirm(texto))return false;
+      const evento={
+        id:Store.uid('evt'),tipo:'sistema',data:Store.hoje(),
+        codigo:tratar?'iad_ri_pista_trabalhada':'iad_ri_pista_reaberta',
+        titulo:tratar?'Pista da Inteligência Comercial trabalhada; permanece no Pipeline':
+          'Pista da Inteligência Comercial reaberta para análise',
+        registradoEm:new Date().toISOString(),
+        registradoPor:usuario.id,etapaDestino:op.etapa||''
+      };
+      Store.atualizarOportunidade(op.id,{eventos:[evento,...(Array.isArray(op.eventos)?op.eventos:[])]});
+      render();
+      return true;
+    },
 
     /* ---------------- Análise das pendências e ações ----------------
        Duas etapas, nesta ordem, e a ordem é o desenho: primeiro relê os
