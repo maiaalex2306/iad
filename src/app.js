@@ -8347,7 +8347,10 @@
        resolve o que sobra — nomes que nem o site nem a grafia aproximam. */
     if (lead.contaSugeridaIA) {
       const daIA = Store.conta(lead.contaSugeridaIA);
-      if (daIA) return { conta: daIA, porque: lead.porqueContaIA || 'reconhecida pelo assistente' };
+      const cnpjIA=global.IADEmpresaCadastro?.validarCnpj(daIA?.cnpj)||'';
+      /* Sugestão por nome nunca pode fundir CNPJs explicitamente distintos. */
+      if (daIA&&(!cnpj||!cnpjIA||cnpj===cnpjIA))
+        return { conta: daIA, porque: lead.porqueContaIA || 'reconhecida pelo assistente' };
     }
     return null;
   }
