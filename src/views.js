@@ -2095,7 +2095,7 @@
 
   let modoPipeline = 'lista';
   const TAMANHO_LOTE_PIPELINE = 48;
-  const TAMANHO_LOTE_KANBAN = 8;
+  const TAMANHO_LOTE_KANBAN = 12;
   let limitePipeline = TAMANHO_LOTE_PIPELINE;
   let limitesKanban = Object.create(null);
   function maisPipeline() { limitePipeline += TAMANHO_LOTE_PIPELINE; }
@@ -2451,7 +2451,7 @@
       '<div class="row chips">' +
       '<span class="chip forte">' + resumos.length +
       (resumos.length === 1 ? ' negociação' : ' negociações') +
-      (resumos.length !== total ? ' de ' + total : '') + ' · ' + U.moeda(valor) + '</span>' +
+      (resumos.length !== total ? ' de ' + total + ' no recorte (demais fora dos filtros)' : '') + ' · ' + U.moeda(valor) + '</span>' +
       chipsDoPipeline() + '</div>';
   }
 
@@ -2670,24 +2670,29 @@
       const grupo = visiveis.get(etapa), contagem = quantidades.get(etapa);
       const cartoes = grupo.map(function (r) { return cartaoKanban(r, etapas); }).join('') ||
         '<div class="vazio tiny">—</div>';
-      const restantes = contagem.total - grupo.length;
+      const restantes = Math.max(0,contagem.total - grupo.length);
+      const totalEtapa = contagem.total;
+      const verMaisNoTopo = restantes > 0
+        ? '<button type="button" class="btn ghost mini kanban-mais" onclick="App.pipelineMaisKanban(\'' +
+          etapa + '\')" title="Mostrar mais negociações nesta etapa">+ ' +
+          Math.min(TAMANHO_LOTE_KANBAN,restantes) + ' cartões</button>' : '';
       const paginacao = restantes > 0
         ? '<button class="btn ghost mini kanban-mais" onclick="App.pipelineMaisKanban(\'' +
           etapa + '\')">Mostrar mais ' + Math.min(TAMANHO_LOTE_KANBAN, restantes) +
           ' nesta etapa · ' + restantes + ' ocultas</button>'
         : '';
-      const resumoVisibilidade = contagem.total > 0
-        ? '<div class="tiny muted kanban-visibilidade">Exibindo ' + grupo.length +
-          ' de ' + contagem.total + '</div>' : '';
+      const resumoVisibilidade = '';
       return '<section class="coluna" ondragover="event.preventDefault()" ondrop="App.soltar(event,\'' + etapa + '\')">' +
         '<header><div class="row" style="gap:6px"><strong>' + esc(etapa) + '</strong><span class="espaco"></span>' +
         '<button class="mais" title="Cadastro rápido nesta etapa" onclick="App.cadastroRapido(\'' + etapa + '\')">+</button></div>' +
-        '<span class="tiny muted">' + contagem.total + ' · ' + U.compacto(contagem.valor) + '</span></header>' +
+        '<span class="tiny muted" title="Total de negociações nesta etapa, após filtros">' + totalEtapa + ' negociações · ' + U.compacto(contagem.valor) + '</span>' +
+        '<div class="tiny muted kanban-visibilidade">' + (totalEtapa ? 'Mostrando '+grupo.length+' de '+totalEtapa : 'Sem negociações') + '</div>' +
+        verMaisNoTopo + '</header>' +
         '<div class="cartoes">' + cartoes + '</div>' + resumoVisibilidade + paginacao + '</section>';
     }).join('');
 
     return '<div class="kanban">' + colunas + '</div>' +
-      '<p class="tiny muted" style="margin-top:8px">Arraste o cartão para mudar a etapa, ou use as setas. A mudança fica registrada no histórico.</p>';
+      '<p class="tiny muted" style="margin-top:8px">Cada etapa mostra inicialmente até 12 cartões. O número na coluna representa TODAS as negociações que atendem aos filtros, inclusive as que estão mais abaixo. Use “+ cartões” para carregar mais; a busca pesquisa o conjunto inteiro. O status “Em andamento” não inclui negócios encerrados. Arraste o cartão ou use as setas para mudar de etapa.</p>';
   }
 
   function cartaoKanban(r, etapas) {
