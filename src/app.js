@@ -2598,6 +2598,7 @@
     paginaHoje: function (n) { V.definirPaginaHoje(n); window.scrollTo(0, 0); render(); },
     modoPipeline: function (modo) { V.definirModoPipeline(modo); render(); },
     pipelineMais: function () { V.maisPipeline(); render(); },
+    pipelineMaisKanban: function (etapa) { V.maisKanban(etapa); render(); },
     revisaoMais: function () { V.maisRevisao(); render(); },
     abaCadastro: function (aba) { V.definirAbaCadastro(aba); render(); window.scrollTo(0, 0); },
     /* Trocar de aba é trocar de lista: aí sim começa do topo. */
