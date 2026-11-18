@@ -2672,7 +2672,10 @@
         '<div class="vazio tiny">—</div>';
       const restantes = Math.max(0,contagem.total - grupo.length);
       const totalEtapa = contagem.total;
-      const verMaisNoTopo = restantes > 0 ? '<button type="button" class="btn ghost mini kanban-mais" onclick="App.pipelineMaisKanban(\\'' + etapa + '\\')" title="Mostrar mais negociações nesta etapa">+ ' + Math.min(TAMANHO_LOTE_KANBAN,restantes) + ' cartões</button>' : '';
+      const verMaisNoTopo = restantes > 0
+        ? '<button type="button" class="btn ghost mini kanban-mais" onclick="App.pipelineMaisKanban(\'' +
+          etapa + '\')" title="Mostrar mais negociações nesta etapa">+ ' +
+          Math.min(TAMANHO_LOTE_KANBAN,restantes) + ' cartões</button>' : '';
       const paginacao = restantes > 0
         ? '<button class="btn ghost mini kanban-mais" onclick="App.pipelineMaisKanban(\'' +
           etapa + '\')">Mostrar mais ' + Math.min(TAMANHO_LOTE_KANBAN, restantes) +
