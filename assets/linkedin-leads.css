@@ -1,0 +1,38 @@
+/* CSS exclusivamente da rota LinkedIN Leads. Sem novos pacotes ou bloqueios do shell. */
+#iad-linkedin-root { display:grid; gap:14px; }
+#iad-linkedin-root > .card { margin:0; }
+#iad-linkedin-root .iad-linkedin-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+#iad-linkedin-root .iad-linkedin-field { display:flex; flex-direction:column; min-width:0; gap:6px; margin:12px 0; }
+#iad-linkedin-root .iad-linkedin-label { font-size:.89rem; font-weight:600; }
+#iad-linkedin-root .iad-linkedin-field input,
+#iad-linkedin-root .iad-linkedin-field textarea,
+#iad-linkedin-root .iad-linkedin-field select,
+#iad-linkedin-root .iad-linkedin-result {
+  display:block; box-sizing:border-box; width:100%; border:1px solid var(--borda,#c9ced7);
+  border-radius:8px; padding:10px 12px; color:var(--texto,#20232a);
+  background:var(--fundo,#fff); font:inherit; line-height:1.4;
+}
+#iad-linkedin-root .iad-linkedin-field textarea { resize:vertical; }
+#iad-linkedin-root .iad-linkedin-result { min-height:140px; resize:vertical; margin:10px 0; }
+#iad-linkedin-root .iad-linkedin-buttons { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin:12px 0; }
+#iad-linkedin-root .iad-linkedin-confirm { display:flex; gap:8px; align-items:flex-start; font-size:.9rem; }
+#iad-linkedin-root .iad-linkedin-confirm input { margin-top:3px; }
+@media (max-width:740px) {
+  #iad-linkedin-root .iad-linkedin-grid { grid-template-columns:1fr; }
+  #iad-linkedin-root .iad-linkedin-buttons .btn { width:100%; }
+}
+
+#iad-linkedin-root .iad-linkedin-import-list { display:grid; gap:8px; margin:12px 0; }
+#iad-linkedin-root .iad-linkedin-import-row {
+  display:grid; grid-template-columns:minmax(160px,1.5fr) minmax(160px,1.5fr) minmax(90px,.8fr) auto auto;
+  align-items:center; gap:8px; padding:10px;
+  border:1px solid var(--borda,#c9ced7); border-radius:9px;
+}
+#iad-linkedin-root .iad-linkedin-import-row > * { min-width:0; overflow-wrap:anywhere; }
+#iad-linkedin-root .iad-linkedin-import-row .btn { white-space:nowrap; }
+#iad-linkedin-root .iad-linkedin-import-list + .iad-linkedin-buttons { justify-content:center; }
+#iad-linkedin-root input[type=file] { display:block; padding:10px 0; max-width:100%; }
+@media (max-width:900px) {
+  #iad-linkedin-root .iad-linkedin-import-row { grid-template-columns:1fr 1fr; }
+  #iad-linkedin-root .iad-linkedin-import-row > strong { grid-column:1 / -1; }
+}

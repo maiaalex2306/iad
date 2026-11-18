@@ -1,0 +1,478 @@
+/* LinkedIN Leads Console: interface enxuta, fila local persistente.
+ * Não inspeciona DOM do LinkedIn nem executa curtidas/comentários externos.
+ * Na versão desktop, links abertos são encaminhados ao WebContentsView integrado. */
+import {importLinkedInCsvStream,CSV_MAX_BYTES} from './linkedin-csv-stream.mjs';
+import {openLinkedInQueue,metaOf,saveMeta,addLeadBatch,leadAt,nextPendingLead,putLead,commitLeadAndMeta,deleteCampaign,pageOf} from './linkedin-queue-db.mjs';
+import {linkedinUrl,prepareLinkedInCampaign,campaignText} from './linkedin-comment-core.mjs';
+import {exportLinkedInCampaign,prepareLinkedInCampaignRestore,PORTABLE_MAX_FILE_BYTES} from './linkedin-campaign-portable.mjs';
+
+const STATUS={
+  pendente:'Aguardando',perfil_aberto:'Perfil revisado',post_localizado:'Publicação identificada',
+  curtido:'Curtida confirmada pelo operador',rascunho:'Comentário preparado',confirmado:'Comentário confirmado pelo operador',
+  sem_post:'Sem publicação',descartado:'Ignorado',erro:'Erro de execução'
+};
+const TERMINAL=new Set(['sem_post','descartado','confirmado']);
+const el=(d,t,text='',cls='')=>{const e=d.createElement(t);e.textContent=text;if(cls)e.className=cls;return e;};
+const button=(d,text,fn,alt=false)=>{
+  const e=el(d,'button',text,'btn'+(alt?' alt':''));
+  e.type='button';e.addEventListener('click',fn);return e;
+};
+const scopeEqual=(scope,token,getScopeToken,root)=>root.isConnected&&getScopeToken()===token;
+const limit=(s,n)=>String(s||'').trim().slice(0,n);
+function campaignId(){
+  return 'import-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,12);
+}
+export function mountLinkedInLeads({root,scope,getScopeToken,nuvem}={}){
+  if(!root||!root.ownerDocument||!scope||typeof getScopeToken!=='function')
+    throw new Error('Sessão autorizada de Gestor/Admin exigida.');
+  const d=root.ownerDocument,token=scope.token;
+  // CSS só na rota LinkedIN Leads: mantém a primeira tela do CRM leve.
+  if(!d.getElementById('iad-linkedin-style')){
+    const style=d.createElement('link');
+    style.id='iad-linkedin-style';
+    style.rel='stylesheet';
+    style.href=new URL('assets/linkedin-leads.css',d.baseURI).href;
+    d.head.appendChild(style);
+  }
+  const valid=()=>scopeEqual(scope,token,getScopeToken,root);
+  const ui=el(d,'div','','iad-linkedin-console');
+  const title=el(d,'h2','LinkedIN Leads — Campanhas');
+  const intro=el(d,'p','Importe seu CSV e trabalhe a fila de contatos, com comentários personalizados por IA. A navegação integrada fica disponível somente na versão desktop especializada.','small muted');
+  const account=el(d,'section','','card');
+  account.append(el(d,'h3','1 · LinkedIn'));
+  const login=button(d,'Abrir LinkedIn',()=>{
+    d.defaultView.open('https://www.linkedin.com/login','_blank','noopener,noreferrer');
+  },true);
+  const accInfo=el(d,'p','O login acontece diretamente no LinkedIn; nenhuma senha é fornecida ao CRM. No aplicativo especializado, o LinkedIn aparece na mesma janela.','small muted');
+  account.append(login,accInfo);
+
+  const imports=el(d,'section','','card');
+  imports.append(el(d,'h3','2 · Importar perfis (até 100 MB)'));
+  const help=el(d,'p','Aceita CSV com qualquer cabeçalho ou TXT com um perfil por linha; também reconhece links no meio do texto. Não precisa converter o arquivo nem informar nome ou empresa.','small muted');
+  const file=el(d,'input');file.type='file';file.accept='.csv,.txt,text/csv,text/plain';
+  file.setAttribute('aria-label','Importar CSV ou TXT com perfis do LinkedIn');
+  const progress=el(d,'progress');progress.max=100;progress.value=0;progress.hidden=true;progress.style.width='100%';
+  const importStatus=el(d,'p','Selecione sua planilha para criar uma campanha.','small muted');
+  importStatus.setAttribute('role','status');importStatus.setAttribute('aria-live','polite');
+  const cancel=button(d,'Cancelar importação',()=>{if(abort)abort.abort();},true);cancel.hidden=true;
+  const diagDetails=el(d,'details','','iad-linkedin-diagnostics');diagDetails.hidden=true;
+  const diagTitle=el(d,'summary','Diagnóstico dos perfis rejeitados');
+  const diagText=el(d,'p','','small muted');
+  const diagButton=button(d,'Baixar diagnóstico de rejeições (.csv)',()=>downloadDiagnostics(),true);
+  diagDetails.append(diagTitle,diagText,diagButton);
+  const pastePanel=el(d,'details','','iad-linkedin-paste');
+  pastePanel.append(el(d,'summary','Ou colar lista de perfis'));
+  const paste=el(d,'textarea');
+  paste.rows=4;paste.maxLength=200000;
+  paste.placeholder='https://www.linkedin.com/in/perfil-1/\nhttps://www.linkedin.com/sales/people/...';
+  paste.setAttribute('aria-label','Lista de URLs de perfis do LinkedIn');
+  const pasteButton=button(d,'Importar links colados',()=>void importSelectedFile(
+    new d.defaultView.File([paste.value],'perfis-colados.txt',{type:'text/plain'})),true);
+  pastePanel.append(paste,pasteButton);
+  imports.append(help,file,pastePanel,progress,importStatus,cancel,diagDetails);
+
+  const queue=el(d,'section','','card');
+  queue.append(el(d,'h3','3 · Fila de campanha'));
+  const counts=el(d,'p','Nenhuma campanha carregada.','small muted');counts.setAttribute('role','status');
+  const message=el(d,'p','Aguardando importação.','small muted');
+  message.setAttribute('role','status');message.setAttribute('aria-live','polite');
+  const leadName=el(d,'h3','Nenhum perfil selecionado');
+  const details=el(d,'p','','small muted');
+  const actions=el(d,'div','','iad-linkedin-buttons');
+  const start=button(d,'Preparar próximo perfil',()=>void nextLead(),false);
+  const openProfile=button(d,'Abrir perfil',()=>openUrl(current?.perfil,'profile'),true);
+  const skip=button(d,'Sem post → próximo lead',()=>void finish('sem_post'),true);
+  const interacted=button(d,'Já interagido → próximo',()=>void finish('descartado'),true);
+  const pause=button(d,'Pausar campanha',()=>void togglePause(),true);
+  actions.append(start,openProfile,skip,interacted,pause);
+  const list=el(d,'div','','iad-linkedin-import-list');
+  const transfer=el(d,'details','','iad-linkedin-transfer');
+  transfer.append(el(d,'summary','Transferir campanha entre navegador e aplicativo Windows'));
+  const transferHelp=el(d,'p',
+    'O Chrome e o aplicativo Windows têm armazenamentos diferentes. Exporte a campanha no Chrome e restaure o arquivo no aplicativo. O arquivo contém dados dos leads: guarde-o em local protegido e apague-o após a transferência.',
+    'small muted');
+  const backupButton=button(d,'Exportar campanha (.json)',()=>void exportCampaign(),true);
+  const restoreLabel=el(d,'label','Restaurar campanha (.json)','small muted');
+  const restoreFile=el(d,'input');restoreFile.type='file';restoreFile.accept='.json,application/json';
+  restoreFile.setAttribute('aria-label','Restaurar campanha LinkedIN Leads');
+  restoreLabel.append(restoreFile);
+  const transferStatus=el(d,'p','','small muted');
+  transferStatus.setAttribute('role','status');transferStatus.setAttribute('aria-live','polite');
+  transfer.append(transferHelp,backupButton,restoreLabel,transferStatus);
+  queue.append(counts,leadName,details,actions,message,transfer,list);
+  
+  const postPanel=el(d,'details','','card');
+  postPanel.append(el(d,'summary','Publicação e comentário (revisão)'));
+  const postHelp=el(d,'p','O navegador integrado não extrai publicações automaticamente nesta versão. Informe o link e o texto do post, ou utilize os dados já presentes no CSV.','small muted');
+  const postLabel=el(d,'label','','iad-linkedin-field');
+  postLabel.append(el(d,'span','URL do post','iad-linkedin-label'));
+  const postUrl=el(d,'input');postUrl.type='url';postUrl.placeholder='https://www.linkedin.com/posts/...';postUrl.maxLength=600;
+  postLabel.append(postUrl);
+  const postTextLabel=el(d,'label','','iad-linkedin-field');postTextLabel.append(el(d,'span','Texto da publicação','iad-linkedin-label'));
+  const postText=el(d,'textarea');postText.rows=5;postText.maxLength=6000;postText.placeholder='Cole o texto do post, quando não estiver no CSV';
+  postTextLabel.append(postText);
+  const analyze=button(d,'Analisar post e gerar comentário',()=>void generate());
+  const openPost=button(d,'Abrir publicação',()=>openUrl(postUrl.value,'post'),true);
+  const liked=button(d,'Confirmei curtida',()=>void confirmLike(),true);
+  const draft=el(d,'textarea','','iad-linkedin-result');draft.rows=5;draft.maxLength=1300;
+  draft.placeholder='Comentário sugerido sobre água e efluentes';draft.setAttribute('aria-label','Comentário sugerido');
+  const insight=el(d,'p','','small muted');
+  const copy=button(d,'Copiar comentário',()=>void copyText(),true);
+  const confirmed=button(d,'Confirmei publicação → próximo',()=>void finish('confirmado'),true);
+  const interactions=el(d,'div','','iad-linkedin-buttons');interactions.append(openPost,liked,analyze,copy,confirmed);
+  postPanel.append(postHelp,postLabel,postTextLabel,interactions,insight,draft);
+
+  const warning=el(d,'p','Esta versão organiza a campanha e prepara comentários; não publica nem curte automaticamente. Limites de revisão da ferramenta não são limites oficiais do LinkedIn.','small muted');
+  ui.append(title,intro,account,imports,queue,postPanel,warning);
+  root.replaceChildren(ui);
+  let db=null,meta=null,current=null,busy=false,abort=null,request=0,uiGeneration=0;
+  let lastDiagnostic=null;
+  function downloadDiagnostics(){
+    if(!valid()||!lastDiagnostic?.problems?.length)return;
+    const safe=v=>{
+      let text=String(v??'').replace(/[\x00-\x1f]/g,' ').slice(0,500);
+      if(/^[=+@-]/.test(text))text="'"+text;
+      return '"'+text.replace(/"/g,'""')+'"';
+    };
+    const rows=[['Linha','Motivo','Nome','Valor analisado'],
+      ...lastDiagnostic.problems.map(p=>[p.line,p.reason,p.name,p.url])];
+    const data='\ufeff'+rows.map(row=>row.map(safe).join(';')).join('\r\n');
+    const blob=new Blob([data],{type:'text/csv;charset=utf-8'});
+    const url=d.defaultView.URL.createObjectURL(blob);
+    const a=d.createElement('a');
+    a.href=url;a.download='diagnostico-linkedin-leads.csv';
+    d.body.appendChild(a);a.click();a.remove();
+    d.defaultView.setTimeout(()=>d.defaultView.URL.revokeObjectURL(url),1000);
+  }
+  function showDiagnostics(summary){
+    lastDiagnostic=summary;
+    const n=Number(summary?.invalid||0);
+    diagDetails.hidden=n===0;
+    if(!n)return;
+    diagTitle.textContent='Diagnóstico: '+n+' perfil(is) rejeitado(s) — consultar causas';
+    const labels={
+      sem_link:'Sem endereço de perfil',
+      formato_linkedin_nao_suportado:'URL do LinkedIn que não representa perfil reconhecido',
+      link_externo:'Endereço de outro site',
+      campo_sem_url:'Campo sem URL utilizável'
+    };
+    const cause=Object.entries(summary.invalidReasons||{})
+      .map(([key,count])=>(labels[key]||key)+': '+count).join(' · ');
+    diagText.textContent=cause+'. O relatório contém '+(summary.problems?.length||0)+
+      ' registros amostrais, com linha e valor de origem'+
+      (summary.diagnosticTruncated?' (amostra limitada a 2.000 linhas).':'.');
+  }
+  const show=(messageText,err=false)=>{
+    if(!valid())return;
+    message.textContent=messageText;
+    message.style.color=err?'#b42318':'';
+  };
+  function disabled(){
+    const importBusy=!!abort,loading=busy,paused=!!meta?.paused;
+    file.disabled=importBusy||loading;
+    pasteButton.disabled=importBusy||loading||!paste.value.trim();
+    start.disabled=!meta?.campaign||importBusy||loading||paused;
+    openProfile.disabled=!current||importBusy||loading||paused;
+    skip.disabled=!current||importBusy||loading||paused;
+    interacted.disabled=!current||importBusy||loading||paused;
+    pause.disabled=!meta?.campaign||importBusy||loading;
+    backupButton.disabled=!meta?.campaign||importBusy||loading;
+    restoreFile.disabled=importBusy||loading;
+    openPost.disabled=!current||importBusy||loading||paused;
+    liked.disabled=!current||importBusy||loading||paused;
+    analyze.disabled=!current||importBusy||loading||paused;
+    copy.disabled=!draft.value.trim()||importBusy||loading;
+    confirmed.disabled=!current||!draft.value.trim()||importBusy||loading||paused;
+    if(meta)pause.textContent=meta.paused?'Retomar campanha':'Pausar campanha';
+  }
+  function showCurrent(){
+    if(!valid())return;
+    leadName.textContent=current?current.lead||'Perfil LinkedIn':'Nenhum perfil selecionado';
+    details.textContent=current?
+      [current.empresa,current.cargo,STATUS[current.estado]||current.estado].filter(Boolean).join(' · '):
+      'Selecione um perfil da campanha para continuar.';
+    postUrl.value=current?.postUrl||'';
+    postText.value=current?.post||'';
+    draft.value=current?.rascunho||'';
+    insight.textContent=current?.fundamento||'';
+    if(meta)counts.textContent='Perfis válidos: '+meta.valid+' · Sem post: '+(meta.semPost||0)+
+      ' · Já interagidos: '+(meta.descartados||0)+' · Curtidas confirmadas: '+(meta.curtidas||0)+
+      ' · Comentários confirmados: '+(meta.confirmados||0)+
+      (meta.paused?' · Pausada':'');
+    disabled();
+  }
+  async function persist(){
+    if(!db||!meta||!valid())return;
+    meta.activeLine=current?.linha||0;meta.lastUpdatedAt=new Date().toISOString();
+    await saveMeta(db,scope,meta);
+  }
+  async function select(lead){
+    current=lead||null;uiGeneration++;showCurrent();
+    if(current)show('Perfil selecionado. Abra o LinkedIn na vista integrada ou no navegador e confira a publicação.');
+    else show('Fim da fila: nenhum perfil pendente após o atual.');
+    await persist();
+  }
+  async function nextLead(){
+    if(!valid()||!meta?.campaign||busy||meta.paused)return;
+    if(current&&!TERMINAL.has(current.estado)){
+      show('Conclua o lead ou utilize Sem post / Já interagido antes de avançar.',true);
+      return;
+    }
+    busy=true;disabled();
+    try{
+      const next=await nextPendingLead(db,scope,meta.campaign,current?.linha||0);
+      if(!valid())return;
+      await select(next);
+    }catch(e){show('Erro ao consultar fila: '+e.message,true);}
+    finally{busy=false;disabled();}
+  }
+  async function finish(status){
+    if(!valid()||!current||!meta?.campaign||busy||meta.paused)return;
+    if(status==='confirmado'&&(!current.curtidaConfirmada||draft.value.trim().length<20)){
+      show('Confirme a curtida e revise um comentário de pelo menos 20 caracteres.',true);return;
+    }
+    busy=true;disabled();
+    const beforeRow={...current},beforeMeta={...meta};
+    let committed=false;
+    try{
+      if(TERMINAL.has(current.estado))throw new Error('Este lead já foi encerrado.');
+      if(status==='confirmado'){
+        current.rascunho=limit(draft.value,1300);
+        current.comentarioPublicado=current.rascunho;
+        current.comentarioConfirmadoEm=new Date().toISOString();
+        meta.confirmados=(meta.confirmados||0)+1;
+      }else if(status==='sem_post'){meta.semPost=(meta.semPost||0)+1;}
+      else {meta.descartados=(meta.descartados||0)+1;}
+      current.estado=status;
+      const old=current;
+      meta.activeLine=old.linha;meta.lastUpdatedAt=new Date().toISOString();
+      await commitLeadAndMeta(db,scope,old,meta);
+      committed=true;
+      const next=await nextPendingLead(db,scope,meta.campaign,old.linha);
+      if(!valid())return;
+      current=next||null;uiGeneration++;
+      await persist();
+      showCurrent();
+      show(next?'Registrado. Próximo perfil carregado.':'Fim da fila; progresso registrado localmente.');
+    }catch(e){
+      if(!committed){
+        current=beforeRow;meta=beforeMeta;showCurrent();
+        show('Não foi possível salvar a interação: '+e.message,true);
+      }else{
+        showCurrent();
+        show('Interação gravada; não foi possível carregar o próximo perfil: '+e.message,true);
+      }
+    }finally{busy=false;disabled();}
+  }
+  async function confirmLike(){
+    if(!valid()||!current||busy||meta?.paused||TERMINAL.has(current.estado))return;
+    const link=linkedinUrl(postUrl.value,'post');
+    if(!link)return show('Informe a URL de publicação válida antes da confirmação.',true);
+    const beforeRow={...current},beforeMeta={...meta};
+    busy=true;disabled();
+    try{
+      current.postUrl=link;current.post=limit(postText.value,6000);
+      if(!current.curtidaConfirmada){current.curtidaConfirmada=true;meta.curtidas=(meta.curtidas||0)+1;}
+      current.curtidaConfirmadaEm=current.curtidaConfirmadaEm||new Date().toISOString();
+      if(current.estado!=='rascunho')current.estado='curtido';
+      meta.activeLine=current.linha;meta.lastUpdatedAt=new Date().toISOString();
+      await commitLeadAndMeta(db,scope,current,meta);
+      showCurrent();
+      show('Curtida registrada conforme sua confirmação; o CRM não verificou a ação no LinkedIn.');
+    }catch(e){
+      current=beforeRow;meta=beforeMeta;showCurrent();
+      show('Falha ao salvar curtida: '+e.message,true);
+    }finally{busy=false;disabled();}
+  }
+  async function generate(){
+    if(!valid()||!current||busy||meta?.paused||TERMINAL.has(current.estado))return;
+    let prepared;
+    try{
+      prepared=prepareLinkedInCampaign({...current,postUrl:postUrl.value,post:postText.value,
+        solucao:'Tecnologias e inteligência para monitoramento online, qualidade da água, efluentes e eficiência operacional.'});
+    }catch(e){return show(e.message,true);}
+    if(typeof nuvem?.chamarFuncao!=='function')return show('Assistente indisponível nesta sessão.',true);
+    busy=true;const seq=++request,selected=uiGeneration;disabled();
+    insight.textContent='Analisando publicação e contexto comercial...';
+    try{
+      const response=await nuvem.chamarFuncao('assistente',{
+        tipo:'linkedin_comment_draft',texto:campaignText(prepared),
+        contexto:{clienteNome:prepared.lead,estilo:'consultivo'}
+      });
+      if(!valid()||seq!==request||uiGeneration!==selected||meta?.paused)return;
+      if(response?.erro)throw new Error(response.erro);
+      const text=limit(response?.campos?.comentario,1300);
+      if(text.length<30)throw new Error('A IA não retornou comentário válido.');
+      current.postUrl=prepared.postUrl;current.post=prepared.post;
+      current.rascunho=text;current.fundamento=limit(response?.campos?.fundamento,600);
+      current.estado='rascunho';
+      await putLead(db,current);
+      if(!valid()||uiGeneration!==selected)return;
+      showCurrent();postPanel.open=true;
+      show('Sugestão gerada para aprovação. Nenhuma ação foi publicada automaticamente.');
+    }catch(e){show('Falha ao gerar comentário: '+String(e.message||e).slice(0,180),true);}
+    finally{busy=false;disabled();}
+  }
+  async function copyText(){
+    const text=draft.value.trim();if(!text)return;
+    try{await d.defaultView.navigator.clipboard.writeText(text);show('Texto copiado; publique somente após revisão.');}
+    catch{draft.focus();draft.select();show('Copie o texto selecionado manualmente.');}
+  }
+  function openUrl(raw,kind){
+    if(!valid()||meta?.paused)return;
+    const url=linkedinUrl(raw,kind);
+    if(!url)return show('URL LinkedIn ausente ou inválida.',true);
+    d.defaultView.open(url,'_blank','noopener,noreferrer');
+    show('Abertura solicitada. No aplicativo especializado, o LinkedIn aparece na vista integrada.');
+  }
+  async function togglePause(){
+    if(!meta||busy)return;
+    const previous=meta.paused;
+    meta.paused=!previous;request++;
+    // Feedback imediato; a gravação é assíncrona e reverte em caso de falha.
+    showCurrent();show(meta.paused?'Campanha pausada.':'Campanha retomada.');
+    try{await persist();}
+    catch(e){meta.paused=previous;showCurrent();show('Falha ao gravar pausa: '+e.message,true);}
+  }
+  async function exportCampaign(){
+    if(!db||!meta?.campaign||!valid()||busy||abort)return;
+    busy=true;disabled();transferStatus.textContent='Preparando backup da campanha...';
+    try{
+      const text=await exportLinkedInCampaign({
+        scope,meta,selected:current?.perfil||'',
+        readPage:(from,size)=>pageOf(db,scope,meta.campaign,from,size)
+      });
+      if(!valid())return;
+      const blob=new d.defaultView.Blob([text],{type:'application/json;charset=utf-8'});
+      const objectUrl=d.defaultView.URL.createObjectURL(blob);
+      const anchor=d.createElement('a');
+      anchor.href=objectUrl;anchor.download='iad-linkedin-campanha-'+new Date().toISOString().slice(0,10)+'.json';
+      d.body.appendChild(anchor);anchor.click();anchor.remove();
+      d.defaultView.setTimeout(()=>d.defaultView.URL.revokeObjectURL(objectUrl),1000);
+      transferStatus.textContent='Backup gerado: '+meta.valid+
+        ' perfis. Contém dados de leads, mas não contém senhas/cookies.';
+    }catch(e){transferStatus.textContent='Falha no backup: '+String(e?.message||e).slice(0,250);}
+    finally{busy=false;disabled();}
+  }
+  async function restoreCampaign(selectedFile){
+    if(!selectedFile||!valid()||busy||abort)return;
+    if(selectedFile.size>PORTABLE_MAX_FILE_BYTES){
+      transferStatus.textContent='Backup inválido: arquivo ultrapassa 12 MiB.';return;
+    }
+    if(meta?.campaign&&!d.defaultView.confirm(
+      'Restaurar este arquivo substituirá a campanha ativa neste navegador. A campanha anterior só será excluída após a nova gravação. Continuar?'))return;
+    const oldMeta=meta,oldCurrent=current,newCampaign=campaignId();
+    busy=true;disabled();transferStatus.textContent='Validando e restaurando checkpoint local...';
+    let committed=false;
+    try{
+      const text=await selectedFile.text();
+      if(!valid())return;
+      const data=prepareLinkedInCampaignRestore(text,scope);
+      if(!db)db=await openLinkedInQueue();
+      for(let i=0;i<data.rows.length;i+=350){
+        if(!valid())throw Error('Sessão alterada: restauração interrompida');
+        const batch=data.rows.slice(i,i+350);
+        const result=await addLeadBatch(db,scope,newCampaign,batch);
+        if(result.inserted!==batch.length||result.duplicates)
+          throw Error('Falha de integridade: perfis duplicados na transferência');
+      }
+      if(!valid())throw Error('Sessão alterada: restauração interrompida');
+      const nextMeta={campaign:newCampaign,...data.counts,
+        paused:data.paused,activeLine:data.selected?.linha||0,createdAt:new Date().toISOString()};
+      await saveMeta(db,scope,nextMeta);
+      committed=true;
+      meta=nextMeta;current=data.selected;uiGeneration++;
+      showCurrent();await renderPage();
+      transferStatus.textContent='Checkpoint restaurado: '+data.rows.length+
+        ' perfis, com estados e posição da campanha.';
+      show('Campanha recuperada neste navegador. Faça login no LinkedIn para continuar.');
+      if(oldMeta?.campaign&&oldMeta.campaign!==newCampaign)
+        void deleteCampaign(db,scope,oldMeta.campaign).catch(()=>{});
+    }catch(e){
+      if(!committed){
+        if(db)await deleteCampaign(db,scope,newCampaign).catch(()=>{});
+        meta=oldMeta;current=oldCurrent;showCurrent();
+      }
+      transferStatus.textContent='Falha na restauração: '+String(e?.message||e).slice(0,250);
+    }finally{restoreFile.value='';busy=false;disabled();}
+  }
+  async function renderPage(){
+    if(!db||!meta?.campaign||!valid())return;
+    const rows=await pageOf(db,scope,meta.campaign,0,10);
+    if(!valid())return;
+    list.replaceChildren();
+    const label=el(d,'p','Amostra dos primeiros 10 perfis importados:','small muted');
+    list.append(label);
+    rows.forEach(row=>{
+      const div=el(d,'div','','iad-linkedin-import-row');
+      const name=el(d,'strong',row.lead||'Lead');
+      const status=el(d,'span',STATUS[row.estado]||'Aguardando','small muted');
+      const choose=button(d,'Selecionar',()=>void selectByLine(row.linha),true);
+      div.append(name,status,choose);list.append(div);
+    });
+  }
+  async function selectByLine(line){
+    if(!db||!meta?.campaign||busy||meta.paused)return;
+    try{const row=await leadAt(db,scope,meta.campaign,line);if(valid())await select(row);}
+    catch(e){show('Falha ao abrir lead: '+e.message,true);}
+  }
+  async function importSelectedFile(selected){
+    if(!selected||!valid()||abort)return;
+    if(selected.size>CSV_MAX_BYTES){importStatus.textContent='Arquivo ultrapassa 100 MiB.';return;}
+    abort=new AbortController();const ctrl=abort,oldMeta=meta,temporary=campaignId();
+    file.disabled=true;cancel.hidden=false;progress.hidden=false;progress.value=0;disabled();
+    importStatus.textContent='Preparando importação por lotes...';
+    lastDiagnostic=null;diagDetails.hidden=true;
+    try{
+      if(!db)db=await openLinkedInQueue();
+      const result=await importLinkedInCsvStream(selected,{
+        signal:ctrl.signal,
+        onBatch:async batch=>addLeadBatch(db,scope,temporary,batch),
+        onProgress:info=>{
+          if(!valid())return;
+          progress.value=info.percent;
+          importStatus.textContent='Importando '+info.percent+'% · '+info.valid+
+            ' perfis válidos · '+info.duplicates+' duplicados · '+info.invalid+' inválidos.';
+        }
+      });
+      if(!valid()||ctrl.signal.aborted)throw new Error('Importação interrompida pela mudança de sessão.');
+      current=null;uiGeneration++;
+      meta={campaign:temporary,valid:result.summary.valid,semPost:0,descartados:0,
+        curtidas:0,confirmados:0,paused:false,activeLine:0,createdAt:new Date().toISOString()};
+      await persist();showCurrent();
+      await renderPage();
+      importStatus.textContent='Importação concluída: '+result.summary.valid+' válidos, '+
+        result.summary.duplicates+' duplicados, '+result.summary.invalid+' inválidos.';
+      showDiagnostics(result.summary);
+      show('Campanha pronta. Selecione Preparar próximo perfil.');
+      if(oldMeta?.campaign&&oldMeta.campaign!==temporary)
+        deleteCampaign(db,scope,oldMeta.campaign).catch(()=>{});
+    }catch(e){
+      if(db)await deleteCampaign(db,scope,temporary).catch(()=>{});
+      meta=oldMeta;showCurrent();
+      importStatus.textContent='Importação cancelada ou falhou: '+String(e.message||e).slice(0,200);
+    }finally{if(abort===ctrl)abort=null;file.value='';cancel.hidden=true;progress.hidden=true;disabled();}
+  }
+  file.addEventListener('change',()=>void importSelectedFile(file.files?.[0]));
+  restoreFile.addEventListener('change',()=>void restoreCampaign(restoreFile.files?.[0]));
+  paste.addEventListener('input',disabled);
+  draft.addEventListener('input',()=>{if(current)current.rascunho=limit(draft.value,1300);disabled();});
+  draft.addEventListener('change',()=>{if(current&&db)putLead(db,current).catch(()=>{});});
+  async function init(){
+    try{
+      db=await openLinkedInQueue();
+      if(!valid()){db.close();return;}
+      meta=await metaOf(db,scope);
+      if(!valid()){db.close();return;}
+      if(meta?.campaign){
+        current=meta.activeLine?await leadAt(db,scope,meta.campaign,meta.activeLine):null;
+        if(!valid())return;
+        if(!current||TERMINAL.has(current.estado))current=await nextPendingLead(db,scope,meta.campaign,0);
+        showCurrent();await renderPage();
+        importStatus.textContent='Campanha restaurada do armazenamento local deste navegador.';
+        show('Fila retomada. Os dados não foram enviados ao CRM nem ao LinkedIn.');
+      }else showCurrent();
+    }catch(e){importStatus.textContent='Armazenamento local indisponível: '+e.message;showCurrent();}
+  }
+  disabled();void init();
+}

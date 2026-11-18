@@ -1,0 +1,26 @@
+name: P0 CAS — Read-only pending conflict inspector
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect-cas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax and safe diagnostic regression
+        run: |
+          node --check src/nuvem.js
+          node --check src/app.js
+          node scripts/verificar-versao-shell.cjs
+          node --test scripts/p0-cas-inspector.test.cjs
+          node --test scripts/p0-cas-durable-receipts.test.cjs
+          node --test scripts/p0-cas-ack-only-admin.test.cjs
+          node --test scripts/p0-cas-partial-ack.test.cjs
+          node --test scripts/p0-cas-failclosed.test.cjs

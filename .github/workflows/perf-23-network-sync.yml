@@ -1,0 +1,30 @@
+name: PERF-23 — Observabilidade de rede e sincronização
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  perf23:
+    name: PERF-23 métricas privadas, rede, sync e compatibilidade
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validar sintaxe dos módulos de performance
+        run: |
+          node --check src/performance.js
+          node --check src/nuvem.js
+          node --check nuvem/testes/perf-23-network-sync-diagnostics.test.cjs
+      - name: Executar testes de rede e sincronização sem servidor real
+        run: node --test nuvem/testes/perf-23-network-sync-diagnostics.test.cjs
+      - name: Regressão de jornada, percentis, sessões e dois frames
+        run: |
+          node --test nuvem/testes/perf-17-journey-adoption.test.cjs
+          node --test nuvem/testes/perf-10-percentis.test.cjs
+          node --test nuvem/testes/perf-10-p5-frames.test.cjs
+          node --test nuvem/testes/perf-10-cockpit.test.cjs

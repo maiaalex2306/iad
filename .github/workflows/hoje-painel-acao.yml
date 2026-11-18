@@ -1,0 +1,25 @@
+name: "HOJE — Painel de ação comercial"
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - 'src/views.js'
+      - 'assets/styles.css'
+      - 'tests/hoje-painel-acao.test.cjs'
+      - '.github/workflows/hoje-painel-acao.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  hoje-acao:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verificar sintaxe
+        run: node --check src/views.js
+      - name: Validar contratos da interface
+        run: node --test tests/hoje-painel-acao.test.cjs

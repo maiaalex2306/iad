@@ -1,0 +1,25 @@
+name: PERF-36L - Tipos Tarefa RLS InitPlan parity
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - 'nuvem/perf-36l-tipos-tarefa-*.sql'
+      - 'nuvem/testes/perf-36l-tipos-tarefa-initplan.test.cjs'
+      - '.github/workflows/perf-36l-tipos-tarefa-rls.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sql-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validar paridade do catálogo e política core
+        run: |
+          node --test nuvem/testes/perf-36l-tipos-tarefa-initplan.test.cjs
+          node --test nuvem/testes/perf-13c-rls-initplan.test.cjs
+          node --test nuvem/testes/perf-36j-sync-eventos-initplan.test.cjs

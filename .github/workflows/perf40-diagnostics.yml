@@ -1,0 +1,32 @@
+name: PERF-40 — Observabilidade da sincronização
+on:
+  push:
+    branches:
+      - feature/perf40-sync-diagnostics-20261107
+  pull_request:
+    paths:
+      - src/nuvem.js
+      - src/performance.js
+      - scripts/perf40-sync-diagnostics.test.cjs
+      - .github/workflows/perf40-diagnostics.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  perf40-sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Sintaxe e integridade
+        run: |
+          node --check src/nuvem.js
+          node --check src/performance.js
+          node --check scripts/perf40-sync-diagnostics.test.cjs
+      - name: Testar sincronização, CAS, privacidade e telemetria
+        run: |
+          node --test scripts/perf40-sync-diagnostics.test.cjs
+          node --test scripts/perf38-navigation.test.cjs

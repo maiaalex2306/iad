@@ -1,0 +1,30 @@
+name: PERF-20 — Paridade e economia do Potencial comercial
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  potential-parity:
+    name: PERF-20 Motor de potencial 389/5k/10k
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Sintaxe dos arquivos alterados
+        run: node --check src/engine.js && node --check src/views.js
+      - name: Paridade do potencial, ganhos e redução de leituras IAD
+        run: node --test nuvem/testes/perf-20-potential-shortcircuit.test.cjs
+      - name: Regressão do Decision Engine e cockpit
+        run: |
+          node --test nuvem/testes/perf-02-engine.test.cjs
+          node --test nuvem/testes/perf-02-cache.test.cjs
+          node --test nuvem/testes/perf-10-cockpit.test.cjs
+          node --test nuvem/testes/perf-18-opportunities-account-index.test.cjs
+          node --test nuvem/testes/perf-19-auth-context.test.cjs

@@ -1,0 +1,30 @@
+'use strict';
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const vm=require('node:vm');
+const fs=require('node:fs');
+const source=fs.readFileSync('src/performance.js','utf8');
+test('medição de dois frames só ativa depois de iniciar',()=>{
+ let t=100, frames=[];
+ const win={performance:{now:()=>t},requestAnimationFrame:fn=>{frames.push(fn);return frames.length}};
+ vm.runInNewContext(source,{window:win,console});
+ assert.equal(win.IADPerformance.medirDoisFrames('teste',100),false);
+ assert.equal(frames.length,0);
+ win.IADPerformance.iniciar();
+ assert.equal(win.IADPerformance.medirDoisFrames('teste',100),true);
+ assert.equal(frames.length,1);
+ t=116;frames.shift()();
+ assert.equal(frames.length,1);
+ assert.equal(win.IADPerformance.relatorio().teste,undefined);
+ t=133;frames.shift()();
+ const r=win.IADPerformance.relatorio().teste;
+ assert.equal(r.chamadas,1);
+ assert.equal(r.p50Ultimas100Ms,33);
+ assert.equal(r.p95Ultimas100Ms,33);
+});
+test('medidas por aba e por card presentes no roteador',()=>{
+ const app=fs.readFileSync('src/app.js','utf8');
+ assert.match(app,/perf10\.cockpit\.dois-frames/);
+ assert.match(app,/perf10\.aba\.dois-frames\.' \+ aba/);
+ assert.match(app,/perf10\.aba\.proximo-frame/);
+});

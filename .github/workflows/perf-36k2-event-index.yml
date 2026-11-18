@@ -1,0 +1,29 @@
+name: PERF-36K2 - Decision events paridade e CPU
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - 'src/engine.js'
+      - 'src/config.js'
+      - 'sw.js'
+      - 'scripts/perf36k2-engine-parity.cjs'
+      - '.github/workflows/perf-36k2-event-index.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  engine-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Sintaxe e comparação com engine de produção v286.75
+        run: |
+          node --check src/engine.js
+          node --check scripts/perf36k2-engine-parity.cjs
+          node --test scripts/perf36k2-engine-parity.cjs

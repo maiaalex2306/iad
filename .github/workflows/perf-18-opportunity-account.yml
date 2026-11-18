@@ -1,0 +1,29 @@
+name: PERF-18 — Cockpit Opp Account Index Parity
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  cockpit-account-index:
+    name: PERF-18 Paridade multiempresa e escala 10k
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Sintaxe dos arquivos modificados
+        run: node --check src/store.js && node --check src/views.js
+      - name: Paridade multiempresa, chaves e 389/5000/10000 oportunidades
+        run: node --test nuvem/testes/perf-18-opportunities-account-index.test.cjs
+      - name: Regressões de índices e cockpit
+        run: |
+          node --test nuvem/testes/perf-15-contacts-index.test.cjs
+          node --test nuvem/testes/perf-16-account-open-index.test.cjs
+          node --test nuvem/testes/perf-10-cockpit.test.cjs
+          node --test nuvem/testes/perf-02-engine.test.cjs

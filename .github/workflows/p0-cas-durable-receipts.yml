@@ -1,0 +1,27 @@
+name: P0 CAS — Durable receipt recovery
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  durable-receipts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Durable ACK, crash recovery and regression
+        run: |
+          node --check src/cas-queue.js
+          node --check src/nuvem.js
+          node scripts/verificar-versao-shell.cjs
+          node --test scripts/p0-cas-durable-receipts.test.cjs
+          node --test scripts/p0-cas-partial-ack.test.cjs
+          node --test scripts/p0-cas-cross-instance.test.cjs
+          node --test scripts/p0-cas-failclosed.test.cjs
+          node --test scripts/p0-cas-diagnostics.test.cjs
+          node --test nuvem/testes/cas-p0-recuperacao.test.cjs

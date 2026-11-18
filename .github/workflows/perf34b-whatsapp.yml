@@ -1,0 +1,27 @@
+name: PERF-34B — Manual WhatsApp refresh preserves cockpit
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  perf34b:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax and PWA version
+        run: |
+          node --check src/app.js
+          node --check scripts/perf34b-whatsapp.test.cjs
+          node scripts/verificar-versao-shell.cjs
+      - name: Targeted channel rendering and portfolio regressions
+        run: |
+          node --test scripts/perf34b-whatsapp.test.cjs
+          node --test scripts/perf33-cockpit-async.test.cjs
+          node --test scripts/perf34a-analysis.test.cjs
+          node --test nuvem/testes/perf-10-cockpit.test.cjs nuvem/testes/perf-10-p8-lazy.test.cjs

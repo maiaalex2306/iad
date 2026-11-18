@@ -1,0 +1,32 @@
+name: RI-M19 — Popup de progresso da Inteligência de Mercado
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - 'src/ri/market-progress.mjs'
+      - 'src/ri/market-view.mjs'
+      - 'assets/paleta-acp.css'
+      - 'tests/market-progress.test.mjs'
+      - 'tests/market-contract.test.mjs'
+      - 'scripts/ri-m12-market-layout-browser.cjs'
+      - 'sw.js'
+      - '.github/workflows/ri-m19-market-progress.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  progress-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Sintaxe JS
+        run: |
+          node --check src/ri/market-progress.mjs
+          node --check src/ri/market-view.mjs
+          node --check scripts/ri-m12-market-layout-browser.cjs
+      - name: Contratos UI, cota, tempo e segurança
+        run: node --test tests/market-progress.test.mjs tests/market-contract.test.mjs tests/market-pwa-precache.test.mjs

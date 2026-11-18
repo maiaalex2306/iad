@@ -1,0 +1,35 @@
+name: "CAS P0 — recuperação local sem sobrescrita"
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - 'src/cas-queue.js'
+      - 'src/nuvem.js'
+      - 'src/app.js'
+      - 'src/config.js'
+      - 'sw.js'
+      - 'scripts/p0-cas-local-reapply.test.cjs'
+      - '.github/workflows/cas-p0-local-reapply.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  local-reapply:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validar sintaxe
+        run: |
+          node --check src/cas-queue.js
+          node --check src/nuvem.js
+          node --check src/app.js
+      - name: CAS recuperação e regressões
+        run: |
+          node --test scripts/p0-cas-local-reapply.test.cjs
+          node --test scripts/p0-cas-assisted-resolution.test.cjs
+          node --test scripts/p0-cas-durable-receipts.test.cjs
+          node --test tests/cas-auto-proven-retry.test.cjs

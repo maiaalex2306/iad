@@ -1,0 +1,27 @@
+name: P0 CAS — Cross-instance serialization and recovery
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  cas-lock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax and PWA version
+        run: |
+          node --check src/cas-queue.js
+          node --check scripts/p0-cas-cross-instance.test.cjs
+          node scripts/verificar-versao-shell.cjs
+      - name: CAS persistence, race and regression
+        run: |
+          node --test scripts/p0-cas-cross-instance.test.cjs
+          node --test nuvem/testes/cas-p0-recuperacao.test.cjs
+          node --test scripts/perf34b-whatsapp.test.cjs
+          node --test scripts/perf34a-analysis.test.cjs

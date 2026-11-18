@@ -1,0 +1,28 @@
+name: RI-M14 — Inteligencia semantica de segmentos
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - 'src/ri/sector-intelligence.mjs'
+      - 'src/ri/market-view.mjs'
+      - 'tests/sector-intelligence.test.mjs'
+      - 'scripts/ri-m12-market-layout-browser.cjs'
+      - '.github/workflows/ri-m14-sector-semantic.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  semantic-unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validar sintaxe
+        run: |
+          node --check src/ri/sector-intelligence.mjs
+          node --check src/ri/market-view.mjs
+      - name: Contratos de taxonomia, aliases, proximidade e tenant
+        run: node --test tests/sector-intelligence.test.mjs

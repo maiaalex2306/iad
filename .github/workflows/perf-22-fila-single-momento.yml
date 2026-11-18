@@ -1,0 +1,31 @@
+name: PERF-22 — Fila sem avaliação duplicada de sinais
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  fila-single-momento:
+    name: PERF-22 Paridade real, 5000 negócios e isolamento
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Sintaxe e integridade do motor
+        run: node --check src/engine.js && node --check nuvem/testes/perf-22-fila-shared-momento.test.cjs
+      - name: Fila antiga vs candidata, 389/1k/5k negócios, multiempresa e regressões
+        run: node --test nuvem/testes/perf-22-fila-shared-momento.test.cjs
+      - name: Suite do Decision Engine, alertas e cockpit
+        run: |
+          node --test nuvem/testes/perf-02-engine.test.cjs
+          node --test nuvem/testes/perf-02-cache.test.cjs
+          node --test nuvem/testes/perf-21-signal-single-pass.test.cjs
+          node --test nuvem/testes/perf-20-potential-shortcircuit.test.cjs
+          node --test nuvem/testes/perf-19-auth-context.test.cjs
+          node --test nuvem/testes/perf-10-cockpit.test.cjs

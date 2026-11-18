@@ -1,0 +1,25 @@
+name: PERF-28 — Ephemeral email lookup indexes
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  perf28:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check syntax
+        run: node --check src/email.js && node --check nuvem/testes/perf-28-email-index-parity.test.cjs
+      - name: Verify parity and existing email regression
+        run: |
+          node --test nuvem/testes/perf-28-email-index-parity.test.cjs
+          node --test nuvem/testes/perf-27-unread-email-count.test.cjs
+      - name: Check coordinated public version
+        run: |
+          node scripts/verificar-versao-shell.cjs

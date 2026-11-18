@@ -1,0 +1,35 @@
+name: PERF-34A — Portfolio analysis fast/full, scope and progress
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  perf34a:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Sintaxe e integridade PWA
+        run: |
+          node --check src/app.js
+          node --check src/views.js
+          node --check src/ia.js
+          node --check scripts/perf34a-analysis.test.cjs
+          node scripts/verificar-versao-shell.cjs
+      - name: Regressao de analise, permissao e modos
+        run: |
+          node --test scripts/perf34a-analysis.test.cjs
+          node --test scripts/perf33-cockpit-async.test.cjs
+          node --test scripts/perf32-regression.cjs
+      - name: Regressao Decision Engine, Hoje, sync e assistente
+        run: |
+          node --test nuvem/testes/perf-10-cockpit.test.cjs nuvem/testes/perf-10-p8-lazy.test.cjs
+          node --test nuvem/testes/perf-02-engine.test.cjs nuvem/testes/perf-02-cache.test.cjs
+          node --test nuvem/testes/perf-31-cockpit-attribution.test.cjs

@@ -1,0 +1,22 @@
+name: PERF-13B — AI explicit-only v286.7
+on:
+  push:
+    branches: ['performance/perf-13b-disable-auto-ai-v2867']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check src/app.js
+      - run: node --check src/views.js
+      - run: node --test nuvem/testes/perf-13b-no-automatic-ai.test.cjs
+      - run: node --test nuvem/testes/*.test.cjs

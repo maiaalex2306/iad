@@ -1,0 +1,1045 @@
+/* Leitura de documentos no navegador, sem biblioteca nenhuma.
+   ------------------------------------------------------------------
+   O vendedor tem a proposta em Word, a planilha de consumo em Excel e o
+   edital em PDF. Pedir que ele copie e cole o conteúdo é pedir que ele não
+   use — e "cole aqui" era exatamente o que este app fazia.
+
+   Por que sem biblioteca: o projeto não tem build nem dependências, e uma
+   página que baixa um interpretador de PDF de 400 kB para ler um arquivo
+   deixa de abrir no celular do vendedor em campo. O que precisamos é o
+   texto, não o layout.
+
+   Word, Excel e PowerPoint são arquivos ZIP com XML dentro — o navegador já
+   sabe descomprimir (DecompressionStream), então basta abrir o ZIP e ler o
+   XML certo. PDF é outra história, e está honestamente comentada lá embaixo. */
+(function (global) {
+  'use strict';
+
+  const LIMITE_BYTES = 20 * 1024 * 1024;   /* 20 MB por arquivo */
+  /* ---------- POR QUE ESTE NÚMERO SUBIU ----------
+
+     Era 60.000, e esse número estava fazendo um trabalho que não é dele.
+
+     A planilha de precificação de um cliente real tem SETE ABAS e rende
+     60.012 letras. O corte em 60.000 derrubava as quatro últimas — entre elas
+     a aba Premissas, que é onde moram os acréscimos por segmento e os
+     descontos por prazo. Quem pedisse o quadro da proposta receberia um
+     quadro completo, bonito, e sem premissa nenhuma. Nada na tela diria por
+     quê, porque aqui ninguém sabia que estava decidindo isso.
+
+     O erro não era o tamanho: era o LUGAR. Este arquivo LÊ; quem decide o que
+     cabe num pedido à IA é quem monta o pedido, e lá a repartição é
+     proporcional entre arquivos e entre abas — ninguém some inteiro.
+
+     O teto continua existindo porque isto roda na memória do navegador do
+     vendedor, e um .xlsx de 20 MB pode render muito texto. Mas agora ele é um
+     limite de memória, que é o que ele sempre deveria ter sido. */
+  const LIMITE_TEXTO = 400000;             /* teto de memória por arquivo, não de pedido */
+
+  function extensao(nome) {
+    const m = String(nome || '').toLowerCase().match(/\.([a-z0-9]+)$/);
+    return m ? m[1] : '';
+  }
+
+  /* Um .zip vale o que vale o que está dentro dele: ele não é lido como
+     documento, é aberto, e cada arquivo de dentro segue o caminho normal.
+     Por isso aparece nesta lista. */
+  const LEGIVEIS = ['docx', 'xlsx', 'pptx', 'pdf', 'txt', 'md', 'csv', 'tsv', 'vtt', 'srt', 'json', 'rtf'];
+
+  /* Quantos arquivos de dentro de um zip entram, e quanto eles podem somar
+     descomprimidos. O primeiro número é sobre a cota da IA: vinte dossiês
+     repartem a cota em vinte pedaços pequenos demais para servirem a alguém.
+     O segundo é sobre o aparelho: um zip de 2 MB pode descomprimir para
+     gigabytes, e tudo isto roda na memória do navegador. */
+  const MAX_DO_ZIP = 20;
+  const MAX_DESCOMPRIMIDO = 80 * 1024 * 1024;
+
+  function aceito(arquivo) {
+    const ext = extensao(arquivo && arquivo.name);
+    return ext === 'zip' || LEGIVEIS.indexOf(ext) !== -1;
+  }
+
+  /* ---------- ZIP ----------
+     Lemos pelo diretório central, no fim do arquivo, e não varrendo cabeçalhos
+     locais: quando o ZIP foi escrito em fluxo, o tamanho do dado não está no
+     cabeçalho local, e sim num descritor depois dele. O diretório central
+     sempre tem os tamanhos certos. */
+  function abrirZip(buffer) {
+    const dv = new DataView(buffer);
+    const bytes = new Uint8Array(buffer);
+
+    let fim = -1;
+    const minimo = Math.max(0, bytes.length - 66000);
+    for (let i = bytes.length - 22; i >= minimo; i--) {
+      if (dv.getUint32(i, true) === 0x06054b50) { fim = i; break; }
+    }
+    if (fim < 0) throw new Error('Arquivo não parece um documento válido.');
+
+    const total = dv.getUint16(fim + 10, true);
+    let p = dv.getUint32(fim + 16, true);
+    const entradas = [];
+
+    for (let i = 0; i < total; i++) {
+      if (dv.getUint32(p, true) !== 0x02014b50) break;
+      const metodo = dv.getUint16(p + 10, true);
+      const comprimido = dv.getUint32(p + 20, true);
+      const tamanho = dv.getUint32(p + 24, true);
+      const tamNome = dv.getUint16(p + 28, true);
+      const tamExtra = dv.getUint16(p + 30, true);
+      const tamComentario = dv.getUint16(p + 32, true);
+      const inicioLocal = dv.getUint32(p + 42, true);
+      const nome = new TextDecoder().decode(bytes.subarray(p + 46, p + 46 + tamNome));
+      entradas.push({ nome: nome, metodo: metodo, comprimido: comprimido,
+                      tamanho: tamanho, inicioLocal: inicioLocal });
+      p += 46 + tamNome + tamExtra + tamComentario;
+    }
+
+    return {
+      nomes: function () { return entradas.map(function (e) { return e.nome; }); },
+      /* Tamanho descomprimido de cada entrada, para decidir o que cabe ANTES
+         de descomprimir. Descobrir depois é descobrir com a memória já
+         estourada. */
+      entradas: function () {
+        return entradas.map(function (e) {
+          return { nome: e.nome, tamanho: e.tamanho };
+        });
+      },
+      cru: function (nome) {
+        const e = entradas.filter(function (x) { return x.nome === nome; })[0];
+        if (!e) return null;
+        /* O cabeçalho local repete nome e extra com tamanhos próprios: é ele
+           que diz onde o dado começa de verdade. */
+        const tamNome = dv.getUint16(e.inicioLocal + 26, true);
+        const tamExtra = dv.getUint16(e.inicioLocal + 28, true);
+        const inicio = e.inicioLocal + 30 + tamNome + tamExtra;
+        return { metodo: e.metodo, dado: bytes.subarray(inicio, inicio + e.comprimido) };
+      },
+      texto: function (nome) {
+        const c = this.cru(nome);
+        if (!c) return Promise.resolve('');
+        if (c.metodo === 0) return Promise.resolve(new TextDecoder().decode(c.dado));
+        return inflar(c.dado);
+      },
+      /* Os bytes, e não o texto. Um .docx dentro de um .zip é binário: passar
+         pelo TextDecoder o corromperia antes de alguém tentar abri-lo. */
+      bytes: function (nome) {
+        const c = this.cru(nome);
+        if (!c) return Promise.resolve(new Uint8Array(0));
+        if (c.metodo === 0) return Promise.resolve(c.dado.slice());
+        return inflarBytes(c.dado);
+      }
+    };
+  }
+
+  /* Os dois são "deflate" e não são a mesma coisa: dentro de um ZIP o dado é
+     cru, e dentro de um PDF vem com o cabeçalho do zlib. Descomprimir um com o
+     descompressor do outro falha em silêncio — foi o que fez o PDF voltar
+     vazio e ser confundido com PDF digitalizado. */
+  function inflar(dado, formato) {
+    if (typeof DecompressionStream !== 'function') {
+      return Promise.reject(new Error('Este navegador não descomprime arquivos. Use um Chrome, Edge, Firefox ou Safari atual.'));
+    }
+    const ds = new DecompressionStream(formato || 'deflate-raw');
+    const fluxo = new Blob([dado]).stream().pipeThrough(ds);
+    return new Response(fluxo).arrayBuffer().then(function (b) {
+      return new TextDecoder().decode(new Uint8Array(b));
+    });
+  }
+
+  /* O mesmo `inflar`, parando antes do TextDecoder. Existe separado porque a
+     diferença é justamente essa: texto para o XML de dentro de um docx, bytes
+     para um docx inteiro de dentro de um zip. */
+  function inflarBytes(dado, formato) {
+    if (typeof DecompressionStream !== 'function') {
+      return Promise.reject(new Error('Este navegador não descomprime arquivos. Use um Chrome, Edge, Firefox ou Safari atual.'));
+    }
+    const ds = new DecompressionStream(formato || 'deflate-raw');
+    const fluxo = new Blob([dado]).stream().pipeThrough(ds);
+    return new Response(fluxo).arrayBuffer().then(function (b) { return new Uint8Array(b); });
+  }
+
+  /* O nome da aba vem de um ATRIBUTO XML, não de um nó de texto: `semTags`
+     devolveria a string inteira sem tirar as entidades, porque não há tag
+     nenhuma para tirar. Uma aba chamada "Preço & Custo" chega como
+     "Preço &amp; Custo" e seria isso que a IA citaria como origem. */
+  function desescapar(s) {
+    return String(s == null ? '' : s)
+      .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'").replace(/&#(\d+);/g, function (_, n) {
+        return String.fromCharCode(Number(n));
+      })
+      .replace(/&amp;/g, '&');
+  }
+
+  function semTags(xml) {
+    return xml.replace(/<[^>]+>/g, '')
+      .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+  }
+
+  /* ---------- Word ---------- */
+  function lerDocx(zip) {
+    return zip.texto('word/document.xml').then(function (xml) {
+      if (!xml) return '';
+      return semTags(xml
+        .replace(/<w:tab\b[^>]*\/?>/g, '\t')
+        .replace(/<w:br\b[^>]*\/?>/g, '\n')
+        .replace(/<\/w:p>/g, '\n'));
+    });
+  }
+
+  /* ---------- PowerPoint ---------- */
+  function lerPptx(zip) {
+    const slides = zip.nomes().filter(function (n) { return /^ppt\/slides\/slide\d+\.xml$/.test(n); })
+      .sort(function (a, b) {
+        const na = parseInt(a.replace(/\D+/g, ''), 10), nb = parseInt(b.replace(/\D+/g, ''), 10);
+        return na - nb;
+      });
+    return Promise.all(slides.map(function (n, i) {
+      return zip.texto(n).then(function (xml) {
+        const t = semTags(xml.replace(/<\/a:p>/g, '\n')).trim();
+        return t ? '--- slide ' + (i + 1) + ' ---\n' + t : '';
+      });
+    })).then(function (partes) { return partes.filter(Boolean).join('\n\n'); });
+  }
+
+  /* ---------- Excel ----------
+     O texto das células não fica na planilha: fica numa tabela de strings
+     compartilhadas, e a célula guarda só o índice. Ler a planilha sem ela
+     devolve uma grade de números sem nenhuma palavra. */
+  /* O NOME de cada aba, na ordem em que o Excel as mostra.
+
+     Antes saía "--- planilha 4 ---", e o número não diz nada a ninguém. Numa
+     planilha de precificação as abas se chamam Precificação, Equipamentos,
+     Premissas, Memorial de Cálculo — e é com ESSE nome que a IA consegue
+     dizer de onde tirou um número. "Aba Premissas, acréscimo por segmento" é
+     conferível em dez segundos; "planilha 4" manda a pessoa abrir o arquivo e
+     contar abas.
+
+     O nome está no `xl/workbook.xml`, que aponta para o arquivo de cada aba
+     por um identificador de relação; a tradução do identificador para o nome
+     do arquivo está no `.rels` ao lado. Quando qualquer um dos dois faltar —
+     planilha gerada por ferramenta exótica —, cai no número de antes, que é
+     o que havia e não é pior do que era. */
+  function nomesDasAbas(zip) {
+    return Promise.all([
+      zip.texto('xl/workbook.xml'),
+      zip.texto('xl/_rels/workbook.xml.rels')
+    ]).then(function (r) {
+      const wb = r[0] || '', rels = r[1] || '';
+      const destino = {};
+      (rels.match(/<Relationship\b[^>]*>/g) || []).forEach(function (tag) {
+        const id = (tag.match(/Id="([^"]+)"/) || [])[1];
+        const alvo = (tag.match(/Target="([^"]+)"/) || [])[1];
+        if (id && alvo) destino[id] = 'xl/' + String(alvo).replace(/^\/?(xl\/)?/, '');
+      });
+      const ordem = [];
+      (wb.match(/<sheet\b[^>]*>/g) || []).forEach(function (tag) {
+        const nome = (tag.match(/name="([^"]*)"/) || [])[1] || '';
+        const id = (tag.match(/r:id="([^"]+)"/) || [])[1] ||
+                   (tag.match(/relationships:id="([^"]+)"/) || [])[1];
+        const arquivo = id ? destino[id] : '';
+        if (arquivo) ordem.push({ arquivo: arquivo, nome: desescapar(nome) });
+      });
+      return ordem;
+    }).catch(function () { return []; });
+  }
+
+  function lerXlsx(zip) {
+    return Promise.all([zip.texto('xl/sharedStrings.xml'), nomesDasAbas(zip)]).then(function (r) {
+      const xml = r[0];
+      const compartilhadas = [];
+      if (xml) {
+        const itens = xml.match(/<si\b[\s\S]*?<\/si>/g) || [];
+        itens.forEach(function (si) { compartilhadas.push(semTags(si)); });
+      }
+      const existentes = zip.nomes();
+      /* A ordem do workbook é a ordem das abas na tela do Excel; a ordem
+         alfabética dos arquivos não é — sheet10 vem antes de sheet2. */
+      let abas = r[1].filter(function (a) { return existentes.indexOf(a.arquivo) !== -1; });
+      if (!abas.length) {
+        abas = existentes
+          .filter(function (n) { return /^xl\/worksheets\/sheet\d+\.xml$/.test(n); })
+          .sort(function (a, b) {
+            return Number((a.match(/(\d+)/) || [])[1] || 0) - Number((b.match(/(\d+)/) || [])[1] || 0);
+          })
+          .map(function (n) { return { arquivo: n, nome: '' }; });
+      }
+      return Promise.all(abas.map(function (a, i) {
+        return zip.texto(a.arquivo).then(function (folha) {
+          return '--- planilha ' + (i + 1) + (a.nome ? ': ' + a.nome : '') + ' ---\n' +
+            linhasDaFolha(folha, compartilhadas);
+        });
+      }));
+    }).then(function (partes) { return partes.filter(Boolean).join('\n\n'); });
+  }
+
+  function linhasDaFolha(xml, compartilhadas) {
+    const linhas = xml.match(/<row\b[\s\S]*?<\/row>/g) || [];
+    return linhas.map(function (linha) {
+      const celulas = linha.match(/<c\b[\s\S]*?(?:\/>|<\/c>)/g) || [];
+      return celulas.map(function (c) {
+        const tipo = (c.match(/\st="([^"]+)"/) || [])[1] || '';
+        const v = (c.match(/<v>([\s\S]*?)<\/v>/) || [])[1];
+        if (tipo === 's') return compartilhadas[parseInt(v, 10)] || '';
+        if (tipo === 'inlineStr') return semTags((c.match(/<is>[\s\S]*?<\/is>/) || [''])[0]);
+        return v == null ? '' : v;
+      }).join('\t');
+    }).filter(function (l) { return l.replace(/\t/g, '').trim(); }).join('\n');
+  }
+
+  /* ---------- PDF ----------
+     PDF não guarda texto: guarda instruções de desenho, com as letras dentro
+     de fluxos comprimidos. E há dois mundos aí dentro.
+
+     No mundo fácil, a letra aparece literal — `(Proposta) Tj` — e basta
+     recolher. No mundo comum de hoje (Google Docs, Figma, Canva, qualquer
+     gerador que embute a fonte só com os glifos usados), o que aparece é
+     `<0012> Tj`: um índice de glifo dentro da fonte, que não é a letra nem o
+     código dela. Ler isso sem tradução devolve nada, e o app dizia "este PDF
+     é digitalizado" — uma resposta errada, e cara: o documento com a proposta
+     e o preço passava batido, e o vendedor não tinha como saber por quê.
+
+     A tradução existe dentro do próprio arquivo: cada fonte carrega um
+     `/ToUnicode`, um CMap que diz qual letra cada glifo representa. Aqui ele é
+     lido, e o texto sai. Continua não funcionando em PDF que é foto de papel —
+     ali não existe texto nenhum, e nenhum truque resolve sem OCR. */
+  function lerPdf(buffer) {
+    const bytes = new Uint8Array(buffer);
+    const bruto = decodificarLatin(bytes);
+    return mapasDeFonte(bytes, bruto).then(function (mapas) {
+      const fluxos = localizarFluxos(bytes, bruto);
+      return Promise.all(fluxos.map(function (f) {
+        if (!f.filtros.length) return Promise.resolve(decodificarLatin(f.dado));
+        /* A cadeia inteira, na ordem escrita. Alguns geradores escrevem o
+           fluxo cru mesmo dizendo FlateDecode — por isso o inflar tenta zlib e
+           depois deflate cru lá dentro: custa uma tentativa e evita perder o
+           documento por causa de um cabeçalho. */
+        return passarPelosFiltros(f.dado, f.filtros)
+          .then(function (d) { return d ? decodificarLatin(d) : ''; })
+          .catch(function () { return ''; });
+      })).then(function (partes) {
+        const texto = partes.map(function (t) { return textoDoFluxo(t, mapas); })
+          .filter(Boolean).join('\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+        if (!texto) throw new Error(porQueNaoSaiuTexto(bruto, fluxos));
+        return texto;
+      });
+    });
+  }
+
+  /* POR QUE NÃO SAIU TEXTO — e esta é a parte que mais custou credibilidade.
+
+     Havia uma frase só para quatro causas diferentes: "provavelmente é
+     digitalizado (foto do papel). Salve como Word". Em três das quatro isso é
+     mentira, e é mentira cara — manda a pessoa converter um arquivo que não
+     tem problema de conversão nenhum, e ela volta com o mesmo erro.
+
+     Cada causa tem um conserto diferente, e dizer qual é vale mais do que
+     qualquer sugestão genérica. */
+  function porQueNaoSaiuTexto(bruto, fluxos) {
+    /* Protegido por senha. Os fluxos existem, estão cifrados, e o inflate
+       devolve vazio — que por fora é idêntico a "não tem texto". */
+    if (/\/Encrypt\s/.test(bruto)) {
+      return 'Este PDF está PROTEGIDO: o conteúdo dele é cifrado, e nem o texto nem as ' +
+        'imagens podem ser lidos sem a senha. Abra no leitor de PDF, use Imprimir → ' +
+        '"Salvar como PDF" para gerar uma cópia sem proteção, e anexe essa cópia.';
+    }
+
+    /* Tem instrução de desenhar texto, mas nada saiu: o texto está lá e a
+       tradução falhou. É um defeito nosso, e dizer "é foto de papel" faria a
+       pessoa procurar para sempre no lugar errado. */
+    const temTexto = fluxos.some(function (f) { return f && !f.filtros.length; }) ||
+      /\bTj\b|\bTJ\b/.test(bruto);
+    if (temTexto) {
+      return 'Este PDF tem texto, mas eu não consegui traduzi-lo — a fonte dele usa uma ' +
+        'codificação que eu ainda não sei ler. Copie o conteúdo e cole na caixa, ou salve ' +
+        'como Word. E me avise: isto é defeito meu, não do seu arquivo.';
+    }
+
+    /* Só desenho. Infográfico com o texto convertido em contorno cai aqui, e é
+       o único caso em que "não há texto" é literalmente verdade. */
+    return 'Este PDF não tem texto nenhum — só desenho. É o caso do infográfico com as ' +
+      'letras convertidas em curvas, e o da página que é foto de papel. Nenhum truque ' +
+      'resolve sem OCR: copie o conteúdo e cole na caixa, ou anexe a versão em Word, ' +
+      'PowerPoint ou Excel de onde esse PDF saiu.';
+  }
+
+  function decodificarLatin(u8) {
+    let s = '';
+    /* Em pedaços: String.fromCharCode.apply com um arquivo inteiro estoura a
+       pilha de argumentos do navegador em PDFs grandes. */
+    for (let i = 0; i < u8.length; i += 8192) {
+      s += String.fromCharCode.apply(null, u8.subarray(i, i + 8192));
+    }
+    return s;
+  }
+
+  /* Os CMaps /ToUnicode do arquivo, por nome de recurso (/F5, /F6…).
+
+     Não montamos um interpretador de PDF: varremos os objetos `N 0 obj`,
+     achamos quais são fontes com /ToUnicode, inflamos esses CMaps e ligamos
+     cada nome de recurso ao mapa pelo /Font << /F5 12 0 R >> das páginas.
+     É pouco código e cobre o arquivo gerado por editor, que é o caso real. */
+  /* Um NOME de PDF é a barra seguida de tudo o que não for espaço nem
+     delimitador. `\w+` dava conta de /F1 e /F5 e parava no primeiro PDF de
+     editor gráfico que aparecesse: o Inkscape e o Illustrator geram /F2+0,
+     /F3+0, e o `+` não é letra. O nome saía cortado em "F2", o mapa ficava
+     guardado em "F2+0", e os dois nunca se encontravam — o texto vinha inteiro
+     como índice de glifo, ou seja, lixo. */
+  const NOME_PDF = '[^\\s/<>\\[\\]{}()%]+';
+
+  /* Todos os objetos do arquivo, inclusive os que não aparecem na varredura.
+
+     Desde o PDF 1.5 os objetos podem vir DENTRO de um fluxo comprimido
+     (/ObjStm): o arquivo não tem "9 0 obj" escrito em lugar nenhum, tem um
+     fluxo que, descomprimido, contém nove objetos emendados com uma tabela de
+     deslocamentos na frente. Todo gerador moderno faz isso.
+
+     Sem abrir esses fluxos, as fontes do documento são invisíveis — e sem
+     fonte não há /ToUnicode, e sem /ToUnicode o texto sai como índice de
+     glifo. O app chamava isso de "PDF digitalizado", que é a resposta errada:
+     o texto está lá, inteiro, e só faltava procurar no lugar certo. */
+  function tabelaDeObjetos(bruto) {
+    const objetos = {};
+    const reObj = /(\d+)\s+0\s+obj\b/g;
+    let m;
+    while ((m = reObj.exec(bruto)) !== null) {
+      const fim = bruto.indexOf('endobj', m.index);
+      const ini = m.index + m[0].length;
+      objetos[m[1]] = { ini: ini, fim: fim < 0 ? bruto.length : fim };
+    }
+    return objetos;
+  }
+
+  function corpoDoObjeto(objetos, bruto, num) {
+    const o = objetos[num];
+    if (!o) return '';
+    return o.corpo != null ? o.corpo : bruto.slice(o.ini, o.fim);
+  }
+
+  /* O pedaço de bytes do fluxo de um objeto clássico. */
+  function bytesDoFluxo(bytes, bruto, o) {
+    const corpo = bruto.slice(o.ini, o.fim);
+    const marca = /stream\r?\n?/.exec(corpo);
+    if (!marca) return null;
+    const ini = o.ini + marca.index + marca[0].length;
+    let ate = bruto.indexOf('endstream', ini);
+    if (ate < 0) return null;
+    while (ate > ini && (bytes[ate - 1] === 10 || bytes[ate - 1] === 13)) ate--;
+    return bytes.subarray(ini, ate);
+  }
+
+  /* Abre os /ObjStm e devolve os objetos de dentro, por número.
+
+     O formato é simples: o cabeçalho tem /N pares "numero deslocamento" e
+     /First diz onde o primeiro objeto começa. Nenhum deles tem fluxo próprio —
+     fluxo não cabe dentro de fluxo —, então basta o texto. */
+  function objetosDeFluxo(bytes, bruto, objetos) {
+    const alvos = Object.keys(objetos).filter(function (n) {
+      return /\/Type\s*\/ObjStm/.test(bruto.slice(objetos[n].ini, objetos[n].fim));
+    });
+    if (!alvos.length) return Promise.resolve({});
+
+    return Promise.all(alvos.map(function (n) {
+      const o = objetos[n];
+      const dado = bytesDoFluxo(bytes, bruto, o);
+      if (!dado) return Promise.resolve(null);
+      const cab = bruto.slice(o.ini, o.fim);
+      const quantos = parseInt((/\/N\s+(\d+)/.exec(cab) || [])[1] || '0', 10);
+      const primeiro = parseInt((/\/First\s+(\d+)/.exec(cab) || [])[1] || '0', 10);
+      if (!quantos) return Promise.resolve(null);
+      const filtros = filtrosDoCabecalho(cab);
+      return passarPelosFiltros(dado, filtros.length ? filtros : ['FlateDecode'])
+        .then(function (d) {
+          return d ? { texto: decodificarLatin(d), quantos: quantos, primeiro: primeiro } : null;
+        })
+        .catch(function () { return null; });
+    })).then(function (abertos) {
+      const saida = {};
+      abertos.forEach(function (x) {
+        if (!x) return;
+        const pares = x.texto.slice(0, x.primeiro).trim().split(/\s+/);
+        for (let i = 0; i + 1 < pares.length && i / 2 < x.quantos; i += 2) {
+          const num = pares[i];
+          const desloca = parseInt(pares[i + 1], 10);
+          const fim = (i + 3 < pares.length)
+            ? x.primeiro + parseInt(pares[i + 3], 10)
+            : x.texto.length;
+          if (!num || isNaN(desloca)) continue;
+          saida[num] = x.texto.slice(x.primeiro + desloca, fim);
+        }
+      });
+      return saida;
+    });
+  }
+
+  /* O dicionário de fontes de um recurso, venha ele escrito ou por referência.
+
+     `/Font << /F1 5 0 R >>` é o caso fácil. `/Font 1 0 R` é o caso do
+     Inkscape, do Illustrator e de metade dos PDFs de material de marketing: o
+     mapa de fontes é um objeto à parte. O app só conhecia o primeiro, e no
+     segundo não achava fonte nenhuma — logo, nenhum /ToUnicode, logo texto
+     ilegível anunciado como "PDF digitalizado". */
+  function dicionariosDeFonte(bruto, objetos) {
+    const saida = [];
+    const re = /\/Font\s*(?:<<([\s\S]*?)>>|(\d+)\s+0\s+R)/g;
+    let m;
+    while ((m = re.exec(bruto)) !== null) {
+      if (m[1] != null) { saida.push(m[1]); continue; }
+      const corpo = corpoDoObjeto(objetos, bruto, m[2]);
+      const dentro = /<<([\s\S]*)>>/.exec(corpo);
+      if (dentro) saida.push(dentro[1]);
+    }
+    /* E os que moram dentro de um /ObjStm: lá o `/Font` da página já foi lido
+       acima quando o texto do objeto entrou na tabela, mas o dicionário
+       referenciado pode ser outro objeto do mesmo fluxo. */
+    Object.keys(objetos).forEach(function (n) {
+      if (objetos[n].corpo == null) return;
+      const r = /\/Font\s*(?:<<([\s\S]*?)>>|(\d+)\s+0\s+R)/g;
+      let x;
+      while ((x = r.exec(objetos[n].corpo)) !== null) {
+        if (x[1] != null) { saida.push(x[1]); continue; }
+        const dentro = /<<([\s\S]*)>>/.exec(corpoDoObjeto(objetos, bruto, x[2]));
+        if (dentro) saida.push(dentro[1]);
+      }
+    });
+    return saida;
+  }
+
+  function mapasDeFonte(bytes, bruto) {
+    const objetos = tabelaDeObjetos(bruto);
+
+    return objetosDeFluxo(bytes, bruto, objetos).then(function (extras) {
+      Object.keys(extras).forEach(function (n) {
+        if (!objetos[n]) objetos[n] = { corpo: extras[n] };
+      });
+      return mapasComObjetos(bytes, bruto, objetos);
+    });
+  }
+
+  function mapasComObjetos(bytes, bruto, objetos) {
+    /* recurso (/F5) → número do objeto do /ToUnicode */
+    const doRecurso = {};
+    const reRefFonte = new RegExp('\\/(' + NOME_PDF + ')\\s+(\\d+)\\s+0\\s+R', 'g');
+
+    dicionariosDeFonte(bruto, objetos).forEach(function (dentro) {
+      let r;
+      reRefFonte.lastIndex = 0;
+      while ((r = reRefFonte.exec(dentro)) !== null) {
+        const corpo = corpoDoObjeto(objetos, bruto, r[2]);
+        if (!corpo) continue;
+        const uni = /\/ToUnicode\s+(\d+)\s+0\s+R/.exec(corpo);
+        /* Fonte tipo 0 aponta para a descendente; o /ToUnicode fica na pai,
+           então basta procurar aqui e, se faltar, seguir o /DescendantFonts. */
+        if (uni) { doRecurso[r[1]] = uni[1]; continue; }
+        const desc = /\/DescendantFonts\s*\[\s*(\d+)\s+0\s+R/.exec(corpo);
+        if (!desc) continue;
+        const u2 = /\/ToUnicode\s+(\d+)\s+0\s+R/.exec(corpoDoObjeto(objetos, bruto, desc[1]));
+        if (u2) doRecurso[r[1]] = u2[1];
+      }
+    });
+
+    const numeros = {};
+    Object.keys(doRecurso).forEach(function (nome) { numeros[doRecurso[nome]] = true; });
+
+    const leituras = Object.keys(numeros).map(function (num) {
+      const obj = objetos[num];
+      /* O CMap é sempre um objeto clássico: ele TEM fluxo, e fluxo não cabe
+         dentro de /ObjStm. Por isso basta o caminho de offsets aqui. */
+      if (!obj || obj.ini == null) return Promise.resolve(null);
+      const dado = bytesDoFluxo(bytes, bruto, obj);
+      if (!dado) return Promise.resolve(null);
+      /* O CMap passa pela MESMA cadeia do conteúdo: quem escreve ASCII85 no
+         fluxo da página escreve no CMap também, e um lido sem o outro dá o
+         pior resultado possível — texto que sai, e sai errado. */
+      const filtros = filtrosDoCabecalho(bruto.slice(Math.max(0, obj.ini - 400), obj.ini + 300));
+      return passarPelosFiltros(dado, filtros.length ? filtros : ['FlateDecode'])
+        .then(function (d) { return { num: num, mapa: lerCMap(d ? decodificarLatin(d) : '') }; })
+        .catch(function () { return null; });
+    });
+
+    return Promise.all(leituras).then(function (lidos) {
+      const porNumero = {};
+      lidos.forEach(function (x) { if (x) porNumero[x.num] = x.mapa; });
+      const saida = {};
+      Object.keys(doRecurso).forEach(function (nome) {
+        const mapa = porNumero[doRecurso[nome]];
+        if (mapa) saida[nome] = mapa;
+      });
+      return saida;
+    });
+  }
+
+  /* bfchar lista pares avulsos; bfrange lista faixas — e a faixa pode vir com
+     um destino inicial (<0041> = A, A+1, A+2…) ou com uma lista explícita. */
+  function lerCMap(texto) {
+    const mapa = {};
+    const hexParaTexto = function (h) {
+      let s = '';
+      for (let i = 0; i + 3 < h.length + 1; i += 4) {
+        const c = parseInt(h.substr(i, 4), 16);
+        if (!isNaN(c)) s += String.fromCharCode(c);
+      }
+      return s;
+    };
+
+    let bloco = /beginbfchar([\s\S]*?)endbfchar/g, m;
+    while ((m = bloco.exec(texto)) !== null) {
+      const re = /<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g;
+      let p;
+      while ((p = re.exec(m[1])) !== null) mapa[p[1].toUpperCase()] = hexParaTexto(p[2]);
+    }
+
+    bloco = /beginbfrange([\s\S]*?)endbfrange/g;
+    while ((m = bloco.exec(texto)) !== null) {
+      const corpo = m[1];
+      const reLista = /<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*\[([\s\S]*?)\]/g;
+      let p;
+      while ((p = reLista.exec(corpo)) !== null) {
+        const de = parseInt(p[1], 16);
+        const itens = p[3].match(/<([0-9A-Fa-f]+)>/g) || [];
+        itens.forEach(function (item, i) {
+          mapa[(de + i).toString(16).toUpperCase().padStart(p[1].length, '0')] =
+            hexParaTexto(item.slice(1, -1));
+        });
+      }
+      const reFaixa = /<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g;
+      while ((p = reFaixa.exec(corpo)) !== null) {
+        const de = parseInt(p[1], 16), ate = parseInt(p[2], 16), alvo = parseInt(p[3], 16);
+        if (ate - de > 65535) continue;
+        for (let c = de; c <= ate; c++) {
+          mapa[c.toString(16).toUpperCase().padStart(p[1].length, '0')] =
+            String.fromCharCode(alvo + (c - de));
+        }
+      }
+    }
+    return mapa;
+  }
+
+  /* ---------- a CADEIA de filtros ----------
+
+     Um fluxo de PDF pode passar por mais de um filtro, em ordem, e o
+     cabeçalho diz quais:
+
+         /Filter /FlateDecode                        — um só
+         /Filter [ /ASCII85Decode /FlateDecode ]     — dois, nesta ordem
+
+     O app só sabia do primeiro caso. No segundo ele mandava os bytes crus
+     direto para o descompressor, que recusava — e o PDF inteiro voltava vazio,
+     anunciado como "digitalizado". O arquivo do GELITA é exatamente esse: o
+     Inkscape e o Cairo, que geram quase todo material de marketing em PDF,
+     escrevem ASCII85 antes do Flate por padrão.
+
+     ASCII85 existe por um motivo antigo e ainda vivo: cabe num e-mail de
+     texto puro. Cinco letras ASCII carregam quatro bytes; "z" sozinho são
+     quatro zeros; "~>" encerra. Decodificar é menos código do que explicar. */
+  function filtrosDoCabecalho(cabecalho) {
+    const m = /\/Filter\s*(\[[^\]]*\]|\/[A-Za-z0-9]+)/.exec(cabecalho);
+    if (!m) return [];
+    const achados = m[1].match(/\/[A-Za-z0-9]+/g) || [];
+    return achados.map(function (x) { return x.slice(1); });
+  }
+
+  function deAscii85(u8) {
+    let texto = '';
+    for (let i = 0; i < u8.length; i += 8192) {
+      texto += String.fromCharCode.apply(null, u8.subarray(i, i + 8192));
+    }
+    /* O "<~" inicial é opcional e o "~>" final encerra. Tudo o que não for do
+       alfabeto — quebra de linha, espaço — se ignora: o formato foi feito para
+       atravessar e-mail, e e-mail reembrulha linha. */
+    texto = texto.replace(/^\s*<~/, '');
+    const fim = texto.indexOf('~>');
+    if (fim >= 0) texto = texto.slice(0, fim);
+    texto = texto.replace(/\s+/g, '');
+
+    const saida = [];
+    let grupo = [], i = 0;
+    const despejar = function (quantos) {
+      /* Grupo incompleto no fim: completa com 'u' (o maior dígito) e descarta
+         os bytes que sobram. É o que a especificação manda, e errar aqui
+         acrescenta lixo no fim de todo fluxo. */
+      const faltam = 5 - grupo.length;
+      for (let k = 0; k < faltam; k++) grupo.push(84);
+      let n = 0;
+      for (let k = 0; k < 5; k++) n = n * 85 + grupo[k];
+      const quatro = [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
+      for (let k = 0; k < quantos; k++) saida.push(quatro[k]);
+      grupo = [];
+    };
+
+    for (i = 0; i < texto.length; i++) {
+      const c = texto.charCodeAt(i);
+      if (c === 122 && !grupo.length) {           /* z = quatro zeros */
+        saida.push(0, 0, 0, 0);
+        continue;
+      }
+      if (c < 33 || c > 117) continue;            /* fora do alfabeto: ignora */
+      grupo.push(c - 33);
+      if (grupo.length === 5) despejar(4);
+    }
+    if (grupo.length) despejar(grupo.length - 1);
+    return new Uint8Array(saida);
+  }
+
+  function deAsciiHex(u8) {
+    let texto = '';
+    for (let i = 0; i < u8.length; i += 8192) {
+      texto += String.fromCharCode.apply(null, u8.subarray(i, i + 8192));
+    }
+    const fim = texto.indexOf('>');
+    if (fim >= 0) texto = texto.slice(0, fim);
+    texto = texto.replace(/[^0-9A-Fa-f]/g, '');
+    if (texto.length % 2) texto += '0';          /* dígito ímpar: a spec completa com zero */
+    const saida = new Uint8Array(texto.length / 2);
+    for (let i = 0; i < saida.length; i++) saida[i] = parseInt(texto.substr(i * 2, 2), 16);
+    return saida;
+  }
+
+  /* Aplica a cadeia na ordem escrita. O que não souber ler encerra a cadeia e
+     devolve o que deu — melhor meio fluxo lido do que o arquivo inteiro
+     recusado por causa de um filtro que ninguém usa para texto. */
+  function passarPelosFiltros(dado, filtros) {
+    let atual = Promise.resolve(dado);
+    (filtros || []).forEach(function (f) {
+      atual = atual.then(function (d) {
+        if (!d) return d;
+        if (f === 'ASCII85Decode' || f === 'A85') return deAscii85(d);
+        if (f === 'ASCIIHexDecode' || f === 'AHx') return deAsciiHex(d);
+        if (f === 'FlateDecode' || f === 'Fl') {
+          return inflarBytes(d, 'deflate').catch(function () { return inflarBytes(d, 'deflate-raw'); });
+        }
+        /* DCTDecode é JPEG, CCITTFaxDecode é fax: são imagem, e imagem não tem
+           texto. Parar aqui é o certo — seguir adiante entregaria bytes de
+           foto ao leitor de texto. */
+        return null;
+      });
+    });
+    return atual.catch(function () { return null; });
+  }
+
+  function localizarFluxos(bytes, bruto) {
+    const achados = [];
+    /* \b antes de "stream" é o que impede casar dentro de "endstream" — sem
+       isso cada fluxo era encontrado duas vezes, a segunda com o início no
+       lugar errado, e o descompressor recusava tudo. O PDF voltava vazio e o
+       app dizia "provavelmente é digitalizado", que é a resposta errada mais
+       cara que este leitor podia dar. */
+    const re = /\bstream\r?\n?/g;
+    let m;
+    while ((m = re.exec(bruto)) !== null) {
+      const inicio = m.index + m[0].length;
+      const fim = bruto.indexOf('endstream', inicio);
+      if (fim < 0) continue;
+      const cabecalho = bruto.slice(Math.max(0, m.index - 400), m.index);
+      /* O "endstream" vem depois de uma quebra de linha que não faz parte do
+         dado. Deixá-la dentro faz o descompressor recusar o fluxo inteiro. */
+      let ate = fim;
+      while (ate > inicio && (bytes[ate - 1] === 10 || bytes[ate - 1] === 13)) ate--;
+      achados.push({
+        dado: bytes.subarray(inicio, ate),
+        filtros: filtrosDoCabecalho(cabecalho),
+        comprimido: /FlateDecode/.test(cabecalho)
+      });
+      re.lastIndex = fim;
+      if (achados.length > 400) break;   /* PDF gigante não trava o navegador */
+    }
+    return achados;
+  }
+
+  /* Tj mostra um texto; TJ mostra uma lista com ajustes de espaçamento no
+     meio, que são números e não fazem parte do conteúdo.
+
+     A quebra de linha sai de Tm, T* e ET, e NÃO de Td: o gerador que escreve
+     glifo a glifo emite um Td entre cada letra, e quebrar ali põe cada letra
+     numa linha — foi o que aconteceu no primeiro teste com um PDF de verdade. */
+  function textoDoFluxo(fluxo, mapas) {
+    if (!/\b(Tj|TJ)\b/.test(fluxo)) return '';
+    const saida = [];
+    /* O mesmo NOME_PDF de lá de cima, e pelo mesmo motivo: `/F2+0 12 Tf`
+       casava só até o "F2", e a fonte escolhida nunca batia com a chave do
+       mapa. Os dois lados têm de ler o nome igual, senão a tradução existe e
+       não é usada — que é o defeito mais caro deste arquivo, porque o texto
+       sai e sai errado. */
+    const re = new RegExp('\\/(' + NOME_PDF + ')\\s+[\\d.]+\\s+Tf' +
+      '|<([0-9A-Fa-f\\s]*)>|\\((?:\\\\.|[^\\\\()])*\\)' +
+      '|\\bTJ\\b|\\bTj\\b|\\bTD\\b|\\bTm\\b|\\bT\\*\\b|\\bET\\b', 'g');
+    let m, linha = [], fonte = null;
+
+    const quebrar = function () {
+      if (!linha.length) return;
+      const t = linha.join('').replace(/[ \t]+$/, '');
+      if (t.trim()) saida.push(t);
+      linha = [];
+    };
+
+    while ((m = re.exec(fluxo)) !== null) {
+      const t = m[0];
+      if (m[1]) { fonte = m[1]; continue; }                 /* /F5 9 Tf */
+      if (m[2] != null) {                                   /* <hex> */
+        const mapa = (mapas && fonte) ? mapas[fonte] : null;
+        linha.push(decodificarHex(m[2], mapa));
+        continue;
+      }
+      if (t.charAt(0) === '(') {
+        const cru = t.slice(1, -1)
+          .replace(/\\([nrt])/g, function (_, c) { return c === 'n' ? '\n' : c === 'r' ? '' : '\t'; })
+          .replace(/\\([()\\])/g, '$1')
+          .replace(/\\([0-7]{1,3})/g, function (_, o) { return String.fromCharCode(parseInt(o, 8)); });
+        /* Fonte de subconjunto — a que os editores geram — numera os glifos do
+           zero e escreve a cadeia com esses números. Lida como bytes, "Água"
+           vira "3'#)". O /ToUnicode existe justamente para desfazer isso, e
+           antes ele só era consultado nas cadeias <hex>: o texto saía cifrado
+           e ia cifrado para a IA, sem ninguém perceber. */
+        const mapa = (mapas && fonte) ? mapas[fonte] : null;
+        const codigos = [];
+        if (larguraDaChave(mapa) === 4) {
+          for (let i = 0; i + 1 < cru.length; i += 2) {
+            codigos.push((cru.charCodeAt(i) << 8) | cru.charCodeAt(i + 1));
+          }
+        } else {
+          for (let i = 0; i < cru.length; i++) codigos.push(cru.charCodeAt(i));
+        }
+        const traduzido = pelaFonte(codigos, mapa);
+        linha.push(traduzido != null ? traduzido : cru);
+        continue;
+      }
+      if (t === 'TD' || t === 'Tm' || t === 'T*' || t === 'ET') quebrar();
+    }
+    quebrar();
+    return saida.join('\n');
+  }
+
+  /* Sem mapa, o hexadecimal é lido como bytes: serve para o PDF simples que
+     escreve <48656C6C6F>. Com mapa, cada código de dois bytes vira a letra
+     que a fonte diz que ele é. */
+  /* A largura da chave do /ToUnicode diz se o código do caractere ocupa um
+     byte (fonte simples) ou dois (fonte composta). O CMap guarda o código na
+     largura original, então basta olhar a primeira chave. */
+  function larguraDaChave(mapa) {
+    if (!mapa) return 0;
+    for (const k in mapa) { if (Object.prototype.hasOwnProperty.call(mapa, k)) return k.length; }
+    return 0;
+  }
+
+  /* Traduz códigos pelo /ToUnicode da fonte. Só vale se a maioria dos códigos
+     estiver no mapa: fonte com ToUnicode parcial traduziria meia frase e
+     comeria a outra metade, o que é pior do que não traduzir. */
+  function pelaFonte(codigos, mapa) {
+    const largura = larguraDaChave(mapa);
+    if (!largura || !codigos.length) return null;
+    let saida = '', achados = 0;
+    for (let i = 0; i < codigos.length; i++) {
+      const chave = codigos[i].toString(16).toUpperCase().padStart(largura, '0');
+      if (mapa[chave] != null) { saida += mapa[chave]; achados++; }
+    }
+    return (achados / codigos.length) >= 0.6 ? saida : null;
+  }
+
+  function decodificarHex(hex, mapa) {
+    const h = hex.replace(/\s+/g, '').toUpperCase();
+    if (!h) return '';
+    const largura = larguraDaChave(mapa) || 4;
+    if (mapa) {
+      const codigos = [];
+      for (let i = 0; i + largura <= h.length; i += largura) {
+        codigos.push(parseInt(h.substr(i, largura), 16));
+      }
+      const traduzido = pelaFonte(codigos, mapa);
+      if (traduzido) return traduzido;
+    }
+    let s = '';
+    for (let i = 0; i + 2 <= h.length; i += 2) {
+      const c = parseInt(h.substr(i, 2), 16);
+      if (c >= 32 && c < 127) s += String.fromCharCode(c);
+    }
+    return s;
+  }
+
+  /* ---------- entrada ---------- */
+  function ler(arquivo) {
+    if (!arquivo) return Promise.reject(new Error('Nenhum arquivo.'));
+    if (arquivo.size > LIMITE_BYTES) {
+      return Promise.reject(new Error('Arquivo grande demais (' + Math.round(arquivo.size / 1048576) + ' MB). O limite é 20 MB.'));
+    }
+    const ext = extensao(arquivo.name);
+
+    if (['txt', 'md', 'csv', 'tsv', 'vtt', 'srt', 'json', 'rtf'].indexOf(ext) !== -1) {
+      return arquivo.text().then(function (t) {
+        return cortar(ext === 'vtt' || ext === 'srt' ? limparLegenda(t) : t);
+      });
+    }
+    /* RAR e 7z não dão, e a mensagem diz por quê em vez de mandar a pessoa
+       tentar de novo. Não é falta de vontade: o navegador descomprime `deflate`
+       de graça — é o mesmo motor que abre docx, xlsx e zip — e não descomprime
+       RAR. Ler RAR exigiria carregar uma biblioteca de centenas de kilobytes
+       num app que não tem nenhuma dependência, para um formato que o próprio
+       Windows e o próprio Mac substituem por zip com dois cliques. */
+    /* Quem chama `ler()` direto espera UMA string. Com um zip isso só pode
+       ser a soma do que há dentro, cada pedaço com o nome do arquivo na
+       frente — senão a IA lê seis documentos como se fossem um. */
+    if (ext === 'zip') {
+      return membrosDoZip(arquivo).then(function (r) {
+        return lerVarios(r.arquivos).then(function (lidos) {
+          const bons = lidos.filter(function (d) { return d.texto; });
+          if (!bons.length) throw new Error('Não consegui tirar texto de nenhum arquivo do ZIP.');
+          return bons.map(function (d) {
+            return '=== ' + d.nome + ' ===\n' + d.texto;
+          }).join('\n\n');
+        });
+      });
+    }
+
+    if (ext === 'rar' || ext === '7z') {
+      return Promise.reject(new Error(
+        'Não consigo abrir .' + ext + ' — o navegador só descomprime ZIP, e ' +
+        'trazer um leitor de ' + ext.toUpperCase() + ' para dentro do app custaria mais do que vale. ' +
+        'Salve a pasta como ZIP (botão direito → Compactar, no Windows e no Mac) e anexe de novo.'));
+    }
+
+    return arquivo.arrayBuffer().then(function (buffer) {
+      if (ext === 'pdf') return lerPdf(buffer);
+      const zip = abrirZip(buffer);
+      if (ext === 'docx') return lerDocx(zip);
+      if (ext === 'xlsx') return lerXlsx(zip);
+      if (ext === 'pptx') return lerPptx(zip);
+      throw new Error('Não sei ler arquivos .' + ext + '.');
+    }).then(cortar);
+  }
+
+  /* ---------- o zip, aberto ----------
+
+     Um .zip não vira um documento: vira OS DOCUMENTOS DE DENTRO DELE, cada um
+     com o seu nome, exatamente como se a pessoa tivesse arrastado os seis
+     arquivos em vez da pasta compactada. Isso importa por três motivos:
+
+     • a cota da IA já é repartida por documento, e um zip concatenado num
+       texto só gastaria a cota de UM arquivo em seis;
+     • a lista da tela mostra os seis nomes, e dá para tirar o que não serve;
+     • a IA sabe qual número saiu de qual arquivo — “a planilha diz 4%” é
+       diferente de “o dossiê diz 4%”.
+
+     Zip dentro de zip não é aberto de propósito: ninguém manda um por acidente,
+     e recursão com arquivo de gente de fora é como se abre um buraco. */
+  function membrosDoZip(arquivo) {
+    return arquivo.arrayBuffer().then(function (buffer) {
+      const zip = abrirZip(buffer);
+
+      const uteis = zip.entradas().filter(function (e) {
+        if (/\/$/.test(e.nome)) return false;                 /* pasta */
+        if (/^__MACOSX\//.test(e.nome)) return false;          /* lixo do Mac */
+        const base = e.nome.split('/').pop();
+        if (!base || base.charAt(0) === '.') return false;     /* ._foo, .DS_Store */
+        return true;
+      });
+
+      const legiveis = uteis.filter(function (e) {
+        return LEGIVEIS.indexOf(extensao(e.nome)) !== -1;
+      });
+      const ignorados = uteis.filter(function (e) {
+        return LEGIVEIS.indexOf(extensao(e.nome)) === -1;
+      }).map(function (e) { return e.nome.split('/').pop(); });
+
+      if (!legiveis.length) {
+        throw new Error('O ZIP não tem nenhum arquivo que eu saiba ler.' +
+          (ignorados.length ? ' Dentro dele: ' + ignorados.slice(0, 6).join(', ') + '.' : '') +
+          ' Leio PDF, Word, Excel, PowerPoint e texto.');
+      }
+
+      /* Os maiores primeiro não: a ORDEM do zip é a que a pessoa montou, e
+         mexer nela faria o corte em 20 pegar arquivos diferentes dos que ela
+         veria numa janela do explorador. */
+      const escolhidos = legiveis.slice(0, MAX_DO_ZIP);
+      const cortados = legiveis.length - escolhidos.length;
+
+      let soma = 0;
+      const cabem = [];
+      escolhidos.forEach(function (e) {
+        if (soma + e.tamanho > MAX_DESCOMPRIMIDO) return;
+        soma += e.tamanho;
+        cabem.push(e);
+      });
+      const grandes = escolhidos.length - cabem.length;
+
+      return Promise.all(cabem.map(function (e) {
+        return zip.bytes(e.nome).then(function (b) {
+          /* Vira um File de verdade, e aí `ler()` o trata como qualquer outro
+             anexo. Sem isso, cada formato precisaria de um caminho novo aqui
+             dentro — e seriam dois lugares para consertar o mesmo defeito. */
+          return new File([b], e.nome.split('/').pop());
+        }, function () { return null; });
+      })).then(function (arquivos) {
+        return {
+          arquivos: arquivos.filter(Boolean),
+          ignorados: ignorados,
+          cortados: cortados,
+          grandes: grandes
+        };
+      });
+    });
+  }
+
+  /* Legenda tem uma linha de tempo a cada fala. Sem limpar, metade do que a
+     IA lê é "00:04:12.480 --> 00:04:15.120" — e a cota do documento se gasta
+     em carimbo de relógio, não no que o cliente disse. */
+  function limparLegenda(texto) {
+    return String(texto || '')
+      .replace(/^WEBVTT.*$/gm, '')
+      .replace(/^\d+\s*$/gm, '')
+      .replace(/^\d{2}:\d{2}:\d{2}[.,]\d{3}\s*-->.*$/gm, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+
+  function cortar(t) {
+    const limpo = String(t || '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+    return limpo.length > LIMITE_TEXTO ? limpo.slice(0, LIMITE_TEXTO) + '\n[…cortado…]' : limpo;
+  }
+
+  /* Vários de uma vez. Um arquivo ilegível não derruba os outros: volta com o
+     motivo, para a tela mostrar ao lado do nome dele. */
+  function lerVarios(arquivos) {
+    return Promise.all(Array.prototype.map.call(arquivos || [], function (a) {
+      if (extensao(a.name) === 'zip') return lerZip(a);
+      /* `arquivo` viaja junto porque quem chama precisa dele para anexar — e
+         com o zip a lista deixou de ser um-para-um com o que foi escolhido.
+         Casar por posição depois disso anexaria o arquivo errado. */
+      return ler(a).then(
+        function (texto) { return [{ nome: a.name, tamanho: a.size, texto: texto, erro: '', arquivo: a }]; },
+        function (e) { return [{ nome: a.name, tamanho: a.size, texto: '', erro: e.message, arquivo: a }]; }
+      );
+    })).then(function (grupos) {
+      /* Um zip devolve vários; os outros devolvem um. Achatar aqui deixa quem
+         chama sem saber a diferença — que é exatamente o ponto. */
+      return grupos.reduce(function (todos, g) { return todos.concat(g); }, []);
+    });
+  }
+
+  /* O zip vira várias linhas na lista, cada uma com o nome do arquivo de
+     dentro e o do zip ao lado. Se algo foi deixado de fora, a primeira linha
+     diz o quê — em vez de o app calar e a pessoa achar que leu tudo. */
+  function lerZip(arquivo) {
+    return membrosDoZip(arquivo).then(function (r) {
+      return lerVarios(r.arquivos).then(function (lidos) {
+        lidos.forEach(function (d) { d.deZip = arquivo.name; });
+
+        const sobras = [];
+        if (r.cortados) sobras.push(r.cortados + ' arquivo(s) além dos ' + MAX_DO_ZIP + ' primeiros');
+        if (r.grandes) sobras.push(r.grandes + ' grande(s) demais para caber na memória');
+        if (r.ignorados.length) sobras.push(r.ignorados.length + ' que não sei ler (' +
+          r.ignorados.slice(0, 4).join(', ') + (r.ignorados.length > 4 ? '…' : '') + ')');
+
+        if (sobras.length) {
+          lidos.unshift({ nome: arquivo.name, tamanho: arquivo.size, texto: '',
+            erro: 'abri ' + lidos.length + ', deixei de fora ' + sobras.join(', ') + '.' });
+        }
+        return lidos;
+      });
+    }, function (e) {
+      return [{ nome: arquivo.name, tamanho: arquivo.size, texto: '', erro: e.message }];
+    });
+  }
+
+  global.IADDocumentos = { ler: ler, lerVarios: lerVarios, aceito: aceito, extensao: extensao,
+                           membrosDoZip: membrosDoZip, MAX_DO_ZIP: MAX_DO_ZIP };
+})(window);

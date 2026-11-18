@@ -1,0 +1,33 @@
+name: PERF-25 — Contador de sinais do cockpit sem ordenação
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  perf25:
+    name: PERF-25 badge, índices, visibilidade e até 10 mil sinais
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Sintaxe dos arquivos de produção e testes
+        run: |
+          node --check src/store.js
+          node --check src/engine.js
+          node --check src/views.js
+          node --check nuvem/testes/perf-25-signal-badge-count.test.cjs
+      - name: Paridade, permissões, 10 mil sinais e economia de leituras
+        run: node --test nuvem/testes/perf-25-signal-badge-count.test.cjs
+      - name: Regressões de cockpit, índice de sinais e autenticação
+        run: |
+          node --test nuvem/testes/perf-21-signal-single-pass.test.cjs
+          node --test nuvem/testes/perf-19-auth-context.test.cjs
+          node --test nuvem/testes/perf-18-opportunities-account-index.test.cjs
+          node --test nuvem/testes/perf-10-cockpit.test.cjs

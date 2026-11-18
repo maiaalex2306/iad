@@ -1,0 +1,30 @@
+name: PERF-21 — Signal Scan, Alerts & Summary Parity
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  perf21-parity:
+    name: PERF-21 P95 path & signal security parity
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Sintaxe da engine
+        run: node --check src/engine.js && node --check nuvem/testes/perf-21-signal-single-pass.test.cjs
+      - name: Paridade histórica real, 5000 sinais, RLS e redução de buscas
+        run: node --test nuvem/testes/perf-21-signal-single-pass.test.cjs
+      - name: Regressões de decisão, cache, fila e cockpit
+        run: |
+          node --test nuvem/testes/perf-02-engine.test.cjs
+          node --test nuvem/testes/perf-02-cache.test.cjs
+          node --test nuvem/testes/perf-10-cockpit.test.cjs
+          node --test nuvem/testes/perf-19-auth-context.test.cjs
+          node --test nuvem/testes/perf-20-potential-shortcircuit.test.cjs

@@ -1,0 +1,36 @@
+name: RI-M18 — Permissoes Gestor/Admin nas Inteligencias
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - 'src/app.js'
+      - 'src/ri/account-view.mjs'
+      - 'src/ri/portfolio-analytics.mjs'
+      - 'src/auth.js'
+      - 'scripts/ri-account-view.test.cjs'
+      - 'scripts/ri-portfolio-analytics.test.cjs'
+      - 'scripts/ri01b-browser.cjs'
+      - 'tests/intelligence-manager-contract.test.mjs'
+      - '.github/workflows/ri-m18-managers.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  role-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validar sintaxe de todas as camadas
+        run: |
+          node --check src/app.js
+          node --check src/auth.js
+          node --check src/ri/account-view.mjs
+          node --check src/ri/portfolio-analytics.mjs
+          node --check scripts/ri01b-browser.cjs
+      - name: Gestores e administradores liberados, usuários comuns bloqueados
+        run: |
+          node --test scripts/ri-account-view.test.cjs scripts/ri-portfolio-analytics.test.cjs tests/intelligence-manager-contract.test.mjs

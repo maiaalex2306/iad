@@ -1,0 +1,25 @@
+name: PERF-30 — WhatsApp badge without conversation rebuild
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  perf30:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax check
+        run: |
+          node --check src/whatsapp.js
+          node --check nuvem/testes/perf-30-whatsapp-unread.test.cjs
+      - name: Parity and zero-unread regression
+        run: node --test nuvem/testes/perf-30-whatsapp-unread.test.cjs
+      - name: Coordinated release version
+        run: |
+          node scripts/verificar-versao-shell.cjs

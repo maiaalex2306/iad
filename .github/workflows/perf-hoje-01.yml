@@ -1,0 +1,32 @@
+name: PERF-01 — Hoje render regression
+on:
+  pull_request:
+    branches:
+      - claude/decisoes-estagios-vendas-eckjo0
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  perf-hoje:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check JavaScript syntax
+        run: |
+          node --check src/app.js
+          node --check src/views.js
+          node --check src/ia.js
+          node --check src/performance.js
+          node --check src/perf-hoje.js
+          node --check src/config.js
+          node --check sw.js
+      - name: Validate targeted updates and local metrics
+        run: node --test nuvem/testes/perf-hoje-01.test.cjs
+      - name: Validate safe staging build (no production Supabase)
+        run: node --test nuvem/testes/build-homologacao.test.cjs
+      - name: Run existing auth and regional regressions
+        run: |
+          node --test nuvem/testes/recuperacao-isolada.test.cjs
+          node --test nuvem/testes/sessao-refresh-invalido.test.cjs
+          node --test nuvem/testes/pipeline-localidades.test.cjs

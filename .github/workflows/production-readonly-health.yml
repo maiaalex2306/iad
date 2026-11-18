@@ -1,0 +1,42 @@
+name: IaD CRM — Production health read-only
+on:
+  push:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - '.github/workflows/production-readonly-health.yml'
+      - 'scripts/prod-health-readonly.cjs'
+      - 'scripts/prod-health-readonly.test.cjs'
+      - 'src/config.js'
+      - 'sw.js'
+      - 'src/ri/conversation-intent.mjs'
+      - 'src/ri/opportunity-radar.mjs'
+      - 'index.html'
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+    paths:
+      - '.github/workflows/production-readonly-health.yml'
+      - 'scripts/prod-health-readonly.cjs'
+      - 'scripts/prod-health-readonly.test.cjs'
+      - 'src/config.js'
+      - 'sw.js'
+      - 'src/ri/conversation-intent.mjs'
+      - 'src/ri/opportunity-radar.mjs'
+      - 'index.html'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax and fail-closed regression tests
+        run: |
+          node --check scripts/prod-health-readonly.cjs
+          node --test scripts/prod-health-readonly.test.cjs
+      - name: Verify production public assets and unauthenticated Auth gate
+        run: node scripts/prod-health-readonly.cjs

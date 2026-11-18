@@ -1,0 +1,22 @@
+name: PERF-16 — Contas e Cadastros indice de oportunidades
+on:
+  pull_request:
+    branches: [claude/decisoes-estagios-vendas-eckjo0]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  perf16-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check src/views.js
+      - run: node --test nuvem/testes/perf-16-account-open-index.test.cjs
+      - run: node --test nuvem/testes/perf-15-contacts-index.test.cjs
+      - run: node --test nuvem/testes/perf-02-engine.test.cjs
