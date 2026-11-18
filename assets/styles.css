@@ -742,6 +742,13 @@ td .tiny { display: block; }
   border-radius: 7px; padding: 3px 0; cursor: pointer; font-size: .8rem; line-height: 1;
 }
 .kanban .seta:hover { background: var(--navy); color: #fff; border-color: var(--navy); }
+/* RI-47: paginação própria da coluna, sem esconder negócios em outras etapas. */
+.kanban .kanban-visibilidade { padding: 8px 2px 3px; text-align: center; }
+.kanban .kanban-mais {
+  display: block; width: 100%; margin-top: 6px; white-space: normal;
+  text-align: center; line-height: 1.35; padding: 8px 5px;
+}
+.kanban .kanban-mais:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; }
 
 /* ---------- Painel gráfico ---------- */
 .filtros { display: flex; flex-direction: column; gap: 8px; margin: 10px 0 16px; }
