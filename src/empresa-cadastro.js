@@ -99,9 +99,9 @@
    return await r.json();
   }finally{clearTimeout(t);}
  }
- function extras(dlg){
+ function extras(){
   return [
-   {rotulo:'Consultar CNPJ',classe:'ghost',acao:()=>{
+   {rotulo:'Consultar CNPJ',classe:'ghost',acao:dlg=>{
      const valor=dlg.querySelector('[name="cnpj"]')?.value||'';
      const cnpj=validarCnpj(valor);
      if(!cnpj){global.alert('Informe um CNPJ válido para consultar. Nunca atribuímos CNPJ por semelhança do nome.');return false;}
@@ -110,7 +110,7 @@
       .catch(e=>{if(dlg.isConnected)global.alert('Consulta CNPJ: '+e.message);});
      return false;
    }},
-   {rotulo:'Consultar CEP',classe:'ghost',acao:()=>{
+   {rotulo:'Consultar CEP',classe:'ghost',acao:dlg=>{
      const cep=validarCep(dlg.querySelector('[name="cep"]')?.value||'');
      if(!cep){global.alert('Informe CEP de 8 dígitos.');return false;}
      consultar('https://viacep.com.br/ws/'+cep+'/json/')
@@ -118,7 +118,7 @@
       .catch(e=>{if(dlg.isConnected)global.alert('Consulta CEP: '+e.message);});
      return false;
    }}
-  ].map(x=>({...x,acao:()=>x.acao()}));
+  ];
  }
  function validarDialogo(dlg,contas,idAtual=''){
   const cnpj=dlg.querySelector('[name="cnpj"]'),cep=dlg.querySelector('[name="cep"]');
