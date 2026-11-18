@@ -84,7 +84,10 @@ test('a mudança de tarefa, contato, registro e escopo invalida cache corretamen
 test('o Pipeline monta no máximo 48 cartões por lote sem modificar totais',()=>{
  const v=codigo('src/views.js',false),app=codigo('src/app.js',false);
  assert.match(v,/const TAMANHO_LOTE_PIPELINE = 48/);
- assert.match(v,/const visiveis = resumos.slice\(0, limitePipeline\)/);
+ assert.match(v,/const visiveis = modoPipeline === 'kanban' \? resumos : resumos\.slice\(0, limitePipeline\)/);
+ /* O corte global de 48 só existe na LISTA: no Kanban cada etapa pagina
+    seus próprios cartões, preservando o universo total da busca. */
+ assert.doesNotMatch(v,/kanban\(resumos\.slice\(/);
  assert.match(v,/kanban\(visiveis, resumos\)/);
  assert.match(v,/barraDoPipeline\(resumos, total\)/);
  assert.match(v,/faixaMaisPipeline\(resumos.length\)/);
