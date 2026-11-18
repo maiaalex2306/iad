@@ -577,6 +577,13 @@ dialog .corpo > label.campo.meia { grid-column: span 1; }
 .empresa-nova-ia span { font-size: .78rem; line-height: 1.4; min-width: 0; overflow-wrap: anywhere; }
 .empresa-nova-ia em { display: block; font-style: normal; font-size: .72rem; color: var(--muted); margin-top: 2px; }
 dialog .rodape { display: flex; gap: 8px; justify-content: flex-end; padding: 12px 18px; border-top: 1px solid var(--line); }
+/* RI-47: botões auxiliares de consulta cadastral não podem esmagar Salvar. */
+dialog.iad-empresa-dialog .rodape { flex-wrap: wrap; align-items: center; }
+dialog.iad-empresa-dialog .rodape [data-extra] { white-space: normal; }
+@media (max-width: 620px) {
+  dialog.iad-empresa-dialog .rodape { justify-content: flex-start; }
+  dialog.iad-empresa-dialog .rodape .espaco { flex-basis: 100%; }
+}
 
 table { width: 100%; border-collapse: collapse; font-size: .88rem; }
 th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); }
