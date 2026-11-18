@@ -2095,8 +2095,15 @@
 
   let modoPipeline = 'lista';
   const TAMANHO_LOTE_PIPELINE = 48;
+  const TAMANHO_LOTE_KANBAN = 8;
   let limitePipeline = TAMANHO_LOTE_PIPELINE;
+  let limitesKanban = Object.create(null);
   function maisPipeline() { limitePipeline += TAMANHO_LOTE_PIPELINE; }
+  function maisKanban(etapa) {
+    if (!P.ETAPAS.includes(etapa) || etapa === 'Venda') return;
+    limitesKanban[etapa] = (limitesKanban[etapa] || TAMANHO_LOTE_KANBAN) + TAMANHO_LOTE_KANBAN;
+  }
+  function reiniciarKanban() { limitesKanban = Object.create(null); }
   function faixaMaisPipeline(total) {
     return total > limitePipeline
       ? '<div class="row" style="justify-content:center;margin:14px 0">' +
@@ -2176,8 +2183,8 @@
   let pipelineFiltro = Object.assign({}, VAZIO_PIPELINE);
 
   function pipelineEstado() { return pipelineFiltro; }
-  function pipelineFiltrar(mudancas) { Object.assign(pipelineFiltro, mudancas || {}); limitePipeline = TAMANHO_LOTE_PIPELINE; }
-  function pipelineLimparTudo() { pipelineFiltro = Object.assign({}, VAZIO_PIPELINE); limitePipeline = TAMANHO_LOTE_PIPELINE; }
+  function pipelineFiltrar(mudancas) { Object.assign(pipelineFiltro, mudancas || {}); limitePipeline = TAMANHO_LOTE_PIPELINE; reiniciarKanban(); }
+  function pipelineLimparTudo() { pipelineFiltro = Object.assign({}, VAZIO_PIPELINE); limitePipeline = TAMANHO_LOTE_PIPELINE; reiniciarKanban(); }
 
   /* Quantos filtros da gaveta estão ligados. É o número no botão — sem ele, a
      pessoa filtra, esquece, e depois jura que o pipeline sumiu. */
@@ -2555,7 +2562,9 @@
       return pipelineFiltro.status !== 'abertas' || !o.desfecho;
     }).length;
 
-    const visiveis = resumos.slice(0, limitePipeline);
+    /* Lista: paginação global. Kanban: cada etapa tem paginação própria.
+       O corte global escondia Diagnóstico quando Conexão tinha centenas de cartões. */
+    const visiveis = modoPipeline === 'kanban' ? resumos : resumos.slice(0, limitePipeline);
     const corpo = resumos.length
       ? (modoPipeline === 'kanban'
           ? kanban(visiveis, resumos)
@@ -2572,7 +2581,7 @@
     const selecao = modoPipeline === 'lista' ? barraDeSelecao(resumos) : '';
 
     return cabecalhoPipeline(filtros) + barraDoPipeline(resumos, total) + corpo +
-      faixaMaisPipeline(resumos.length) + selecao;
+      (modoPipeline === 'lista' ? faixaMaisPipeline(resumos.length) : '') + selecao;
   }
 
   /* O recorte do administrador não é um filtro da barra: mora no menu do
@@ -2654,17 +2663,27 @@
     }
     for (const r of resumos) {
       const bucket = visiveis.get(r.op.etapa);
-      if (bucket) bucket.push(r);
+      if (bucket && bucket.length < (limitesKanban[r.op.etapa] || TAMANHO_LOTE_KANBAN))
+        bucket.push(r);
     }
     const colunas = etapas.map(function (etapa) {
       const grupo = visiveis.get(etapa), contagem = quantidades.get(etapa);
       const cartoes = grupo.map(function (r) { return cartaoKanban(r, etapas); }).join('') ||
         '<div class="vazio tiny">—</div>';
+      const restantes = contagem.total - grupo.length;
+      const paginacao = restantes > 0
+        ? '<button class="btn ghost mini kanban-mais" onclick="App.pipelineMaisKanban(\'' +
+          etapa + '\')">Mostrar mais ' + Math.min(TAMANHO_LOTE_KANBAN, restantes) +
+          ' nesta etapa · ' + restantes + ' ocultas</button>'
+        : '';
+      const resumoVisibilidade = contagem.total > 0
+        ? '<div class="tiny muted kanban-visibilidade">Exibindo ' + grupo.length +
+          ' de ' + contagem.total + '</div>' : '';
       return '<section class="coluna" ondragover="event.preventDefault()" ondrop="App.soltar(event,\'' + etapa + '\')">' +
         '<header><div class="row" style="gap:6px"><strong>' + esc(etapa) + '</strong><span class="espaco"></span>' +
         '<button class="mais" title="Cadastro rápido nesta etapa" onclick="App.cadastroRapido(\'' + etapa + '\')">+</button></div>' +
         '<span class="tiny muted">' + contagem.total + ' · ' + U.compacto(contagem.valor) + '</span></header>' +
-        '<div class="cartoes">' + cartoes + '</div></section>';
+        '<div class="cartoes">' + cartoes + '</div>' + resumoVisibilidade + paginacao + '</section>';
     }).join('');
 
     return '<div class="kanban">' + colunas + '</div>' +
@@ -6298,15 +6317,24 @@
   function listaEmpresas(est) {
     const abertasPorConta = oportunidadesAbertasPorConta(est.oportunidades);
     const linhas = est.contas.filter(function (c) {
-      return combina(c.nome) || combina(c.razaoSocial) || combina(c.cnpj) || combina(c.segmento) || combina(c.cidade);
+      return [c.nome,c.razaoSocial,c.cnpj,c.segmento,c.cidade,c.uf,
+        c.cep,c.logradouro,c.bairro,c.telefone].some(combina);
     }).map(function (c) {
       const ops = abertasPorConta.get(c.id) || [];
       const valor = ops.reduce(function (s, o) { return s + (o.valor || 0); }, 0);
+      const rua = [c.logradouro,c.numero].filter(Boolean).join(', ');
+      const endereco = [rua,c.bairro,c.cep ? 'CEP '+c.cep : ''].filter(Boolean).join(' · ');
+      const contato = String(c.telefone||'').replace(/\D/g,'');
       return '<tr><td><strong>' + esc(c.nome) + '</strong>' +
         (c.razaoSocial ? '<span class="tiny muted">' + esc(c.razaoSocial) + '</span>' : '') +
-        (c.cnpj ? '<span class="tiny muted">' + esc(c.cnpj) + '</span>' : '') + '</td>' +
+        (c.cnpj ? '<span class="tiny muted">CNPJ: ' + esc(c.cnpj) + '</span>' : '') +
+        (c.telefone ? '<span class="tiny muted">Telefone: ' +
+          (contato.length>=10 && contato.length<=13
+            ? '<a href="tel:+' + esc(contato.startsWith('55')?contato:'55'+contato) + '">' + esc(c.telefone) + '</a>'
+            : esc(c.telefone)) + '</span>' : '') + '</td>' +
         '<td>' + esc(c.segmento || '—') + '</td>' +
-        '<td>' + esc([c.cidade, c.uf].filter(Boolean).join('/') || '—') + '</td>' +
+        '<td>' + esc([c.cidade, c.uf].filter(Boolean).join('/') || '—') +
+        (endereco ? '<span class="tiny muted" title="' + esc(endereco) + '">' + esc(endereco.slice(0,100)) + '</span>' : '') + '</td>' +
         '<td>' + esc(c.relacaoAtual || '—') + '</td>' +
         '<td class="right">' + Store.contatosDaConta(c.id).length + '</td>' +
         '<td class="right">' + ops.length + (valor ? '<span class="tiny muted">' + U.compacto(valor) + '</span>' : '') + '</td>' +
@@ -8877,11 +8905,11 @@
     pendenteAcesso: function () { return pendente; },
     definirFiltroFunil, limparFiltroFunil, definirFunilAberto, definirForma, tarefasFiltrar, tarefasEstado, tarefasVisiveis, tarefasDaPagina, tarefasSelecionadas, tarefasMarcar,
     pipelineEstado, pipelineFiltrar, pipelineLimparTudo, gavetaDeFiltros, conferirSessao, zerarFiltros,
-    maisPipeline: maisPipeline, limitePipeline: function () { return limitePipeline; },
+    maisPipeline: maisPipeline, maisKanban: maisKanban, limitePipeline: function () { return limitePipeline; },
     definirSemanasDoAprendizado: function (n) { semanasDoAprendizado = n; },
     semanasDoAprendizado: function () { return semanasDoAprendizado; },
     oportunidadesDoLHSemTarefa, outrasAbertasDaConta,
-    definirFiltro: function (f) { filtroGrupo = f; limitePipeline = TAMANHO_LOTE_PIPELINE; },
+    definirFiltro: function (f) { filtroGrupo = f; limitePipeline = TAMANHO_LOTE_PIPELINE; reiniciarKanban(); },
     definirFiltroHistorico: function (f) { filtroHistorico = f; },
     definirFiltroHoje: function (f) { filtroHoje = f; paginaHoje = 1; },
     definirConferencia: definirConferencia,
@@ -8895,7 +8923,7 @@
     POR_PAGINA: POR_PAGINA,
     definirFiltroTarefas: function (f) { filtroTarefas = f; },
     definirPeriodoTarefas: function (f) { periodoTarefas = f; },
-    definirModoPipeline: function (m) { modoPipeline = m; limitePipeline = TAMANHO_LOTE_PIPELINE; },
+    definirModoPipeline: function (m) { modoPipeline = m; limitePipeline = TAMANHO_LOTE_PIPELINE; reiniciarKanban(); },
     definirAbaCadastro: function (a) { abaCadastro = a; buscaCadastro = ''; },
 
     /* A nutrição precisa do estado dela de fora: o App lê o que está marcado

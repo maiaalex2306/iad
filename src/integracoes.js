@@ -305,6 +305,17 @@
       empresaDominio: emprego.dominio,
       empresaCidade: emprego.cidade,
       empresaSetor: emprego.setor,
+      /* Somente campos explicitamente EMPRESARIAIS do payload. 'phone' e
+         'address' isolados pertencem ao contato, jamais ao estabelecimento. */
+      empresaCnpj: primeiro(plano,['company_cnpj','empresa_cnpj','company_tax_id']),
+      empresaCep: primeiro(plano,['company_postal_code','company_cep']),
+      empresaLogradouro: primeiro(plano,['company_street','company_street_address']),
+      empresaNumero: primeiro(plano,['company_street_number','company_address_number']),
+      empresaComplemento: primeiro(plano,['company_address_extra']),
+      empresaBairro: primeiro(plano,['company_neighborhood','company_district']),
+      empresaUF: primeiro(plano,['company_state_code','company_uf']),
+      empresaTelefone: primeiro(plano,['company_phone','company_main_phone']),
+      empresaCodigoIbge: primeiro(plano,['company_ibge_code']),
       /* Matéria-prima para classificar o segmento sem sair para a internet:
          na maioria das vezes a descrição que o próprio LinkedIn traz basta. */
       empresaDescricao: String(emprego.descricao || '').replace(/\s+/g, ' ').slice(0, 600),

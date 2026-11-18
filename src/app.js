@@ -2598,6 +2598,7 @@
     paginaHoje: function (n) { V.definirPaginaHoje(n); window.scrollTo(0, 0); render(); },
     modoPipeline: function (modo) { V.definirModoPipeline(modo); render(); },
     pipelineMais: function () { V.maisPipeline(); render(); },
+    pipelineMaisKanban: function (etapa) { V.maisKanban(etapa); render(); },
     revisaoMais: function () { V.maisRevisao(); render(); },
     abaCadastro: function (aba) { V.definirAbaCadastro(aba); render(); window.scrollTo(0, 0); },
     /* Trocar de aba é trocar de lista: aí sim começa do topo. */
@@ -3110,8 +3111,11 @@
        a empresa dentro da oportunidade. Sem ele, salvar a conta jogava a pessoa
        na lista de contas e o negócio que ela estava criando se perdia. */
     novaConta: function (depois) {
+      let dialogoEmpresa = null;
       U.formulario('Nova conta', camposConta(), {}, function (d, docs, pessoas) {
         if (!d.nome) { if (depois) depois(null); return; }
+        if(dialogoEmpresa?.empresaFontes)
+          d.fontesCadastro=Object.assign({},dialogoEmpresa.empresaFontes);
         const nova = Store.criarConta(d);
         anexarAoRegistro(docs, { contaId: nova.id });
         const n = criarContatosPropostos(nova.id, pessoas);
@@ -3123,19 +3127,31 @@
             'Confira o papel de cada um na compra — é ele que alimenta a cobertura do grupo comprador.');
         }
         if (depois) depois(nova);
-      }, null, function () { if (depois) depois(null); });
+      }, function(dlg) {
+        dialogoEmpresa=dlg;
+        dlg.classList.add('iad-empresa-dialog');
+        global.IADEmpresaCadastro?.ligarAoFormulario(dlg,Store.dados().contas);
+      }, function () { if (depois) depois(null); },
+      global.IADEmpresaCadastro?.extras()||[]);
     },
 
     editarConta: function (id) {
       const c = Store.conta(id);
       if (!c) return;
+      let dialogoEmpresa = null;
       U.formulario('Editar conta', camposConta(), c, function (d, docs, pessoas) {
+        if(dialogoEmpresa?.empresaFontes)
+          d.fontesCadastro=Object.assign({},c.fontesCadastro||{},dialogoEmpresa.empresaFontes);
         Object.assign(c, d);
         Store.salvar();
         anexarAoRegistro(docs, { contaId: id });
         criarContatosPropostos(id, pessoas);
         render();
-      });
+      },function(dlg) {
+        dialogoEmpresa=dlg;
+        dlg.classList.add('iad-empresa-dialog');
+        global.IADEmpresaCadastro?.ligarAoFormulario(dlg,Store.dados().contas,id);
+      },null,global.IADEmpresaCadastro?.extras()||[]);
     },
 
     /* Documentos da empresa, como no RD Station: o que se carregou uma vez
@@ -8283,11 +8299,23 @@
      uma conta só, e o vendedor só perceberia meses depois. */
   function contaCandidata(lead) {
     const contas = Store.dados().contas;
+    const cnpj=global.IADEmpresaCadastro?.validarCnpj(lead.empresaCnpj)||'';
+    if(cnpj){
+      const exatas=contas.filter(function(c){
+        return global.IADEmpresaCadastro?.validarCnpj(c.cnpj)===cnpj;
+      });
+      if(exatas.length===1)return {conta:exatas[0],porque:'CNPJ exato'};
+      if(exatas.length>1)return null; // duplicidade jurídica requer revisão humana
+    }
 
     const dominio = dominioDe(lead.empresaDominio || lead.empresaSite);
     if (dominio) {
       const porSite = contas.filter(function (c) { return dominioDe(c.site) === dominio; })[0];
-      if (porSite) return { conta: porSite, porque: 'mesmo site: ' + dominio };
+      if (porSite) {
+        const outro=global.IADEmpresaCadastro?.validarCnpj(porSite.cnpj)||'';
+        if(!cnpj||!outro||cnpj===outro)
+          return { conta: porSite, porque: 'mesmo site: ' + dominio };
+      }
     }
 
     /* Lead sem empresa: a conta nasce com o nome da pessoa. Sem isto, a
@@ -8306,7 +8334,8 @@
     const alvo = achatarNome(lead.empresa);
     if (!alvo) return null;
     const porNome = contas.filter(function (c) {
-      return mesmoNomeDeEmpresa(alvo, achatarNome(c.nome));
+      const outro=global.IADEmpresaCadastro?.validarCnpj(c.cnpj)||'';
+      return (!cnpj||!outro||cnpj===outro)&&mesmoNomeDeEmpresa(alvo, achatarNome(c.nome));
     });
     /* Duas contas com nome compatível é ambiguidade, não achado. Escolher a
        primeira seria escolher pela ordem de cadastro, que não quer dizer
@@ -8320,7 +8349,10 @@
        resolve o que sobra — nomes que nem o site nem a grafia aproximam. */
     if (lead.contaSugeridaIA) {
       const daIA = Store.conta(lead.contaSugeridaIA);
-      if (daIA) return { conta: daIA, porque: lead.porqueContaIA || 'reconhecida pelo assistente' };
+      const cnpjIA=global.IADEmpresaCadastro?.validarCnpj(daIA?.cnpj)||'';
+      /* Sugestão por nome nunca pode fundir CNPJs explicitamente distintos. */
+      if (daIA&&(!cnpj||!cnpjIA||cnpj===cnpjIA))
+        return { conta: daIA, porque: lead.porqueContaIA || 'reconhecida pelo assistente' };
     }
     return null;
   }
@@ -8447,6 +8479,33 @@
      quando não é. Sem janela e sem digitação: o que não veio do LinkedIn fica
      em branco para o vendedor completar depois — melhor um campo vazio do que
      um palpite virando fato no painel. */
+  /* RI-47: somente chaves explicitamente corporativas do LH/LinkLeads.
+     Telefone e localização da PESSOA não viram dados da EMPRESA. */
+  function corporativosDoLead(lead) {
+    const E=global.IADEmpresaCadastro;
+    const uf=String(lead.empresaUF||'').trim().toUpperCase();
+    return {
+      cnpj:E?.validarCnpj(lead.empresaCnpj)||'',
+      cep:E?.validarCep(lead.empresaCep)||'',
+      logradouro:String(lead.empresaLogradouro||'').trim().slice(0,200),
+      numero:String(lead.empresaNumero||'').trim().slice(0,40),
+      complemento:String(lead.empresaComplemento||'').trim().slice(0,140),
+      bairro:String(lead.empresaBairro||'').trim().slice(0,140),
+      uf:/^[A-Z]{2}$/.test(uf)?uf:'',
+      codigoIbge:String(lead.empresaCodigoIbge||'').replace(/\D/g,'').slice(0,7),
+      telefone:E?.telefoneBrasil(lead.empresaTelefone)||''
+    };
+  }
+  function fontesCorporativas(fonte,campos,anteriores) {
+    const out=Object.assign({},anteriores||{});
+    for(const key of Object.keys(campos)){
+      if(!campos[key]||out[key])continue;
+      out[key]={provedor:fonte,consultadoEm:new Date().toISOString(),
+        status:'declarado_nao_verificado'};
+    }
+    return out;
+  }
+
   function importarUmLead(lead, segmento) {
     /* Sem empresa, a conta ainda precisa de um nome — e o que ela NÃO pode é
        ter cara de empresa. "Contato Fabio Alves" parecia razão social num
@@ -8456,17 +8515,19 @@
     if (segmento) Store.criarNoCatalogo('segmentos', { nome: segmento });
 
     /* ---------- a empresa ---------- */
+    const corporativos=corporativosDoLead(lead);
+    const fonteCorp=lead.origem==='linkleads'?'LinkLeads':'Linked Helper';
     let conta = contaJaExistente(lead);
     const ehContaNova = !conta;
     if (!conta) {
-      conta = Store.criarConta({
+      conta = Store.criarConta(Object.assign({
         nome: nome, segmento: segmento || '',
         site: lead.empresaSite || '', cidade: lead.empresaCidade || '',
-        /* A descrição do LinkedIn é a matéria-prima do segmento e do insight.
-           Descartá-la obrigava a IA a reclassificar a empresa do zero mais
-           tarde, sem nada além do nome. */
+        /* O texto do LinkedIn serve para contexto, não para atribuir CNPJ. */
         descricao: lead.empresaDescricao || ''
-      });
+      },corporativos,{
+        fontesCadastro:fontesCorporativas(fonteCorp,corporativos)
+      }));
     } else {
       /* Só o que está vazio. O vendedor que corrigiu o nome da empresa ou
          escolheu outro segmento não pode ver a próxima leitura desfazer
@@ -8475,6 +8536,15 @@
       if (!conta.site && lead.empresaSite) conta.site = lead.empresaSite;
       if (!conta.cidade && lead.empresaCidade) conta.cidade = lead.empresaCidade;
       if (!conta.descricao && lead.empresaDescricao) conta.descricao = lead.empresaDescricao;
+      const antesCorp={};
+      Object.keys(corporativos).forEach(function(k){antesCorp[k]=conta[k];});
+      if(completarEmBranco(conta,corporativos)){
+        const novos={};
+        Object.keys(corporativos).forEach(function(k){
+          if(!antesCorp[k]&&conta[k])novos[k]=conta[k];
+        });
+        conta.fontesCadastro=fontesCorporativas(fonteCorp,novos,conta.fontesCadastro);
+      }
     }
 
     /* ---------- o contato ---------- */
@@ -11985,6 +12055,7 @@
         placeholder: 'Cole aqui um e-mail, um trecho do site, o perfil do LinkedIn — ou carregue a proposta, a planilha de consumo, o edital. A IA lê tudo junto.',
         /* Prospect, cliente ou ex-cliente é fato comercial nosso — não sai de texto. */
         nunca: ['relacaoAtual'],
+        somenteVazios: true, /* IA não reescreve informação cadastral conferida */
         contexto: function () { return IA.contextoDaConta(null); } }
     ];
 
@@ -12016,12 +12087,21 @@
          segmento, que é onde ele de fato serve, e não como mais uma caixa. */
       { id: 'porte', rotulo: 'Porte (faturamento ou funcionários)', largura: 'metade' },
 
-      { tipo: 'secao', rotulo: 'Onde fica e como falar' },
+      { tipo: 'secao', rotulo: 'Endereço do estabelecimento',
+        ajuda: 'O CEP pode preencher somente os campos vazios. Rua, número e endereço da unidade devem ser conferidos.' },
+      { id: 'cep', rotulo: 'CEP', largura: 'metade', placeholder: '00000-000' },
+      { id: 'logradouro', rotulo: 'Rua / Avenida / Logradouro' },
+      { id: 'numero', rotulo: 'Número', largura: 'metade' },
+      { id: 'complemento', rotulo: 'Complemento', largura: 'metade' },
+      { id: 'bairro', rotulo: 'Bairro', largura: 'metade' },
       { id: 'cidade', rotulo: 'Cidade', largura: 'metade' },
-      { id: 'uf', rotulo: 'UF', largura: 'metade' },
+      { id: 'uf', rotulo: 'UF', largura: 'metade', placeholder: 'SP' },
+      { id: 'codigoIbge', rotulo: 'Código IBGE (opcional)', largura: 'metade' },
       { id: 'pais', rotulo: 'País', largura: 'metade', placeholder: 'Brasil' },
-      { id: 'telefone', rotulo: 'Telefone', largura: 'metade' },
-      { id: 'site', rotulo: 'Site', largura: 'metade' },
+      { tipo: 'secao', rotulo: 'Canais corporativos',
+        ajuda: 'Telefone da empresa, não o celular pessoal do contato. Consulta CNPJ e CEP disponível nos botões inferiores.' },
+      { id: 'telefone', rotulo: 'Telefone corporativo', largura: 'metade' },
+      { id: 'site', rotulo: 'Site oficial', largura: 'metade' },
       { id: 'linkedin', rotulo: 'LinkedIn da empresa', largura: 'metade',
         placeholder: 'linkedin.com/company/...' },
 

@@ -769,7 +769,23 @@
              tempo esgotado, recusa do servidor e material grande demais, e
              mandava procurar rede e chave quando o problema era volume. */
           if (r.erro) { estado.textContent = r.erro; return; }
-          const n = aplicarSugestoes(dlg, campos, r, c.nunca);
+          const antes=c.extrair==='conta'
+            ? Object.fromEntries(campos.filter(x=>x.id).map(x=>{
+                const el=dlg.querySelector('[name="'+x.id+'"]');
+                return [x.id,el?String(el.value||'').trim():null];
+              })) : null;
+          const n = aplicarSugestoes(dlg, campos, r, c.nunca, c.somenteVazios);
+          if(antes&&r.campos&&typeof r.campos==='object'){
+            const fontes=Object.assign({},dlg.empresaFontes||{});
+            for(const [k,v] of Object.entries(r.campos)){
+              if(v==null||v===''||antes[k]!==''||fontes[k])continue;
+              const el=dlg.querySelector('[name="'+k+'"]');
+              if(!el||String(el.value).trim()!==String(v).trim())continue;
+              fontes[k]={provedor:'IA - texto/documento',consultadoEm:new Date().toISOString(),
+                status:'extraido_nao_verificado',trecho:String(r.frases?.[k]||'').slice(0,140)};
+            }
+            dlg.empresaFontes=fontes;
+          }
           const quantos = pintarContatos(dlg, c.id, r.contatos || []);
           const corte = (r.cortado ? ' A IA recebeu apenas parte do material.' : '') +
             (avisoCorte ? ' '+avisoCorte : '');
@@ -788,7 +804,7 @@
   /* Escreve os valores nos campos e deixa cada um visivelmente marcado, com a
      frase que originou o palpite. A marca some no instante em que a pessoa
      mexe no campo: aí ele deixou de ser sugestão e virou decisão dela. */
-  function aplicarSugestoes(dlg, campos, resultado, nunca) {
+  function aplicarSugestoes(dlg, campos, resultado, nunca, somenteVazios) {
     const valores = (resultado && resultado.campos) || {};
     const frases = (resultado && resultado.frases) || {};
     const proibidos = nunca || [];
@@ -802,6 +818,7 @@
       if (v == null || v === '') return;
       const el = dlg.querySelector('[name="' + c.id + '"]');
       if (!el) return;
+      if(somenteVazios && String(el.value||'').trim())return;
       if (el.tagName === 'SELECT') {
         const existe = Array.prototype.some.call(el.options, function (o) {
           return String(o.value) === String(v);

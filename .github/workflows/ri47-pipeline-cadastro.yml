@@ -1,0 +1,35 @@
+name: RI-47 — Kanban e cadastro empresarial
+on:
+  pull_request:
+    branches:
+      - claude/decisoes-estagios-vendas-eckjo0
+    paths:
+      - 'src/**'
+      - 'assets/styles.css'
+      - 'index.html'
+      - 'sw.js'
+      - 'nuvem/**'
+      - 'tests/ri47-kanban-cadastro.test.cjs'
+  push:
+    branches:
+      - feature/ri47-pipeline-kanban-cadastro-v286108-20261118
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check syntax of impacted runtime modules
+        run: |
+          node --check src/views.js
+          node --check src/app.js
+          node --check src/store.js
+          node --check src/ui.js
+          node --check src/integracoes.js
+          node --check src/empresa-cadastro.js
+          node --check src/nuvem.js
+      - name: Test per-stage Kanban, CNPJ, CEP, conflicts and source tracking
+        run: node --test tests/ri47-kanban-cadastro.test.cjs

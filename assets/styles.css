@@ -577,6 +577,13 @@ dialog .corpo > label.campo.meia { grid-column: span 1; }
 .empresa-nova-ia span { font-size: .78rem; line-height: 1.4; min-width: 0; overflow-wrap: anywhere; }
 .empresa-nova-ia em { display: block; font-style: normal; font-size: .72rem; color: var(--muted); margin-top: 2px; }
 dialog .rodape { display: flex; gap: 8px; justify-content: flex-end; padding: 12px 18px; border-top: 1px solid var(--line); }
+/* RI-47: botões auxiliares de consulta cadastral não podem esmagar Salvar. */
+dialog.iad-empresa-dialog .rodape { flex-wrap: wrap; align-items: center; }
+dialog.iad-empresa-dialog .rodape [data-extra] { white-space: normal; }
+@media (max-width: 620px) {
+  dialog.iad-empresa-dialog .rodape { justify-content: flex-start; }
+  dialog.iad-empresa-dialog .rodape .espaco { flex-basis: 100%; }
+}
 
 table { width: 100%; border-collapse: collapse; font-size: .88rem; }
 th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); }
@@ -742,6 +749,13 @@ td .tiny { display: block; }
   border-radius: 7px; padding: 3px 0; cursor: pointer; font-size: .8rem; line-height: 1;
 }
 .kanban .seta:hover { background: var(--navy); color: #fff; border-color: var(--navy); }
+/* RI-47: paginação própria da coluna, sem esconder negócios em outras etapas. */
+.kanban .kanban-visibilidade { padding: 8px 2px 3px; text-align: center; }
+.kanban .kanban-mais {
+  display: block; width: 100%; margin-top: 6px; white-space: normal;
+  text-align: center; line-height: 1.35; padding: 8px 5px;
+}
+.kanban .kanban-mais:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; }
 
 /* ---------- Painel gráfico ---------- */
 .filtros { display: flex; flex-direction: column; gap: 8px; margin: 10px 0 16px; }

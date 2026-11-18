@@ -1099,7 +1099,9 @@
   function criarConta(dados) {
     const nova = Object.assign({
       id: uid('acc'), nome: '', razaoSocial: '', cnpj: '', segmento: '', porte: '',
-      cidade: '', uf: '', site: '', telefone: '', relacaoAtual: 'Prospect', criadoEm: hoje()
+      cidade: '', uf: '', cep: '', logradouro: '', numero: '', complemento: '', bairro: '',
+      codigoIbge: '', telefone: '', fontesCadastro: {},
+      site: '', relacaoAtual: 'Prospect', criadoEm: hoje()
     }, carimbo(true), dados);
     estado.contas.push(nova);
     salvar();
