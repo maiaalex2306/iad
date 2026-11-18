@@ -3,6 +3,7 @@
  * Tipos são HIPÓTESES para decisão humana; sem score de compra ou previsão.
  */
 import {discoverInternalCommercialCues} from './internal-cues.mjs';
+import {isRadarTreated} from './triage-state.mjs';
 const label=v=>typeof v==='string'?v.trim().slice(0,180):'';
 const id=v=>typeof v==='string'&&v.length>0;
 const norm=v=>label(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
@@ -209,7 +210,7 @@ export function buildCommercialOpportunityRadar({snapshot,scope,asOf}={}){
   }
  }
  for(const op of opIndex.values()){
-  if(closed(op))continue;
+  if(closed(op)||isRadarTreated(op))continue;
   const entered=dateFrom(op.criadoEm);
   if(!entered||entered>asOf||deltaDays(entered,asOf)>14)continue;
   const idKey=JSON.stringify([op.tenantId,op.id]);
