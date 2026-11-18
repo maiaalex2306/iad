@@ -3111,8 +3111,11 @@
        a empresa dentro da oportunidade. Sem ele, salvar a conta jogava a pessoa
        na lista de contas e o negócio que ela estava criando se perdia. */
     novaConta: function (depois) {
+      let dialogoEmpresa = null;
       U.formulario('Nova conta', camposConta(), {}, function (d, docs, pessoas) {
         if (!d.nome) { if (depois) depois(null); return; }
+        if(dialogoEmpresa?.empresaFontes)
+          d.fontesCadastro=Object.assign({},dialogoEmpresa.empresaFontes);
         const nova = Store.criarConta(d);
         anexarAoRegistro(docs, { contaId: nova.id });
         const n = criarContatosPropostos(nova.id, pessoas);
@@ -3124,19 +3127,29 @@
             'Confira o papel de cada um na compra — é ele que alimenta a cobertura do grupo comprador.');
         }
         if (depois) depois(nova);
-      }, null, function () { if (depois) depois(null); });
+      }, function(dlg) {
+        dialogoEmpresa=dlg;
+        global.IADEmpresaCadastro?.ligarAoFormulario(dlg,Store.dados().contas);
+      }, function () { if (depois) depois(null); },
+      global.IADEmpresaCadastro?.extras()||[]);
     },
 
     editarConta: function (id) {
       const c = Store.conta(id);
       if (!c) return;
+      let dialogoEmpresa = null;
       U.formulario('Editar conta', camposConta(), c, function (d, docs, pessoas) {
+        if(dialogoEmpresa?.empresaFontes)
+          d.fontesCadastro=Object.assign({},c.fontesCadastro||{},dialogoEmpresa.empresaFontes);
         Object.assign(c, d);
         Store.salvar();
         anexarAoRegistro(docs, { contaId: id });
         criarContatosPropostos(id, pessoas);
         render();
-      });
+      },function(dlg) {
+        dialogoEmpresa=dlg;
+        global.IADEmpresaCadastro?.ligarAoFormulario(dlg,Store.dados().contas,id);
+      },null,global.IADEmpresaCadastro?.extras()||[]);
     },
 
     /* Documentos da empresa, como no RD Station: o que se carregou uma vez
@@ -12017,12 +12030,21 @@
          segmento, que é onde ele de fato serve, e não como mais uma caixa. */
       { id: 'porte', rotulo: 'Porte (faturamento ou funcionários)', largura: 'metade' },
 
-      { tipo: 'secao', rotulo: 'Onde fica e como falar' },
+      { tipo: 'secao', rotulo: 'Endereço do estabelecimento',
+        ajuda: 'O CEP pode preencher somente os campos vazios. Rua, número e endereço da unidade devem ser conferidos.' },
+      { id: 'cep', rotulo: 'CEP', largura: 'metade', placeholder: '00000-000' },
+      { id: 'logradouro', rotulo: 'Rua / Avenida / Logradouro' },
+      { id: 'numero', rotulo: 'Número', largura: 'metade' },
+      { id: 'complemento', rotulo: 'Complemento', largura: 'metade' },
+      { id: 'bairro', rotulo: 'Bairro', largura: 'metade' },
       { id: 'cidade', rotulo: 'Cidade', largura: 'metade' },
-      { id: 'uf', rotulo: 'UF', largura: 'metade' },
+      { id: 'uf', rotulo: 'UF', largura: 'metade', placeholder: 'SP' },
+      { id: 'codigoIbge', rotulo: 'Código IBGE (opcional)', largura: 'metade' },
       { id: 'pais', rotulo: 'País', largura: 'metade', placeholder: 'Brasil' },
-      { id: 'telefone', rotulo: 'Telefone', largura: 'metade' },
-      { id: 'site', rotulo: 'Site', largura: 'metade' },
+      { tipo: 'secao', rotulo: 'Canais corporativos',
+        ajuda: 'Telefone da empresa, não o celular pessoal do contato. Consulta CNPJ e CEP disponível nos botões inferiores.' },
+      { id: 'telefone', rotulo: 'Telefone corporativo', largura: 'metade' },
+      { id: 'site', rotulo: 'Site oficial', largura: 'metade' },
       { id: 'linkedin', rotulo: 'LinkedIn da empresa', largura: 'metade',
         placeholder: 'linkedin.com/company/...' },
 
