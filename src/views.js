@@ -6324,7 +6324,7 @@
       const valor = ops.reduce(function (s, o) { return s + (o.valor || 0); }, 0);
       const rua = [c.logradouro,c.numero].filter(Boolean).join(', ');
       const endereco = [rua,c.bairro,c.cep ? 'CEP '+c.cep : ''].filter(Boolean).join(' · ');
-      const contato = String(c.telefone||'').replace(/\\D/g,'');
+      const contato = String(c.telefone||'').replace(/\D/g,'');
       return '<tr><td><strong>' + esc(c.nome) + '</strong>' +
         (c.razaoSocial ? '<span class="tiny muted">' + esc(c.razaoSocial) + '</span>' : '') +
         (c.cnpj ? '<span class="tiny muted">CNPJ: ' + esc(c.cnpj) + '</span>' : '') +
