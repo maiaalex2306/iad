@@ -1,7 +1,8 @@
-/* IaD CRM RI-01B — lazy, read-only Inteligência Comercial.
- * Snapshot MUST come from Store.dados() (already authorized).
- * No writes, no remote providers, no automatic action, no decision scoring.
- * DOM strings are displayed with textContent only.
+/* IaD CRM RI-46 — Inteligência Comercial lazy sobre carteira autorizada.
+ * Radar e dossiê são somente leitura; a triagem é uma ação MANUAL explícita
+ * registrada no histórico da oportunidade por App.marcarPistaComercial.
+ * Sem fornecedores externos, movimentação automática ou mudança de IAD.
+ * Textos de dados comerciais entram no DOM apenas via textContent.
  */
 import {buildAccountBriefing} from './account-briefing.mjs';
 import {localBusinessDate} from './portfolio-analytics.mjs';
