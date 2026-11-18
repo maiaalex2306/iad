@@ -56,6 +56,13 @@ create table if not exists public.contas (
   uf             text default '',
   site           text default '',
   telefone       text default '',
+  cep            text not null default '',
+  logradouro     text not null default '',
+  numero         text not null default '',
+  complemento    text not null default '',
+  bairro         text not null default '',
+  codigo_ibge    text not null default '',
+  fontes_cadastro jsonb not null default '{}'::jsonb,
   relacao_atual  text default 'Prospect',
   criado_em      date default current_date,
   atualizado_em  timestamptz default now()
