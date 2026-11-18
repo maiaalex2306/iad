@@ -4,6 +4,7 @@
  * necessidades; o cartao consolida ate quatro sinais com citacoes rastreaveis.
  */
 import {detectCommercialIntents,buyerMessagesFromTranscript,validateAiIntents} from './conversation-intent.mjs';
+import {isRadarTreated} from './triage-state.mjs';
 const short=(v,n=260)=>typeof v==='string'?v.trim().slice(0,n):'';
 const key=(tenant,account)=>JSON.stringify([tenant,account]);
 const day=v=>{
@@ -56,7 +57,7 @@ export function discoverInternalCommercialCues({snapshot,scope,accounts,asOf,lim
    record.signals.set(typeKey,item);
  };
  for(const op of snapshot.oportunidades){
-  if(!op||!op.id||!op.contaId||!op.tenantId)continue;
+  if(!op||!op.id||!op.contaId||!op.tenantId||isRadarTreated(op))continue;
   if(scope.role==='admin'&&scope.admin===true&&
    scope.ownerFilter!=='todos'&&scope.ownerFilter!==op.donoId)continue;
   const account=accounts.get(key(op.tenantId,op.contaId));
